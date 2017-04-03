@@ -30,7 +30,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBuf
 from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    AbsoluteOp, Add, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
@@ -38,6 +38,7 @@ from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
+from ngraph.op_graph.ctc import CTCOp
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.passes import SimplePrune
@@ -52,6 +53,7 @@ from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
+from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel, SendKernel, RecvKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -146,6 +148,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Divide)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
+
+    @add_op.on_type(FloorDivide)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("int_div", x=x, y=y, out=out)
 
     @add_op.on_type(Mod)
     def add_op(self, op, out, x, y):
@@ -425,6 +431,10 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(update_lut)
     def add_kernel(self, op):
         self.kernels.append(LUTBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(CTCOp)
+    def add_kernel(self, op):
+        self.kernels.append(CTCKernel(self.transformer, op))
 
     @add_kernel.on_type(GPUQueueSendOp)
     def add_kernel(self, op):
@@ -758,9 +768,6 @@ class GPUDeviceTensor(DeviceTensor):
     def __setitem__(self, key, value):
         sliced = self.__getitem__(key)
 
-        if isinstance(value, np.ndarray) and value.shape == ():
-            value = value.item()
-
         # Use fill for scalar values
         # convert value to numpy
         if type(value) == float:
@@ -774,8 +781,7 @@ class GPUDeviceTensor(DeviceTensor):
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
             sliced.fill(value.astype(sliced.dtype))
-        elif type(value) == np.int32 or type(value) == np.int64 or \
-                type(value) == int:
+        elif type(value) in (np.int32, np.int64, int, np.uint32):
             sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
             sliced.fill(value.astype(sliced.dtype))
@@ -1054,6 +1060,9 @@ class GPUTransformer(Transformer):
         self.current_buffer.add_view_allocator(view_alloc)
 
     def start_transform_allocate(self):
+        pass
+
+    def transform_allocate_ops(self, all_ops):
         pass
 
     def finish_transform_allocate(self):

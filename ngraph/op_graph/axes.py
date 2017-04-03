@@ -26,17 +26,28 @@ import types
 from builtins import object, map, zip
 
 from ngraph.util.names import NameableValue
+from ngraph.flex.base import Flex
 
 
 def default_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.float32)
+    elif not isinstance(dtype, Flex) and not isinstance(dtype, np.dtype):
+        try:
+            dtype = np.dtype(dtype)
+        except TypeError:
+            raise TypeError("Could not cast {} to np.dtype".format(dtype))
     return dtype
 
 
 def default_int_dtype(dtype=None):
     if dtype is None:
         dtype = np.dtype(np.int32)
+    elif not isinstance(dtype, Flex) and not isinstance(dtype, np.dtype):
+        try:
+            dtype = np.dtype(dtype)
+        except TypeError:
+            raise TypeError("Could not cast {} to np.dtype".format(dtype))
     return dtype
 
 
@@ -111,6 +122,9 @@ class Axis(object):
             type(self).__name_counter += 1
 
         self.name = name
+
+        if length is not None and length < 0:
+            raise ValueError("Axis length {} must be >= 0".format(length))
         self.__length = length
 
         self.uuid = uuid.uuid4()
@@ -170,6 +184,8 @@ class Axis(object):
 
     @length.setter
     def length(self, value):
+        if value < 0:
+            raise ValueError("Axis length {} must be >= 0".format(value))
         self.__length = value
 
     @property
@@ -178,6 +194,9 @@ class Axis(object):
 
     def __repr__(self):
         return 'Axis({name}: {length})'.format(name=self.name, length=self.length)
+
+    def __str__(self):
+        return '{name}: {length}'.format(name=self.name, length=self.length)
 
     def __eq__(self, other):
         return isinstance(other, Axis) and self.name == other.name
@@ -748,6 +767,9 @@ class Axes(object):
             ', '.join(map(repr, self))
         )
 
+    def __str__(self):
+        return ', '.join(map(str, self))
+
     @staticmethod
     def as_nested_list(axes):
         """
@@ -1097,6 +1119,9 @@ class TensorDescription(NameableValue):
             "Sizes must have same number of dimensions as axes"
         assert len(self.full_strides) == self.ndim, \
             "Strides must have same number of dimensions as axes"
+
+    def __repr__(self):
+        return self.base.name
 
     @property
     def is_persistent(self):

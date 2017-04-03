@@ -17,6 +17,15 @@ preview release!
 Installation documentation can be found
 [here](https://ngraph.nervanasys.com/docs/latest/installation.html).
 
+### MKL-DNN Support
+To install with Intel MKL-DNN support, first download MKL-DNN from [here] 
+(https://github.com/01org/mkl-dnn) and follow the installation instructions
+there to install MKL-DNN. Set environment variable MKLDNN_ROOT to point to 
+the installed location and follow the rest of the steps to install Nervana 
+Graph
+```
+export MKLDNN_ROOT=/path/to/mkldnn/root
+```
 We recommend installing Nervana Graph inside a virtual environment.
 
 To create and activate a Python 3 virtualenv:
@@ -48,7 +57,7 @@ make uninstall
 
 To run the tests:
 ```
-make [test_cpu|test_gpu|test_integration]
+make [test_cpu|test_mkldnn|test_gpu|test_integration]
 ```
 
 Before checking in code, ensure no "make style" errors:

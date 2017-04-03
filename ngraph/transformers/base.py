@@ -360,6 +360,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
             device_buffer.transform_allocate()
+        self.transform_allocate_ops(all_ops)
         self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage

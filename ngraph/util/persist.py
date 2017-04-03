@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function
 import os
+import posixpath
 import sys
 import requests
 from tqdm import tqdm
@@ -111,7 +112,7 @@ def fetch_file(url, sourcefile, destfile, totalsz):
         destfile (str): Path to the destination.
         totalsz (int): Size of the file to be downloaded.
     """
-    req = requests.get(os.path.join(url, sourcefile),
+    req = requests.get(posixpath.join(url, sourcefile),
                        headers={'User-Agent': 'ngraph'},
                        stream=True)
 

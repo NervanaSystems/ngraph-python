@@ -23,6 +23,7 @@ from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, 
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.ctc import CTCOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -109,11 +110,11 @@ def get_device_op(op):
     Helper function that traverses through any reshape ops or value ops
     to return the tensor op
     """
-    if op.is_device_op or isinstance(op, TensorValueOp):
-        return op
-
     while isinstance(op, SequentialOp):
         op = op.value_tensor
+
+    if op.is_device_op or isinstance(op, TensorValueOp):
+        return op
 
     for arg in op.args:
         dev_op = get_device_op(arg)
@@ -294,7 +295,7 @@ class AddLayoutConversions(PeepholeGraphPass):
     def __init__(self, assign_pass):
         self.assign_pass = assign_pass
         self.binary_constraints = None
-        self.visited = []
+        self.visited = set()
 
     def do_pass(self, ops, transformer):
         self.binary_constraints = self.assign_pass.binary_constraints
@@ -324,6 +325,10 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(SetItemOp)
     def op_from_args(self, op, args):
         return SetItemOp(args[0], op.item, args[1])
+
+    @op_from_args.on_type(CTCOp)
+    def op_from_args(self, op, args):
+        return CTCOp(*args, axes=op.axes)
 
     @op_from_args.on_type(ConvolutionOp)
     def op_from_args(self, op, args):
@@ -366,7 +371,7 @@ class AddLayoutConversions(PeepholeGraphPass):
         op whose args are the converted args.
         """
         if "layout" in op.metadata and op not in self.visited:
-            self.visited.append(op)
+            self.visited.add(op)
             new_args = []
             for arg in op.args:
                 b_constraint = None
@@ -390,7 +395,7 @@ class AddLayoutConversions(PeepholeGraphPass):
                                                                 arg)
                     new_args.append(new_arg)
                     if new_arg is not arg:
-                        self.visited.append(new_arg)
+                        self.visited.add(new_arg)
                 else:
                     new_args.append(arg)
 
@@ -399,5 +404,5 @@ class AddLayoutConversions(PeepholeGraphPass):
                 new_op = self.op_from_args(op, new_args)
                 new_op.metadata["layout"] = op.metadata["layout"]
                 self.replace_op(op, new_op)
-                self.visited.append(new_op)
+                self.visited.add(new_op)
                 self.binary_constraints[new_op] = self.binary_constraints[op]

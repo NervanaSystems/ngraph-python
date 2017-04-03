@@ -25,14 +25,15 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := ngraph tests examples
+STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
-TEST_OPTS := --timeout=300 --cov=ngraph --junit-xml=testout.xml
+TEST_OPTS := --timeout=300 --cov=ngraph
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
 TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
+TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
 # this variable controls where we publish Sphinx docs to
@@ -70,7 +71,7 @@ uninstall:
 clean:
 	@find . -name "*.py[co]" -type f -delete
 	@find . -name "__pycache__" -type d -delete
-	@rm -f .coverage coverage.xml .coverage.*
+	@rm -f .coverage .coverage.*
 	@rm -rf ngraph.egg-info
 	@echo
 
@@ -78,39 +79,57 @@ test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
 test_flex: test_prepare clean
 	@echo Running flex unit tests...
-	@py.test --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
+	@py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
+	 --junit-xml=testout_test_flex_$(PY).xml \
 	 $(TEST_OPTS) $(TEST_DIRS_FLEX)
+	@coverage xml -i -o coverage_test_flex_$(PY).xml
 
-test_mkl: test_prepare clean
-	@echo Running unit tests...
-	@py.test --transformer mkl -m "transformer_dependent" $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
+test_mkldnn: export MKL_TEST_ENABLE=1
+test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
+test_mkldnn: test_prepare clean test_cpu test_hetr
 
 test_cpu: test_prepare clean
 	@echo Running unit tests for core and cpu transformer tests...
-	@py.test -m "not hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
+	@py.test -m "not hetr_only" --boxed -n auto \
+	 --junit-xml=testout_test_cpu_$(PY).xml \
+	 $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_gpu: gpu_prepare test_prepare clean
 	@echo Running unit tests for gpu dependent transformer tests...
-	@py.test --transformer hetr -m "hetr_gpu_only" $(TEST_OPTS) $(TEST_DIRS)
-	@py.test --transformer gpu -m "transformer_dependent" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
+	@py.test --transformer hetr -m "hetr_gpu_only" \
+	 --junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
+	 $(TEST_OPTS) $(TEST_DIRS)
+	@py.test --transformer gpu -m "transformer_dependent" --boxed -n auto \
+	 --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
+	 --cov-append \
+	 $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i -o coverage_test_gpu_$(PY).xml
 
 test_hetr: test_prepare clean
 	@echo Running unit tests for hetr dependent transformer tests...
-	@py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto $(TEST_OPTS) $(TEST_DIRS)
-	@coverage xml -i
+	@py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto \
+	 --junit-xml=testout_test_hetr_$(PY).xml \
+	 $(TEST_OPTS) $(TEST_DIRS)
+	@coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mxnet: test_prepare clean
 	@echo Running unit tests for mxnet frontend...
-	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_MXNET)
+	@py.test --cov=ngraph \
+	 --junit-xml=testout_test_mxnet_$(PY).xml \
+	 $(TEST_OPTS) $(TEST_DIRS_MXNET)
+	@coverage xml -i coverage_test_mxnet_$(PY).xml
+
+test_cntk: test_prepare clean
+	@echo Running unit tests for cntk frontend...
+	@py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
 	@coverage xml -i
 
 test_integration: test_prepare clean
 	@echo Running integration tests...
-	@py.test $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
-	@coverage xml -i
+	@py.test --junit-xml=testout_test_integration__$(PY).xml \
+	 $(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
+	@coverage xml -i coverage_test_integration_$(PY).xml
 
 examples: examples_prepare
 	@for file in `find examples -type f -executable`; do echo Running $$file... ; ./$$file ; done
