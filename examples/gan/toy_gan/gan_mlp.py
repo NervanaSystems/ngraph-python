@@ -42,7 +42,6 @@ def affine_layer(h_dim, activation, name):
                   name=name)
 
 
-# TODO: LR schedule and other optimizer parameters
 def make_optimizer(name=None):
     learning_rate = 0.005 if minibatch_discrimination else 0.03
     optimizer = GradientDescentMomentum(learning_rate, momentum_coef=0.0,
