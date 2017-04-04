@@ -1029,7 +1029,7 @@ def _generate_kernel_args(ops, axes_mapping, dims, ctx):
                     params.append(tensor.strides[1])
                     params.append(tensor.strides[2])
 
-                if  isinstance(tensor, TensorDescriptionWrapper) and tensor.is_flex():
+                if isinstance(tensor, TensorDescriptionWrapper) and tensor.is_flex():
                     argname, flex_entry, is_output = ctx.flex_scale[regname]
                     args.append("float " + argname)
                     arg_desc = arg_desc + "f"
