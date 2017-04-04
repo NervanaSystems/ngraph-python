@@ -726,7 +726,7 @@ def _build_register_mapping(stages):
 
                         # flex
                         # for argmax and argmin, inval is GPURegister, not TensorDescriptionWrapper
-                        if not (op[0] == "argmax" or op[0] == "argmin") and inval.is_flex():
+                        if isinstance(inval, TensorDescriptionWrapper) and inval.is_flex():
                             flex_entry = inval.flex_entry()
                             flex_scale[regname] = (sclname, flex_entry, False)
 
@@ -1029,7 +1029,7 @@ def _generate_kernel_args(ops, axes_mapping, dims, ctx):
                     params.append(tensor.strides[1])
                     params.append(tensor.strides[2])
 
-                if not (op[0] == "argmax" or op[0] == "argmin") and tensor.is_flex():
+                if  isinstance(tensor, TensorDescriptionWrapper) and tensor.is_flex():
                     argname, flex_entry, is_output = ctx.flex_scale[regname]
                     args.append("float " + argname)
                     arg_desc = arg_desc + "f"
