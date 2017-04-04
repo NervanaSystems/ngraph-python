@@ -30,7 +30,7 @@ pytestmark = pytest.mark.transformer_dependent("module")
 ))
 def test_gemm_multiply_matrices(transformer_factory, rows_1, col_1, col_2, description):
     """
-    :param transformer_factory: to use flex calculations
+    :param [FIXTURE] transformer_factory: py.test fixture to use flex calculations
     :param rows_1: number of rows for first matrix
     :param col_1: number of columns for first matrix
     :param col_2: number of columns for second matrix
@@ -51,7 +51,7 @@ def test_gemm_multiply_matrices(transformer_factory, rows_1, col_1, col_2, descr
 ))
 def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val, flex_exceptions, iters, description):
     """
-    :param transformer_factory: to use flex calculations
+    :param [FIXTURE] transformer_factory: py.test fixture to use flex calculations
     :param row: number of rows for first matrix
     :param col: number of columns for first matrix
     :param const_val: vector is filled using this value
@@ -69,7 +69,7 @@ def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val
     template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters)
 
 
-@pytest.mark.parametrize("row, col, scalar, flex_exceptions, iter, description", (
+@pytest.mark.parametrize("row, col, scalar, flex_exceptions, iters, description", (
     (3, 3, 0.4, [], 3, "Dot product of matrix and positive scalar"),
     (2, 4, -0.3, [], 2, "Dot product of matrix and negative scalar"),
     (3, 5, 0, [], 3, "Dot product of matrix and zero"),
@@ -77,9 +77,9 @@ def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val
                 np.array([[0, 255.9921875], [255.9921875, 255.9921875], [255.9921875, 255.9921875]])], 3,
      "Dot product with two expected overflows")
 ))
-def test_gemm_multiply_matrix_by_scalar(transformer_factory, row, col, scalar, flex_exceptions, iter,  description):
+def test_gemm_multiply_matrix_by_scalar(transformer_factory, row, col, scalar, flex_exceptions, iters,  description):
     """
-    :param transformer_factory: to use flex calculations
+    :param [FIXTURE] transformer_factory: py.test fixture to use flex calculations
     :param row: number of rows for matrix
     :param col: number of columns for matrix
     :param scalar: value of scalar which is multiplied
@@ -93,4 +93,4 @@ def test_gemm_multiply_matrix_by_scalar(transformer_factory, row, col, scalar, f
     Those test cases check autoflex initialisation and scale adjusting as well.
     """
     print(description)
-    template_dot_one_placeholder_and_scalar(row, col, scalar, flex_exceptions, iter)
+    template_dot_one_placeholder_and_scalar(row, col, scalar, flex_exceptions, iters)
