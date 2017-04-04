@@ -1094,7 +1094,7 @@ def _generate_new_kernel_args(ops, axes_mapping, dims):
                     params.append(tensor.strides[1])
                     params.append(tensor.strides[2])
 
-                if not (op[0] == "argmax" or op[0] == "argmin") and tensor.is_flex():
+                if isinstance(tensor, TensorDescriptionWrapper) and tensor.is_flex():
                     # create description of flex scale parameters that will be bound later
                     flex_entry = tensor.flex_entry()
 
