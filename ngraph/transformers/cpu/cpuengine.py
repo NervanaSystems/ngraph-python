@@ -62,6 +62,14 @@ class Mkldnn(object):
                  ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_conv_bprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_innerproduct_fprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
+            self.create_mkldnn_innerproduct_fprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+            self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
@@ -75,6 +83,7 @@ class Mkldnn(object):
             self.mkldnn_engine_initialized = True
             self.mkldnn_conv_fprop_netlist = dict()
             self.mkldnn_conv_bprop_netlist = dict()
+            self.mkldnn_innerproduct_fprop_netlist = dict()
 
     def close(self):
         if (self.mkldnn_engine_initialized):
@@ -82,6 +91,8 @@ class Mkldnn(object):
                 self.cleanup_mkldnn_fn(self.mkldnn_conv_fprop_netlist[i])
             for i in self.mkldnn_conv_bprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_conv_bprop_netlist[i])
+            for i in self.mkldnn_innerproduct_fprop_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_innerproduct_fprop_netlist[i])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -199,6 +210,37 @@ class Mkldnn(object):
                 slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
                 slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
+
+    def init_innerproduct_fprop(self, index, out, x, y):
+        if (self.mkldnn_enabled):
+            if (self.mkldnn_verbose):
+                print("Inner Product Input: ", len(x.shape), x.shape,
+                      " Weights: ", y.shape, len(y.shape),
+                      " Outputs: ", out.shape, len(out.shape))
+            # Only single precision float supported for now
+            if ((x.dtype != np.float32) or (y.dtype != np.float32)):
+                return
+            # Sanity check tensor shapes
+            if ((len(x.shape) != 2) or (len(y.shape) != 2) or
+                    (len(out.shape) != 2)):
+                return
+            input_shape = ((ctypes.c_int) * len(x.shape))(*x.shape)
+            weights_shape = ((ctypes.c_int) * len(y.shape))(*y.shape)
+            output_shape = ((ctypes.c_int) * len(out.shape))(*out.shape)
+            self.mkldnn_innerproduct_fprop_netlist[index] = \
+                self.create_mkldnn_innerproduct_fprop_primitives_fn(
+                    self.mkldnn_engine,
+                    len(x.shape), len(y.shape), 1, len(out.shape), input_shape,
+                    weights_shape, None, output_shape, x.ctypes.data,
+                    y.ctypes.data, None, out.ctypes.data)
+
+    def mkldnn_gemm(self, index, x, y, out):
+        if (self.mkldnn_enabled and (index in self.mkldnn_innerproduct_fprop_netlist)):
+            assert x.flags['C_CONTIGUOUS']
+            assert y.flags['C_CONTIGUOUS']
+            self.run_mkldnn_netlist_fn(self.mkldnn_innerproduct_fprop_netlist[index])
+        else:
+            np.dot(x, y, out=out)
 
 
 def update_conv(conv_slices, I, E, U):

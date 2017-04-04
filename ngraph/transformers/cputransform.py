@@ -330,6 +330,11 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_conv_bprop(index={}, E={}, F={}, gI={}, pad={}, stride={})",
                     op.index, delta, filters, gI, pad, stride)
 
+    @allocate_op.on_type(DotLowDimension)
+    def allocate_op(self, op, out, x, y):
+        self.append("mkldnn.init_innerproduct_fprop({}, out={}, x={}, y={})",
+                    op.index, out, x, y)
+
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -435,7 +440,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
-        self.append("np.dot({}, {}, out={})", x, y, out)
+        self.append("mkldnn.mkldnn_gemm({}, {}, {}, out={})",
+                    op.index, x, y, out)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):

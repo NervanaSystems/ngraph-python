@@ -3086,8 +3086,12 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
+    _index = 0
+
     def __init__(self, x, y, axes, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        self.index = DotLowDimension._index
+        DotLowDimension._index += 1
 
 
 class SoftmaxOp(ValueOp):
