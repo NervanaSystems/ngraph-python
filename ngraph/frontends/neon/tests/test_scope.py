@@ -86,8 +86,8 @@ class LSTMLayer(LayerClass):
                           gate_activation=Tanh())
 
     def get_weights(self):
-        return tuple(self.layer.W_input.values() + self.layer.W_recur.values() +
-                     self.layer.b.values())
+        return tuple(list(self.layer.W_input.values()) + list(self.layer.W_recur.values()) +
+                     list(self.layer.b.values()))
 
     def get_input(self):
         ax_i = ng.make_axes([ng.make_axis(name='M', length=8),

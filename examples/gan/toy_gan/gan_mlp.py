@@ -170,6 +170,6 @@ try:
     plt.plot(pg, 'g', label='generated data')
     plt.legend(loc='upper left')
     plt.savefig('toygan.png')
-    print ("png saved")
+    print("png saved")
 except ImportError:
-    print ("needs matplotlib")
+    print("needs matplotlib")
