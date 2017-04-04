@@ -134,6 +134,9 @@ def layer_cls(request):
 
 
 def test_scope(layer_cls):
+    """
+    Test that creating layer in and outside of scope behaves correctly
+    """
 
     scope1 = 's1'
     layer0 = layer_cls()

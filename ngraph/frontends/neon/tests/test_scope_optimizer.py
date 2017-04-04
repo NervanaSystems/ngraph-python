@@ -26,8 +26,6 @@ from ngraph.testing import ExecutorFactory, RandomTensorGenerator
 rng = RandomTensorGenerator(0, np.float32)
 
 
-# TODO: test different layer types
-# self.W is None check - test that self.W doesn't get recreated?
 def gradient_descent_momentum():
     return GradientDescentMomentum(0.1)
 
@@ -53,6 +51,12 @@ def scope_pair(request):
 
 
 def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
+    """
+    Two layer network with each layer in a different variable scope.
+    Test that optimizing with respect to variables in one scope correctly
+    updates the variables in that scope and leaves the other layer variables
+    unchanged.
+    """
 
     # this test peeks at values of layer weights, not hetr-compatible
     if transformer_factory.name == 'hetr':
