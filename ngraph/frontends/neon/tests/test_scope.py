@@ -157,4 +157,3 @@ def test_scope(layer_cls):
         assert w.scope == scope1, "found scope {} instead of {}".format(w.scope, scope1)
     for w in layer2.get_weights():
         assert w.scope is None
-    print "{} tests passed".format(layer_cls)
