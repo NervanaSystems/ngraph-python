@@ -36,6 +36,7 @@ We do broadcast first:
                         (5, 3, 4, 2)
 """
 import ngraph as ng
+import numbers
 
 POS_AXIS_PREFIX = 'POS_'
 
@@ -55,6 +56,9 @@ def make_pos_axis(length, pos, prefix=POS_AXIS_PREFIX):
     Returns:
         Axis object
     """
+    if not (isinstance(pos, numbers.Integral) and pos >= 0):
+        raise ValueError("pos {} must be integer greater or equal than zero."
+                         .format(pos))
     return ng.make_axis(length, name='%s%s' % (prefix, pos))
 
 

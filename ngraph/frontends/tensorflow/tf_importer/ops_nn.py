@@ -122,11 +122,11 @@ class OpsNN(OpsBase):
         output = ng.convolution(params, image, weight, axes=ax_o)
 
         # output KMPQN -> NPQK
-        output = ng.axes_with_order(output, ng.make_axes(
-            [N, M, P, Q, K]))  # KMPQN -> NMPQK
+        # KMPQN -> NMPQK
+        output = ng.axes_with_order(output, ng.make_axes([N, M, P, Q, K]))
+        # NMPQK -> NPQK
         output = ng.tensor_slice(output, [slice(None), 0, slice(None),
-                                          slice(None),
-                                          slice(None)])  # NMPQK -> NPQK
+                                          slice(None), slice(None)])
 
         return output
 
@@ -228,11 +228,12 @@ class OpsNN(OpsBase):
         output = ng.pooling(params, image, axes=ax_o)
 
         # output KMPQN -> NPQK
+        # KMPQN -> NMPQK
         output = ng.axes_with_order(output, ng.make_axes(
-            [N, M, P, Q, K]))  # KMPQN -> NMPQK
+            [N, M, P, Q, K]))
+        # NMPQK -> NPQK
         output = ng.tensor_slice(output, [slice(None), 0, slice(None),
-                                          slice(None),
-                                          slice(None)])  # NMPQK -> NPQK
+                                          slice(None), slice(None)])
 
         return output
 
@@ -277,7 +278,7 @@ class OpsNN(OpsBase):
         # predicts: (N, Y)
         predicts = ng.softmax(logits, normalization_axes=axis_y)
 
-        # cross_entropy: (N1)
+        # cross_entropy: (N)
         return ng.cross_entropy_multi(predicts, labels, out_axes=(axis_n,))
 
     def Softmax(self, tf_node, inputs):

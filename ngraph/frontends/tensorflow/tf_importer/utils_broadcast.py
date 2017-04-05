@@ -127,13 +127,13 @@ def broadcast_to(x, out_shape):
     x_ndims = len(x.axes)
 
     if x_ndims == 0:
+        # special case: x'shape is same as out_shape
+        return x
+
+    elif x.axes.lengths == out_shape:
         # special case: scalar
         zero = ng.constant(0., axes=make_pos_axes(out_shape))
         return x + zero
-
-    elif x.axes.lengths == out_shape:
-        # special case: x'shape is same as out_shape
-        return x
 
     else:
         # collapse (collapse all dimension 1 axes that will be broadcasted)
