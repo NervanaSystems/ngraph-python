@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+import pytest
 from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recvs
 from ngraph.testing.hetr_utils import create_send_recv_graph, create_scatter_gather_graph
 from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
@@ -82,7 +83,7 @@ def test_update_comm_deps_scatter_gather():
     ax_b = ng.make_axis(length=15, name='B')
     axes = ng.make_axes([ax_a, ax_b])
 
-    parallel_metadata = dict(parallel=ax_b, device_id=(0, 1),
+    parallel_metadata = dict(parallel=ax_a, device_id=(0, 1),
                              transformer=None, host_transformer=None, device=None)
     with ng.metadata(transformer='cpu0'):
         with ng.metadata(**parallel_metadata):
@@ -116,12 +117,15 @@ def test_update_comm_deps_scatter_gather():
         set(gather_recv_x_plus_one_a.all_deps)
 
 
-def test_scatter_gather_node_axes():
-    ax_A = ng.make_axis(64)
-    ax_B = ng.make_axis(128)
-    ax_C = ng.make_axis(255)
+def assert_axes_eq_len(expected_axes, actual_axes):
+    for exp, act in zip(expected_axes, actual_axes):
+        assert exp.length == act.length
 
-    tests = [
+# TODO don't define these globally
+ax_A = ng.make_axis(64)
+ax_B = ng.make_axis(128)
+ax_C = ng.make_axis(256)
+@pytest.mark.parametrize('config', [
         {
             'axes': ng.make_axes([ax_A]),
             'parallel_axis': ax_A,
@@ -131,61 +135,67 @@ def test_scatter_gather_node_axes():
         {
             'axes': ng.make_axes([ax_A, ax_B]),
             'parallel_axis': ax_A,
-            'slices': [[slice(0, 21, 1), slice(None)],
-                       [slice(21, 42, 1), slice(None)],
-                       [slice(42, 64, 1), slice(None)]],
-            'device_id': (0, 1, 2)
+            'slices': [[slice(0, 16, 1), slice(None)],
+                       [slice(16, 32, 1), slice(None)],
+                       [slice(32, 48, 1), slice(None)],
+                       [slice(48, 64, 1), slice(None)]],
+            'device_id': (0, 1, 2, 3)
         },
         {
             'axes': ng.make_axes([ax_A, ax_B, ax_C]),
             'parallel_axis': ax_A,
-            'slices': [[slice(0, 12, 1), slice(None), slice(None)],
-                       [slice(12, 24, 1), slice(None), slice(None)],
-                       [slice(24, 36, 1), slice(None), slice(None)],
-                       [slice(36, 48, 1), slice(None), slice(None)],
+            'slices': [[slice(0, 16, 1), slice(None), slice(None)],
+                       [slice(16, 32, 1), slice(None), slice(None)],
+                       [slice(32, 48, 1), slice(None), slice(None)],
                        [slice(48, 64, 1), slice(None), slice(None)]],
-            'device_id': (0, 1, 2, 3, 4)
+            'device_id': (0, 1, 2, 3)
         },
         {
             'axes': ng.make_axes([ax_A, ax_B, ax_C]),
             'parallel_axis': ax_C,
-            'slices': [[slice(None), slice(None), slice(0, 127, 1)],
-                       [slice(None), slice(None), slice(127, 255, 1)]],
+            'slices': [[slice(None), slice(None), slice(0, 128, 1)],
+                       [slice(None), slice(None), slice(128, 256, 1)]],
             'device_id': (0, 1)
         }
-    ]
+    ])
 
-    for t in tests:
+
+def test_scatter_gather_node_axes(config):
+    t = config
+
+    with ng.metadata(device=None, device_id='0', transformer='cpu0', host_transformer=None):
         from_node = ng.placeholder(axes=t['axes'])
-        from_node.metadata['device'] = None
-        from_node.metadata['device_id'] = t['device_id']
-        from_node.metadata['transformer'] = None
-        from_node.metadata['parallel'] = t['parallel_axis']
-        from_node.metadata['host_transformer'] = None
-
         to_node = ng.placeholder(axes=t['axes'])
-        to_node.metadata['device'] = None
-        to_node.metadata['device_id'] = t['device_id']
-        to_node.metadata['transformer'] = None
-        to_node.metadata['parallel'] = t['parallel_axis']
-        to_node.metadata['host_transformer'] = None
 
-        gather_send_op = GatherSendOp(from_node=from_node)
-        assert t['axes'] == gather_send_op.axes
+    with ng.metadata(device=None, device_id=t['device_id'], transformer=None,
+                     parallel=t['parallel_axis'], host_transformer=None):
+        par_node = ng.placeholder(axes=t['axes'])
 
-        gather_recv_op = GatherRecvOp(from_node=from_node,
-                                      to_node=to_node,
-                                      send_node=gather_send_op)
-        assert t['axes'] == gather_recv_op.axes
-        assert t['slices'] == gather_recv_op.slices
+    scatter_send_op = ScatterSendOp(from_node=from_node,
+                                    to_node=par_node)
+    assert t['axes'] == scatter_send_op.axes
+    assert t['slices'] == scatter_send_op.slices
 
-        scatter_send_op = ScatterSendOp(from_node=from_node,
-                                        to_node=to_node)
-        assert t['axes'] == scatter_send_op.axes
-        assert t['slices'] == scatter_send_op.slices
+    scatter_recv_op = ScatterRecvOp(to_node=par_node,
+                                    send_node=scatter_send_op)
 
-        scatter_recv_op = ScatterRecvOp(to_node=to_node,
-                                        send_node=scatter_send_op)
-        assert t['axes'] == scatter_recv_op.axes
+
+    for sct_a, a in zip(scatter_recv_op.axes, t['axes']):
+        if sct_a == t['parallel_axis']:
+            assert sct_a.length == a.length / len(t['device_id'])
+        else:
+            assert sct_a.length == a.length
+
+    gather_send_op = GatherSendOp(from_node=scatter_recv_op)
+    assert_axes_eq_len(scatter_recv_op.axes, gather_send_op.axes)
+
+    gather_recv_op = GatherRecvOp(from_node=par_node,
+                                  to_node=to_node,
+                                  send_node=gather_send_op)
+    assert_axes_eq_len(t['axes'], gather_recv_op.axes)
+
+    assert t['slices'] == gather_recv_op.slices
+
+
 
 # todo def test_clone_graph():

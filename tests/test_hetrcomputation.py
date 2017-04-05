@@ -139,6 +139,26 @@ def test_distributed_graph_plus_one(transformer_factory):
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 1)
 
+from ngraph.transformers.passes.nviz import VizPass
+def test_distributed_dot(transformer_factory):
+    H = ng.make_axis(length=4, name='height')
+    #W = ng.make_axis(length=6, name='width')
+    N = ng.make_axis(length=8, name='batch')
+    weight_dim = ng.make_axis(length=10, name='weight_dim')
+    x = ng.placeholder(axes=[H, N])
+    weight = ng.placeholder(axes=[weight_dim, H])
+
+    with ng.metadata(device_id=('1', '2'), parallel=N):
+        dot= ng.dot(weight,x)
+
+    np_x = np.random.randint(100, size=[H.length, N.length])
+    np_weights = np.random.randint(100, size=[weight_dim.length, H.length])
+    with ExecutorFactory() as ex:
+        ex.transformer.register_graph_pass(VizPass(show_all_metadata=False, show_axes=True))
+        computation = ex.executor(dot, x, weight)
+        res = computation(np_x,np_weights)
+        np.testing.assert_array_equal(res, np.dot(np_weights,np_x))
+
 
 def test_distributed_graph_plus_two(transformer_factory):
     H = ng.make_axis(length=4, name='height')

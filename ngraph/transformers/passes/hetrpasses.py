@@ -99,8 +99,9 @@ class DistributedPass(GraphBuildingPass):
                 self.parallel_axes = op.metadata['parallel']
 
                 gather_send_op = op.send_node()
-                new_axes = calculate_new_axes(
-                    gather_send_op.axes, self.parallel_axes, len(op.from_id))
+
+                # TODO double check this makes sense
+                new_axes = gather_send_op.axes
 
                 # clone nodes for each device_id
                 for i, id in enumerate(op.from_id):

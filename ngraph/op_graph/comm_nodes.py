@@ -17,6 +17,12 @@ from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
 import multiprocessing
 
 
+def calculate_gather_axes(axes, gather_axis, num_devices):
+    new_axes = [make_axis(a.length * num_devices, a.name) if gather_axis == a else a for a in axes ]
+    new_axes = make_axes(new_axes)
+    return new_axes
+
+
 def calculate_new_axes(axes, parallel_axis, num_devices):
     new_axes = list()
     for a in axes:
@@ -61,6 +67,7 @@ class ResultOp(TensorOp):
     """
 
     def __init__(self, device_id, args, **kwargs):
+
         super(ResultOp, self).__init__(args=args)
         self.metadata['device_id'] = device_id
         self.axes = args[0].axes
@@ -112,13 +119,17 @@ class RecvOp(CommunicationOp):
         send_node: The send node associated with this recv node.
     """
 
-    def __init__(self, to_node, send_node):
+    def __init__(self, to_node, send_node, fragment_axis=None, fragments=None):
         super(RecvOp, self).__init__(
             node=to_node,
             args=(),
-            axes=send_node.axes,
+            axes=self.calculate_recv_axes(send_node.axes, fragment_axis, fragments),
             dtype=send_node.dtype)
         self._send_node = send_node
+
+    @classmethod
+    def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
+        return send_axes
 
     def send_node(self):
         return self._send_node
@@ -155,7 +166,16 @@ class ScatterRecvOp(RecvOp):
     """
 
     def __init__(self, to_node, send_node):
-        super(ScatterRecvOp, self).__init__(to_node, send_node)
+        super(ScatterRecvOp, self).__init__(to_node, send_node,
+                                            fragment_axis=to_node.metadata['parallel'],
+                                            fragments=len(to_node.metadata['device_id']))
+
+    @classmethod
+    def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
+        #invoke axes math helper to modify scatter axis
+        # TODO if calculate... function is only used here, refactor/rename
+        recv_axes = calculate_new_axes(send_axes, fragment_axis, fragments)
+        return recv_axes
 
 
 class GatherSendOp(SendOp):
@@ -182,7 +202,9 @@ class GatherRecvOp(RecvOp):
     """
 
     def __init__(self, from_node, to_node, send_node):
-        super(GatherRecvOp, self).__init__(to_node, send_node)
+        super(GatherRecvOp, self).__init__(to_node, send_node,
+                                           fragment_axis=from_node.metadata['parallel'],
+                                           fragments=len(from_node.metadata['device_id']))
         self.metadata['marker'] = 'gather'
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']
@@ -190,6 +212,13 @@ class GatherRecvOp(RecvOp):
         self._slices = get_slices(self.axes,
                                   self.metadata['parallel'],
                                   len(self.from_id))
+
+    @classmethod
+    def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
+        #invoke axes math helper to modify scatter axis
+        # TODO if calculate... function is only used here, refactor/rename
+        recv_axes = calculate_gather_axes(send_axes, fragment_axis, fragments)
+        return recv_axes
 
     @property
     def slices(self):
@@ -200,22 +229,14 @@ class GPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):
         super(GPUQueueSendOp, self).__init__(from_node)
-        self._queue = multiprocessing.Queue()
-
-    @property
-    def queue(self):
-        return self._queue
+        self.queue = multiprocessing.Queue()
 
 
 class GPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
         super(GPUQueueRecvOp, self).__init__(to_node, send_node)
-        self._queue = send_node.queue
-
-    @property
-    def queue(self):
-        return self._queue
+        self.queue = send_node.queue
 
 
 class CPUQueueSendOp(SendOp):
