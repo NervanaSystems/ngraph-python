@@ -473,7 +473,8 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     # Old interface
     def computation(self, results, *parameters):
         """
-        Adds a computation to the transformer.
+        Adds a computation to the transformer. In the case of not providing parameters
+        explicitly, the computation will keep using the old values for the parameters.
 
         Arguments:
             results: Values to be computed
