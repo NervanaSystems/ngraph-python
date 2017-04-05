@@ -14,10 +14,10 @@
 # ----------------------------------------------------------------------------
 
 # reuse from TF
-from ngraph.frontends.tensorflow.tf_importer.ops_binary import OpsBinary as TFOpsBinary
+from ngraph.frontends.common.legacy_binary_ew_op import LegacyOpsBinary
 
 
-class OpsBinary(TFOpsBinary):
+class OpsBinary(LegacyOpsBinary):
     """
     Mix-in class element-wise binary ops.
     For now, reuse TF

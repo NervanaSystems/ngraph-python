@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import \
+    cast_to_pos_axes
 import ngraph as ng
 
 
@@ -53,12 +55,7 @@ class OpsReduction(OpsBase):
 
         # perform reduction operation
         result_op = reduction_op(input_tensor, reduction_axes=reduction_axes)
-
-        # broadcast results for safety
-        new_out_axes = [
-            ng.make_axis(length=axis.length) for axis in result_op.axes
-        ]
-        result_op = ng.cast_axes(result_op, new_out_axes).named(tf_node.name)
+        result_op = cast_to_pos_axes(result_op).named(tf_node.name)
 
         return result_op
 
