@@ -440,7 +440,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
-        self.append("mkldnn.mkldnn_gemm({}, {}, {}, out={})",
+        self.append("mkldnn.innerproduct_fprop({}, {}, {}, out={})",
                     op.index, x, y, out)
 
     @generate_op.on_type(Equal)

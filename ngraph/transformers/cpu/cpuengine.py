@@ -234,7 +234,7 @@ class Mkldnn(object):
                     weights_shape, None, output_shape, x.ctypes.data,
                     y.ctypes.data, None, out.ctypes.data)
 
-    def mkldnn_gemm(self, index, x, y, out):
+    def innerproduct_fprop(self, index, x, y, out):
         if (self.mkldnn_enabled and (index in self.mkldnn_innerproduct_fprop_netlist)):
             assert x.flags['C_CONTIGUOUS']
             assert y.flags['C_CONTIGUOUS']
