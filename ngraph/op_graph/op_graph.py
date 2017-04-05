@@ -336,6 +336,8 @@ class Op(NameableValue):
         self.style = {}
         self._forward = None
 
+        self.scope = None
+
     @property
     def tensor(self):
         """
@@ -2068,6 +2070,7 @@ class AssignableTensorOp(TensorOp):
             is_trainable=False,
             is_placeholder=False,
             const=None,
+            scope=None,
             **kwargs):
         super(AssignableTensorOp, self).__init__(**kwargs)
         self._is_input = is_input
@@ -2077,6 +2080,7 @@ class AssignableTensorOp(TensorOp):
         self._is_placeholder = is_placeholder
         self._const = const
         self.initial_value = None
+        self.scope = scope
 
         if initial_value is not None:
             # convert callable initial value
@@ -2273,7 +2277,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-def variable(axes, dtype=None, initial_value=None):
+def variable(axes, dtype=None, initial_value=None, scope=None):
     """
     A trainable tensor.
 
@@ -2282,6 +2286,8 @@ def variable(axes, dtype=None, initial_value=None):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
+        scope (optional): scope of variable, can be used to filter on when
+                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
@@ -2291,7 +2297,8 @@ def variable(axes, dtype=None, initial_value=None):
                               is_persistent=True,
                               is_trainable=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              scope=scope)
 
 
 class StackOp(SequentialOp):
