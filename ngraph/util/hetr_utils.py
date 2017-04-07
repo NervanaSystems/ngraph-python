@@ -13,10 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
+from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
+
 import uuid
 
 
@@ -104,7 +106,7 @@ def update_comm_deps(ops):
                         r.add_control_dep(op)
 
 
-def clone_graph(root, device_id, shared_queues_idx, axes):
+def clone_graph(root, device_id, shared_queues_idx, axes, parallel_axis, num_clones):
     """
     clone graph with serde (serialization)
     input:
@@ -133,7 +135,9 @@ def clone_graph(root, device_id, shared_queues_idx, axes):
         # TODO this looks like it could be incorrect
         #      some axes in the subgraph may not be changed, right?
         #      only modify op._axes if it contains parallel axis?
-        op._axes = axes
+
+        if parallel_axis in op._axes:
+            op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
         op.uuid = uuid.uuid4()
 
     return new_root

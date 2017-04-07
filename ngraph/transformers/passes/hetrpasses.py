@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.transformers.passes.passes import GraphBuildingPass
-from ngraph.op_graph.comm_nodes import calculate_new_axes
+from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone_graph
@@ -102,11 +102,13 @@ class DistributedPass(GraphBuildingPass):
 
                 # TODO double check this makes sense
                 new_axes = gather_send_op.axes
-
+                #new_axes = calculate_new_axes(gather_send_op.axes, self.parallel_axes, len(op.from_id))
                 # clone nodes for each device_id
                 for i, id in enumerate(op.from_id):
                     new_gather_send_op = clone_graph(root=gather_send_op, device_id=id,
-                                                     shared_queues_idx=i, axes=new_axes)
+                                                     shared_queues_idx=i, axes=new_axes,
+                                                     parallel_axis=self.parallel_axes,
+                                                     num_clones=len(op.from_id))
                     self.send_nodes.add(new_gather_send_op)
 
                 self.send_nodes.remove(gather_send_op)

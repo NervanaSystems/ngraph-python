@@ -31,6 +31,7 @@ from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
+from ngraph.transformers.passes.nviz import VizPass
 
 
 def build_transformer(name):
@@ -178,6 +179,10 @@ class AsyncTransformer(Process):
 
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
+
+                if self.name == 'AsyncTransformer-3':
+                    nviz = VizPass(show_all_metadata=False,show_axes=True)
+                    transformer.register_graph_pass(nviz)
                 outputs = computation(*inputs)
 
                 # individual results q makes it easy for caller to find results

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.op_graph.comm_nodes import calculate_new_axes
+from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 import ngraph as ng
 import pytest
 
@@ -24,14 +24,14 @@ axes = ng.make_axes([ax_A, ax_B, ax_C])
 
 
 def test_calculate_new_axes_single_device():
-    new_axes = calculate_new_axes(axes=axes, parallel_axis=ax_B, num_devices=1)
+    new_axes = calculate_scatter_axes(axes=axes, parallel_axis=ax_B, num_devices=1)
     assert new_axes.full_lengths == axes.full_lengths
 
 
 @pytest.mark.parametrize("axis, num", [(ax_A, 2), (ax_B, 3), (ax_C, 4), (ax_A, 5), (ax_B, 5),
                                        (ax_C, 5)])
 def test_calculate_new_axes_no_remainder(axis, num):
-    new_axes = calculate_new_axes(axes=axes, parallel_axis=axis, num_devices=num)
+    new_axes = calculate_scatter_axes(axes=axes, parallel_axis=axis, num_devices=num)
     expected_axes = ng.make_axes(
         [a if a != axis else ng.make_axis(length=axis.length / num, name=a.name) for a in axes])
     assert new_axes.full_lengths == expected_axes.full_lengths
@@ -40,20 +40,20 @@ def test_calculate_new_axes_no_remainder(axis, num):
 @pytest.mark.parametrize("axis, num", [(ax_B, 2), (ax_A, 3), (ax_B, 4), (ax_B, 6), (ax_C, 7)])
 def tests_calculate_new_axes_has_remainder(axis, num):
     with pytest.raises(AssertionError):
-        calculate_new_axes(axes=axes, parallel_axis=axis, num_devices=num)
+        calculate_scatter_axes(axes=axes, parallel_axis=axis, num_devices=num)
 
 
 def test_calculate_new_axes_zero_devices():
     with pytest.raises(ZeroDivisionError):
-        calculate_new_axes(axes=axes, parallel_axis=ax_B, num_devices=0)
+        calculate_scatter_axes(axes=axes, parallel_axis=ax_B, num_devices=0)
 
 
 def test_calculate_new_axes_null_axes():
     with pytest.raises(TypeError):
-        calculate_new_axes(axes=None, parallel_axis=ax_B, num_devices=2)
+        calculate_scatter_axes(axes=None, parallel_axis=ax_B, num_devices=2)
 
 
 def test_calculate_new_axes_null_parallel_axis():
-    new_axes = calculate_new_axes(axes=axes, parallel_axis=None, num_devices=1)
+    new_axes = calculate_scatter_axes(axes=axes, parallel_axis=None, num_devices=1)
     # Checks null parallel axis. The axes calculated should have the same length as original
     assert new_axes.full_lengths == axes.full_lengths

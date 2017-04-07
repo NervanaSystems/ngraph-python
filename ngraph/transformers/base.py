@@ -87,6 +87,7 @@ class Computation(NameableValue):
         for param, arg in zip(self.computation.parameters, args):
             param.value[()] = arg
 
+
         self.executor()
 
         # TODO Should copy this out of the device to a destination when it is not scalar

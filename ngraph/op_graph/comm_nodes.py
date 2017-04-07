@@ -23,7 +23,7 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
     return new_axes
 
 
-def calculate_new_axes(axes, parallel_axis, num_devices):
+def calculate_scatter_axes(axes, parallel_axis, num_devices):
     new_axes = list()
     for a in axes:
         if parallel_axis == a:
@@ -174,7 +174,7 @@ class ScatterRecvOp(RecvOp):
     def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
         #invoke axes math helper to modify scatter axis
         # TODO if calculate... function is only used here, refactor/rename
-        recv_axes = calculate_new_axes(send_axes, fragment_axis, fragments)
+        recv_axes = send_axes#calculate_scatter_axes(send_axes, fragment_axis, fragments)
         return recv_axes
 
 
@@ -217,7 +217,8 @@ class GatherRecvOp(RecvOp):
     def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
         #invoke axes math helper to modify scatter axis
         # TODO if calculate... function is only used here, refactor/rename
-        recv_axes = calculate_gather_axes(send_axes, fragment_axis, fragments)
+        recv_axes = send_axes
+            #calculate_gather_axes(send_axes, fragment_axis, fragments)
         return recv_axes
 
     @property
