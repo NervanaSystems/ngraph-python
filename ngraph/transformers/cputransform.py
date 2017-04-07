@@ -671,7 +671,7 @@ from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
 
-        mkldnn_path = os.getcwd()
+        mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
         self.code.execute("mkldnn.open()")
