@@ -8,7 +8,7 @@ pytestmark = pytest.mark.transformer_dependent("module")
 
 @pytest.mark.parametrize("script_path, description", (
     ("examples/mnist/mnist_mlp.py", "Check if MNIST MLP is trainable"),
-    ("examples/cifar10/cifar10_conv.py", "Check if CIFAR10 CONV is trainable")
+    ("examples/cifar10/cifar10_mlp.py", "Check if CIFAR10 MLP is trainable")
 ))
 def test_if_network_is_trainable(script_path, description):
     """
