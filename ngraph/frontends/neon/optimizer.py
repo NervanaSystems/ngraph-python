@@ -113,6 +113,25 @@ class LearningRateOptimizer(Optimizer):
         super(LearningRateOptimizer, self).__init__(**kwargs)
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
+    @ng.with_op_metadata
+    def __call__(self, cost_func, variable_scope=None):
+        all_updates = []
+        batch_cost = ng.sum(cost_func, out_axes=())
+        batch_size = cost_func.axes.batch_axis().length
+
+        selected_variables = batch_cost.variables()
+        if variable_scope is not None:
+            selected_variables = [op for op in selected_variables if op.scope == variable_scope]
+        grads = [ng.deriv(batch_cost, v) / batch_size for v in selected_variables]
+        scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
+
+        for variable, grad in zip(selected_variables, grads):
+            updates = self.variable_update(variable, grad, scale_factor)
+            all_updates.append(updates)
+        updates = ng.doall(all_updates)
+        grads = ng.doall(grads)
+        return ng.sequential([grads, updates, 0])
+
 
 class GradientDescentMomentum(LearningRateOptimizer):
     """
@@ -171,29 +190,19 @@ class GradientDescentMomentum(LearningRateOptimizer):
         self.wdecay = wdecay
         self.nesterov = nesterov
 
-    @ng.with_op_metadata
-    def __call__(self, cost_func):
-        all_updates = []
-        batch_cost = ng.sum(cost_func, out_axes=())
-        batch_size = cost_func.axes.batch_axis().length
-        grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
-        scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
-        for variable, grad in zip(batch_cost.variables(), grads):
-            updates = []
-            velocity = ng.persistent_tensor(axes=variable.axes,
-                                            initial_value=0.).named(variable.name + '_vel')
-            clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
-            lr = - self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
-            updates.append(ng.assign(velocity, velocity * self.momentum_coef + lr))
-            if self.nesterov:
-                delta = (self.momentum_coef * velocity + lr)
-            else:
-                delta = velocity
-            updates.append(ng.assign(variable, variable + delta))
-            all_updates.append(ng.sequential(updates))
-        updates = ng.doall(all_updates)
-        grads = ng.doall(grads)
-        return ng.sequential([grads, updates, 0])
+    def variable_update(self, variable, grad, scale_factor):
+        updates = []
+        velocity = ng.persistent_tensor(axes=variable.axes,
+                                        initial_value=0.).named(variable.name + '_vel')
+        clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
+        lr = - self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
+        updates.append(ng.assign(velocity, velocity * self.momentum_coef + lr))
+        if self.nesterov:
+            delta = (self.momentum_coef * velocity + lr)
+        else:
+            delta = velocity
+        updates.append(ng.assign(variable, variable + delta))
+        return ng.sequential(updates)
 
 
 class RMSProp(LearningRateOptimizer):
@@ -243,25 +252,13 @@ class RMSProp(LearningRateOptimizer):
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
 
-    @ng.with_op_metadata
-    def __call__(self, cost_func):
-        all_updates = []
-        batch_cost = ng.sum(cost_func, out_axes=())
-        batch_size = cost_func.axes.batch_axis().length
-
-        grads = [ng.deriv(batch_cost, v) / batch_size for v in batch_cost.variables()]
-        scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
-
+    def variable_update(self, variable, grad, scale_factor):
         epsilon, decay = (self.epsilon, self.decay_rate)
-        for i, (variable, grad) in enumerate(zip(batch_cost.variables(), grads)):
-            grad = clip_gradient_value(grad, self.gradient_clip_value)
-            state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
-            all_updates.append(ng.sequential([
-                ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
-                ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
-                                                / (ng.sqrt(state + epsilon) + epsilon)))
-            ]))
-
-        updates = ng.doall(all_updates)
-        grads = ng.doall(grads)
-        return ng.sequential([grads, updates, 0])
+        grad = clip_gradient_value(grad, self.gradient_clip_value)
+        state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+        updates = ng.sequential([
+            ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
+            ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
+                                            / (ng.sqrt(state + epsilon) + epsilon)))
+        ])
+        return updates
