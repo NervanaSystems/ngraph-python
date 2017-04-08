@@ -16,17 +16,12 @@
 from __future__ import print_function
 from ngraph.frontends.caffe.cf_importer.importer import CaffeImporter
 
-#give all the options to the importer as arguments dictonary
-args = {}
-args['model'] = "sum.prototxt"
-#option to compute the values
-args['mode'] = "compute"
-#give the names of the layers to compute
-args['name'] = "A,B,C,D"
+model = "sum.prototxt"
 #import graph from the prototxt
-importer = CaffeImporter(args)
+importer = CaffeImporter()
+importer.parse_net_def(model,verbose=True)
 #call the compute function and print results
-res = importer.compute(args['name'])
+res = importer.compute("A,B,C,D")
 print("Result is:")
 for out in res:
     print("\n",out)
