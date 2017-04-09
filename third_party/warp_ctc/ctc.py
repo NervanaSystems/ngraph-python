@@ -129,9 +129,7 @@ class CTC(object):
                     n_threads=1):
 
         self.options.num_threads = n_threads
-        max_t, bsz, nout = acts.shape
-        utt_lens = (utt_lens * max_t / 100).astype(np.int32)
-
+        _, self.bsz, self.nout = acts.shape
         flat_dims = np.prod(acts.shape)
         assert np.prod(grads.shape) == flat_dims
 
@@ -140,7 +138,7 @@ class CTC(object):
         costs_buf = self.ffi.cast("float*", costs.ctypes.data)
 
         warp_grads_buf_size = flat_dims * self.get_buf_size(grads_buf)
-        warp_costs_buf_size = bsz * self.get_buf_size(costs_buf)
+        warp_costs_buf_size = self.bsz * self.get_buf_size(costs_buf)
 
         warp_labels = self.ffi.cast("int*", lbls.ravel().ctypes.data)
         warp_label_lens = self.ffi.cast("int*", lbl_lens.ravel().ctypes.data)
@@ -148,8 +146,8 @@ class CTC(object):
 
         status = self.ctclib.get_workspace_size(warp_label_lens, 
                                                 warp_input_lens, 
-                                                nout, 
-                                                bsz, 
+                                                self.nout, 
+                                                self.bsz, 
                                                 self.options, 
                                                 self.size_in_bytes)
 
@@ -165,8 +163,8 @@ class CTC(object):
                                                   warp_labels,
                                                   warp_label_lens,
                                                   warp_input_lens,
-                                                  nout,
-                                                  bsz,
+                                                  self.nout,
+                                                  self.bsz,
                                                   costs_buf,
                                                   workspace,
                                                   self.options)
