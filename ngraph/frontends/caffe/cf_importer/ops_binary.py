@@ -13,15 +13,16 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe.cf_importer.ops_base import OpsBase
 import ngraph as ng
 import caffe_pb2
 
 
-class OpsBinary(OpsBase):
+class OpsBinary():
     """
     This class supports all the binary operations required for caffe.
     It provides ngraph ops corresponding to caffe operations
+
+    Note : register all the Op functions in this class with OpsBridge
     """
     def Eltwise(self, layer, inputs):
         """
@@ -43,3 +44,6 @@ class OpsBinary(OpsBase):
             out.named = layer.name
             return out
 
+
+    def __call__(self,func,layer,inputs):
+        return getattr(self,func)(layer,inputs)

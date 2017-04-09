@@ -13,13 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe.cf_importer.ops_base import OpsBase
 import ngraph as ng
 
-
-class OpsConstant(OpsBase):
+class OpsConstant():
     """
-    Mix-in class for constant ops.
+    class for constant ops.
+    Note: Op functions in this class should be registered in the OpsBridge class
     """
 
     def DummyData(self,layer,inputs):
@@ -50,4 +49,6 @@ class OpsConstant(OpsBase):
             return ng.constant(val,axes).named(layer.name)
 
 
+    def __call__(self,func,layer,inputs):
+        return getattr(self,func)(layer,inputs)
 

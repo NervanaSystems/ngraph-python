@@ -13,36 +13,47 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe.cf_importer.ops_constant import OpsConstant
-from ngraph.frontends.caffe.cf_importer.ops_binary import OpsBinary
 
-class OpsBridge(OpsConstant,OpsBinary):
+class OpsBridge():
     """
     Bridging op between Caffe2 / ngraph.
-
-    OpsBase
-        ^
-        |_____________________________________________________ ...
-        |                 |                 |
-    OpsBinary         OpsUnary           OpsReduction          ...
-        ^                 ^                 ^
-        |def Add()        |def Tanh()       |
-        |def Mul()        |def Sigmoid()    |
-        |...              |...              |
-        |_________________|_________________|_________________ ...
-        |
-        |
-    OpsBridge (contains mix-ins from OpsBinary, OpsUnary, ...)
-
     """
 
     def __init__(self):
-        self.init_assign_op_names = set()
+        self._funcs_class_map = {}
+        self.register_funcs_with_op_class()
+
+    def map_funcs_with_op_class(self,func,className):
+        """
+        This function builds dictionary for op functions and its class
+        """
+        if not self._funcs_class_map.has_key(func):
+            self._funcs_class_map[func] = className
+        else:
+            raise  ValueError (func," already exists in the class:",className)
+
+    def get_op_class_by_func(self,func):
+        """
+        returns the op class for a given op function
+        """
+        if self._funcs_class_map.has_key(func):
+            return self._funcs_class_map[func]
+        else:
+            raise NotImplementedError (func," is not defined in any class")
+
+    def register_funcs_with_op_class(self):
+        """
+        This function registers all the op functions of caffe to op class
+        """
+        from ngraph.frontends.caffe.cf_importer.ops_constant import OpsConstant
+        from ngraph.frontends.caffe.cf_importer.ops_binary import OpsBinary
+
+        self.map_funcs_with_op_class("Eltwise",OpsBinary)
+        self.map_funcs_with_op_class("DummyData",OpsConstant)
 
     def __call__(self, layer, input_ops):
         """
-        Call Op based on `layer.name`. Mix-in functions must have same name
-        as the `layer.name`.
+        This function returns the ngraph op corresponding to caffe layer type
 
         Arguments:
             layer : a Caffe layer
@@ -51,12 +62,6 @@ class OpsBridge(OpsConstant,OpsBinary):
         Returns:
             The resulting ngraph op
         """
-        op_type = layer.type
-
-        if hasattr(self, op_type):
-            return getattr(self, op_type)(layer, input_ops)
-        else:
-            #print(layer.name, "ignored.")
-            return None
-
-
+        func = layer.type
+        op_class = self.get_op_class_by_func(func)
+        return op_class()(func,layer,input_ops)

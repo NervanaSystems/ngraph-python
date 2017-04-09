@@ -129,6 +129,9 @@ class CaffeImporter:
                 if self._name_op_map.has_key(layer.top):
                     self._name_op_map[layer.top] = out_op
 
+    
+    def get_op_by_name(self,name):
+        return self._name_op_map.get(name)
 
     def compute(self,name):
         """
@@ -141,10 +144,11 @@ class CaffeImporter:
         layers = name.split(',')
         ops =[]
         for l in layers:
-            if not self._name_op_map.has_key(l) :
+            op = self.get_op_by_name(l)
+            if not op:
                 print("Layer ",l," does not exists in the prototxt")
             else:
-                ops.append(self._name_op_map[l])
+                ops.append(op)
 
         with ef() as ex:
             return ex.executor(ops)()
@@ -229,9 +233,12 @@ if __name__ == '__main__':
     params_def = args['weights']
 
     importer = CaffeImporter()
-    importer.parse_net_def(model_def,solver_def,params_def,verbose=True)
+    importer.parse_net_def(model_def,solver_def,params_def,verbose=args['verbose'])
 
 
     if args['mode'] == 'compute':
-            print("\n",importer.compute(args['name']))
+        result = importer.compute(args['name'])
+
+    for out in result:
+        print(out)
 

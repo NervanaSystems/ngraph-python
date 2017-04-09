@@ -19,11 +19,14 @@ model = "sum.prototxt"
 #import graph from the prototxt
 importer = CaffeImporter()
 importer.parse_net_def(model,verbose=True)
-#call the compute function and print results
-res = importer.compute("A,B,C,D")
-print("Result is:")
-for out in res:
-    print("\n",out)
+#get the op handle for any layer
+op = importer.get_op_by_name("D")
+#execute the op handle
+with executor(op) as ex:
+    res = ex()
+
+print("Result is:",res)
+
 ```
 
 ## Example models
