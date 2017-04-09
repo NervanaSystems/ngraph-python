@@ -38,11 +38,6 @@ class CTC(object):
         self.ffi.cdef(ctc_header())
         self.ctclib = self.ffi.dlopen(libpath)
 
-        self.buf_ref_from_array = lambda arr: self.ffi.from_buffer(
-            self.ffi.buffer(self.ffi.cast('void*', arr.ptr), arr.nbytes))
-        self.buf_ref_from_ptr = lambda ptr, size: self.ffi.from_buffer(
-            self.ffi.buffer(ptr, size))
-
         supported_devices = ['cpu', 'gpu']
         if on_device not in supported_devices:
             print("the requested device {} is not supported".format(
