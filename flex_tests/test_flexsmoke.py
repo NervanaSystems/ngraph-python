@@ -23,4 +23,3 @@ def test_if_network_is_trainable(script_path, description):
     mnist_mlp_path = os.path.dirname(__file__) + "/../" + script_path
     cmd = "python " + mnist_mlp_path + " -b flexgpu"
     subprocess.check_output(cmd, shell=True)
-
