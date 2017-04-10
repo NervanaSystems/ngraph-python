@@ -85,7 +85,7 @@ class ImporterTester(object):
 
         # assert
         assert tf_result.shape == ng_result.shape
-        assert ng.testing.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(tf_result, ng_result, rtol=rtol, atol=atol,err_msg='Tensorflow.Importer.Tester.run',verbose=True)
 
     def ng_run(self,
                tf_target_node,
