@@ -21,13 +21,18 @@ pytestmark = pytest.mark.transformer_dependent("module")
 
 MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
-EPSILON = 0.2
 
 x = ng.placeholder(())
-z = ng.placeholder(())
 
 bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
                                                  "DEC initialization not constrained to allowed range")
+
+
+def id_func(param):
+    if isinstance(param, str):
+        return param
+    return " "
+
 
 test_data_single_operand = (
     # template:(operation, operand, expected_result, description)
@@ -72,9 +77,33 @@ test_data_single_operand = (
 )
 
 
-@pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand)
+@pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand, ids=id_func)
 def test_single_operand(transformer_factory, operation, operand, expected_result, description):
     template_one_placeholder(operand, operation(x), x, expected_result, description)
+
+
+ExpMinus11 = 0.000016701407730579376220703125
+Minus11 = -11
+test_input_types_cases = (
+    # template:(operation, operand, expected_result, description, placeholder)
+    (ng.exp, [Minus11], [ExpMinus11],
+     "Exponential function of -11 as scalar",
+     ng.placeholder(())),
+
+    (ng.exp, [np.array([Minus11])], np.array([ExpMinus11]),
+     "Exponential function of -11 as 1-element array",
+     ng.placeholder(ng.make_axes([ng.make_axis(length=1)]))),
+
+    (ng.exp, [np.array([Minus11, Minus11])], [np.array([ExpMinus11, ExpMinus11])],
+     "Exponential function of -11 as multi-element array",
+     ng.placeholder(ng.make_axes([ng.make_axis(length=2)]))),
+)
+
+
+@pytest.mark.parametrize("operation, operand, expected_result, description, placeholder", test_input_types_cases, ids=id_func)
+def test_input_types(transformer_factory, operation, operand, expected_result, description, placeholder):
+    template_one_placeholder(operand, operation(placeholder), placeholder, expected_result, description)
+
 
 
 
