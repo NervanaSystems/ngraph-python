@@ -19,7 +19,7 @@ def test_if_network_is_trainable(script_path, description):
     Each test case tests only trainings using flex. The tests are not functional so it's not important what values are
     returned.
     """
-    print ("Description of test case: ", description)
+    print("Description of test case: ", description)
     mnist_mlp_path = os.path.dirname(__file__) + "/../" + script_path
     cmd = "python " + mnist_mlp_path + " -b flexgpu"
     subprocess.check_output(cmd, shell=True)
