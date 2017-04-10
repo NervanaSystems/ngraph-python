@@ -23,13 +23,10 @@ RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-bran
 RUN ln /dev/null /dev/raw1394
 
 WORKDIR /root/ngraph-test
-ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
-RUN pip install -r test_requirements.txt
-ADD examples_requirements.txt /root/ngraph-test/examples_requirements.txt
-RUN pip install -r examples_requirements.txt
-ADD gpu_requirements.txt /root/ngraph-test/gpu_requirements.txt
-RUN pip install -r gpu_requirements.txt
-
+ADD . /root/ngraph-test
+RUN make install
+RUN make gpu_prepare
+RUN make test_prepare
 
 # build Baidu's Warp-CTC 
 # dependencies for deepspeech example

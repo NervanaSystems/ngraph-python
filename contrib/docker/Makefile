@@ -264,7 +264,7 @@ test_hetr: build_test
 	/tmp/chown_files.sh
 
 doc: build_doc
-	docker run --rm ${VOLUME} -t ngraph_doc:${BUILD_VERSION} make doc
+	docker run --rm ${VOLUME} -t ngraph_doc:${BUILD_VERSION} sh -c "make doc_prepare && make doc"
 # update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
