@@ -79,22 +79,22 @@ ifeq ($(findstring ngraph_base,$(NGRAPH_BASE_IMG)), ngraph_base)
 endif
 
 build_base: expand_dockerfile_templates fallback_cuda_version
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_base:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_base:${BUILD_VERSION}` ngraph_base:latest
+	docker rmi ngraph_base:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_base:${BUILD_VERSION}` ngraph_base:latest
 
 build_base_cpu: expand_dockerfile_templates
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base_cpu --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_cpu:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.base_cpu --build-arg python_version=${PYTHON_VERSION} -t=ngraph_base_cpu:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_base_cpu:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_base_cpu:${BUILD_VERSION}` ngraph_base_cpu:latest
+	docker rmi ngraph_base_cpu:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_base_cpu:${BUILD_VERSION}` ngraph_base_cpu:latest
 
 build_dev: build_base
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.dev -t=ngraph_dev:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_dev:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_dev:${BUILD_VERSION}` ngraph_dev:latest
+	docker rmi ngraph_dev:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_dev:${BUILD_VERSION}` ngraph_dev:latest
 
 build_test_base: build_base
 	# hack to clone autoflex here in this working directory so it can be
@@ -107,17 +107,17 @@ build_test_base: build_base
 	git clone git@github.com:NervanaSystems/autoflex.git
 
 	# now build the docker container
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_test_base:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_test_base:${BUILD_VERSION}` ngraph_test_base:latest
+	docker rmi ngraph_test_base:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_test_base:${BUILD_VERSION}` ngraph_test_base:latest
 
 build_test: build_test_base
 	# now build the docker container
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test -t=ngraph_test:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_test:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test:latest
+	docker rmi ngraph_test:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_test:${BUILD_VERSION}` ngraph_test:latest
 
 build_test_cpu: build_base_cpu
 	# hack to clone autoflex here in this working directory so it can be
@@ -130,28 +130,28 @@ build_test_cpu: build_base_cpu
 	git clone git@github.com:NervanaSystems/autoflex.git
 
 	# now build the docker container
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_test_cpu:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_test_cpu:${BUILD_VERSION}` ngraph_test_cpu:latest
+	docker rmi ngraph_test_cpu:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_test_cpu:${BUILD_VERSION}` ngraph_test_cpu:latest
 
 build_mkldnn_test: build_test_cpu
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mkldnn -t=ngraph_mkldnn_test:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_mkldnn_test:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_mkldnn_test:${BUILD_VERSION}` ngraph_mkldnn_test:latest
+	docker rmi ngraph_mkldnn_test:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_mkldnn_test:${BUILD_VERSION}` ngraph_mkldnn_test:latest
 
 build_doc: build_base_cpu
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.doc -t=ngraph_doc:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_doc:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_doc:${BUILD_VERSION}` ngraph_doc:latest
+	docker rmi ngraph_doc:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_doc:${BUILD_VERSION}` ngraph_doc:latest
 
 build_caffe2: build_test_base
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.caffe2 -t=ngraph_caffe2:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_caffe2:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_caffe2:${BUILD_VERSION}` ngraph_caffe2:latest
+	docker rmi ngraph_caffe2:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_caffe2:${BUILD_VERSION}` ngraph_caffe2:latest
 
 build_mxnet: build_test_base
 	# clone ngraph-mxnet here in this working directory so it can be
@@ -162,10 +162,10 @@ build_mxnet: build_test_base
 	cd ${DIR}/contrib/docker
 	git clone git@github.com:NervanaSystems/ngraph-mxnet.git --recursive
 
-	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mxnet -t=ngraph_mxnet:${BUILD_VERSION} ${DIR}
+	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mxnet -t=ngraph_mxnet:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
-	@docker rmi ngraph_mxnet:latest || echo "keep going if docker rmi command fails"
-	@docker tag `docker images -q ngraph_mxnet:${BUILD_VERSION}` ngraph_mxnet:latest
+	docker rmi ngraph_mxnet:latest || echo "keep going if docker rmi command fails"
+	docker tag `docker images -q ngraph_mxnet:${BUILD_VERSION}` ngraph_mxnet:latest
 
 build_cntk: build_test_base
 	@$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.cntk -t=ngraph_cntk:${BUILD_VERSION} ${DIR}
@@ -179,54 +179,54 @@ test_all: test test_gpu test_mkldnn test_caffe2 test_mxnet test_cntk
 
 test: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_cpu
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_test \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_cpu: build_test_cpu
 	docker run --rm ${VOLUME} -t ngraph_test_cpu:${BUILD_VERSION} make test_cpu
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_test_cpu \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_parallel: build_test
 	docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_parallel
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_test \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_mkldnn: build_mkldnn_test
 	docker run --rm ${VOLUME} -t ngraph_mkldnn_test:${BUILD_VERSION} sh -c "cp /tmp/mkldnn_engine.so ./mkldnn_engine.so;make test_mkldnn"
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_mkldnn_test \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_caffe2: build_caffe2
 	docker run --rm ${VOLUME} -t ngraph_caffe2:${BUILD_VERSION} make test_caffe2
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_caffe2 \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_caffe2_shell: build_caffe2
 	docker run --rm ${VOLUME} -it ngraph_caffe2:${BUILD_VERSION} /bin/bash
@@ -245,43 +245,43 @@ test_cntk_shell: build_cntk
 
 test_gpu: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_gpu test_flex
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_test \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_hetr: build_test
 	nvidia-docker run --rm ${VOLUME} -t ngraph_test:${BUILD_VERSION} make test_hetr
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_test \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 doc: build_doc
 	docker run --rm ${VOLUME} -t ngraph_doc:${BUILD_VERSION} make doc
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_doc \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 style: build_test_cpu
 	docker run --rm ${VOLUME} -t ngraph_test_cpu:${BUILD_VERSION} make style
-# update the files to be owned by the calling user instead of root 
+# update the files to be owned by the calling user instead of root
 	docker run --rm ${VOLUME} \
 	--env MY_UID=${CALLER_UID} \
 	--env MY_GID=${CALLER_GID} \
 	--env MY_ROOT_DIR=/root/ngraph-test \
 	-t ngraph_test_cpu \
-	/tmp/chown_files.sh 
+	/tmp/chown_files.sh
 
 test_shell: build_test
 	docker run --rm ${VOLUME} -it ngraph_test:${BUILD_VERSION} /bin/bash
