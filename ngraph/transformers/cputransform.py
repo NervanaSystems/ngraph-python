@@ -34,7 +34,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.relu import ReluOp
+from ngraph.op_graph.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
@@ -342,6 +342,11 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_relu_fprop({}, inputs={}, out={}, slope={})",
                     op.index, inputs, outputs, op.slope)
 
+    @allocate_op.on_type(BpropReluOp)
+    def allocate_op(self, op, outputs, delta):
+        self.append("mkldnn.init_relu_bprop({}, arrE={}, arrD={}, slope={})",
+                    op.index, delta, outputs, op.fprop.slope)
+
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -453,6 +458,10 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):
         self.append("mkldnn.fprop_relu({}, {}, {}, {})", op.index, inputs, outputs, op.slope)
+
+    @generate_op.on_type(BpropReluOp)
+    def generate_op(self, op, outputs, delta):
+        self.append("mkldnn.bprop_relu({}, {}, {}, {})", op.index, delta, outputs, op.fprop.slope)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):

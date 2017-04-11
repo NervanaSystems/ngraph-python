@@ -33,6 +33,7 @@ struct mkldnn_netlist {
   mkldnn_primitive_desc_t prim_desc_list[3 * MKLDNN_NETLIST_MAX_SIZE];
   mkldnn_primitive_t prim_list[3 * MKLDNN_NETLIST_MAX_SIZE];
   float* buffer_list[MKLDNN_NETLIST_MAX_SIZE];
+  float* fprop_src_addr;
 };
 
 typedef struct mkldnn_netlist* mkldnn_netlist_t;

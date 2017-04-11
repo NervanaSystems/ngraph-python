@@ -69,5 +69,74 @@ mkldnn_netlist_t create_mkldnn_relu_fprop_primitives(
     mkldnn_net->prim_desc_list[mkldnn_net->prim_desc_count++] = relu_pd;
     mkldnn_net->net[mkldnn_net->net_size++] = relu;
 
+    mkldnn_net->fprop_src_addr = relu_src;    
+
+    return mkldnn_net;
+}
+
+
+/* Create list of mkldnn primitives to run relu bprop */
+mkldnn_netlist_t create_mkldnn_relu_bprop_primitives(
+            mkldnn_engine_t engine,
+            float* relu_src, float* relu_out, double slope,
+            mkldnn_netlist_t mkldnn_fprop_net, int src_size
+        )
+{
+    mkldnn_netlist_t mkldnn_net = create_mkldnn_netlist();
+    mkldnn_primitive_t relu_back;
+
+    int mkl_src_dims = 1;
+    int mkl_dst_dims = 1;
+    int mkl_src_sizes[1];
+    int mkl_dst_sizes[1];
+
+    mkl_src_sizes[0] = src_size;
+    mkl_dst_sizes[0] = src_size;
+
+    mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_dst_md;
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
+                                      mkl_src_sizes, mkldnn_f32, mkldnn_x));
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
+                                      mkl_dst_sizes, mkldnn_f32, mkldnn_x));  ///specify format of previous mkl layer
+
+    mkldnn_relu_desc_t relu_desc;
+    MKL_CHECK(mkldnn_relu_backward_desc_init(&relu_desc, &mkldnn_memory_desc_src_md,
+                                             &mkldnn_memory_desc_src_md, slope));
+    mkldnn_primitive_desc_t relu_pd;
+    MKL_CHECK(mkldnn_primitive_desc_create(&relu_pd, &relu_desc, engine, NULL));
+
+    mkldnn_primitive_t mkldnn_memory_prim_user_src, mkldnn_memory_prim_user_dst,
+                       mkldnn_memory_prim_user_fprop_src;
+    create_mkldnn_memory_primitive(mkl_src_dims, mkl_src_sizes, mkldnn_x,
+                                   mkldnn_f32, engine, relu_src,
+                                   &mkldnn_memory_prim_user_src);
+    create_mkldnn_memory_primitive(mkl_dst_dims, mkl_dst_sizes, mkldnn_x,
+                                   mkldnn_f32, engine, relu_out,
+                                   &mkldnn_memory_prim_user_dst);
+    create_mkldnn_memory_primitive(mkl_src_dims, mkl_src_sizes, mkldnn_x,
+                                   mkldnn_f32, engine,
+                                   mkldnn_fprop_net->fprop_src_addr,
+                                   &mkldnn_memory_prim_user_fprop_src);
+
+    const_mkldnn_primitive_t relu_dsts[] = { mkldnn_memory_prim_user_dst };
+
+    mkldnn_primitive_at_t relu_srcs[] =
+        { mkldnn_primitive_at(mkldnn_memory_prim_user_fprop_src, 0),
+                              mkldnn_primitive_at(mkldnn_memory_prim_user_src, 0)
+        };
+
+    MKL_CHECK(mkldnn_primitive_create(&relu_back, relu_pd, relu_srcs, relu_dsts));
+
+     /* Remember MKLDNN resources for cleanup */
+    mkldnn_net->prim_list[mkldnn_net->prim_count++] = relu_back;
+    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_src;
+    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_dst;
+    mkldnn_net->prim_list[mkldnn_net->prim_count++] =
+        mkldnn_memory_prim_user_fprop_src;
+
+    mkldnn_net->prim_desc_list[mkldnn_net->prim_desc_count++] = relu_pd;
+
+    mkldnn_net->net[mkldnn_net->net_size++] = relu_back;
+
     return mkldnn_net;
 }

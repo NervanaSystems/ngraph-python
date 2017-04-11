@@ -76,6 +76,13 @@ class Mkldnn(object):
                 [ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double, ctypes.c_int]
             self.create_mkldnn_relu_fprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_relu_bprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_relu_bprop_primitives
+            self.create_mkldnn_relu_bprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double,
+                 ctypes.c_void_p, ctypes.c_int]
+            self.create_mkldnn_relu_bprop_primitives_fn.restype = ctypes.c_void_p
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
@@ -91,6 +98,7 @@ class Mkldnn(object):
             self.mkldnn_conv_bprop_netlist = dict()
             self.mkldnn_innerproduct_fprop_netlist = dict()
             self.mkldnn_relu_fprop_netlist = dict()
+            self.mkldnn_relu_bprop_netlist = dict()
 
     def close(self):
         if (self.mkldnn_engine_initialized):
@@ -102,6 +110,8 @@ class Mkldnn(object):
                 self.cleanup_mkldnn_fn(self.mkldnn_innerproduct_fprop_netlist[i])
             for i in self.mkldnn_relu_fprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_relu_fprop_netlist[i])
+            for i in self.mkldnn_relu_bprop_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_relu_bprop_netlist[i])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -270,6 +280,27 @@ class Mkldnn(object):
             self.run_mkldnn_netlist_fn(self.mkldnn_relu_fprop_netlist[index])
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
+
+    def init_relu_bprop(self, index, arrE, arrD, slope):
+        if (self.mkldnn_enabled):
+            if (self.mkldnn_verbose):
+                print("Relu Input: ", len(arrE.shape), arrE.shape,
+                      " Outputs: ", arrD.shape, len(arrD.shape))
+            # Only single precision float supported for now
+            if ((arrE.dtype != np.float32) or (arrD.dtype != np.float32)):
+                return
+            input_size = np.prod(arrE.shape)
+            self.mkldnn_relu_bprop_netlist[index] = \
+                self.create_mkldnn_relu_bprop_primitives_fn(
+                    self.mkldnn_engine, arrE.ctypes.data, arrD.ctypes.data,
+                    slope, self.mkldnn_relu_fprop_netlist[index], input_size)
+
+    def bprop_relu(self, index, inputs, out, slope):
+        if (self.mkldnn_enabled and index in self.mkldnn_relu_bprop_netlist):
+            self.run_mkldnn_netlist_fn(self.mkldnn_relu_bprop_netlist[index])
+        else:
+            print("todo")
+            np.add(inputs * np.greater(inputs, 0), inputs * slope * np.less(inputs, 0), out=out)
 
 
 def update_conv(conv_slices, I, E, U):
