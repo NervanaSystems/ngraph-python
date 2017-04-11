@@ -16,11 +16,10 @@
 from __future__ import print_function
 from ngraph.transformers.gpu.kernel import GPUKernel
 import numpy as np
-from pycuda.gpuarray import empty
-
-from third_party.warp_ctc.ctc import CTC                                                            
+from third_party.warp_ctc.ctc import CTC
 
 warp_ctc = CTC(on_device='gpu')
+
 
 class CTCKernel(GPUKernel):
     def __init__(self, transformer, op):
@@ -50,7 +49,7 @@ class CTCKernel(GPUKernel):
         self.grads.fill(0.)
         self.costs.fill(0.)
 
-        warp_utt_lens = (self.uttlens_pct.get().ravel() 
+        warp_utt_lens = (self.uttlens_pct.get().ravel()
                          * self.max_t / 100.).astype(np.int32)
         warp_lbls = self.lbls.get().ravel().astype(np.int32)
         warp_lbl_lens = self.lbl_lens.get().ravel().astype(np.int32)
@@ -61,9 +60,9 @@ class CTCKernel(GPUKernel):
                                                        self.bsz)
         self.at_runtime.set_scratch_size(scratch_size)
         workspace = self.at_runtime.scratch_buffer(scratch_size)
-        
+
         warp_ctc.bind_to_gpu(self.activs,
-                             self.grads, 
+                             self.grads,
                              warp_lbls,
                              warp_lbl_lens,
                              warp_utt_lens,
