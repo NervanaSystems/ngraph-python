@@ -34,12 +34,14 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.relu import ReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
+from ngraph.transformers.passes.cpuopsfusion import FusionPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -335,6 +337,11 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_innerproduct_fprop({}, out={}, x={}, y={})",
                     op.index, out, x, y)
 
+    @allocate_op.on_type(ReluOp)
+    def allocate_op(self, op, outputs, inputs):
+        self.append("mkldnn.init_relu_fprop({}, inputs={}, out={}, slope={})",
+                    op.index, inputs, outputs, op.slope)
+
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -442,6 +449,10 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("mkldnn.innerproduct_fprop({}, {}, {}, out={})",
                     op.index, x, y, out)
+
+    @generate_op.on_type(ReluOp)
+    def generate_op(self, op, outputs, x):
+        self.append("mkldnn.fprop_relu(index={})""", op.index)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -632,6 +643,7 @@ class CPUTransformer(Transformer):
         self.use_pinned_mem = False
         self.rng_seed = None
         self.graph_passes = [CPUTensorLayout(),
+                             FusionPass(),
                              SimplePrune(),
                              RequiredTensorShaping(),
                              CPUTensorShaping()]
