@@ -642,8 +642,8 @@ class CPUTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [CPUTensorLayout(),
-                             FusionPass(),
+        self.graph_passes = [FusionPass(),
+                             CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
                              CPUTensorShaping()]

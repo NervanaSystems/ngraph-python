@@ -13,7 +13,7 @@ class FusionPass(PeepholeGraphPass):
         """
         pass
 
-    def fuse(self, input1, input2, op):
+    def fuse_fprop_relu(self, input1, input2, op):
         """
         Max and min fused to relu for the IA transformer.
         """
@@ -33,9 +33,9 @@ class FusionPass(PeepholeGraphPass):
             input_slope, = mul_arg1.args
             min_arg1, min_arg2 = mul_arg2.args
             if not ((min_arg1.is_scalar and min_arg1.args[0].tensor.const == 0
-                    and not(min_arg2.is_scalar))):  # check Min(0,x)/Min(x,0)
+                    and not(min_arg2.is_scalar)) and min_arg2 == input_tensor):  # check Min(0,x)/Min(x,0)
                 if not ((min_arg2.is_scalar and min_arg2.args[0].tensor.const == 0
-                        and not(min_arg1.is_scalar))):
+                        and not(min_arg1.is_scalar)) and min_arg1 == input_tensor):
                     return
             new_op = ReluOp(input_tensor, input_slope.tensor.const)
             self.replace_op(op, new_op)
@@ -43,9 +43,9 @@ class FusionPass(PeepholeGraphPass):
             input_slope, = mul_arg2.args
             min_arg1, min_arg2 = mul_arg1.args
             if not ((min_arg1.is_scalar and min_arg1.args[0].tensor.const == 0
-                    and not(min_arg2.is_scalar))):
+                    and not(min_arg2.is_scalar)) and min_arg2 == input_tensor):
                 if not ((min_arg2.is_scalar and min_arg2.args[0].tensor.const == 0
-                        and not(min_arg1.is_scalar))):
+                        and not(min_arg1.is_scalar)) and min_arg1 == input_tensor):
                     return
             new_op = ReluOp(input_tensor, input_slope.tensor.const)
             self.replace_op(op, new_op)
@@ -60,6 +60,6 @@ class FusionPass(PeepholeGraphPass):
         # expression is maximum(x,0) + slope*minimum(0,x)
         input1, input2 = op.args
         if (isinstance(input1, Maximum) and isinstance(input2, Multiply)):
-            self.fuse(input1, input2, op)
+            self.fuse_fprop_relu(input1, input2, op)
         elif (isinstance(input2, Maximum) and isinstance(input1, Multiply)):
-            self.fuse(input2, input1, op)
+            self.fuse_fprop_relu(input2, input1, op)
