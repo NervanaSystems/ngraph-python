@@ -13,7 +13,17 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
+
+from types import FunctionType
 from ngraph.testing import executor
+
+
+def id_func(param):
+    if isinstance(param, str):
+        return param
+    elif isinstance(param, FunctionType):
+        return param.func_name.title()
+    return " "
 
 
 def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, description):

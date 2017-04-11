@@ -15,7 +15,7 @@
 import numpy as np
 import pytest
 import ngraph as ng
-from ngraph.testing.flexutil import template_one_placeholder
+from ngraph.testing.flexutil import template_one_placeholder, id_func
 
 pytestmark = pytest.mark.transformer_dependent("module")
 
@@ -27,11 +27,6 @@ x = ng.placeholder(())
 bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
                                                  "DEC initialization not constrained to allowed range")
 
-
-def id_func(param):
-    if isinstance(param, str):
-        return param
-    return " "
 
 
 test_data_single_operand = (
@@ -77,11 +72,6 @@ test_data_single_operand = (
 )
 
 
-@pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand, ids=id_func)
-def test_single_operand(transformer_factory, operation, operand, expected_result, description):
-    template_one_placeholder(operand, operation(x), x, expected_result, description)
-
-
 ExpMinus11 = 0.000016701407730579376220703125
 Minus11 = -11
 test_input_types_cases = (
@@ -98,6 +88,11 @@ test_input_types_cases = (
      "Exponential function of -11 as multi-element array",
      ng.placeholder(ng.make_axes([ng.make_axis(length=2)]))),
 )
+
+
+@pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand, ids=id_func)
+def test_single_operand(transformer_factory, operation, operand, expected_result, description):
+    template_one_placeholder(operand, operation(x), x, expected_result, description)
 
 
 @pytest.mark.parametrize("operation, operand, expected_result, description, placeholder", test_input_types_cases, ids=id_func)
