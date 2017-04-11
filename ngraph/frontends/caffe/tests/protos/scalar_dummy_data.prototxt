@@ -1,0 +1,16 @@
+name: "Scalar Dummy"
+
+layer {
+    name: "A"
+    type: "DummyData"
+    top: "A"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: 1.0
+        }
+        shape {
+            dim:1
+        }
+    }
+}

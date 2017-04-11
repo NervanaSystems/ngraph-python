@@ -14,16 +14,29 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function
+import numpy as np
+import ngraph as ng
+from ngraph.testing import executor
+import pytest
 from ngraph.frontends.caffe.cf_importer.importer import CaffeImporter
-import ngraph.transformers as ngt
+from os.path import join
+pytestmark = pytest.mark.transformer_dependent("module")
+PROTO_PATH = "ngraph/frontends/caffe/tests/protos/"
 
-model = "sum.prototxt"
-#import graph from the prototxt
-importer = CaffeImporter()
-importer.parse_net_def(model,verbose=True)
-#get the op handle for any layer
-op = importer.get_op_by_name("D")
-#execute the op handle
-res = ngt.make_transformer().computation(op)()
-print("Result is:",res)
+def test_scalar_dummy_data():
+    importer = CaffeImporter()
+    importer.parse_net_def(join(PROTO_PATH,"scalar_dummy_data.prototxt"))
+    op = importer.get_op_by_name("A")
+    with executor(op) as ex:
+        res = ex()
+    assert(res == 1.)
+
+def test_vector_dummy_data():
+    importer = CaffeImporter()
+    importer.parse_net_def(join(PROTO_PATH,"tensor_dummy_data.prototxt"))
+    op = importer.get_op_by_name("A")
+    a = np.full((2,3),4.)
+    with executor(op) as ex:
+        res = ex()
+    assert(np.array_equal(res,a))
 

@@ -14,6 +14,7 @@
 ```python
 from __future__ import print_function
 from ngraph.frontends.caffe.cf_importer.importer import CaffeImporter
+import ngraph.transformers as ngt
 
 model = "sum.prototxt"
 #import graph from the prototxt
@@ -22,9 +23,7 @@ importer.parse_net_def(model,verbose=True)
 #get the op handle for any layer
 op = importer.get_op_by_name("D")
 #execute the op handle
-with executor(op) as ex:
-    res = ex()
-
+res = ngt.make_transformer().computation(op)()
 print("Result is:",res)
 
 ```

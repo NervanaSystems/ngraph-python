@@ -16,8 +16,6 @@ from __future__ import print_function
 from ngraph.frontends.caffe.cf_importer.ops_bridge import OpsBridge
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.testing import ExecutorFactory as ef
-import os
 import argparse
 
 from google.protobuf import text_format
@@ -25,6 +23,20 @@ try:
     import caffe_pb2
 except:
     raise ImportError('Must be able to import Caffe modules to use this module')
+
+supported_layers = ["Eltwise","DummyData"] 
+
+#TBD Adding support for below layers   
+#AbsVal, Accuracy, ArgMax, 
+#BNLL, BatchNorm, BatchReindex, Bias, Concat, ContrastiveLoss, Convolution, 
+#Crop, Deconvolution, DetectionEvaluate, DetectionOutput, Dropout,ELU, 
+#Eltwise, Embed, EuclideanLoss, Exp, Filter, Flatten,HDF5Output, HingeLoss,
+#Im2col, InfogainLoss, InnerProduct, Input, LRN, LSTM, LSTMUnit, Log, MVN,
+#MultiBoxLoss, MultinomialLogisticLoss, Normalize, PReLU, Parameter, Permute, 
+#Pooling, Power, PriorBox, RNN, ReLU, Reduction, Reshape,SPP, Scale, Sigmoid,
+#SigmoidCrossEntropyLoss, Silence, Slice, SmoothL1Loss,Softmax, 
+#SoftmaxWithLoss, Split, TanH, Threshold, Tile, 
+#"Data","AnnotatedData","HDF5Data","ImageData","MemoryData","VideoData","WindowData"
 
 class CaffeImporter:
     """
@@ -46,24 +58,8 @@ class CaffeImporter:
         self._ops_bridge = OpsBridge()
         self._model_def = None
         self._solver_def = None
-        self._supported_layers = self.supported_layers()
-        self._data_layers = [ l for l in self._supported_layers if "Data" in l]
+        self._data_layers = [ l for l in supported_layers if "Data" in l]
 
-    def supported_layers(self):
-        supported_layers = ["Eltwise","DummyData"] 
-        #TBD Adding support for below layers   
-
-        #AbsVal, Accuracy, ArgMax, 
-        #BNLL, BatchNorm, BatchReindex, Bias, Concat, ContrastiveLoss, Convolution, 
-        #Crop, Deconvolution, DetectionEvaluate, DetectionOutput, Dropout,ELU, 
-        #Eltwise, Embed, EuclideanLoss, Exp, Filter, Flatten,HDF5Output, HingeLoss,
-        #Im2col, InfogainLoss, InnerProduct, Input, LRN, LSTM, LSTMUnit, Log, MVN,
-        #MultiBoxLoss, MultinomialLogisticLoss, Normalize, PReLU, Parameter, Permute, 
-        #Pooling, Power, PriorBox, RNN, ReLU, Reduction, Reshape,SPP, Scale, Sigmoid,
-        #SigmoidCrossEntropyLoss, Silence, Slice, SmoothL1Loss,Softmax, 
-        #SoftmaxWithLoss, Split, TanH, Threshold, Tile, 
-        #"Data","AnnotatedData","HDF5Data","ImageData","MemoryData","VideoData","WindowData"
-        return  supported_layers
     
     def parse_net_def(self,model_def=None,solver_def=None,params_def=None,verbose=False):
         """
@@ -98,7 +94,7 @@ class CaffeImporter:
             if verbose:
                 print("\nLayer: ",layer.name," Type: ",layer.type)
 
-            if layer.type not in self._supported_layers:
+            if layer.type not in supported_layers:
                 raise ValueError ('layer type', layer.type ,' is not supported')
             if len(layer.top) > 1 and layer.type not in self._data_layers:
                 raise ValueError ('only "Data" layers can have more than one output (top)')
@@ -133,25 +129,6 @@ class CaffeImporter:
     def get_op_by_name(self,name):
         return self._name_op_map.get(name)
 
-    def compute(self,name):
-        """
-        To compute the value for the given layer 
-        Arguments:
-            name : name of the layers to compute
-        Return:
-            return the final value of the given layer
-        """
-        layers = name.split(',')
-        ops =[]
-        for l in layers:
-            op = self.get_op_by_name(l)
-            if not op:
-                print("Layer ",l," does not exists in the prototxt")
-            else:
-                ops.append(op)
-
-        with ef() as ex:
-            return ex.executor(ops)()
     
 
 class CaffeCLI:
@@ -184,6 +161,16 @@ class CaffeCLI:
         
     def get_cmd_args(self):
         return self._cmdargs
+
+    def compute(self,ops):
+        """
+        To compute the value for the given layer 
+        Arguments:
+            ops : ngraph ops of the caffe layers to compute
+        Return:
+            return the value of the given layers
+        """
+        return ngt.make_transformer().computation(ops)()
 
     def caffe_cli_emulator(self): 
         """
@@ -224,21 +211,27 @@ if __name__ == '__main__':
 
     solver_def = None
     model_def = None
+    params_def = args['weights']
 
     if args['mode'] == 'train':
         solver_def = args['solver']
     else:
         model_def = args['model']
 
-    params_def = args['weights']
-
     importer = CaffeImporter()
     importer.parse_net_def(model_def,solver_def,params_def,verbose=args['verbose'])
 
 
     if args['mode'] == 'compute':
-        result = importer.compute(args['name'])
+        layers = args['name'].split(',')
+        ops =[]
+        for l in layers:
+            op = importer.get_op_by_name(l)
+            if not op:
+                print("Layer ",l," does not exists in the prototxt")
+            else:
+                ops.append(op)
+        result = cli.compute(ops)
 
     for out in result:
         print(out)
-
