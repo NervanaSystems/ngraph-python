@@ -1,7 +1,8 @@
 FROM ngraph_base_cpu
 
+# install dependencies
 WORKDIR /root
-RUN apt-get install -y python-dev && \
+RUN apt-get install -y python-dev cmake && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
@@ -21,6 +22,16 @@ RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-bran
 WORKDIR /root/ngraph-test
 ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
 RUN pip install -r test_requirements.txt
+ADD examples_requirements.txt /root/ngraph-test/examples_requirements.txt
+RUN pip install -r examples_requirements.txt
+
+# build Baidu's Warp-CTC
+# dependencies for deepspeech example
+RUN pip install -y cffi
+RUN git clone https://github.com/baidu-research/warp-ctc.git
+WORKDIR warp-ctc
+RUN mkdir -p build
+RUN cd build && cmake ../ && make && cd ../..
 
 # add chown_files script
 WORKDIR /root/ngraph-test
