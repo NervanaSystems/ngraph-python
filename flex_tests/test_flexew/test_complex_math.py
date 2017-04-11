@@ -50,6 +50,15 @@ test_data_single_operand = (
     (ng.log, [MAXIMUM_FLEX_VALUE + 1], [10.39697265625],
      "Logarithm of a value greater than positive border value to achieve overflow"),
 
+    # test_safe_log
+    (ng.safelog, [0], [-50.0], "Safe-Logarithm of 0 to limit (-50)"),
+    (ng.safelog, [0.01], [-4.605224609375], "Safe-Logarithm of a small constant within the flex range"),
+    (ng.safelog, [1], [np.log(1)], "Safe-Logarithm of 1 to achieve 0"),
+    (ng.safelog, [MAXIMUM_FLEX_VALUE], [10.39697265625],
+     "Safe-Logarithm of a positive border value to achieve a number from flex range"),
+    (ng.safelog, [MAXIMUM_FLEX_VALUE + 1], [10.39697265625],
+     "Safe-Logarithm of a value greater than positive border value to achieve overflow"),
+
     # test_tanh
     (ng.tanh, [MINIMUM_FLEX_VALUE - 1], [np.tanh(MINIMUM_FLEX_VALUE)], "Tanh of a constant below the flex range"),
     (ng.tanh, [MINIMUM_FLEX_VALUE], [np.tanh(MINIMUM_FLEX_VALUE)], "Tanh of a negative border value"),
