@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,13 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
-from cachetools import cached, LRUCache
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
-    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, \
-    ReductionOp, DotOp, TensorOp, TensorSliceOp, BroadcastOp, ReorderAxes, Flatten, \
-    AxesCastOp, ReshapeOp, TensorValueOp, tdcache, Unflatten, ExpandDims, SequentialOp, \
-    Transpose
+    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
+    ReshapeOp, TensorValueOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes
@@ -27,8 +24,24 @@ from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
 from ngraph.op_graph.ctc import CTCOp
 
-from ngraph.transformers.passes.layout import LayoutAssignment, BinaryLayoutConstraint, \
-    UnaryLayoutConstraint
+from ngraph.transformers.passes.layout import UnaryLayoutConstraint
+from ngraph.transformers.util.layout_common import StridedLayoutAssignment, \
+    StridedBinaryLayoutConstraint, flatten
+
+
+class GPULayoutView(object):
+    """
+    Contains information needed to create a tensor view for the GPU
+
+    Attributes:
+        shape: tuple of integer dimension lengths
+        strides: tuple of integer item strides
+        offset: item offset from base address of GPU memory allocation
+    """
+    def __init__(self, shape, strides, offset=0):
+        self.shape = tuple([int(i) for i in shape])
+        self.strides = tuple([int(i) for i in strides])
+        self.offset = int(offset)
 
 
 class DimshuffleOp(TensorOp):
@@ -36,7 +49,11 @@ class DimshuffleOp(TensorOp):
     Layout transformation op for GPU which does a copy
 
     Parameters:
-        x (TensorOp): A tensor.
+        x (TensorOp): A tensor
+        in_view (GPULayoutView): View to use for reading the input
+        out_view (GPULayoutView): View to use for writing the output
+        axis_order (list): List of input axis indexes specifying order to permute
+            input axes for the output
     """
 
     def __init__(self, x, in_view, out_view, axis_order, **kwargs):
@@ -50,6 +67,10 @@ class DimshuffleOp(TensorOp):
 class GPUReshapeOp(ReshapeOp):
     """
     Layout transformation op for a GPU which does not copy, but changes shape and/or strides
+
+    Parameters:
+        x (TensorOp): A tensor
+        view (GPULayoutView): New view to use for reading the tensor
     """
     def __init__(self, x, view, **kwargs):
         super(GPUReshapeOp, self).__init__(x, axes=x.axes, **kwargs)
@@ -63,64 +84,14 @@ class GPUReshapeOp(ReshapeOp):
         return td
 
 
-def flatten(l):
-    out = []
-    for item in l:
-        if type(item) == list:
-            out = out + item
-        else:
-            out.append(item)
-    return out
-
-
-def enumerate_remaining_axes(remaining_axes):
-    results = []
-    if len(remaining_axes) == 1:
-        return [[remaining_axes[0]]]
-
-    for axis in remaining_axes:
-        other_axes = [a for a in remaining_axes if a != axis]
-        sub_results = enumerate_remaining_axes(other_axes)
-        for result in sub_results:
-            result.insert(0, axis)
-            results.append(result)
-
-    return results
-
-
-@cached(cache=LRUCache(maxsize=100))
-def enumerate_axis_orders(axes):
-    return enumerate_remaining_axes(list(axes))
-
-
-def split_points_to_groups(split_points, num_axes):
-    result = [list(range(s, split_points[i + 1])) for i, s in enumerate(split_points[:-1])]
-    result = [list(range(split_points[0]))] + result + [list(range(split_points[-1], num_axes))]
-    return result
-
-
-@cached(cache=LRUCache(maxsize=100))
-def get_split_groups(num_axes, num_groups):
-    num_splits = num_groups - 1
-    split_points = [(i + 1) for i in range(num_splits)]
-    results = []
-
-    for split in reversed(tuple(range(num_splits))):
-        limit = num_axes if split == (num_splits - 1) else split_points[split + 1]
-
-        while split_points[split] < (limit - 1):
-            results.append(split_points_to_groups(split_points, num_axes))
-            split_points[split] += 1
-
-    results.append(split_points_to_groups(split_points, num_axes))
-
-    return results
-
-
-class GPULayoutAssignment(LayoutAssignment):
+class GPULayoutAssignment(StridedLayoutAssignment):
     """
-    GPU implementation of device specific layout descriptor. The layout is implemented
-    by a list of axis groups where each group of axes must be contiguous in memory.
+    GPU implementation of device specific layout descriptor.
+
+    Parameters:
+        axes: List of ngraph Axis objects specifying axes stored in this layout
+        order: List of axis groups. See definition of StridedLayoutAssignment for
+            an example
 
     Attributes:
         ng_axes: List of Axis objects stored by this layout (unflattened)
@@ -128,35 +99,23 @@ class GPULayoutAssignment(LayoutAssignment):
         shape: Tensor shape calculated from layout axes groups
         strides: Tensor strides calculated from layout axes groups
         offset: Tensor offset from buffer base
-
-    Example:
-        ng_axes = [Axis(C), Axis(H), Axis(W), Axis(N)]
-        axes = [[0, 2], [1], [3]]
-        This means C and W are flattened into a single contiguous axis in memory and the
-        other axes are unconstrained, meaning they may be strided in any way.
     """
     def __init__(self, axes, order=None):
-        self.ng_axes = axes
-        if order:
-            self.axes = order
-        else:
-            self.axes = list(range(len(axes)))
+        super(GPULayoutAssignment, self).__init__(axes, order)
         self.shape = None
         self.strides = None
         self.offset = None
 
     def __str__(self):
-        out = "("
-        for a in self.axes:
-            out = out + "["
-            for idx in a:
-                out = out + str(self.ng_axes[idx].name) + ", "
-            out = out + "] "
-        out = out + ")"
+        out = super(GPULayoutAssignment, self).__str__()
         out = out + "\nshape: {}, strides {}".format(self.shape, self.strides)
         return out
 
     def set_shape_strides(self):
+        """
+        Compute shape and strides based on axis groups specified by this layout.
+        Groups will be stored in the order that they are specified in the layout.
+        """
         if self.axes:
             shape = []
             strides = [1]
@@ -177,48 +136,21 @@ class GPULayoutAssignment(LayoutAssignment):
         self.strides = tuple(strides)
 
     @staticmethod
-    def generate_ew_layouts(axes, max_out_axes):
-        # Get list of individual axes
-        axes_list = Axes.as_flattened_list(axes)
-
-        # Need to divide op axes into `max_out_axes` sets
-        if len(axes_list) > max_out_axes:
-            groups = get_split_groups(len(axes_list), max_out_axes)
-            num_groups = max_out_axes
-        else:
-            groups = [[[i] for i in range(len(axes_list))]]
-            num_groups = len(axes_list)
-
-        # Find all permutations of these axis groups
-        permutations = enumerate_axis_orders(tuple(range(num_groups)))
-
-        if permutations:
-            # Create EW layouts
-            layouts = []
-            for group in groups:
-                for order in permutations:
-                    layout_spec = [group[i] for i in order]
-                    layouts.append(GPULayoutAssignment(axes_list, layout_spec))
-        else:
-            layouts = [GPULayoutAssignment(axes_list, [])]
-
-        return layouts
-
-    @staticmethod
-    def generate_default_layout(axes, max_out_axes):
-        axes_list = Axes.as_flattened_list(axes)
-
-        # Need to divide op axes into `max_out_axes` sets
-        if len(axes_list) > max_out_axes:
-            split_points = [(i + 1) for i in range(max_out_axes - 1)]
-            layout = split_points_to_groups(split_points, len(axes_list))
-        else:
-            layout = [[i] for i in range(len(axes_list))]
-
-        return [GPULayoutAssignment(axes_list, layout)]
-
-    @staticmethod
     def generate_default_dot_layout(op):
+        """
+        Generates the default layout assignment for a dot operation on GPU. By default
+        we allow the first operand to be transposed but not the second.
+
+        Output layout of the Dot operation is defined by rows which are the non-reduction
+        axes from the first operand and columns which are the non-reduction axes from the
+        second operand.
+
+        Arguments:
+            op (DotOp): op to generate layout for
+
+        Returns:
+            GPUDotLayoutAssignment for this op
+        """
         axes_list = Axes.as_flattened_list(op.axes)
         rows_axis = [axes_list.index(a) for a in Axes.as_flattened_list(op.x_out_axes)]
         cols_axis = [axes_list.index(a) for a in Axes.as_flattened_list(op.y_out_axes)]
@@ -228,6 +160,15 @@ class GPULayoutAssignment(LayoutAssignment):
 
     @staticmethod
     def generate_default_lut_layout(op):
+        """
+        Generates the default layout assignment for a lookup table operation on GPU.
+
+        Arguments:
+            op (LookupTableOp): op to generate layout for
+
+        Returns:
+            GPULayoutAssignment for this op
+        """
         axes_list = Axes.as_flattened_list(op.axes)
         groups = Axes.as_nested_list(op.axes)
         layout = []
@@ -238,56 +179,16 @@ class GPULayoutAssignment(LayoutAssignment):
                 layout.append([axes_list.index(group)])
         return [GPULayoutAssignment(axes_list, layout)]
 
-    @staticmethod
-    def factory(op):
-        """
-        Generates a list of possible layouts given an op
-        """
-        if isinstance(op, AssignOp):
-            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
-        elif isinstance(op, UnaryElementWiseOp):
-            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
-        elif isinstance(op, BinaryElementWiseOp):
-            return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
-        elif isinstance(op, ReductionOp):
-            return GPULayoutAssignment.generate_ew_layouts(op.axes, 2)
-        elif isinstance(op, OneHotOp):
-            return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
-        elif isinstance(op, TensorSizeOp):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, Fill):
-            return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
-        elif isinstance(op, SetItemOp):
-            return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
-        elif isinstance(op, DotOp):
-            return GPULayoutAssignment.generate_default_dot_layout(op)
-        elif isinstance(op, ConvolutionOp):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, bprop_conv):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, update_conv):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, PoolingOp):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, BpropPoolOp):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, TensorValueOp):
-            return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
-        elif isinstance(op, LookupTableOp):
-            return GPULayoutAssignment.generate_default_lut_layout(op)
-        elif isinstance(op, (update_lut, bprop_lut)):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, RngOp):
-            return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
-        elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        elif isinstance(op, CTCOp):
-            return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-        else:
-            raise ValueError("Layouts not implemented for op type {}".format(op))
-
 
 class GPUDotLayoutAssignment(GPULayoutAssignment):
+    """
+    Dot operation on GPU supports one operand being transposed, but not both. This
+    layout assignment adds a parameter that specifies which operand may be transposed.
+
+    Attributes:
+        A_trans: True if the first operand can be transposed
+        B_trans: True if the second operand can be transposed
+    """
     def __init__(self, A_trans, B_trans, axes, order=None):
         super(GPUDotLayoutAssignment, self).__init__(axes, order)
         self.A_trans = A_trans
@@ -296,156 +197,26 @@ class GPUDotLayoutAssignment(GPULayoutAssignment):
             raise NotImplementedError("Can't support Dot op tt")
 
 
-class GPULayoutView(object):
-    def __init__(self, shape, strides, offset=0):
-        self.shape = tuple([int(i) for i in shape])
-        self.strides = tuple([int(i) for i in strides])
-        self.offset = int(offset)
-
-    def __str__(self):
-        return "offset: {}, shape: {}, strides {}".format(self.offset, self.shape, self.strides)
-
-
-class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
+class GPUBinaryLayoutConstraint(StridedBinaryLayoutConstraint):
+    """
+    Base class for GPU binary layout constraints. Can generate dimshuffle and reshape
+    ops based on constraint definition and two op layout assignments.
+    """
     def __init__(self, op, arg):
-        self.op = op
-        self.arg = arg
-
-        # Build mapping of arg axis position to axis position in buffer
-        # Arg axes may be re-ordered, cast, broadcast, sliced between the original
-        # buffer and the op being used for this constraint
-        predecessor_op = arg
-        while isinstance(predecessor_op, SequentialOp):
-            predecessor_op = predecessor_op.value_tensor
-
-        self.arg_axes_list = Axes.as_flattened_list(arg.axes)
-        self.mappings = {}
-        self.sliced_out = []
-        for i in range(len(self.arg_axes_list)):
-            self.mappings[i] = i
-
-        while not (predecessor_op.is_device_op or isinstance(predecessor_op, TensorValueOp)):
-            pred_axes = Axes.as_flattened_list(predecessor_op.axes)
-            pred_arg_axes = Axes.as_flattened_list(predecessor_op.args[0].axes)
-            if isinstance(predecessor_op, (BroadcastOp, ExpandDims)):
-                bcast_axes = [pred_axes.index(a) for a in pred_axes if a not in pred_arg_axes]
-                bcast_mappings = [a for a in self.mappings if self.mappings[a] in bcast_axes]
-                for bcast in bcast_mappings:
-                    self.mappings[bcast] = "bcast"
-                for a, p in self.mappings.items():
-                    if isinstance(p, int):
-                        offset = 0
-                        for bcast_axis in bcast_axes:
-                            if p > bcast_axis:
-                                offset += 1
-                        self.mappings[a] = p - offset
-
-                for i in range(len(self.sliced_out)):
-                    if self.sliced_out[i][0] in bcast_axes:
-                        self.sliced_out[i] = (self.sliced_out[i][0], "bcast")
-                    else:
-                        new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
-                        self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
-            elif isinstance(predecessor_op, TensorSliceOp):
-                new_indexes = []
-                for index, axis in enumerate(pred_axes):
-                    new_index = pred_arg_axes.index(axis)
-                    if predecessor_op.slices[new_index] != slice(None, None, None):
-                        new_index = ("slice", new_index, predecessor_op.slices[new_index])
-                    if new_index != index:
-                        for a, p in self.mappings.items():
-                            if isinstance(p, int) and p == index:
-                                new_indexes.append((a, new_index))
-
-                for a, p in new_indexes:
-                    self.mappings[a] = p
-
-                # Find any axes that are sliced out and add these to offset calculations
-                rem_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
-                for rm_axis in rem_axes:
-                    self.sliced_out.append((rm_axis, predecessor_op.slices[rm_axis]))
-            elif isinstance(predecessor_op, (ReorderAxes, Transpose)):
-                new_indexes = []
-                for a, p in self.mappings.items():
-                    if isinstance(p, int):
-                        new_indexes.append((a, pred_arg_axes.index(pred_axes[p])))
-                for a, p in new_indexes:
-                    self.mappings[a] = p
-
-                for i in range(len(self.sliced_out)):
-                    new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
-                    self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
-            elif isinstance(predecessor_op, AxesCastOp):
-                pass
-            elif isinstance(predecessor_op, Flatten):
-                pass
-            elif isinstance(predecessor_op, Unflatten):
-                pass
-            else:
-                raise RuntimeError("Confused")
-            predecessor_op = predecessor_op.args[0]
-            while isinstance(predecessor_op, SequentialOp):
-                predecessor_op = predecessor_op.value_tensor
-
-        return
-
-    def get_layout_transform(self, arg_layout, op_layout, arg):
-        return arg
-
-    def get_cost(self, arg_layout, op_layout):
-        return 0.0
-
-    def map(self, axis):
-        axis_position = -1
-        for index, arg_axis in enumerate(self.arg_axes_list):
-            if axis == arg_axis:
-                axis_position = index
-        return self.mappings[axis_position]
-
-    def group_axis_contig(self, arg_mem_order, op_group):
-        if not op_group:
-            return True
-
-        # Convert op group to arg group
-        arg_group = [self.map(a) for a in op_group]
-
-        # If broadcasts included, not contiguous
-        if any(a == "bcast" for a in arg_group) or len(op_group) == 0:
-            return False
-
-        # If slices included, not contiguous
-        if any(isinstance(a, tuple) for a in arg_group):
-            return False
-
-        compatible = False
-        group_len = len(arg_group)
-        for i in range(len(arg_mem_order) - group_len + 1):
-            if arg_mem_order[i:i + group_len] == arg_group:
-                compatible = True
-                break
-        return compatible
-
-    def group_axis_strided_valid(self, arg_mem_order, op_group):
-        # Convert op group to arg group
-        arg_group = [self.map(a) for a in op_group]
-
-        # If broadcasts included, all axes in group must be broadcast
-        if any(a == "bcast" for a in arg_group):
-            return all(a == "bcast" for a in arg_group)
-
-        # Slices cannot be grouped with other axes
-        if any(isinstance(a, tuple) for a in arg_group):
-            return len(arg_group) == 1
-
-        compatible = False
-        group_len = len(arg_group)
-        for i in range(len(arg_mem_order) - group_len + 1):
-            if arg_mem_order[i:i + group_len] == arg_group:
-                compatible = True
-                break
-        return compatible
+        super(GPUBinaryLayoutConstraint, self).__init__(op, arg)
 
     def contiguous_layout_view(self, out_groups):
+        """
+        Generates a contiguous view for the axes specified by out_groups. Will place
+        groups in memory in the order they are specified in the argument.
+
+        Arguments:
+            out_groups: List of axis groups, where each group is a list of Axis objects
+                which must be contiguous.
+
+        Returns:
+            Tensor view where all groups are contiguous in memory
+        """
         lengths = []
         for group in out_groups:
             if group:
@@ -462,6 +233,19 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return GPULayoutView(shape, strides)
 
     def layout_view(self, arg_mem_order, arg_axes, out_groups):
+        """
+        Given an input tensor, generate a view of that tensor with specified ordered
+        axes. Axis groups must be contiguous in the argument; this condition is not checked
+        by this method.
+
+        Arguments:
+            arg_mem_order: List of axis indexes specifying order in memory
+            arg_axes: List of Axis objects indexed by arg_mem_order
+            out_groups: List of Axis groups specifying desired view
+
+        Returns:
+            GPULayoutView which maps the argument tensor to the view specified by out_groups
+        """
         # Convert op axis groups to arg axis index groups
         shape = []
         axis_groups = []
@@ -524,6 +308,19 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return GPULayoutView(shape, strides, offset=offset)
 
     def get_dimshuffle(self, arg_mem_order, arg_axes, out_groups, arg):
+        """
+        Given an input tensor, generate a dimshuffle operation which will output a tensor
+        compatible with the view specified by out_groups.
+
+        Arguments:
+            arg_mem_order: List of axis indexes specifying order in memory
+            arg_axes: List of Axis objects indexed by arg_mem_order
+            out_groups: List of Axis groups specifying desired view
+            arg: The op producing this argument
+
+        Returns:
+            DimshuffleOp which converts the argument to a tensor with the desired axes groups
+        """
         # Get contiguous un-flattened view of input tensor
         flattened_out_groups = []
         for group in out_groups:
@@ -560,62 +357,87 @@ class GPUBinaryLayoutConstraint(BinaryLayoutConstraint):
         return out
 
     def get_reshape(self, arg_mem_order, arg_axes, out_groups, arg):
+        """
+        Given an input tensor, generate a ReshapeOp that produces a view of the original tensor
+        which is defined by out_groups. Axis groups must be contiguous in the argument; this
+        condition is not checked by this method.
+
+        Arguments:
+            arg_mem_order: List of axis indexes specifying order in memory
+            arg_axes: List of Axis objects indexed by arg_mem_order
+            out_groups: List of Axis groups specifying desired view
+            arg: The op producing this argument
+
+        Returns:
+            GPUReshapeOp which contains a view of the original tensor with the desired axes groups
+        """
         out_view = self.layout_view(arg_mem_order, arg_axes, out_groups)
         out = GPUReshapeOp(arg, out_view)
         out.metadata["layout"] = out_view
         return out
 
-    @staticmethod
-    def factory(op, arg):
-        if isinstance(op, AssignOp):
-            return GPUStridedLayoutConstraint(op, arg)
-        elif isinstance(op, SetItemOp):
-            return GPUSetItemLayoutConstraint(op, arg)
-        elif isinstance(op, UnaryElementWiseOp):
-            return GPUStridedLayoutConstraint(op, arg)
-        elif isinstance(op, BinaryElementWiseOp):
-            return GPUStridedLayoutConstraint(op, arg)
-        elif isinstance(op, ReductionOp):
-            return GPUStridedLayoutConstraint(op, arg)
-        elif isinstance(op, OneHotOp):
-            return GPUStridedLayoutConstraint(op, arg)
-        elif isinstance(op, TensorSizeOp):
-            return GPUBinaryLayoutConstraint(op, arg)
-        elif isinstance(op, Fill):
-            return GPUBinaryLayoutConstraint(op, arg)
-        elif isinstance(op, DotOp):
-            return GPUDotLayoutConstraint(op, arg)
-        elif isinstance(op, ConvolutionOp):
-            return GPUConvLayoutConstraint(op, arg)
-        elif isinstance(op, bprop_conv):
-            return GPUConvLayoutConstraint(op, arg)
-        elif isinstance(op, update_conv):
-            return GPUConvLayoutConstraint(op, arg)
-        elif isinstance(op, PoolingOp):
-            return GPUPoolLayoutConstraint(op, arg)
-        elif isinstance(op, BpropPoolOp):
-            return GPUPoolLayoutConstraint(op, arg)
-        elif isinstance(op, (LookupTableOp, update_lut, bprop_lut)):
-            return GPULutLayoutConstraint(op, arg)
-        elif isinstance(op, RngOp):
-            return GPUBinaryLayoutConstraint(op, arg)
-        elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
-            return GPUBinaryLayoutConstraint(op, arg)
-        elif isinstance(op, CTCOp):
-            return GPUConvLayoutConstraint(op, arg)
+    def needs_transform(self, arg_layout, op_layout):
+        """
+        Default constraint requires no dimshuffle
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+
+        Returns:
+            True if a DimshuffleOp is needed to convert the arg
+        """
+        return False
+
+    def get_cost(self, arg_layout, op_layout):
+        """
+        Returns cost of this constraint given the pair of layouts. If no DimshuffleOp is
+        needed, the cost is 0. Otherwise the cost is non-zero.
+        TODO: model of dimshuffle cost
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+
+        Returns:
+            Cost of the constraint
+        """
+        if self.needs_transform(arg_layout, op_layout):
+            return 1.0
         else:
-            raise ValueError("Layouts not implemented for op type {}".format(op))
+            return 0.0
 
 
-class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
+class GPUEWLayoutConstraint(GPUBinaryLayoutConstraint):
+    """
+    GPU layout constraint for elementwise operations and most CUDA C kernels. The op layout
+    specifies how the kernel will read a tensor with strides and shape. The op layout also
+    specifies the storage order for the axes in the output. This constraint checks if an argument
+    with a specified layout can be read by a kernel with a specified op layout.
+
+    Attributes:
+        red_axes: Axes which are reduced by the op and are therefore present in the input but not
+            in the output.
+    """
     def __init__(self, op, arg):
-        super(GPUStridedLayoutConstraint, self).__init__(op, arg)
+        super(GPUEWLayoutConstraint, self).__init__(op, arg)
         if isinstance(op, ReductionOp):
             self.red_axes = Axes.as_flattened_list(op.reduction_axes)
         else:
             self.red_axes = None
 
     def needs_transform(self, arg_layout, op_layout):
+        """
+        Given the op layout and argument layout, check if a DimshuffleOp is needed to convert
+        the argument to a suitable layout.
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+
+        Returns:
+            True if a DimshuffleOp is needed to convert the arg
+        """
         # Flattened arg layout axes list used to determine arg contiguity
         arg_mem_order = flatten(arg_layout.axes)
 
@@ -635,16 +457,23 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
             if not self.group_axis_strided_valid(arg_mem_order, red_axis):
                 compatible = False
 
-        # Compute cost as proportional to tensor size if dimshuffle required
         return (not compatible)
 
-    def get_cost(self, arg_layout, op_layout):
-        if self.needs_transform(arg_layout, op_layout):
-            return 1.0
-        else:
-            return 0.0
-
     def get_layout_transform(self, arg_layout, op_layout, arg):
+        """
+        Given the op layout and argument layout, check if a DimshuffleOp is needed to convert
+        the argument to a suitable layout. Generates either a DimshuffleOp or GPUReshapeOp for
+        the argument which produces a view which satisfies the op_layout assignment.
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+            arg (TensorOp): Op producing the argument
+
+        Returns:
+            Either a GPUReshapeOp if no transform is needed, or a DimshuffleOp which satisfies
+            the requirements of the op_layout
+        """
         # Flattened arg layout axes list used to determine arg contiguity
         arg_mem_order = flatten(arg_layout.axes)
         arg_axes = arg_layout.ng_axes
@@ -697,53 +526,49 @@ class GPUStridedLayoutConstraint(GPUBinaryLayoutConstraint):
             return arg
 
 
-class GPUConvLayoutConstraint(GPUBinaryLayoutConstraint):
-    def __init__(self, op, arg):
-        super(GPUConvLayoutConstraint, self).__init__(op, arg)
-        self.order = Axes.as_flattened_list(arg.axes)
+class GPUFixedLayoutConstraint(GPUBinaryLayoutConstraint):
+    """
+    GPU layout constraint for an operation which only supports fully contiguous arguments. An
+    example is convolution which requires the axes to be contiguous and match the order supported
+    by the kernel.
+
+    Attributes:
+        order: List of axes in order which must be satisfied by the argument
+    """
+    def __init__(self, op, arg, axes):
+        super(GPUFixedLayoutConstraint, self).__init__(op, arg)
+        self.order = Axes.as_flattened_list(axes)
 
     def needs_transform(self, arg_layout, op_layout):
+        """
+        Checks if all axes in self.order are contiguous in the argument.
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+
+        Returns:
+            True if a DimshuffleOp is needed to convert the arg
+        """
         arg_mem_order = flatten(arg_layout.axes)
         if not self.group_axis_contig(arg_mem_order, self.order):
             return True
 
         return False
 
-    def get_cost(self, arg_layout, op_layout):
-        if self.needs_transform(arg_layout, op_layout):
-            return 1.0
-        else:
-            return 0.0
-
     def get_layout_transform(self, arg_layout, op_layout, arg):
-        arg_mem_order = flatten(arg_layout.axes)
-        arg_axes = arg_layout.ng_axes
+        """
+        Generates either a DimshuffleOp or GPUReshapeOp for the argument that produces a view
+        which satisfies contiguous order requirement.
 
-        if self.needs_transform(arg_layout, op_layout):
-            return self.get_dimshuffle(arg_mem_order, arg_axes, [self.order], arg)
-        else:
-            return self.get_reshape(arg_mem_order, arg_axes, [self.order], arg)
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+            arg (TensorOp): Op producing the argument
 
-
-class GPUPoolLayoutConstraint(GPUBinaryLayoutConstraint):
-    def __init__(self, op, arg):
-        super(GPUPoolLayoutConstraint, self).__init__(op, arg)
-        self.order = Axes.as_flattened_list(arg.axes)
-
-    def needs_transform(self, arg_layout, op_layout):
-        arg_mem_order = flatten(arg_layout.axes)
-        if not self.group_axis_contig(arg_mem_order, self.order):
-            return True
-
-        return False
-
-    def get_cost(self, arg_layout, op_layout):
-        if self.needs_transform(arg_layout, op_layout):
-            return 1.0
-        else:
-            return 0.0
-
-    def get_layout_transform(self, arg_layout, op_layout, arg):
+        Either a GPUReshapeOp if no transform is needed, or a DimshuffleOp which satisfies
+            the requirements of the op_layout
+        """
         arg_mem_order = flatten(arg_layout.axes)
         arg_axes = arg_layout.ng_axes
 
@@ -754,6 +579,17 @@ class GPUPoolLayoutConstraint(GPUBinaryLayoutConstraint):
 
 
 class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
+    """
+    GPU layout constraint for dot operation. Requires the reduction axes in the argument
+    to be contiguous in the same order as the op specifies. Also requires the non-reduction
+    axes to be contiguous.
+
+    Attributes:
+        op_axes: list of axes in the output
+        operand: Specifies if this is the left or right operand
+        reduction_axes: List of axes used for the inner product
+        out_axes: List of axes which are present in the argument and op output
+    """
     def __init__(self, op, arg):
         super(GPUDotLayoutConstraint, self).__init__(op, arg)
 
@@ -771,6 +607,17 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
             raise ValueError("Invalid argument for constraint")
 
     def needs_transform(self, arg_layout, op_layout):
+        """
+        Checks if reduction_axes and out_axes are contiguous and if the argument
+        meets the transpose requirements of the op
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+
+        Returns:
+            True if a DimshuffleOp is needed to convert the arg
+        """
         arg_mem_order = flatten(arg_layout.axes)
         out_mem_order = flatten(op_layout.axes)
 
@@ -801,13 +648,19 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
 
         return True
 
-    def get_cost(self, arg_layout, op_layout):
-        if self.needs_transform(arg_layout, op_layout):
-            return 1.0
-        else:
-            return 0.0
-
     def get_layout_transform(self, arg_layout, op_layout, arg):
+        """
+        Generates either a DimshuffleOp or GPUReshapeOp for the argument that produces a view
+        which satisfies the dot op layout.
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+            arg (TensorOp): Op producing the argument
+
+        Either a GPUReshapeOp if no transform is needed, or a DimshuffleOp which satisfies
+            the requirements of the op_layout
+        """
         arg_mem_order = flatten(arg_layout.axes)
         arg_axes = arg_layout.ng_axes
         args = list(self.op.args)
@@ -832,14 +685,26 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
 
 
 class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
+    """
+    Simple constraint for SetItemOp, which can handle any number of strided axes.
+    """
     def __init__(self, op, arg):
         super(GPUSetItemLayoutConstraint, self).__init__(op, arg)
-        self.order = Axes.as_flattened_list(arg.axes)
 
     def get_cost(self, arg_layout, op_layout):
         return 0.0
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
+        """
+        Returns a reshape view of the argument strided to match the SetItemOp axes
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+            arg (TensorOp): Op producing the argument
+
+        A GPUReshapeOp which satisfies the requirements of the op_layout
+        """
         arg_mem_order = flatten(arg_layout.axes)
         arg_view_axes = Axes.as_flattened_list(arg.axes)
         arg_axes = arg_layout.ng_axes
@@ -848,6 +713,13 @@ class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
 
 
 class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
+    """
+    Constraint for LookupTableOp. The lookuptable must have two contiguous axes
+    and the index list must have one contiguous axis.
+
+    Attributes:
+        order: List of axis groups which must be contiguous
+    """
     def __init__(self, op, arg):
         super(GPULutLayoutConstraint, self).__init__(op, arg)
         if len(arg.axes) == 2:
@@ -857,18 +729,22 @@ class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
             self.order = [Axes.as_flattened_list(arg.axes)]
 
     def needs_transform(self, arg_layout, op_layout):
+        """
+        Checks if all axes in self.order are contiguous in the argument.
+
+        Arguments:
+            arg_layout (GPULayoutAssignment): layout of the argument
+            op_layout: (GPULayoutAssignment): layout required by the op
+
+        Returns:
+            True if a DimshuffleOp is needed to convert the arg
+        """
         arg_mem_order = flatten(arg_layout.axes)
         for group in self.order:
             if not self.group_axis_contig(arg_mem_order, group):
                 return True
 
         return False
-
-    def get_cost(self, arg_layout, op_layout):
-        if self.needs_transform(arg_layout, op_layout):
-            return 1.0
-        else:
-            return 0.0
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
         arg_mem_order = flatten(arg_layout.axes)
@@ -881,8 +757,119 @@ class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
 
 
 class GPUUnaryLayoutConstraint(UnaryLayoutConstraint):
+    """
+    Placehold for unary constraint
+    TODO: This should return a cost for an op based on the layout. Layouts that
+    are less optimal for the kernel/implementation should cause this constraint to
+    increase in cost.
+    """
     def __init__(self):
         pass
 
     def get_cost(self, op_layout):
         return 0.0
+
+
+def gpu_layout_factory(op):
+    """
+    Generates a list of possible layouts given an op
+
+    Arguments:
+        op: Computation graph op which runs on the device
+
+    Returns:
+        List of possible layout assignment descriptors
+    """
+    if isinstance(op, AssignOp):
+        return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+    elif isinstance(op, UnaryElementWiseOp):
+        return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+    elif isinstance(op, BinaryElementWiseOp):
+        return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+    elif isinstance(op, ReductionOp):
+        return GPULayoutAssignment.generate_ew_layouts(op.axes, 2)
+    elif isinstance(op, OneHotOp):
+        return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
+    elif isinstance(op, TensorSizeOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, Fill):
+        return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
+    elif isinstance(op, SetItemOp):
+        return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
+    elif isinstance(op, DotOp):
+        return GPULayoutAssignment.generate_default_dot_layout(op)
+    elif isinstance(op, ConvolutionOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, bprop_conv):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, update_conv):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, PoolingOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, BpropPoolOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, TensorValueOp):
+        return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+    elif isinstance(op, LookupTableOp):
+        return GPULayoutAssignment.generate_default_lut_layout(op)
+    elif isinstance(op, (update_lut, bprop_lut)):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, RngOp):
+        return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+    elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, CTCOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    else:
+        raise ValueError("Layouts not implemented for op type {}".format(op))
+
+
+def gpu_constraint_factory(op, arg):
+    """
+    Generates a binary layout constraint given an op and an argument
+
+    Arguments:
+        op: Computation graph op which runs on the device
+        arg: Argument to the op for which to generate a constraint
+
+    Returns:
+        Binary layout constraint object
+    """
+    if isinstance(op, AssignOp):
+        return GPUEWLayoutConstraint(op, arg)
+    elif isinstance(op, SetItemOp):
+        return GPUSetItemLayoutConstraint(op, arg)
+    elif isinstance(op, UnaryElementWiseOp):
+        return GPUEWLayoutConstraint(op, arg)
+    elif isinstance(op, BinaryElementWiseOp):
+        return GPUEWLayoutConstraint(op, arg)
+    elif isinstance(op, ReductionOp):
+        return GPUEWLayoutConstraint(op, arg)
+    elif isinstance(op, OneHotOp):
+        return GPUEWLayoutConstraint(op, arg)
+    elif isinstance(op, TensorSizeOp):
+        return GPUBinaryLayoutConstraint(op, arg)
+    elif isinstance(op, Fill):
+        return GPUBinaryLayoutConstraint(op, arg)
+    elif isinstance(op, DotOp):
+        return GPUDotLayoutConstraint(op, arg)
+    elif isinstance(op, ConvolutionOp):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, bprop_conv):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, update_conv):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, PoolingOp):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, BpropPoolOp):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, (LookupTableOp, update_lut, bprop_lut)):
+        return GPULutLayoutConstraint(op, arg)
+    elif isinstance(op, RngOp):
+        return GPUBinaryLayoutConstraint(op, arg)
+    elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
+        return GPUBinaryLayoutConstraint(op, arg)
+    elif isinstance(op, CTCOp):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    else:
+        raise ValueError("Layouts not implemented for op type {}".format(op))

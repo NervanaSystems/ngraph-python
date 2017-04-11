@@ -336,6 +336,8 @@ class Op(NameableValue):
         self.style = {}
         self._forward = None
 
+        self.scope = None
+
     @property
     def tensor(self):
         """
@@ -633,21 +635,8 @@ class Op(NameableValue):
         Returns:
             Set of trainable Ops.
         """
-        params = OrderedSet()
-
-        def visitor(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-            """
-            if node.tensor.is_trainable:
-                params.add(node.tensor)
-
-        Op.visit_input_closure([self], visitor)
-
-        return params
+        return OrderedSet([op.tensor for op in Op.ordered_ops([self])
+                           if op.tensor.is_trainable])
 
     def placeholders(self):
         """
@@ -656,21 +645,8 @@ class Op(NameableValue):
         Returns:
             Set of placeholder Ops.
         """
-        params = OrderedSet()
-
-        def visitor(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-            """
-            if node.tensor.is_placeholder:
-                params.add(node.tensor)
-
-        Op.visit_input_closure([self], visitor)
-
-        return params
+        return OrderedSet([op.tensor for op in Op.ordered_ops([self])
+                           if op.tensor.is_placeholder])
 
     def tensor_description(self):
         return None
@@ -2094,6 +2070,7 @@ class AssignableTensorOp(TensorOp):
             is_trainable=False,
             is_placeholder=False,
             const=None,
+            scope=None,
             **kwargs):
         super(AssignableTensorOp, self).__init__(**kwargs)
         self._is_input = is_input
@@ -2103,6 +2080,7 @@ class AssignableTensorOp(TensorOp):
         self._is_placeholder = is_placeholder
         self._const = const
         self.initial_value = None
+        self.scope = scope
 
         if initial_value is not None:
             # convert callable initial value
@@ -2299,7 +2277,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
                               initial_value=initial_value)
 
 
-def variable(axes, dtype=None, initial_value=None):
+def variable(axes, dtype=None, initial_value=None, scope=None):
     """
     A trainable tensor.
 
@@ -2308,6 +2286,8 @@ def variable(axes, dtype=None, initial_value=None):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
+        scope (optional): scope of variable, can be used to filter on when
+                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
@@ -2317,7 +2297,8 @@ def variable(axes, dtype=None, initial_value=None):
                               is_persistent=True,
                               is_trainable=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              scope=scope)
 
 
 class StackOp(SequentialOp):
@@ -3112,8 +3093,12 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
+    _index = 0
+
     def __init__(self, x, y, axes, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        self.index = DotLowDimension._index
+        DotLowDimension._index += 1
 
 
 class SoftmaxOp(ValueOp):

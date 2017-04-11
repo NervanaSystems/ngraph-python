@@ -52,6 +52,7 @@ if "MKLDNN_ROOT" in os.environ:
                         extra_link_args = ["-shared", "-lmkldnn", "-Wl,-rpath,%s/lib"%(MKLDNNROOT)],
                         library_dirs = ['%s/lib'%(MKLDNNROOT)],
                         sources = ['ngraph/transformers/cpu/mkldnn_engine.c', \
+                                   'ngraph/transformers/cpu/innerproduct.c', \
                                    'ngraph/transformers/cpu/convolution.c']))
 
 setup(
