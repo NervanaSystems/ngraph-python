@@ -135,6 +135,7 @@ def test_distributed_graph_plus_one(transformer_factory):
 
     np_x = np.random.randint(100, size=[H.length, W.length])
     with ExecutorFactory() as ex:
+        ex.transformer.register_graph_pass(VizPass(show_all_metadata=False, show_axes=True))
         computation = ex.executor(x_plus_one, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 1)
