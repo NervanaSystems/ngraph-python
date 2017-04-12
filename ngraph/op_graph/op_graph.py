@@ -2774,8 +2774,9 @@ def log(x):
 safelog_cutoff = 50.0
 
 
-def safelog(x, limit=np.exp(-safelog_cutoff)):
-    return log(maximum(x, limit))
+def safelog(x, limit=-safelog_cutoff):
+    offset = np.exp(limit)
+    return maximum(log(x + offset), limit)
 
 
 class ReciprocalOp(UnaryElementWiseOp):
@@ -3093,8 +3094,12 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
+    _index = 0
+
     def __init__(self, x, y, axes, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        self.index = DotLowDimension._index
+        DotLowDimension._index += 1
 
 
 class SoftmaxOp(ValueOp):
