@@ -24,9 +24,6 @@ MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 x = ng.placeholder(())
 z = ng.placeholder(())
 
-bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
-                                                 "DEC initialization not constrained to allowed range")
-
 test_data_double_operand = (
     # template:(operation, [operand_1, operand_2], expected_result, description
 
@@ -60,7 +57,7 @@ test_data_double_operand = (
 
     # test_less
     (ng.less, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False], "Less function - underflow expected"),
-    bug_1103((ng.less, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True], "Less function - overflow expected")),
+    (ng.less, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False], "Less function - overflow expected"),
     (ng.less, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [False],
      "Less function - negative boundary value less than negative boundary value"),
     (ng.less, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
@@ -83,8 +80,8 @@ test_data_double_operand = (
      "Less equal function - negative boundary value less or equal than positive boundary value"),
 
     # test_greater
-    bug_1103((ng.greater, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
-              "Greater function - underflow expected")),
+    (ng.greater, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False],
+              "Greater function - underflow expected"),
     (ng.greater, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False],
               "Greater function - overflow expected"),
     (ng.greater, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [False],
