@@ -125,41 +125,41 @@ def assert_axes_eq_len(expected_axes, actual_axes):
 ax_A = ng.make_axis(64)
 ax_B = ng.make_axis(128)
 ax_C = ng.make_axis(256)
+
+
 @pytest.mark.parametrize('config', [
-        {
-            'axes': ng.make_axes([ax_A]),
-            'parallel_axis': ax_A,
-            'slices': [[slice(0, 32, 1)], [slice(32, 64, 1)]],
-            'device_id': (0, 1)
-        },
-        {
-            'axes': ng.make_axes([ax_A, ax_B]),
-            'parallel_axis': ax_A,
-            'slices': [[slice(0, 16, 1), slice(None)],
-                       [slice(16, 32, 1), slice(None)],
-                       [slice(32, 48, 1), slice(None)],
-                       [slice(48, 64, 1), slice(None)]],
-            'device_id': (0, 1, 2, 3)
-        },
-        {
-            'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-            'parallel_axis': ax_A,
-            'slices': [[slice(0, 16, 1), slice(None), slice(None)],
-                       [slice(16, 32, 1), slice(None), slice(None)],
-                       [slice(32, 48, 1), slice(None), slice(None)],
-                       [slice(48, 64, 1), slice(None), slice(None)]],
-            'device_id': (0, 1, 2, 3)
-        },
-        {
-            'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-            'parallel_axis': ax_C,
-            'slices': [[slice(None), slice(None), slice(0, 128, 1)],
-                       [slice(None), slice(None), slice(128, 256, 1)]],
-            'device_id': (0, 1)
-        }
-    ])
-
-
+    {
+        'axes': ng.make_axes([ax_A]),
+        'parallel_axis': ax_A,
+        'slices': [[slice(0, 32, 1)], [slice(32, 64, 1)]],
+        'device_id': (0, 1)
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'parallel_axis': ax_A,
+        'slices': [[slice(0, 16, 1), slice(None)],
+                   [slice(16, 32, 1), slice(None)],
+                   [slice(32, 48, 1), slice(None)],
+                   [slice(48, 64, 1), slice(None)]],
+        'device_id': (0, 1, 2, 3)
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'parallel_axis': ax_A,
+        'slices': [[slice(0, 16, 1), slice(None), slice(None)],
+                   [slice(16, 32, 1), slice(None), slice(None)],
+                   [slice(32, 48, 1), slice(None), slice(None)],
+                   [slice(48, 64, 1), slice(None), slice(None)]],
+        'device_id': (0, 1, 2, 3)
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'parallel_axis': ax_C,
+        'slices': [[slice(None), slice(None), slice(0, 128, 1)],
+                   [slice(None), slice(None), slice(128, 256, 1)]],
+        'device_id': (0, 1)
+    }
+])
 def test_scatter_gather_node_axes(config):
     t = config
 
@@ -179,12 +179,8 @@ def test_scatter_gather_node_axes(config):
     scatter_recv_op = ScatterRecvOp(to_node=par_node,
                                     send_node=scatter_send_op)
 
-
     for sct_a, a in zip(scatter_recv_op.axes, t['axes']):
-        if sct_a == t['parallel_axis']:
-            assert sct_a.length == a.length / len(t['device_id'])
-        else:
-            assert sct_a.length == a.length
+        assert sct_a.length == a.length
 
     gather_send_op = GatherSendOp(from_node=scatter_recv_op)
     assert_axes_eq_len(scatter_recv_op.axes, gather_send_op.axes)
@@ -195,7 +191,6 @@ def test_scatter_gather_node_axes(config):
     assert_axes_eq_len(t['axes'], gather_recv_op.axes)
 
     assert t['slices'] == gather_recv_op.slices
-
 
 
 # todo def test_clone_graph():

@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
-from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.op_graph import Op, DotOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
@@ -131,13 +131,12 @@ def clone_graph(root, device_id, shared_queues_idx, axes, parallel_axis, num_clo
             op.idx = shared_queues_idx
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()
-
-        # TODO this looks like it could be incorrect
-        #      some axes in the subgraph may not be changed, right?
-        #      only modify op._axes if it contains parallel axis?
-
-        if parallel_axis in op._axes:
+        if hasattr(op, '_axes') and parallel_axis in op._axes:
             op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
+            # TODO: Revisit to handle axes updation better.
+            if isinstance(op, DotOp):
+                op.x_out_axes = calculate_scatter_axes(op.x_out_axes, parallel_axis, num_clones)
+                op.y_out_axes = calculate_scatter_axes(op.y_out_axes, parallel_axis, num_clones)
         op.uuid = uuid.uuid4()
 
     return new_root

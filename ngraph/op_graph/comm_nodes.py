@@ -18,7 +18,8 @@ import multiprocessing
 
 
 def calculate_gather_axes(axes, gather_axis, num_devices):
-    new_axes = [make_axis(a.length * num_devices, a.name) if gather_axis == a else a for a in axes ]
+    new_axes = [make_axis(a.length * num_devices, a.name)
+                if gather_axis == a else a for a in axes]
     new_axes = make_axes(new_axes)
     return new_axes
 
@@ -172,9 +173,8 @@ class ScatterRecvOp(RecvOp):
 
     @classmethod
     def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
-        #invoke axes math helper to modify scatter axis
-        # TODO if calculate... function is only used here, refactor/rename
-        recv_axes = send_axes#calculate_scatter_axes(send_axes, fragment_axis, fragments)
+        # invoke axes math helper to modify scatter axis
+        recv_axes = send_axes
         return recv_axes
 
 
@@ -215,10 +215,8 @@ class GatherRecvOp(RecvOp):
 
     @classmethod
     def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
-        #invoke axes math helper to modify scatter axis
-        # TODO if calculate... function is only used here, refactor/rename
+        # invoke axes math helper to modify scatter axis\
         recv_axes = send_axes
-            #calculate_gather_axes(send_axes, fragment_axis, fragments)
         return recv_axes
 
     @property

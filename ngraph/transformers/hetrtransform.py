@@ -179,10 +179,6 @@ class AsyncTransformer(Process):
 
                 # actual computation objects stored in this process, indexed
                 computation = self.computations[comp_id]
-                #
-                # if self.name == 'AsyncTransformer-3':
-                #     nviz = VizPass(show_all_metadata=False,show_axes=True)
-                #     transformer.register_graph_pass(nviz)
                 outputs = computation(*inputs)
 
                 # individual results q makes it easy for caller to find results
@@ -355,9 +351,7 @@ class HetrTransformer(Transformer):
         pass
 
     def register_graph_pass(self, graph_pass):
-        from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
-            #self.passes.insert(3, graph_pass)
             self.passes.append(graph_pass)
         else:
             raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))

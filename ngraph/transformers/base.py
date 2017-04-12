@@ -87,7 +87,6 @@ class Computation(NameableValue):
         for param, arg in zip(self.computation.parameters, args):
             param.value[()] = arg
 
-
         self.executor()
 
         # TODO Should copy this out of the device to a destination when it is not scalar
@@ -320,7 +319,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.graph_passes = None
 
     def register_graph_pass(self, graph_pass):
-        self.graph_passes.insert(0, graph_pass)
+        self.graph_passes.append(graph_pass)
 
     def run_registered_graph_passes(self, ops):
         for graph_pass in self.graph_passes:

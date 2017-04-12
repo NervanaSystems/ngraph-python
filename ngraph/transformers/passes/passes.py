@@ -147,7 +147,6 @@ class RequiredTensorShaping(PeepholeGraphPass):
                                                    op.y_out_axes.flatten(True)]))
 
             out = unflatten(out)
-            #out.axes.lengths(0)
             out = ReorderAxes(out, out_axes)
 
         self.replace_op(op, out)
