@@ -13,12 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import
 import sys
 import os
 import numpy as np
 from cffi import FFI
-from include_header import ctc_header
+from .include_header import ctc_header
 
 try:
     warp_ctc_path = os.environ["WARP_CTC_PATH"]
