@@ -33,7 +33,7 @@ class FusionPass(PeepholeGraphPass):
             input_slope, = mul_arg1.args
             min_arg1, min_arg2 = mul_arg2.args
             if not ((min_arg1.is_scalar and min_arg1.args[0].tensor.const == 0
-                    and not(min_arg2.is_scalar)) and min_arg2 == input_tensor):  # check Min(0,x)/Min(x,0)
+                    and not(min_arg2.is_scalar)) and min_arg2 == input_tensor):  # Min(0,x)/(x,0)
                 if not ((min_arg2.is_scalar and min_arg2.args[0].tensor.const == 0
                         and not(min_arg1.is_scalar)) and min_arg1 == input_tensor):
                     return
