@@ -70,13 +70,13 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
-            self.create_mkldnn_add_pritmitives_fn = \
+            self.create_mkldnn_add_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_add_primitives
-            self.create_mkldnn_add_pritmitives_fn.argtypes = \
+            self.create_mkldnn_add_primitives_fn.argtypes = \
                 [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int]
-            self.create_mkldnn_add_pritmitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
@@ -262,15 +262,13 @@ class Mkldnn(object):
             input2_shape = I_array2.size
             output_shape = O_array.size
             self.mkldnn_elementwise_add_netlist[index] = \
-                self.create_mkldnn_add_pritmitives_fn(
+                self.create_mkldnn_add_primitives_fn(
                     self.mkldnn_engine, I_array1.ctypes.data,
                     I_array2.ctypes.data, O_array.ctypes.data,
                     input1_shape, input2_shape, output_shape, 2)
 
     def elementwise_add(self, index, I_array1, I_array2, O_array):
         if (self.mkldnn_enabled and (index in self.mkldnn_elementwise_add_netlist)):
-            assert I_array1.flags['C_CONTIGUOUS']
-            assert I_array2.flags['C_CONTIGUOUS']
             self.run_mkldnn_netlist_fn(self.mkldnn_elementwise_add_netlist[index])
         else:
             np.add(I_array1, I_array2, out=O_array)
