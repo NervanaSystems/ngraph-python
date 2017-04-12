@@ -18,25 +18,23 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
 import pytest
-from ngraph.frontends.caffe.cf_importer.importer import CaffeImporter
+from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
 from os.path import join
 pytestmark = pytest.mark.transformer_dependent("module")
 PROTO_PATH = "ngraph/frontends/caffe/tests/protos/"
 
 def test_scalar_const_sum():
 
-    importer = CaffeImporter()
-    importer.parse_net_def(join(PROTO_PATH,"scalar_const_sum.prototxt"))
-    op = importer.get_op_by_name("C")
+    op_map = parse_prototxt(join(PROTO_PATH,"scalar_const_sum.prototxt"))
+    op = op_map.get("C")
     with executor(op) as ex:
         res = ex()
     assert(res == 4.)
 
 def test_tensor_const_sum():
 
-    importer = CaffeImporter()
-    importer.parse_net_def(join(PROTO_PATH,"tensor_const_sum.prototxt"))
-    op = importer.get_op_by_name("C")
+    op_map=parse_prototxt(join(PROTO_PATH,"tensor_const_sum.prototxt"))
+    op = op_map.get("C")
     with executor(op) as ex:
         res = ex()
 

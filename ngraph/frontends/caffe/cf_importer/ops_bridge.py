@@ -13,43 +13,34 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+funcs_class_bridge = {}
+
+def register_func_with_ops_bridge(func,class_obj):
+    """
+    This function registers the op function against its class to ops bridge
+    """
+    if not funcs_class_bridge.has_key(func):
+        funcs_class_bridge[func] = class_obj
+    else:
+        raise  ValueError (func," already exists in the class:",class_obj.__class__.__name__)
 
 class OpsBridge():
     """
-    Bridging op between Caffe2 / ngraph.
+    Bridging ops between Caffe2 and ngraph.
     """
 
     def __init__(self):
-        self._funcs_class_map = {}
-        self.register_funcs_with_op_class()
-
-    def map_funcs_with_op_class(self,func,className):
-        """
-        This function builds dictionary for op functions and its class
-        """
-        if not self._funcs_class_map.has_key(func):
-            self._funcs_class_map[func] = className
-        else:
-            raise  ValueError (func," already exists in the class:",className)
+        pass
 
     def get_op_class_by_func(self,func):
         """
         returns the op class for a given op function
         """
-        if self._funcs_class_map.has_key(func):
-            return self._funcs_class_map[func]
+        if funcs_class_bridge.has_key(func):
+            return funcs_class_bridge[func]
         else:
             raise NotImplementedError (func," is not defined in any class")
 
-    def register_funcs_with_op_class(self):
-        """
-        This function registers all the op functions of caffe to op class
-        """
-        from ngraph.frontends.caffe.cf_importer.ops_constant import OpsConstant
-        from ngraph.frontends.caffe.cf_importer.ops_binary import OpsBinary
-
-        self.map_funcs_with_op_class("Eltwise",OpsBinary)
-        self.map_funcs_with_op_class("DummyData",OpsConstant)
 
     def __call__(self, layer, input_ops):
         """
@@ -64,4 +55,4 @@ class OpsBridge():
         """
         func = layer.type
         op_class = self.get_op_class_by_func(func)
-        return op_class()(func,layer,input_ops)
+        return op_class(func,layer,input_ops)

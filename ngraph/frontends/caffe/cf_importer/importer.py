@@ -13,9 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-from ngraph.frontends.caffe.cf_importer.ops_bridge import OpsBridge
 import ngraph as ng
 import ngraph.transformers as ngt
+from ngraph.frontends.caffe.cf_importer.ops_bridge import OpsBridge
+import ngraph.frontends.caffe.cf_importer.ops_constant
+import ngraph.frontends.caffe.cf_importer.ops_binary
 import argparse
 
 from google.protobuf import text_format
@@ -38,101 +40,86 @@ supported_layers = ["Eltwise","DummyData"]
 #SoftmaxWithLoss, Split, TanH, Threshold, Tile, 
 #"Data","AnnotatedData","HDF5Data","ImageData","MemoryData","VideoData","WindowData"
 
-class CaffeImporter:
+
+    
+def parse_prototxt(model_txt=None,solver_txt=None,caffemodel=None,verbose=False):
     """
-    Importer for Caffe prototxt 
+    This function parses and creates a graph of ngraph ops corresponding to each layer 
+    in the prototxt  
     Arguments:
-        None
-    Returns:
-        instant of CaffeImporter
+        model_txt: prototxt file of the Neural net topology
+        solver_txt: protoxt file of the solver to train the neural net
+        caffemodel: parameters (weights/biases) to be loded into the model
+    return : 
+        Dictionary of the ngraph ops whose keys are the layer names of the prototxt
     """
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        """
-        Resets importer states and handles the command line options
-        """
-        self._name_op_map = dict()
-        self._ops_bridge = OpsBridge()
-        self._model_def = None
-        self._solver_def = None
-        self._data_layers = [ l for l in supported_layers if "Data" in l]
-
     
-    def parse_net_def(self,model_def=None,solver_def=None,params_def=None,verbose=False):
-        """
-        Imports a net_def to ngraph. Creates a graph with ngraph ops
-        corresponding to each layer in the given prototxt 
-        """
-        
-        if model_def is None and solver_def is None:
-            raise ValueError ("Either model prototxt or solver prototxt is needed")
+    ops_bridge = OpsBridge() #opsBridge constructor
+    data_layers = [ l for l in supported_layers if "Data" in l]
+    name_op_map = {} #graph data structure
 
-        self._model_def = caffe_pb2.NetParameter()
-        self._solver_def = caffe_pb2.SolverParameter()
-        #TBD: Addding support to load weights from .caffemodel
+    if model_txt is None and solver_txt is None:
+        raise ValueError ("Either model prototxt or solver prototxt is needed")
 
+    model_def = caffe_pb2.NetParameter()
+    solver_def = caffe_pb2.SolverParameter()
 
-        if solver_def is not None:
-            with open(solver_def, 'r') as fid:
-                text_format.Merge(fid.read(), self._solver_def)
-        
-            if not self._solver_def.HasField("net"):
-                raise ValueError ('model prototxt is not available in the solver prototxt')
-            else:
-                modelFile = self._solver_def.net
+    #TBD: Addding support to load weights from .caffemodel
+
+    if solver_txt is not None:
+        with open(solver_txt, 'r') as fid:
+            text_format.Merge(fid.read(), solver_def)
+    
+        if not solver_def.HasField("net"):
+            raise ValueError ('model prototxt is not available in the solver prototxt')
         else:
-            with open(model_def, 'r') as fid:
-                text_format.Merge(fid.read(), self._model_def)
+            modelFile = solver_def.net
+    else:
+        with open(model_txt, 'r') as fid:
+            text_format.Merge(fid.read(),model_def)
 
-        netLayers = self._model_def.layer
+    netLayers = model_def.layer
 
-        for layer in netLayers:
+    for layer in netLayers:
+        if verbose:
+            print("\nLayer: ",layer.name," Type: ",layer.type)
+        if layer.type not in supported_layers:
+            raise ValueError ('layer type', layer.type ,' is not supported')
+        if len(layer.top) > 1 and layer.type not in data_layers:
+            raise ValueError ('only "Data" layers can have more than one output (top)')
 
-            if verbose:
-                print("\nLayer: ",layer.name," Type: ",layer.type)
+        input_ops = [] 
+        for name in layer.bottom:
+            if name_op_map.has_key(name):
+                input_ops.append(name_op_map[name])
+            elif layer.type not in data_layers:
+                raise ValueError ("Bottom layer:",name ," is missing in the prototxt") 
+        #get the ngraph op from bridge
+        out_op = ops_bridge(layer,input_ops)
 
-            if layer.type not in supported_layers:
-                raise ValueError ('layer type', layer.type ,' is not supported')
-            if len(layer.top) > 1 and layer.type not in self._data_layers:
-                raise ValueError ('only "Data" layers can have more than one output (top)')
+        if out_op is None:
+            print("!!! Unknown Operation '{}' of type '{}' !!!"
+                  .format(layer.name, layer.type))
+        if verbose:
+            print("input Ops:",input_ops)
+            print("output Op:",[out_op])
 
-            input_ops = [] 
-            for name in layer.bottom:
-                if self._name_op_map.has_key(name):
-                    input_ops.append(self._name_op_map[name])
-                elif layer.type not in self._data_layers:
-                    raise ValueError ("Bottom layer:",name ," is missing in the prototxt") 
+        if name_op_map.has_key(layer.name):
+            raise ValueError('Layer ',Layer.name,' already exists. Layer name should be unique')
 
-            out_op = self._ops_bridge(layer,input_ops)
+        #update dictionary
+        name_op_map[layer.name] = out_op
 
-            if out_op is None:
-                print("!!! Unknown Operation '{}' of type '{}' !!!"
-                      .format(layer.name, layer.type))
-            if verbose:
-                print("input Ops:",input_ops)
-                print("output Op:",[out_op])
+        # handle special cases like relu,dropout etc
+        if layer.top == layer.bottom:
+            if name_op_map.has_key(layer.top):
+                name_op_map[layer.top] = out_op
 
-            if self._name_op_map.has_key(layer.name):
-                raise ValueError('Layer ',Layer.name,' already exists. Layer name should be unique')
-
-            self._name_op_map[layer.name] = out_op
-
-            # handle special cases like relu,dropout etc
-            if layer.top == layer.bottom:
-                if self._name_op_map.has_key(layer.top):
-                    self._name_op_map[layer.top] = out_op
-
-    
-    def get_op_by_name(self,name):
-        return self._name_op_map.get(name)
-
-    
+    return name_op_map
 
 class CaffeCLI:
     """
+    A class to manage the CLI arguments
     """
     def __init__(self):
         self.caffe_cli_emulator()
@@ -140,7 +127,7 @@ class CaffeCLI:
 
     def validate_cmdline_args(self):
         """
-        To validate whether all the required arguments given for a task
+        To validate the required arguments given for a task
         """
         args = self._cmdargs
 
@@ -174,6 +161,7 @@ class CaffeCLI:
 
     def caffe_cli_emulator(self): 
         """
+        This function handles the cmd line arguments given by the user
         """
         parser = argparse.ArgumentParser()
 
@@ -209,24 +197,22 @@ if __name__ == '__main__':
     cli = CaffeCLI()
     args = cli.get_cmd_args()
 
-    solver_def = None
-    model_def = None
-    params_def = args['weights']
+    solver_txt = None
+    model_txt = None
+    caffemodel = args['weights']
 
     if args['mode'] == 'train':
-        solver_def = args['solver']
+        solver_txt= args['solver']
     else:
-        model_def = args['model']
+        model_txt = args['model']
 
-    importer = CaffeImporter()
-    importer.parse_net_def(model_def,solver_def,params_def,verbose=args['verbose'])
-
+    op_map = parse_prototxt(model_txt,solver_txt,caffemodel,verbose=args['verbose'])
 
     if args['mode'] == 'compute':
         layers = args['name'].split(',')
         ops =[]
         for l in layers:
-            op = importer.get_op_by_name(l)
+            op = op_map.get(l)
             if not op:
                 print("Layer ",l," does not exists in the prototxt")
             else:

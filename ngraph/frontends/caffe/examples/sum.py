@@ -14,15 +14,14 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function
-from ngraph.frontends.caffe.cf_importer.importer import CaffeImporter
 import ngraph.transformers as ngt
+from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
 
 model = "sum.prototxt"
 #import graph from the prototxt
-importer = CaffeImporter()
-importer.parse_net_def(model,verbose=True)
+op_map = parse_prototxt(model,verbose=True)
 #get the op handle for any layer
-op = importer.get_op_by_name("D")
+op = op_map.get("D")
 #execute the op handle
 res = ngt.make_transformer().computation(op)()
 print("Result is:",res)

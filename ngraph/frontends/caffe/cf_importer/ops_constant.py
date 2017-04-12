@@ -14,11 +14,12 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
+from ngraph.frontends.caffe.cf_importer.ops_bridge import register_func_with_ops_bridge
 
 class OpsConstant():
     """
     class for constant ops.
-    Note: Op functions in this class should be registered in the OpsBridge class
+    Note: Op functions in this class should be registered in the OpsBridge 
     """
 
     def DummyData(self,layer,inputs):
@@ -51,4 +52,8 @@ class OpsConstant():
 
     def __call__(self,func,layer,inputs):
         return getattr(self,func)(layer,inputs)
+
+#register all functions in this class with opbridge
+ops_const = OpsConstant()
+register_func_with_ops_bridge("DummyData",ops_const)
 
