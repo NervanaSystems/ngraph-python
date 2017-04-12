@@ -101,7 +101,7 @@ class Mkldnn(object):
                 self.cleanup_mkldnn_fn(self.mkldnn_conv_bprop_netlist[i])
             for i in self.mkldnn_innerproduct_fprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_innerproduct_fprop_netlist[i])
-            for i in self.mkldnn_innerproduct_fprop_netlist:
+            for i in self.mkldnn_elementwise_add_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_elementwise_add_netlist[i])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
@@ -255,12 +255,9 @@ class Mkldnn(object):
     def init_elementwise_add(self, index, I_array1, I_array2, O_array):
         if(self.mkldnn_enabled):
             # Sanity check for tensor shapes
-            import pdb;
-            pdb.set_trace()
             if (not (I_array1.flags['C_CONTIGUOUS'] and
                      I_array2.flags['C_CONTIGUOUS'])):
                 return
-
             input1_shape = I_array1.size
             input2_shape = I_array2.size
             output_shape = O_array.size
@@ -269,7 +266,6 @@ class Mkldnn(object):
                     self.mkldnn_engine, I_array1.ctypes.data,
                     I_array2.ctypes.data, O_array.ctypes.data,
                     input1_shape, input2_shape, output_shape, 2)
-
 
     def elementwise_add(self, index, I_array1, I_array2, O_array):
         if (self.mkldnn_enabled and (index in self.mkldnn_elementwise_add_netlist)):

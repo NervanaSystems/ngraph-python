@@ -17,7 +17,7 @@
 #include "mkldnn_util.h"
 
 /* Create list of mkldnn primitives to run elelment Wise add primitive  */
-mkldnn_netlist_t create_mkldnn_add_primitives(mkldnn_engine_t *engine, float *add_src1, float *add_src2, float *add_dst,\
+mkldnn_netlist_t create_mkldnn_add_primitives(mkldnn_engine_t engine, float *add_src1, float *add_src2, float *add_dst,\
                                               int src1_sizes, int src2_sizes, int dst_sizes, int Num_matrix_to_add){
 
     mkldnn_netlist_t mkldnn_net = create_mkldnn_netlist();
@@ -39,20 +39,20 @@ mkldnn_netlist_t create_mkldnn_add_primitives(mkldnn_engine_t *engine, float *ad
      mkldnn_memory_desc_t prim_md1;
      mkldnn_primitive_desc_t user_pd1;
      MKL_CHECK(mkldnn_memory_desc_init(&prim_md1, mkl_src1_dims, mkl_src1_size, mkldnn_f32, mkldnn_x));
-     MKL_CHECK(mkldnn_memory_primitive_desc_create(&user_pd1, &prim_md1, *engine));
+     MKL_CHECK(mkldnn_memory_primitive_desc_create(&user_pd1, &prim_md1, engine));
 
      mkldnn_memory_desc_t prim_md2;
      mkldnn_primitive_desc_t user_pd2;
      MKL_CHECK(mkldnn_memory_desc_init(&prim_md2, mkl_src2_dims, mkl_src2_size, mkldnn_f32, mkldnn_x));
-     MKL_CHECK(mkldnn_memory_primitive_desc_create(&user_pd2, &prim_md2, *engine));
+     MKL_CHECK(mkldnn_memory_primitive_desc_create(&user_pd2, &prim_md2, engine));
 
      mkldnn_primitive_desc_t input_pds[] = {user_pd1, user_pd2};
 
     // create a memory primitive for input and output
     mkldnn_primitive_t mkldnn_memory_prim_src1, mkldnn_memory_prim_src2, mkldnn_memory_prim_dst;
-    create_mkldnn_memory_primitive(mkl_src1_dims, mkl_src1_size, mkldnn_x, mkldnn_f32, *engine, add_src1, &mkldnn_memory_prim_src1);
-    create_mkldnn_memory_primitive(mkl_src2_dims, mkl_src2_size, mkldnn_x, mkldnn_f32, *engine, add_src2, &mkldnn_memory_prim_src2);
-    create_mkldnn_memory_primitive(mkl_dst_dims, mkl_dst_size, mkldnn_x, mkldnn_f32, *engine, add_dst, &mkldnn_memory_prim_dst);
+    create_mkldnn_memory_primitive(mkl_src1_dims, mkl_src1_size, mkldnn_x, mkldnn_f32, engine, add_src1, &mkldnn_memory_prim_src1);
+    create_mkldnn_memory_primitive(mkl_src2_dims, mkl_src2_size, mkldnn_x, mkldnn_f32, engine, add_src2, &mkldnn_memory_prim_src2);
+    create_mkldnn_memory_primitive(mkl_dst_dims, mkl_dst_size, mkldnn_x, mkldnn_f32, engine, add_dst, &mkldnn_memory_prim_dst);
 
     // create a Sum primitive descriptor 
     mkldnn_primitive_desc_t add_primitive_desc;

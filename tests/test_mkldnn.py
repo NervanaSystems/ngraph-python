@@ -457,6 +457,6 @@ def test_mkldnn_elementwise_add():
     unittest_mkldnn_add(N=128, C=3, K=8, D=1, T=1, H=32, W=32)
 
     # test -2
-    unitt_mkldnn_elementwise_addest_mkldnn_add(N=128, C=3, K=8, D=1, T=1, H=28, W=28)
+    unittest_mkldnn_add(N=128, C=3, K=8, D=1, T=1, H=28, W=28)
 
 test_mkldnn_elementwise_add()
