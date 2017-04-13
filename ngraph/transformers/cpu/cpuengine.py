@@ -273,6 +273,7 @@ class Mkldnn(object):
         else:
             np.add(I_array1, I_array2, out=O_array)
 
+
 def update_conv(conv_slices, I, E, U):
     mSlice, pSlice, qSlice, _, _, _ = conv_slices
     K, M, P, Q, N = E.shape

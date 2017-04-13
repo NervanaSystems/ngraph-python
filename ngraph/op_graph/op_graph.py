@@ -2870,7 +2870,7 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         self.index = BinaryElementWiseOp._index
-        BinaryElementWiseOp._index +=1
+        BinaryElementWiseOp._index += 1
         x, y = as_ops((x, y))
 
         x_axes_bcast = x.axes + (y.axes - x.axes)

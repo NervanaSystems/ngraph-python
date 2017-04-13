@@ -336,7 +336,7 @@ class CPUCodeGenerator(PyGen):
                     op.index, out, x, y)
 
     @allocate_op.on_type(Add)
-    def allocate_op(self,op, out, x, y):
+    def allocate_op(self, op, out, x, y):
         self.append("mkldnn.init_elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
                     op.index, x, y, out)
 
