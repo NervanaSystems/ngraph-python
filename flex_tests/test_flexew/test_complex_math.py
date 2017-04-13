@@ -40,6 +40,7 @@ test_data_single_operand = (
      "Exponential function of a positive value inside of flex range"),
     (ng.exp, [-int(np.log(MAXIMUM_FLEX_VALUE) / 2)], [0.0067379474639892578],
      "Exponential function of a negative value inside of flex range"),
+    (ng.exp, [0, 10, 1, -5], [1, 1.9999, 2.7182, 0.0068], "Iterations exp(x)"),
 
     # test_log
     (ng.log, [0], [MINIMUM_FLEX_VALUE], "Logarithm of 0 to achieve underflow (-inf)"),
@@ -49,6 +50,7 @@ test_data_single_operand = (
      "Logarithm of a positive border value to achieve a number from flex range"),
     (ng.log, [MAXIMUM_FLEX_VALUE + 1], [10.39697265625],
      "Logarithm of a value greater than positive border value to achieve overflow"),
+    (ng.log, [2, MAXIMUM_FLEX_VALUE, 10, 1], [0.6931, 0.9999, 2.3026, 0], "Iterations ln(x)"),
 
     # test_tanh
     (ng.tanh, [MINIMUM_FLEX_VALUE - 1], [np.tanh(MINIMUM_FLEX_VALUE)], "Tanh of a constant below the flex range"),
@@ -62,13 +64,16 @@ test_data_single_operand = (
     (ng.reciprocal, [MAXIMUM_FLEX_VALUE], [3.0517578125e-05], "Reciprocal of positive boundary value - high precision"),
     (ng.reciprocal, [MINIMUM_FLEX_VALUE], [-3.0517578125e-05],
      "Reciprocal of negative boundary value - high precision"),
+    (ng.reciprocal, [1, MAXIMUM_FLEX_VALUE, 2, MINIMUM_FLEX_VALUE], [1, 0.5, 0.5, -0.125],
+     "Iterations reciprocal of x"),
 
     # test_square
     (ng.square, [1], [1], "Square of 1 equals 1"),
     bug_1103((ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
               "Square of negative boundary value - overflow expected")),
     bug_1103((ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-              "Square of positive boundary value - overflow expected"))
+              "Square of positive boundary value - overflow expected")),
+    (ng.square, [0, 100, -1, 10], [0, 127.9960, 1, 100], "Iterations x ^ 2")
 )
 
 

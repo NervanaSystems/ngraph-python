@@ -36,6 +36,10 @@ test_data_double_operand = (
     (ng.sum, [np.array([MAXIMUM_FLEX_VALUE, -1.0, -2.0])], [MAXIMUM_FLEX_VALUE - 1.0 - 2.0],
      "Redop sum function - values from flex range, near positive boundary"),
     (ng.sum, [np.array([1.0, 2.0, 3.0, 4.0])], [10.0], "Redop sum function - values from flex range"),
+    (ng.sum, [np.array([1.0, 2.0, 3.0, 4.0],),
+              np.array([0.4, 0.03, 0.44, 1.47]),
+              np.array([100, 2000, 3500.4, 10000])], [10.0, 2.33984375, 31.9990234375],
+     "Redop sum function with iterations - values from flex range"),
 
     # test_prod
     bug((ng.prod, [np.array([MINIMUM_FLEX_VALUE, 2.0])], [MINIMUM_FLEX_VALUE],
@@ -50,12 +54,19 @@ test_data_double_operand = (
      "Redop product function - values from flex range, multiplied by zero"),
     (ng.prod, [np.array([1.0, 2.0, 3.0, 4.0])], [24.0],
      "Redop product function - values from flex range"),
+    (ng.prod, [np.array([1.0, 2.0, 3.0, 4.0]),
+               np.array([100, 200, 3, 4]),
+               np.array([0.4, 100, 0.7, 10000])], [24.0, 31.9990234375, 127.99609375],
+     "Redop product function with iterations - values from flex range"),
 
     # test_max
     bug((ng.max, [np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE + 2.0])],
          [MAXIMUM_FLEX_VALUE], "Redop max function - result expected to overflow")),
     bug((ng.max, [np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE])], [MAXIMUM_FLEX_VALUE],
          "Redop max function - values from flex range")),
+    (ng.max, [np.array([0.4, 0.1, 0.2]),
+              np.array([0, 100, 10]),
+              np.array([1, 7, 0])], [0.3999, 0.4999, 1.9999], "Iterations max(x)"),
 
     # test_min
     bug((ng.min, [np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE - 2])],

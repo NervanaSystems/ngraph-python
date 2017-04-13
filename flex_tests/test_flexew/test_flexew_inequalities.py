@@ -43,6 +43,7 @@ test_data_double_operand = (
      "Equality function - positive boundary value equal to negative boundary value"),
     (ng.equal, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
      "Equality function - negative boundary value equal to positive boundary value"),
+    (ng.equal, [(1, 1), (MAXIMUM_FLEX_VALUE, 3.9998779296875), (10, 10)], [True, True, True], "Iterations x == y"),
 
     # test_not_equal
     bug_1103((ng.not_equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False],
@@ -57,6 +58,8 @@ test_data_double_operand = (
      "Inequality function - positive boundary value not equal to negative boundary value"),
     (ng.not_equal, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [True],
      "Inequality function - negative boundary value not equal to positive boundary value"),
+    (ng.not_equal, [(0, 1), (MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE), (MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)],
+     [True, True, True], "Iterations x != y"),
 
     # test_less
     bug_1103((ng.less, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False], "Less function - underflow expected")),
@@ -69,6 +72,7 @@ test_data_double_operand = (
      "Less function - positive boundary value less than negative boundary value"),
     (ng.less, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [True],
      "Less function - negative boundary value less than positive boundary value"),
+    (ng.less, [(1, 2), (2, 3), (10000, 10)], (True, True, False), "Iterations x < y"),
 
     # test_less_equal
     bug_1103((ng.less_equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True],
