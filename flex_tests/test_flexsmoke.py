@@ -21,5 +21,5 @@ def test_if_network_is_trainable(script_path, description):
     """
     print("Description of test case: ", description)
     mlp_path = os.path.dirname(__file__) + "/../" + script_path
-    cmd = "python " + mlp_path + " -b flexgpu"
+    cmd = "python " + mlp_path + " -b flexgpu -t 200"
     subprocess.check_output(cmd, shell=True)
