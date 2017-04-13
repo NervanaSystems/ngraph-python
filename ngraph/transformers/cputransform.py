@@ -332,6 +332,36 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_conv_bprop(index={}, E={}, F={}, gI={}, pad={}, stride={})",
                     op.index, delta, filters, gI, pad, stride)
 
+    @allocate_op.on_type(PoolingOp)
+    def allocate_op(self, op, arrO, arrI):
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+        pad = [pad_d, pad_h, pad_w]
+        stride = [str_d, str_h, str_w]
+        kernel = [op.pool_params['J'], op.pool_params['T'],
+                  op.pool_params['R'], op.pool_params['S']]
+        op_type = op.pool_params
+        pool_type = 0
+        if op_type['op'] == 'avg':
+            pool_type = 1
+        self.append("mkldnn.init_pool_fprop({}, index={}, arrI={}, arrO={}, kernel={}, pad={}, stride={})",  # noqa
+                    pool_type, op.index, arrI, arrO, kernel, pad, stride)
+
+    @allocate_op.on_type(BpropPoolOp)
+    def allocate_op(self, op, outputs, delta):
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+        pad = [pad_d, pad_h, pad_w]
+        stride = [str_d, str_h, str_w]
+        kernel = [op.pool_params['J'], op.pool_params['T'],
+                  op.pool_params['R'], op.pool_params['S']]
+        op_type = op.pool_params
+        pool_type = 0
+        if op_type['op'] == 'avg':
+            pool_type = 1
+        self.append("mkldnn.init_pool_bprop({}, index={}, arrE={}, arrD={}, kernel={}, pad={}, stride={})",  # noqa
+                    pool_type, op.index, delta, outputs, kernel, pad, stride)
+
     @allocate_op.on_type(DotLowDimension)
     def allocate_op(self, op, out, x, y):
         self.append("mkldnn.init_innerproduct_fprop({}, out={}, x={}, y={})",
@@ -398,13 +428,13 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, outputs, inputs):
         self.pool_params[op.index] = op.pool_params
         self.pool_slices[op.index] = CPUPoolEngine.get_slices(inputs, outputs, op.pool_params)
-        self.append("fprop_pool(self.pool_slices[{}], arrI={}, arrO={})",
-                    op.index, inputs, outputs)
+        self.append("mkldnn.fprop_pool({}, self.pool_slices[{}], arrI={}, arrO={})",
+                    op.index, op.index, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
-        self.append("bprop_pool(self.pool_slices[{}], arrE={}, arrD={})",
-                    op.index, delta, outputs)
+        self.append("mkldnn.bprop_pool({}, self.pool_slices[{}], arrE={}, arrD={})",
+                    op.index, op.index, delta, outputs)
 
     @generate_op.on_type(LookupTableOp)
     def generate_op(self, op, outputs, lut, idx):
@@ -681,7 +711,7 @@ import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
 from ngraph.op_graph import axes
-from ngraph.transformers.cpu.cpuengine import update_conv, fprop_pool, bprop_pool
+from ngraph.transformers.cpu.cpuengine import update_conv
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals
