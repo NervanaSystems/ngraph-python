@@ -216,7 +216,7 @@ class GPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):
         super(GPUQueueSendOp, self).__init__(from_node)
-        self.queue = multiprocessing.Queue()
+        self._queue = multiprocessing.Queue()
 
     @property
     def queue(self):
@@ -227,7 +227,7 @@ class GPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
         super(GPUQueueRecvOp, self).__init__(to_node, send_node)
-        self.queue = send_node.queue
+        self._queue = send_node.queue
 
     @property
     def queue(self):
