@@ -506,8 +506,8 @@ class Affine(Layer):
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
         b_out = self.bias(l_out)
-        bn_out = self.batch_norm(b_out) if self.batch_norm else b_out
-        return self.activation(bn_out)
+        bn_out = self.batch_norm_layer(b_out) if self.batch_norm else b_out
+        return self.activation_layer(bn_out)
 
 
 class Convolution(Layer):
@@ -685,40 +685,43 @@ class Recurrent(Layer):
         self.return_sequence = return_sequence
         self.backward = backward
         self.batch_norm = BatchNorm() if batch_norm is True else None
+        self.w_in_axes = None
 
     def interpret_axes(self, in_obj, init_state):
-        self.in_axes = in_obj.axes
 
-        self.recurrent_axis = self.in_axes.recurrent_axis()
-        self.in_feature_axes = self.in_axes.sample_axes() - self.recurrent_axis
+        if self.w_in_axes is None:
+            self.in_axes = in_obj.axes
 
-        # if init state is given, use that as hidden axes
-        if init_state:
-            self.out_feature_axes = (init_state.axes.sample_axes() -
-                                     init_state.axes.recurrent_axis())
-            if sum(self.out_feature_axes.full_lengths) != self.nout:
-                raise ValueError("Length of init_state must be the same as nout: " +
-                                 "{} != {}".format(sum(self.out_feature_axes.full_lengths),
-                                                   self.nout))
-        else:
-            self.out_feature_axes = ng.make_axes([ng.make_axis(self.nout)])
-            if len(self.in_feature_axes) == 1:
-                self.out_feature_axes[0].named(self.in_feature_axes[0].name)
+            self.recurrent_axis = self.in_axes.recurrent_axis()
+            self.in_feature_axes = self.in_axes.sample_axes() - self.recurrent_axis
 
-        self.out_axes = self.out_feature_axes + self.in_axes.batch_axis()
-        self.recurrent_axis_idx = len(self.out_feature_axes)
+            # if init state is given, use that as hidden axes
+            if init_state:
+                self.out_feature_axes = (init_state.axes.sample_axes() -
+                                         init_state.axes.recurrent_axis())
+                if sum(self.out_feature_axes.full_lengths) != self.nout:
+                    raise ValueError("Length of init_state must be the same as nout: " +
+                                     "{} != {}".format(sum(self.out_feature_axes.full_lengths),
+                                                       self.nout))
+            else:
+                self.out_feature_axes = ng.make_axes([ng.make_axis(self.nout)])
+                if len(self.in_feature_axes) == 1:
+                    self.out_feature_axes[0].named(self.in_feature_axes[0].name)
 
-        # create temporary out axes which the dot ops will output.  These
-        # temporary axes will be immediately cast to self.out_axes
-        # afterwards.  We can't go directly to self.out_axes from the DotOp
-        # because sometimes the self.out_axes intersect with the self.in_axes
-        # and so the weight matrix would have a duplicate Axis which isn't
-        # allowed.
-        temp_out_axes = ng.make_axes(shadow_axes_map(self.out_feature_axes).keys())
+            self.out_axes = self.out_feature_axes + self.in_axes.batch_axis()
+            self.recurrent_axis_idx = len(self.out_feature_axes)
 
-        # determine the shape of the weight matrices
-        self.w_in_axes = temp_out_axes + self.in_feature_axes
-        self.w_re_axes = temp_out_axes + self.out_feature_axes
+            # create temporary out axes which the dot ops will output.  These
+            # temporary axes will be immediately cast to self.out_axes
+            # afterwards.  We can't go directly to self.out_axes from the DotOp
+            # because sometimes the self.out_axes intersect with the self.in_axes
+            # and so the weight matrix would have a duplicate Axis which isn't
+            # allowed.
+            temp_out_axes = ng.make_axes(shadow_axes_map(self.out_feature_axes).keys())
+
+            # determine the shape of the weight matrices
+            self.w_in_axes = temp_out_axes + self.in_feature_axes
+            self.w_re_axes = temp_out_axes + self.out_feature_axes
 
     def _step(self, h_ff, states):
         h_ff = ng.cast_role(h_ff, self.out_axes)
@@ -884,14 +887,13 @@ class BiRNN(Layer):
         if self.sum_out:
             return fwd_out + bwd_out
         elif self.concat_out:
-            ax_list = list()
-            for out in [fwd_out, bwd_out]:
-                axes = out.axes.sample_axes() - out.axes.recurrent_axis()
-                if len(axes) == 1:
-                    ax_list.append(axes[0])
-                else:
-                    raise ValueError("Multiple hidden axes. Unable to concatenate automatically")
-            return ng.ConcatOp([fwd_out, bwd_out], ax_list)
+            ax = fwd_out.axes.feature_axes()
+            if len(ax) == 1:
+                ax = ax[0]
+            else:
+                raise ValueError(("Multiple hidden axes: {}. "
+                                  "Unable to concatenate automatically").format(ax))
+            return ng.concat_along_axis([fwd_out, bwd_out], ax)
         else:
             return fwd_out, bwd_out
 
