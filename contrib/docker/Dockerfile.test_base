@@ -1,18 +1,22 @@
 FROM ngraph_base
 
-# install neon
 WORKDIR /root
 RUN apt-get install -y python-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
 # install aeon dependency
-RUN apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev cmake && \
+RUN apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev cmake libgtest-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
+WORKDIR /usr/src/gtest
+RUN cmake CMakeLists.txt
+RUN make
+RUN cp *.a /usr/local/lib
+
 RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
-    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install .
+    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
 # This disables a warning from opencv from a defunct driver
 RUN ln /dev/null /dev/raw1394
