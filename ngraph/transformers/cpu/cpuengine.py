@@ -265,9 +265,11 @@ class Mkldnn(object):
                     self.mkldnn_engine, inputs.ctypes.data, out.ctypes.data,
                     slope, input_size)
 
-    def fprop_relu(self, index):
+    def fprop_relu(self, index, inputs, out, slope):
         if (self.mkldnn_enabled and index in self.mkldnn_relu_fprop_netlist):
             self.run_mkldnn_netlist_fn(self.mkldnn_relu_fprop_netlist[index])
+        else:
+            np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
 
 def update_conv(conv_slices, I, E, U):

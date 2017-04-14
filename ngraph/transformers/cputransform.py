@@ -451,8 +451,8 @@ class CPUCodeGenerator(PyGen):
                     op.index, x, y, out)
 
     @generate_op.on_type(ReluOp)
-    def generate_op(self, op, outputs, x):
-        self.append("mkldnn.fprop_relu(index={})""", op.index)
+    def generate_op(self, op, outputs, inputs):
+        self.append("mkldnn.fprop_relu({}, {}, {}, {})", op.index, inputs, outputs, op.slope)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
