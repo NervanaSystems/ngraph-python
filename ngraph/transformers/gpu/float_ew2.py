@@ -1328,11 +1328,11 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             "scale": ctx.flex_scale[reg_name][0]
                         }
                         flex_stores.append(flex_conversion)
-                        flex_stores.append("flex_max = max_abs(flex_max, reg_out);")
                         store_code = _default_conversion % {
                             "out": store_code,
                             "in": "reg_out"
                         }
+                        store_code += "\n" + "flex_max = max_abs(flex_max, reg_out);"
                     elif type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,
