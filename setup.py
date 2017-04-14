@@ -54,7 +54,8 @@ if "MKLDNN_ROOT" in os.environ:
                         sources = ['ngraph/transformers/cpu/convolution.c', \
                                    'ngraph/transformers/cpu/elementwise.c', \
                                    'ngraph/transformers/cpu/innerproduct.c', \
-                                   'ngraph/transformers/cpu/mkldnn_engine.c']))
+                                   'ngraph/transformers/cpu/mkldnn_engine.c',
+                                   'ngraph/transformers/cpu/relu.c']))
 
 setup(
     name="ngraph",
