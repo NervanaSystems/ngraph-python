@@ -345,7 +345,7 @@ class CPUCodeGenerator(PyGen):
     @allocate_op.on_type(ReluOp)
     def allocate_op(self, op, outputs, inputs):
         self.append("mkldnn.init_relu_fprop({}, inputs={}, out={}, slope={})",
-                    op.index, inputs, outputs, op.slope
+                    op.index, inputs, outputs, op.slope)
 
     @generic_method(Op)
     def generate_op(self, op, *args):
