@@ -106,7 +106,7 @@ def update_comm_deps(ops):
                         r.add_control_dep(op)
 
 
-def clone_graph(root, device_id, shared_queues_idx, axes, parallel_axis, num_clones):
+def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
     """
     clone graph with serde (serialization)
     input:
@@ -124,8 +124,8 @@ def clone_graph(root, device_id, shared_queues_idx, axes, parallel_axis, num_clo
     cloned_graph = Op.ordered_ops([new_root])
     # update newly cloned op metadata, generate new UUIDs
     for op in cloned_graph:
-        op.metadata['transformer'] = op.metadata['device'] + str(device_id)
-        op.metadata['device_id'] = str(device_id)
+        op.metadata['transformer'] = op.metadata['device'] + str(clone_id)
+        op.metadata['device_id'] = str(clone_id)
         if isinstance(op, (ScatterRecvOp, GatherSendOp)):
             op._shared_queues = orig_ops[op.uuid].shared_queues
             op.idx = shared_queues_idx
@@ -133,10 +133,16 @@ def clone_graph(root, device_id, shared_queues_idx, axes, parallel_axis, num_clo
                 op._send_node = orig_ops[op.uuid].send_node()
         if hasattr(op, '_axes') and parallel_axis in op._axes:
             op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
-            # TODO: Revisit to handle axes updation better.
+            # TODO: Revisit to handle axes updation better. Github Ticket #1355
             if isinstance(op, DotOp):
-                op.x_out_axes = calculate_scatter_axes(op.x_out_axes, parallel_axis, num_clones)
-                op.y_out_axes = calculate_scatter_axes(op.y_out_axes, parallel_axis, num_clones)
+                if parallel_axis in op.x_out_axes:
+                    op.x_out_axes = calculate_scatter_axes(op.x_out_axes,
+                                                           parallel_axis, num_clones)
+                elif parallel_axis in op.y_out_axes:
+                    op.y_out_axes = calculate_scatter_axes(op.y_out_axes,
+                                                           parallel_axis, num_clones)
+                else:
+                    raise ValueError("Missing parallel_axis in Op's x_out_axes or y_out_axes")
         op.uuid = uuid.uuid4()
 
     return new_root

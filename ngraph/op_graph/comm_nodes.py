@@ -24,12 +24,12 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
     return new_axes
 
 
-def calculate_scatter_axes(axes, parallel_axis, num_devices):
+def calculate_scatter_axes(axes, scatter_axis, num_devices):
     new_axes = list()
     for a in axes:
-        if parallel_axis == a:
+        if scatter_axis == a:
             assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
-                .format(parallel_axis, num_devices)
+                .format(scatter_axis, num_devices)
 
             new_length = a.length // num_devices
             new_axis = make_axis(new_length, a.name)
@@ -171,12 +171,6 @@ class ScatterRecvOp(RecvOp):
                                             fragment_axis=to_node.metadata['parallel'],
                                             fragments=len(to_node.metadata['device_id']))
 
-    @classmethod
-    def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
-        # invoke axes math helper to modify scatter axis
-        recv_axes = send_axes
-        return recv_axes
-
 
 class GatherSendOp(SendOp):
     """
@@ -213,12 +207,6 @@ class GatherRecvOp(RecvOp):
                                   self.metadata['parallel'],
                                   len(self.from_id))
 
-    @classmethod
-    def calculate_recv_axes(self, send_axes, fragment_axis, fragments):
-        # invoke axes math helper to modify scatter axis\
-        recv_axes = send_axes
-        return recv_axes
-
     @property
     def slices(self):
         return self._slices
@@ -230,12 +218,20 @@ class GPUQueueSendOp(SendOp):
         super(GPUQueueSendOp, self).__init__(from_node)
         self.queue = multiprocessing.Queue()
 
+    @property
+    def queue(self):
+        return self._queue
+
 
 class GPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
         super(GPUQueueRecvOp, self).__init__(to_node, send_node)
         self.queue = send_node.queue
+
+    @property
+    def queue(self):
+        return self._queue
 
 
 class CPUQueueSendOp(SendOp):

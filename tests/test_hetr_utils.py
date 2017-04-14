@@ -121,22 +121,17 @@ def assert_axes_eq_len(expected_axes, actual_axes):
     for exp, act in zip(expected_axes, actual_axes):
         assert exp.length == act.length
 
-# TODO don't define these globally
-ax_A = ng.make_axis(64)
-ax_B = ng.make_axis(128)
-ax_C = ng.make_axis(256)
-
 
 @pytest.mark.parametrize('config', [
     {
-        'axes': ng.make_axes([ax_A]),
-        'parallel_axis': ax_A,
+        'axes': [64],
+        'parallel_axis': 0,
         'slices': [[slice(0, 32, 1)], [slice(32, 64, 1)]],
         'device_id': (0, 1)
     },
     {
-        'axes': ng.make_axes([ax_A, ax_B]),
-        'parallel_axis': ax_A,
+        'axes': [64, 128],
+        'parallel_axis': 0,
         'slices': [[slice(0, 16, 1), slice(None)],
                    [slice(16, 32, 1), slice(None)],
                    [slice(32, 48, 1), slice(None)],
@@ -144,8 +139,8 @@ ax_C = ng.make_axis(256)
         'device_id': (0, 1, 2, 3)
     },
     {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'parallel_axis': ax_A,
+        'axes': [64, 128, 256],
+        'parallel_axis': 0,
         'slices': [[slice(0, 16, 1), slice(None), slice(None)],
                    [slice(16, 32, 1), slice(None), slice(None)],
                    [slice(32, 48, 1), slice(None), slice(None)],
@@ -153,8 +148,8 @@ ax_C = ng.make_axis(256)
         'device_id': (0, 1, 2, 3)
     },
     {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'parallel_axis': ax_C,
+        'axes': [64, 128, 256],
+        'parallel_axis': 2,
         'slices': [[slice(None), slice(None), slice(0, 128, 1)],
                    [slice(None), slice(None), slice(128, 256, 1)]],
         'device_id': (0, 1)
@@ -162,24 +157,25 @@ ax_C = ng.make_axis(256)
 ])
 def test_scatter_gather_node_axes(config):
     t = config
-
+    axes = ng.make_axes([ng.make_axis(length) for length in t['axes']])
+    parallel_axis = axes[t['parallel_axis']]
     with ng.metadata(device=None, device_id='0', transformer='cpu0', host_transformer=None):
-        from_node = ng.placeholder(axes=t['axes'])
-        to_node = ng.placeholder(axes=t['axes'])
+        from_node = ng.placeholder(axes=axes)
+        to_node = ng.placeholder(axes=axes)
 
     with ng.metadata(device=None, device_id=t['device_id'], transformer=None,
-                     parallel=t['parallel_axis'], host_transformer=None):
-        par_node = ng.placeholder(axes=t['axes'])
+                     parallel=parallel_axis, host_transformer=None):
+        par_node = ng.placeholder(axes=axes)
 
     scatter_send_op = ScatterSendOp(from_node=from_node,
                                     to_node=par_node)
-    assert t['axes'] == scatter_send_op.axes
+    assert axes == scatter_send_op.axes
     assert t['slices'] == scatter_send_op.slices
 
     scatter_recv_op = ScatterRecvOp(to_node=par_node,
                                     send_node=scatter_send_op)
 
-    for sct_a, a in zip(scatter_recv_op.axes, t['axes']):
+    for sct_a, a in zip(scatter_recv_op.axes, axes):
         assert sct_a.length == a.length
 
     gather_send_op = GatherSendOp(from_node=scatter_recv_op)
@@ -188,7 +184,7 @@ def test_scatter_gather_node_axes(config):
     gather_recv_op = GatherRecvOp(from_node=par_node,
                                   to_node=to_node,
                                   send_node=gather_send_op)
-    assert_axes_eq_len(t['axes'], gather_recv_op.axes)
+    assert_axes_eq_len(axes, gather_recv_op.axes)
 
     assert t['slices'] == gather_recv_op.slices
 

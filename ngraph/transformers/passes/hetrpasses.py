@@ -98,12 +98,11 @@ class DistributedPass(GraphBuildingPass):
                 self.parallel_axes = op.metadata['parallel']
 
                 gather_send_op = op.send_node()
-                new_axes = gather_send_op.axes
 
                 # clone nodes for each device_id
                 for i, id in enumerate(op.from_id):
-                    new_gather_send_op = clone_graph(root=gather_send_op, device_id=id,
-                                                     shared_queues_idx=i, axes=new_axes,
+                    new_gather_send_op = clone_graph(root=gather_send_op, clone_id=id,
+                                                     shared_queues_idx=i,
                                                      parallel_axis=self.parallel_axes,
                                                      num_clones=len(op.from_id))
                     self.send_nodes.add(new_gather_send_op)
