@@ -72,6 +72,8 @@ clean:
 	rmdir ${DIR}/contrib/docker/.build-* || echo "keep going if directory is not present"
 	rm -f ${DIR}/*.xml
 	rm -f ${DIR}/*.dat
+# workaround for blocking issues for aeon
+	rm -rf ${DIR}/contrib/docker/private-aeon
 
 # if the ngraph_base image exists, use it to run make clean with docker run
 ifeq ($(findstring ngraph_base,$(NGRAPH_BASE_IMG)), ngraph_base)
@@ -106,6 +108,11 @@ build_test_base: build_base
 	cd ${DIR}/contrib/docker
 	git clone git@github.com:NervanaSystems/autoflex.git
 
+# workaround for blocking issues for aeon
+	rm -rf ${DIR}/contrib/docker/private-aeon
+	cd ${DIR}/contrib/docker
+	git clone git@github.com:NervanaSystems/private-aeon.git
+
 	# now build the docker container
 	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image
@@ -128,6 +135,11 @@ build_test_cpu: build_base_cpu
 	rm -rf ${DIR}/contrib/docker/autoflex
 	cd ${DIR}/contrib/docker
 	git clone git@github.com:NervanaSystems/autoflex.git
+
+# workaround for blocking issues for aeon
+	rm -rf ${DIR}/contrib/docker/private-aeon
+	cd ${DIR}/contrib/docker
+	git clone git@github.com:NervanaSystems/private-aeon.git
 
 	# now build the docker container
 	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_cpu -t=ngraph_test_cpu:${BUILD_VERSION} ${DIR}

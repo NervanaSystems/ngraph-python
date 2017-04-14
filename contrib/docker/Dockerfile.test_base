@@ -16,8 +16,16 @@ RUN cmake CMakeLists.txt
 RUN make
 RUN cp *.a /usr/local/lib
 
-RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
-    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
+# workaround for blocking issues for aeon
+WORKDIR /root/ngraph-test
+ADD contrib/docker/private-aeon /root/private-aeon
+WORKDIR /root
+RUN mkdir aeon_build && cd aeon_build && cmake ../private-aeon && pip install . && cd ..
+# end workaround
+
+# install from aeon rc1-master
+#RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
+#    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
 # This disables a warning from opencv from a defunct driver
 RUN ln /dev/null /dev/raw1394
@@ -30,16 +38,17 @@ RUN make test_prepare
 
 # build Baidu's Warp-CTC 
 # dependencies for deepspeech example
-RUN pip install -y cffi
+WORKDIR /root/..
+RUN pip install cffi
 RUN git clone https://github.com/baidu-research/warp-ctc.git 
 WORKDIR warp-ctc 
 RUN mkdir -p build 
 RUN cd build && cmake ../ && make && cd ../.. 
 
-
 # add in autoflex.  This should will only be added if the user building
 # this dockerfile has permission to access the autoflex repo.  This is a
 # temporary solution to get things working quickly.
+WORKDIR /root/ngraph-test
 ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
 

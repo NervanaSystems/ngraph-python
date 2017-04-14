@@ -16,8 +16,16 @@ RUN cmake CMakeLists.txt
 RUN make
 RUN cp *.a /usr/local/lib
 
-RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
-    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
+# workaround for blocking issues for aeon
+WORKDIR /root/ngraph-test
+ADD contrib/docker/private-aeon /root/private-aeon
+WORKDIR /root
+RUN mkdir aeon_build && cd aeon_build && cmake ../private-aeon && pip install . && cd ..
+# end workaround
+
+# install from aeon rc1-master
+#RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
+#    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
 WORKDIR /root/ngraph-test
 ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
