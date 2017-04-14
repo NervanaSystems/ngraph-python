@@ -66,7 +66,7 @@ class CTCOp(TensorOp):
             raise ValueError('activations must have a recurrent axis')
 
         if len(labels.shape) != 1:
-            raise ValueError(('labels 1must have 1 dimension, '
+            raise ValueError(('labels must have 1 dimension, '
                               'found {}').format(len(labels.shape)))
 
         if len(activation_lens.shape) != 1:
