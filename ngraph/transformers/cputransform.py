@@ -337,6 +337,11 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_innerproduct_fprop({}, out={}, x={}, y={})",
                     op.index, out, x, y)
 
+    @allocate_op.on_type(Add)
+    def allocate_op(self, op, out, x, y):
+        self.append("mkldnn.init_elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
+                    op.index, x, y, out)
+
     @allocate_op.on_type(ReluOp)
     def allocate_op(self, op, outputs, inputs):
         self.append("mkldnn.init_relu_fprop({}, inputs={}, out={}, slope={})",
@@ -360,7 +365,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
-        self.append("np.add({}, {}, out={})", x, y, out)
+        self.append("mkldnn.elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
+                    op.index, x, y, out)
 
     @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
