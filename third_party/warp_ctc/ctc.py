@@ -17,32 +17,46 @@ from __future__ import division, print_function, absolute_import
 import sys
 import os
 import numpy as np
+from itertools import chain
 from cffi import FFI
 from .include_header import ctc_header
 
-try:
-    warp_ctc_path = os.environ["WARP_CTC_PATH"]
-except KeyError:
-    print("Unable to determine location of warp-ctc library.\n"
-          "Ensure that warp-ctc is built and set WARP_CTC_PATH"
-          " to the location of libwarpctc.so",
-          file=sys.stderr)
-    sys.exit(1)
-else:
-    libpath = os.path.join(warp_ctc_path, "libwarpctc.so")
 
-if not os.path.exists(libpath):
-    print(("Could not find libwarpctc.so in {}.\n"
-           "Build warp-ctc and set WARP_CTC_PATH to the location of"
-           " libwarpctc.so").format(libpath),
-          file=sys.stderr)
-    sys.exit(1)
+def find(filename, path_list):
+    emptypath = str()
+    search_chain = chain.from_iterable(os.walk(path) for path in path_list)
+    for root, _, files in search_chain:
+        if filename in files:
+            return os.path.join(root, filename)
+    return emptypath
+
+
+def get_ctc_lib():
+    try:
+        search_paths = os.environ["LD_LIBRARY_PATH"]
+    except KeyError:
+        print("Unable to determine location of warp-ctc library.\n"
+              "Ensure that warp-ctc is built and set LD_LIBRARY_PATH"
+              " to include the location of libwarpctc.so",
+              file=sys.stderr)
+        sys.exit(1)
+    else:
+        libpath = find("libwarpctc.so", search_paths.split(':'))
+
+    if not os.path.exists(libpath):
+        print("Could not find libwarpctc.so in LD_LIBRARY_PATH.\n"
+              "Build warp-ctc and update LD_LIBRARY_PATH to include"
+              " the location of libwarpctc.so",
+              file=sys.stderr)
+        sys.exit(1)
+    return libpath
 
 
 class CTC(object):
     """
     """
     def __init__(self, on_device='cpu', blank_label=0):
+        libpath = get_ctc_lib()
         self.ffi = FFI()
         self.ffi.cdef(ctc_header())
         self.ctclib = self.ffi.dlopen(libpath)
@@ -56,7 +70,7 @@ class CTC(object):
 
         self.options = self.ffi.new('ctcOptions*',
                                     {"loc": assign_device,
-                                    "blank_label": blank_label})[0]
+                                     "blank_label": blank_label})[0]
         self.size_in_bytes = self.ffi.new("size_t*")
         self.nout = None
         self.bsz = None
@@ -64,12 +78,12 @@ class CTC(object):
     def get_buf_size(self, ptr_to_buf):
         return self.ffi.sizeof(self.ffi.getctype(
                                self.ffi.typeof(ptr_to_buf).item))
-        
+
     def buf_ref_from_array(self, arr):
         return self.ffi.from_buffer(
             self.ffi.buffer(self.ffi.cast('void*', arr.ptr), arr.nbytes))
-                                    
-    def buf_ref_from_ptr(self, ptr, size): 
+
+    def buf_ref_from_ptr(self, ptr, size):
         return self.ffi.from_buffer(self.ffi.buffer(ptr, size))
 
     def get_gpu_workspace_size(self, lbl_lens, utt_lens, nout, bsz):
@@ -77,19 +91,18 @@ class CTC(object):
         self.bsz = bsz
         _lbl_lens = self.ffi.cast("int*", lbl_lens.ravel().ctypes.data)
         _utt_lens = self.ffi.cast("int*", utt_lens.ravel().ctypes.data)
-        
-        status = self.ctclib.get_workspace_size(_lbl_lens, 
-                                                _utt_lens, 
-                                                self.nout, 
-                                                self.bsz, 
-                                                self.options, 
+
+        status = self.ctclib.get_workspace_size(_lbl_lens,
+                                                _utt_lens,
+                                                self.nout,
+                                                self.bsz,
+                                                self.options,
                                                 self.size_in_bytes)
         assert status is 0, "get_workspace_size() in warp-ctc failed"
 
         return self.size_in_bytes[0]
 
-
-    def bind_to_gpu(self, acts, grads, lbls, lbl_lens, utt_lens, 
+    def bind_to_gpu(self, acts, grads, lbls, lbl_lens, utt_lens,
                     costs, workspace, scratch_size, stream):
 
         if stream is None:
@@ -104,11 +117,11 @@ class CTC(object):
         flat_dims = np.prod(acts.shape)
         assert np.prod(grads.shape) == flat_dims
 
-        acts_buf = self.ffi.cast("float*", 
+        acts_buf = self.ffi.cast("float*",
                                  self.buf_ref_from_array(acts))
-        grads_buf = self.ffi.cast("float*", 
+        grads_buf = self.ffi.cast("float*",
                                   self.buf_ref_from_array(grads))
-        costs_buf = self.ffi.cast("float*", 
+        costs_buf = self.ffi.cast("float*",
                                   self.buf_ref_from_array(costs))
 
         warp_grads_buf_size = flat_dims * self.get_buf_size(grads_buf)
@@ -134,7 +147,7 @@ class CTC(object):
 
         assert ctc_status is 0, "warp-ctc run failed"
 
-    def bind_to_cpu(self, acts, lbls, utt_lens, lbl_lens, grads, costs, 
+    def bind_to_cpu(self, acts, lbls, utt_lens, lbl_lens, grads, costs,
                     n_threads=1):
 
         self.options.num_threads = n_threads
@@ -153,17 +166,17 @@ class CTC(object):
         warp_label_lens = self.ffi.cast("int*", lbl_lens.ravel().ctypes.data)
         warp_input_lens = self.ffi.cast("int*", utt_lens.ravel().ctypes.data)
 
-        status = self.ctclib.get_workspace_size(warp_label_lens, 
-                                                warp_input_lens, 
-                                                self.nout, 
-                                                self.bsz, 
-                                                self.options, 
+        status = self.ctclib.get_workspace_size(warp_label_lens,
+                                                warp_input_lens,
+                                                self.nout,
+                                                self.bsz,
+                                                self.options,
                                                 self.size_in_bytes)
 
         assert status is 0, "get_workspace_size() in warp-ctc failed"
-                                                                                     
+
         # TODO: workspace is a variable size buffer whose size is
-        # determined during each call, so we can't initialize ahead 
+        # determined during each call, so we can't initialize ahead
         # of time. Can we avoid this?
         workspace = self.ffi.new("char[]", self.size_in_bytes[0])
 
@@ -184,4 +197,3 @@ class CTC(object):
         self.ffi.memmove(costs, costs_buf, warp_costs_buf_size)
 
         assert ctc_status is 0, "warp-ctc run failed"
-

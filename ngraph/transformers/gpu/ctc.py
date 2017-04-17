@@ -18,13 +18,12 @@ from ngraph.transformers.gpu.kernel import GPUKernel
 import numpy as np
 from third_party.warp_ctc.ctc import CTC
 
-warp_ctc = CTC(on_device='gpu')
-
 
 class CTCKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(CTCKernel, self).__init__(transformer)
 
+        self.warp_ctc = CTC(on_device='gpu')
         self.at_runtime = self.transformer.runtime
         self.stream = self.at_runtime.stream
         self.costs = op.tensor_description()
@@ -54,19 +53,19 @@ class CTCKernel(GPUKernel):
         warp_lbls = self.lbls.get().ravel().astype(np.int32)
         warp_lbl_lens = self.lbl_lens.get().ravel().astype(np.int32)
 
-        scratch_size = warp_ctc.get_gpu_workspace_size(warp_lbl_lens,
-                                                       warp_utt_lens,
-                                                       self.nout,
-                                                       self.bsz)
+        scratch_size = self.warp_ctc.get_gpu_workspace_size(warp_lbl_lens,
+                                                            warp_utt_lens,
+                                                            self.nout,
+                                                            self.bsz)
         self.at_runtime.set_scratch_size(scratch_size)
         workspace = self.at_runtime.scratch_buffer(scratch_size)
 
-        warp_ctc.bind_to_gpu(self.activs,
-                             self.grads,
-                             warp_lbls,
-                             warp_lbl_lens,
-                             warp_utt_lens,
-                             self.costs,
-                             workspace,
-                             scratch_size,
-                             self.stream)
+        self.warp_ctc.bind_to_gpu(self.activs,
+                                  self.grads,
+                                  warp_lbls,
+                                  warp_lbl_lens,
+                                  warp_utt_lens,
+                                  self.costs,
+                                  workspace,
+                                  scratch_size,
+                                  self.stream)

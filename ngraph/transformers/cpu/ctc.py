@@ -17,10 +17,13 @@ from __future__ import division
 import numpy as np
 from third_party.warp_ctc.ctc import CTC
 
-warp_ctc = CTC(on_device='cpu')
+warp_ctc = None
 
 
 def ctc_cpu(acts, lbls, utt_lens, lbl_lens, grads, costs, n_threads=8):
+    global warp_ctc
+    if warp_ctc is None:
+        warp_ctc = CTC(on_device='cpu')
     costs.fill(0.)
     grads.fill(0.)
     max_t, bsz, nout = acts.shape
