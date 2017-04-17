@@ -17,12 +17,19 @@ from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
 import multiprocessing
 
 
-def calculate_new_axes(axes, parallel_axis, num_devices):
+def calculate_gather_axes(axes, gather_axis, num_devices):
+    new_axes = [make_axis(a.length * num_devices, a.name)
+                if gather_axis == a else a for a in axes]
+    new_axes = make_axes(new_axes)
+    return new_axes
+
+
+def calculate_scatter_axes(axes, scatter_axis, num_devices):
     new_axes = list()
     for a in axes:
-        if parallel_axis == a:
+        if scatter_axis == a:
             assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
-                .format(parallel_axis, num_devices)
+                .format(scatter_axis, num_devices)
 
             new_length = a.length // num_devices
             new_axis = make_axis(new_length, a.name)
@@ -61,6 +68,7 @@ class ResultOp(TensorOp):
     """
 
     def __init__(self, device_id, args, **kwargs):
+
         super(ResultOp, self).__init__(args=args)
         self.metadata['device_id'] = device_id
         self.axes = args[0].axes
@@ -112,13 +120,17 @@ class RecvOp(CommunicationOp):
         send_node: The send node associated with this recv node.
     """
 
-    def __init__(self, to_node, send_node):
+    def __init__(self, to_node, send_node, fragment_axis=None, fragments=None):
         super(RecvOp, self).__init__(
             node=to_node,
             args=(),
-            axes=send_node.axes,
+            axes=self.calculate_recv_axes(send_node.axes, fragment_axis, fragments),
             dtype=send_node.dtype)
         self._send_node = send_node
+
+    @classmethod
+    def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
+        return send_axes
 
     def send_node(self):
         return self._send_node
@@ -155,7 +167,9 @@ class ScatterRecvOp(RecvOp):
     """
 
     def __init__(self, to_node, send_node):
-        super(ScatterRecvOp, self).__init__(to_node, send_node)
+        super(ScatterRecvOp, self).__init__(to_node, send_node,
+                                            fragment_axis=to_node.metadata['parallel'],
+                                            fragments=len(to_node.metadata['device_id']))
 
 
 class GatherSendOp(SendOp):
@@ -182,7 +196,9 @@ class GatherRecvOp(RecvOp):
     """
 
     def __init__(self, from_node, to_node, send_node):
-        super(GatherRecvOp, self).__init__(to_node, send_node)
+        super(GatherRecvOp, self).__init__(to_node, send_node,
+                                           fragment_axis=from_node.metadata['parallel'],
+                                           fragments=len(from_node.metadata['device_id']))
         self.metadata['marker'] = 'gather'
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']

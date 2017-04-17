@@ -11,15 +11,17 @@ class Flex(object):
 
     Arguments:
         storage_bits (int): number of bits to store numbers of this type
+        exp_bits (int): number of bits to store exponent (DEC) of this type
 
     Attributes:
         itemsize: numpy interface
         type: numpy interface
         str: numpy interface
         name: numpy interface
+        exp_bits: exponent bits required in autoflex algorithm
     """
 
-    def __init__(self, storage_bits):
+    def __init__(self, storage_bits, exp_bits=5):
 
         self.storage_bits = storage_bits
 
@@ -28,6 +30,7 @@ class Flex(object):
         self.type = 'flex'
         self.str = "<i2"
         self.name = 'flex'
+        self.exp_bits = exp_bits
 
     def __eq__(self, other):
         """
