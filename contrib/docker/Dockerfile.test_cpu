@@ -41,6 +41,7 @@ WORKDIR warp-ctc
 RUN mkdir -p build
 RUN cd build && cmake ../ && make && cd ../..
 ENV WARP_CTC_PATH=/warp-ctc/build
+ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
 
 # add chown_files script
 WORKDIR /root/ngraph-test
