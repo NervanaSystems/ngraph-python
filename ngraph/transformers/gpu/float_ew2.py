@@ -726,7 +726,7 @@ def _build_register_mapping(stages):
 
                         # flex
                         # for argmax and argmin, inval is GPURegister, not TensorDescriptionWrapper
-                        if not (op[0] == "argmax" or op[0] == "argmin") and inval.is_flex():
+                        if isinstance(inval, TensorDescriptionWrapper) and inval.is_flex():
                             flex_entry = inval.flex_entry()
                             flex_scale[regname] = (sclname, flex_entry, False)
 
@@ -1029,7 +1029,7 @@ def _generate_kernel_args(ops, axes_mapping, dims, ctx):
                     params.append(tensor.strides[1])
                     params.append(tensor.strides[2])
 
-                if not (op[0] == "argmax" or op[0] == "argmin") and tensor.is_flex():
+                if isinstance(tensor, TensorDescriptionWrapper) and tensor.is_flex():
                     argname, flex_entry, is_output = ctx.flex_scale[regname]
                     args.append("float " + argname)
                     arg_desc = arg_desc + "f"
@@ -1094,7 +1094,7 @@ def _generate_new_kernel_args(ops, axes_mapping, dims):
                     params.append(tensor.strides[1])
                     params.append(tensor.strides[2])
 
-                if not (op[0] == "argmax" or op[0] == "argmin") and tensor.is_flex():
+                if isinstance(tensor, TensorDescriptionWrapper) and tensor.is_flex():
                     # create description of flex scale parameters that will be bound later
                     flex_entry = tensor.flex_entry()
 
@@ -1328,11 +1328,11 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
                             "scale": ctx.flex_scale[reg_name][0]
                         }
                         flex_stores.append(flex_conversion)
-                        flex_stores.append("flex_max = max_abs(flex_max, reg_out);")
                         store_code = _default_conversion % {
                             "out": store_code,
                             "in": "reg_out"
                         }
+                        store_code += "\n" + "flex_max = max_abs(flex_max, reg_out);"
                     elif type_key in _conversion_templates:
                         store_code = _conversion_templates[type_key] % {
                             "out": store_code,

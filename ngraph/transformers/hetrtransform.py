@@ -31,6 +31,7 @@ from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
+from ngraph.transformers.passes.nviz import VizPass
 
 
 def build_transformer(name):
@@ -350,7 +351,6 @@ class HetrTransformer(Transformer):
         pass
 
     def register_graph_pass(self, graph_pass):
-        from ngraph.transformers.passes.nviz import VizPass
         if isinstance(graph_pass, VizPass):
             self.passes.append(graph_pass)
         else:

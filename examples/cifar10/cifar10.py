@@ -14,9 +14,7 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 import os
-from tqdm import tqdm
-from ngraph.util.persist import ensure_dirs_exist, pickle_load, valid_path_append, fetch_file
-from PIL import Image
+from ngraph.util.persist import pickle_load, valid_path_append, fetch_file
 import tarfile
 
 
@@ -83,42 +81,3 @@ class CIFAR10(object):
                                     'axes': ('batch',)}}
 
         return self.train_set, self.valid_set
-
-
-def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
-    '''
-    Save CIFAR-10 dataset as PNG files
-    '''
-    out_dir = os.path.join(root_dir, 'cifar10')
-    set_names = ('train', 'val')
-    manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
-
-    if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
-        return manifest_files
-
-    dataset = {k: s for k, s in zip(set_names, CIFAR10(path=out_dir).load_data())}
-
-    pad_size = (padded_size - 32) // 2 if padded_size > 32 else 0
-    pad_width = ((0, 0), (pad_size, pad_size), (pad_size, pad_size))
-
-    # Write out label files and setup directory structure
-    lbl_paths, img_paths = dict(), dict(train=dict(), val=dict())
-    for lbl in range(10):
-        lbl_paths[lbl] = ensure_dirs_exist(os.path.join(out_dir, 'labels', str(lbl) + '.txt'))
-        np.savetxt(lbl_paths[lbl], [lbl], fmt='%d')
-        for setn in ('train', 'val'):
-            img_paths[setn][lbl] = ensure_dirs_exist(os.path.join(out_dir, setn, str(lbl) + '/'))
-
-    # Now write out image files and manifests
-    for setn, manifest in zip(set_names, manifest_files):
-        records = []
-        for idx, (img, lbl) in enumerate(tqdm(zip(*dataset[setn]))):
-            img_path = os.path.join(img_paths[setn][lbl[0]], str(idx) + '.png')
-            im = np.pad(img.reshape((3, 32, 32)), pad_width, mode='mean')
-            im = Image.fromarray(np.uint8(np.transpose(im, axes=[1, 2, 0]).copy()))
-            im.save(os.path.join(out_dir, img_path), format='PNG')
-            records.append((os.path.relpath(img_path, out_dir),
-                            os.path.relpath(lbl_paths[lbl[0]], out_dir)))
-        np.savetxt(manifest, records, fmt='%s,%s')
-
-    return manifest_files

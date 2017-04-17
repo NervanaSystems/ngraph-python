@@ -34,12 +34,14 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.relu import ReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
+from ngraph.transformers.passes.cpufusion import FusionPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -330,6 +332,21 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_conv_bprop(index={}, E={}, F={}, gI={}, pad={}, stride={})",
                     op.index, delta, filters, gI, pad, stride)
 
+    @allocate_op.on_type(DotLowDimension)
+    def allocate_op(self, op, out, x, y):
+        self.append("mkldnn.init_innerproduct_fprop({}, out={}, x={}, y={})",
+                    op.index, out, x, y)
+
+    @allocate_op.on_type(Add)
+    def allocate_op(self, op, out, x, y):
+        self.append("mkldnn.init_elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
+                    op.index, x, y, out)
+
+    @allocate_op.on_type(ReluOp)
+    def allocate_op(self, op, outputs, inputs):
+        self.append("mkldnn.init_relu_fprop({}, inputs={}, out={}, slope={})",
+                    op.index, inputs, outputs, op.slope)
+
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -348,7 +365,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
-        self.append("np.add({}, {}, out={})", x, y, out)
+        self.append("mkldnn.elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
+                    op.index, x, y, out)
 
     @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
@@ -435,7 +453,12 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
-        self.append("np.dot({}, {}, out={})", x, y, out)
+        self.append("mkldnn.innerproduct_fprop({}, {}, {}, out={})",
+                    op.index, x, y, out)
+
+    @generate_op.on_type(ReluOp)
+    def generate_op(self, op, outputs, inputs):
+        self.append("mkldnn.fprop_relu({}, {}, {}, {})", op.index, inputs, outputs, op.slope)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -625,7 +648,8 @@ class CPUTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [CPUTensorLayout(),
+        self.graph_passes = [FusionPass(),
+                             CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
                              CPUTensorShaping()]
@@ -665,7 +689,7 @@ from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
 
-        mkldnn_path = os.getcwd()
+        mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
         self.code.execute("mkldnn.open()")
