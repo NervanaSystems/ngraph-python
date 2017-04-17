@@ -1470,6 +1470,11 @@ class ReshapeOp(TensorOp):
         """
         return False
 
+    @property
+    def states_read(self):
+        # Reshapes are views of the underlying tensor, so the states are the same.
+        return self.args[0].states_read
+
 
 class Transpose(ReshapeOp):
     """
