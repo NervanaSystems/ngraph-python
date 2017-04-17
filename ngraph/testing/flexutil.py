@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
+from types import FunctionType
 import numpy as np
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
@@ -48,6 +49,14 @@ def template_create_placeholders_for_multiplication(n, c, d):
     return X, Y
 
 
+def id_func(param):
+    if isinstance(param, str):
+        return param
+    elif isinstance(param, FunctionType):
+        return param.func_name.title()
+    return " "
+
+
 def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, description):
     with executor(ng_fun, ng_placeholder) as const_executor:
         print(description)
@@ -56,7 +65,7 @@ def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, de
             print("flex_value: ", flex)
             print("expected_value: ", expected_value)
             print(flex - expected_value)
-            assert flex == expected_value
+            assert (flex == expected_value).all()
 
 
 def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2,
