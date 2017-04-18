@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
+import json
 import ngraph as ng
 from ngraph.frontends.neon import ax
 
@@ -32,6 +33,14 @@ except ImportError:
 
 
 class AeonDataloader(Dataloader):
+
+    def __init__(self, config, *args, **kwargs):
+
+        if isinstance(config, dict):
+            config = json.dumps(config)
+
+        super(AeonDataloader, self).__init__(config, *args, **kwargs)
+
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
         ax.N.length = self.batch_size

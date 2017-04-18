@@ -140,6 +140,23 @@ def test_distributed_graph_plus_one(transformer_factory):
         np.testing.assert_array_equal(res, np_x + 1)
 
 
+def test_distributed_dot(transformer_factory):
+    H = ng.make_axis(length=4, name='height')
+    N = ng.make_axis(length=8, name='batch')
+    weight = ng.make_axis(length=2, name='weight')
+    x = ng.placeholder(axes=[H, N])
+    w = ng.placeholder(axes=[weight, H])
+    with ng.metadata(device_id=('1', '2'), parallel=N):
+        dot = ng.dot(w, x)
+
+    np_x = np.random.randint(100, size=[H.length, N.length])
+    np_weight = np.random.randint(100, size=[weight.length, H.length])
+    with ExecutorFactory() as ex:
+        computation = ex.executor(dot, x, w)
+        res = computation(np_x, np_weight)
+        np.testing.assert_array_equal(res, np.dot(np_weight, np_x))
+
+
 def test_distributed_graph_plus_two(transformer_factory):
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')

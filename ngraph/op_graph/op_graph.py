@@ -2774,8 +2774,9 @@ def log(x):
 safelog_cutoff = 50.0
 
 
-def safelog(x, limit=np.exp(-safelog_cutoff)):
-    return log(maximum(x, limit))
+def safelog(x, limit=-safelog_cutoff):
+    offset = np.exp(limit)
+    return maximum(log(x + offset), limit)
 
 
 class ReciprocalOp(UnaryElementWiseOp):
@@ -2864,8 +2865,12 @@ def sqrt(x):
 
 class BinaryElementWiseOp(ElementWiseOp):
 
+    _index = 0
+
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
+        self.index = BinaryElementWiseOp._index
+        BinaryElementWiseOp._index += 1
         x, y = as_ops((x, y))
 
         x_axes_bcast = x.axes + (y.axes - x.axes)

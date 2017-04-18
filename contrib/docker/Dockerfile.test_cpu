@@ -1,20 +1,46 @@
 FROM ngraph_base_cpu
 
-# install neon
+# install dependencies
 WORKDIR /root
-RUN apt-get install -y python-dev && \
+RUN apt-get install -y python-dev cmake && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
 # install aeon dependency
-RUN apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev && \
+RUN apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev cmake libgtest-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
-RUN pip install git+https://github.com/NervanaSystems/aeon.git
+
+WORKDIR /usr/src/gtest
+RUN cmake CMakeLists.txt
+RUN make
+RUN cp *.a /usr/local/lib
+
+# workaround for blocking issues for aeon
+WORKDIR /root/ngraph-test
+ADD contrib/docker/private-aeon /root/private-aeon
+WORKDIR /root
+RUN mkdir aeon_build && cd aeon_build && cmake ../private-aeon && pip install . && cd ..
+# end workaround
+
+# install from aeon rc1-master
+#RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
+#    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
 WORKDIR /root/ngraph-test
 ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
 RUN pip install -r test_requirements.txt
+ADD examples_requirements.txt /root/ngraph-test/examples_requirements.txt
+RUN pip install -r examples_requirements.txt
+
+# build Baidu's Warp-CTC
+# dependencies for deepspeech example
+RUN pip install cffi
+RUN git clone https://github.com/baidu-research/warp-ctc.git
+WORKDIR warp-ctc
+RUN mkdir -p build
+RUN cd build && cmake ../ && make && cd ../..
+ENV WARP_CTC_PATH=/warp-ctc/build
 
 # add chown_files script
 WORKDIR /root/ngraph-test
@@ -23,4 +49,5 @@ ADD contrib/docker/chown_files.sh /tmp/chown_files.sh
 # necessary for tests/test_walkthrough.py which requires that ngraph is
 # importable from an entrypoint not local to ngraph.
 ADD . /root/ngraph-test
-RUN pip install -e .
+RUN make install
+RUN make test_prepare

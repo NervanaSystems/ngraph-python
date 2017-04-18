@@ -70,6 +70,21 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_add_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_add_primitives
+            self.create_mkldnn_add_primitives_fn.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int]
+            self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
+
+            self.create_mkldnn_relu_fprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_relu_fprop_primitives
+            self.create_mkldnn_relu_fprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double, ctypes.c_int]
+            self.create_mkldnn_relu_fprop_primitives_fn.restype = ctypes.c_void_p
+
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
@@ -84,6 +99,8 @@ class Mkldnn(object):
             self.mkldnn_conv_fprop_netlist = dict()
             self.mkldnn_conv_bprop_netlist = dict()
             self.mkldnn_innerproduct_fprop_netlist = dict()
+            self.mkldnn_elementwise_add_netlist = dict()
+            self.mkldnn_relu_fprop_netlist = dict()
 
     def close(self):
         if (self.mkldnn_engine_initialized):
@@ -93,6 +110,10 @@ class Mkldnn(object):
                 self.cleanup_mkldnn_fn(self.mkldnn_conv_bprop_netlist[i])
             for i in self.mkldnn_innerproduct_fprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_innerproduct_fprop_netlist[i])
+            for i in self.mkldnn_elementwise_add_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_elementwise_add_netlist[i])
+            for i in self.mkldnn_relu_fprop_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_relu_fprop_netlist[i])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -241,6 +262,47 @@ class Mkldnn(object):
             self.run_mkldnn_netlist_fn(self.mkldnn_innerproduct_fprop_netlist[index])
         else:
             np.dot(x, y, out=out)
+
+    def init_elementwise_add(self, index, I_array1, I_array2, O_array):
+        if(self.mkldnn_enabled):
+            # Sanity check for tensor shapes
+            if (not (I_array1.flags['C_CONTIGUOUS'] and
+                     I_array2.flags['C_CONTIGUOUS'])):
+                return
+            input1_shape = I_array1.size
+            input2_shape = I_array2.size
+            output_shape = O_array.size
+            self.mkldnn_elementwise_add_netlist[index] = \
+                self.create_mkldnn_add_primitives_fn(
+                    self.mkldnn_engine, I_array1.ctypes.data,
+                    I_array2.ctypes.data, O_array.ctypes.data,
+                    input1_shape, input2_shape, output_shape, 2)
+
+    def elementwise_add(self, index, I_array1, I_array2, O_array):
+        if (self.mkldnn_enabled and (index in self.mkldnn_elementwise_add_netlist)):
+            self.run_mkldnn_netlist_fn(self.mkldnn_elementwise_add_netlist[index])
+        else:
+            np.add(I_array1, I_array2, out=O_array)
+
+    def init_relu_fprop(self, index, inputs, out, slope):
+        if (self.mkldnn_enabled):
+            if (self.mkldnn_verbose):
+                print("Relu Input: ", len(inputs.shape), inputs.shape,
+                      " Outputs: ", out.shape, len(out.shape))
+            # Only single precision float supported for now
+            if ((inputs.dtype != np.float32) or (out.dtype != np.float32)):
+                return
+            input_size = np.prod(inputs.shape)
+            self.mkldnn_relu_fprop_netlist[index] = \
+                self.create_mkldnn_relu_fprop_primitives_fn(
+                    self.mkldnn_engine, inputs.ctypes.data, out.ctypes.data,
+                    slope, input_size)
+
+    def fprop_relu(self, index, inputs, out, slope):
+        if (self.mkldnn_enabled and index in self.mkldnn_relu_fprop_netlist):
+            self.run_mkldnn_netlist_fn(self.mkldnn_relu_fprop_netlist[index])
+        else:
+            np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
 
 def update_conv(conv_slices, I, E, U):
