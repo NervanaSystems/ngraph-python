@@ -44,6 +44,7 @@ WORKDIR warp-ctc
 RUN mkdir -p build 
 RUN cd build && cmake ../ && make && cd ../.. 
 ENV WARP_CTC_PATH=/root/warp-ctc/build
+ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
 ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
 
 # add in autoflex.  This should will only be added if the user building
