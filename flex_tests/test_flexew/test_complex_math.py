@@ -24,11 +24,6 @@ MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
 x = ng.placeholder(())
 
-bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
-                                                 "DEC initialization not constrained to allowed range")
-
-
-
 test_data_single_operand = (
     # template:(operation, operand, expected_result, description)
 
@@ -74,10 +69,10 @@ test_data_single_operand = (
 
     # test_square
     (ng.square, [1], [1], "Square of 1 equals 1"),
-    bug_1103((ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-              "Square of negative boundary value - overflow expected")),
-    bug_1103((ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-              "Square of positive boundary value - overflow expected"))
+    (ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
+              "Square of negative boundary value - overflow expected"),
+    (ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
+              "Square of positive boundary value - overflow expected")
 )
 
 
