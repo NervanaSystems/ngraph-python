@@ -24,11 +24,6 @@ MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
 x = ng.placeholder(())
 
-bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
-                                                 "DEC initialization not constrained to allowed range")
-
-
-
 test_data_single_operand = (
     # template:(operation, operand, expected_result, description)
 
@@ -78,13 +73,9 @@ test_data_single_operand = (
 
     # test_square
     (ng.square, [1], [1], "Square of 1 equals 1"),
-    bug_1103((ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-              "Square of negative boundary value - overflow expected")),
-    bug_1103((ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE],
-              "Square of positive boundary value - overflow expected")),
-    (ng.square, [0, 100, -1, 10], [0, 127.9960, 1, 100], "Iterations x ^ 2")
+    (ng.square, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Square of negative boundary value - overflow expected"),
+    (ng.square, [MAXIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Square of positive boundary value - overflow expected")
 )
-
 
 ExpMinus11 = 0.000016701407730579376220703125
 Minus11 = -11
@@ -109,7 +100,8 @@ def test_single_operand(transformer_factory, operation, operand, expected_result
     template_one_placeholder(operand, operation(x), x, expected_result, description)
 
 
-@pytest.mark.parametrize("operation, operand, expected_result, description, placeholder", test_input_types_cases, ids=id_func)
+@pytest.mark.parametrize("operation, operand, expected_result, description, placeholder", test_input_types_cases,
+                         ids=id_func)
 def test_input_types(transformer_factory, operation, operand, expected_result, description, placeholder):
     template_one_placeholder(operand, operation(placeholder), placeholder, expected_result, description)
 
