@@ -45,12 +45,12 @@ mkldnn_netlist_t create_mkldnn_conv_fprop_primitives(
   mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_weights_md,
       mkldnn_memory_desc_bias_md, mkldnn_memory_desc_dst_md;
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                    mkl_src_sizes, mkldnn_f32, mkldnn_chwn));
+                                    mkl_src_sizes, mkldnn_f32, mkldnn_any));
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
                                     mkl_weights_dims, mkl_weights_sizes,
-                                    mkldnn_f32, mkldnn_ihwo));
+                                    mkldnn_f32, mkldnn_any));
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                    mkl_dst_sizes, mkldnn_f32, mkldnn_chwn));
+                                    mkl_dst_sizes, mkldnn_f32, mkldnn_any));
   if (conv_bias) {
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_bias_md, 1,
                                       conv_bias_sizes, mkldnn_f32, mkldnn_x));
@@ -243,7 +243,7 @@ mkldnn_netlist_t create_mkldnn_conv_bprop_primitives(
   mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_weights_md,
       mkldnn_memory_desc_bias_md, mkldnn_memory_desc_dst_md;
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                    mkl_src_sizes, mkldnn_f32, mkldnn_chwn));
+                                    mkl_src_sizes, mkldnn_f32, mkldnn_any));
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
                                     mkl_weights_dims, mkl_weights_sizes,
                                     mkldnn_f32, mkldnn_any));
@@ -252,7 +252,7 @@ mkldnn_netlist_t create_mkldnn_conv_bprop_primitives(
                                       conv_bias_sizes, mkldnn_f32, mkldnn_x));
   }
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                    mkl_dst_sizes, mkldnn_f32, mkldnn_chwn));
+                                    mkl_dst_sizes, mkldnn_f32, mkldnn_any));
 
   /* create a convolution descriptor  - logical description of convolution. i/p
    * --> diff_dst(src) & o/p --> diff_src */
