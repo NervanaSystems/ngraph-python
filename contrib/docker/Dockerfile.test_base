@@ -38,14 +38,14 @@ RUN make test_prepare
 
 # build Baidu's Warp-CTC 
 # dependencies for deepspeech example
-WORKDIR /root/..
-RUN pip install cffi
+WORKDIR /root
 RUN git clone https://github.com/baidu-research/warp-ctc.git 
 WORKDIR warp-ctc 
 RUN mkdir -p build 
 RUN cd build && cmake ../ && make && cd ../.. 
-ENV WARP_CTC_PATH=/warp-ctc/build
+ENV WARP_CTC_PATH=/root/warp-ctc/build
 ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
+ENV LD_PRELOAD=$WARP_CTC_PATH/libawarpctc.so:$LD_PRELOAD
 
 # add in autoflex.  This should will only be added if the user building
 # this dockerfile has permission to access the autoflex repo.  This is a
