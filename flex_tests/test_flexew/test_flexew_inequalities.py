@@ -24,17 +24,14 @@ MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 x = ng.placeholder(())
 z = ng.placeholder(())
 
-bug_1103 = pytest.mark.xfail(strict=True, reason="GitHub issue #1103, "
-                                                 "DEC initialization not constrained to allowed range")
-
 test_data_double_operand = (
     # template:(operation, [operand_1, operand_2], expected_result, description
 
     # test_equal
-    bug_1103((ng.equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
-              "Equality function - underflow expected")),
-    bug_1103((ng.equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True],
-              "Equality function - overflow expected")),
+    (ng.equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
+              "Equality function - underflow expected"),
+    (ng.equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True],
+              "Equality function - overflow expected"),
     (ng.equal, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [True],
      "Equality function - negative boundary value equal to negative boundary value"),
     (ng.equal, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [True],
@@ -45,10 +42,10 @@ test_data_double_operand = (
      "Equality function - negative boundary value equal to positive boundary value"),
 
     # test_not_equal
-    bug_1103((ng.not_equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False],
-              "Inequality function - underflow expected")),
-    bug_1103((ng.not_equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False],
-              "Inequality function - overflow expected")),
+    (ng.not_equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False],
+              "Inequality function - underflow expected"),
+    (ng.not_equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False],
+              "Inequality function - overflow expected"),
     (ng.not_equal, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [False],
      "Inequality function - negative boundary value not equal to negative boundary value"),
     (ng.not_equal, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
@@ -59,8 +56,8 @@ test_data_double_operand = (
      "Inequality function - negative boundary value not equal to positive boundary value"),
 
     # test_less
-    bug_1103((ng.less, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False], "Less function - underflow expected")),
-    bug_1103((ng.less, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True], "Less function - overflow expected")),
+    (ng.less, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False], "Less function - underflow expected"),
+    (ng.less, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False], "Less function - overflow expected"),
     (ng.less, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [False],
      "Less function - negative boundary value less than negative boundary value"),
     (ng.less, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
@@ -71,8 +68,8 @@ test_data_double_operand = (
      "Less function - negative boundary value less than positive boundary value"),
 
     # test_less_equal
-    bug_1103((ng.less_equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True],
-              "Less equal function - overflow expected")),
+    (ng.less_equal, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [True],
+              "Less equal function - overflow expected"),
     (ng.less_equal, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [True],
      "Less equal function - negative boundary value less or equal than negative boundary value"),
     (ng.less_equal, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [True],
@@ -83,10 +80,10 @@ test_data_double_operand = (
      "Less equal function - negative boundary value less or equal than positive boundary value"),
 
     # test_greater
-    bug_1103((ng.greater, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
-              "Greater function - underflow expected")),
-    bug_1103((ng.greater, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False],
-              "Greater function - overflow expected")),
+    (ng.greater, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [False],
+              "Greater function - underflow expected"),
+    (ng.greater, [(MAXIMUM_FLEX_VALUE + 2, MAXIMUM_FLEX_VALUE)], [False],
+              "Greater function - overflow expected"),
     (ng.greater, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [False],
      "Greater function - negative boundary value greater than negative boundary value"),
     (ng.greater, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
@@ -97,8 +94,8 @@ test_data_double_operand = (
      "Greater function - negative boundary value greater than positive boundary value"),
 
     # test_greater_equal
-    bug_1103((ng.greater_equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
-              "Greater equal function - underflow expected")),
+    (ng.greater_equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
+              "Greater equal function - underflow expected"),
     (ng.greater_equal, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [True],
      "Greater equal function - negative boundary value greater or equal than negative boundary value"),
     (ng.greater_equal, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [True],
