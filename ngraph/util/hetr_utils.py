@@ -13,10 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import Op
+from ngraph.op_graph.comm_nodes import calculate_scatter_axes
+from ngraph.op_graph.op_graph import Op, DotOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
+
 import uuid
 
 
@@ -104,7 +106,7 @@ def update_comm_deps(ops):
                         r.add_control_dep(op)
 
 
-def clone_graph(root, device_id, shared_queues_idx, axes):
+def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
     """
     clone graph with serde (serialization)
     input:
@@ -122,15 +124,25 @@ def clone_graph(root, device_id, shared_queues_idx, axes):
     cloned_graph = Op.ordered_ops([new_root])
     # update newly cloned op metadata, generate new UUIDs
     for op in cloned_graph:
-        op.metadata['transformer'] = op.metadata['device'] + str(device_id)
-        op.metadata['device_id'] = str(device_id)
+        op.metadata['transformer'] = op.metadata['device'] + str(clone_id)
+        op.metadata['device_id'] = str(clone_id)
         if isinstance(op, (ScatterRecvOp, GatherSendOp)):
             op._shared_queues = orig_ops[op.uuid].shared_queues
             op.idx = shared_queues_idx
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()
-
-        op._axes = axes
+        if hasattr(op, '_axes') and parallel_axis in op._axes:
+            op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
+            # TODO: Revisit to handle axes updation better. Github Ticket #1355
+            if isinstance(op, DotOp):
+                if parallel_axis in op.x_out_axes:
+                    op.x_out_axes = calculate_scatter_axes(op.x_out_axes,
+                                                           parallel_axis, num_clones)
+                elif parallel_axis in op.y_out_axes:
+                    op.y_out_axes = calculate_scatter_axes(op.y_out_axes,
+                                                           parallel_axis, num_clones)
+                else:
+                    raise ValueError("Missing parallel_axis in Op's x_out_axes or y_out_axes")
         op.uuid = uuid.uuid4()
 
     return new_root

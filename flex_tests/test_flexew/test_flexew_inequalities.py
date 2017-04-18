@@ -85,6 +85,7 @@ test_data_double_operand = (
      "Less equal function - positive boundary value less or equal than negative boundary value"),
     (ng.less_equal, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [True],
      "Less equal function - negative boundary value less or equal than positive boundary value"),
+    (ng.less_equal, [(10000, 10000), (9999, 10000), (0.4, 0.1)], [True, True, True], "Iterations x <= y"),
 
     # test_greater
     bug_1103((ng.greater, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
@@ -99,6 +100,7 @@ test_data_double_operand = (
      "Greater function - positive boundary value greater than negative boundary value"),
     (ng.greater, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
      "Greater function - negative boundary value greater than positive boundary value"),
+    (ng.greater, [(1, 0.4), (10000, 10000), (10001, 10000)], [True, True, True], "Iterations x > y"),
 
     # test_greater_equal
     bug_1103((ng.greater_equal, [(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], [True],
@@ -110,7 +112,8 @@ test_data_double_operand = (
     (ng.greater_equal, [(MAXIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], [True],
      "Greater equal function - positive boundary value greater or equal than negative boundary value"),
     (ng.greater_equal, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], [False],
-     "Greater equal function - negative boundary value greater or equal than positive boundary value")
+     "Greater equal function - negative boundary value greater or equal than positive boundary value"),
+    (ng.greater_equal, [(1, 1), (9000, 10000), (10001, 10000)], [True, True, True], "Iterations x >= y"),
 )
 
 @pytest.mark.parametrize("operation, operand_tuple, expected_result, description", test_data_double_operand)
