@@ -34,7 +34,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.relu import ReluOp, BpropReluOp
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp

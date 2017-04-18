@@ -1,7 +1,7 @@
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Add, Maximum, Multiply, Minimum, Greater, Less
-from ngraph.op_graph.relu import ReluOp, BpropReluOp
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 
 
 class FusionPass(PeepholeGraphPass):
