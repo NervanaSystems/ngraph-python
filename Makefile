@@ -144,17 +144,17 @@ examples: examples_prepare
 gpu_examples: examples_prepare gpu_prepare
 	for file in `find examples -type f -executable | grep -v hetr`; do echo Running $$file... ; ./$$file -b gpu; done
 
-style:
+style: test_prepare
 	flake8 --output-file style.txt --tee $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
-lint:
+lint: test_prepare
 	pylint --output-format=colorized ngraph
 
 lint3k:
 	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
-check:
+check: test_prepare
 	echo "Running style checks.  Number of style errors is... "
 	-flake8 --count $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) \
 	 > /dev/null
