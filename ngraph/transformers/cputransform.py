@@ -634,7 +634,7 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, *args):
         recv_id = len(self.recv_nodes)
         self.recv_nodes.append(op)
-        self.append("{}[()] = self.recv_from_queue_send({})", out, recv_id)
+        self.append("{}[...] = self.recv_from_queue_send({})", out, recv_id)
 
     @generate_op.on_type(CPUQueueGatherSendOp)
     def generate_op(self, op, out, *args):
@@ -646,7 +646,7 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, *args):
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes.append(op)
-        self.append("{}[:] = self.gather_recv_from_queue_gather_send({})", out, gather_recv_id)
+        self.append("{}[...] = self.gather_recv_from_queue_gather_send({})", out, gather_recv_id)
 
     @generate_op.on_type(CPUQueueScatterSendOp)
     def generate_op(self, op, out, *args):
@@ -658,7 +658,8 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, *args):
         scatter_recv_id = len(self.scatter_recv_nodes)
         self.scatter_recv_nodes.append(op)
-        self.append("{}[:] = self.scatter_recv_from_queue_scatter_send({})", out, scatter_recv_id)
+        self.append("{}[...] = self.scatter_recv_from_queue_scatter_send({})",
+                    out, scatter_recv_id)
 
 
 class CPUTransformer(Transformer):
