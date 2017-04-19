@@ -62,6 +62,24 @@ class Mkldnn(object):
                  ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_conv_bprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_pool_fprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_pool_fprop_primitives
+            self.create_mkldnn_pool_fprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_int]
+            self.create_mkldnn_pool_fprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_pool_bprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_pool_bprop_primitives
+            self.create_mkldnn_pool_bprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+            self.create_mkldnn_pool_bprop_primitives_fn.restype = ctypes.c_void_p
             self.create_mkldnn_innerproduct_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
             self.create_mkldnn_innerproduct_fprop_primitives_fn.argtypes = \
@@ -77,14 +95,19 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int]
             self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
-
             self.create_mkldnn_relu_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_relu_fprop_primitives
             self.create_mkldnn_relu_fprop_primitives_fn.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double, ctypes.c_int]
             self.create_mkldnn_relu_fprop_primitives_fn.restype = ctypes.c_void_p
-
+            self.create_mkldnn_relu_bprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_relu_bprop_primitives
+            self.create_mkldnn_relu_bprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double,
+                 ctypes.c_void_p, ctypes.c_int]
+            self.create_mkldnn_relu_bprop_primitives_fn.restype = ctypes.c_void_p
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
@@ -98,9 +121,12 @@ class Mkldnn(object):
             self.mkldnn_engine_initialized = True
             self.mkldnn_conv_fprop_netlist = dict()
             self.mkldnn_conv_bprop_netlist = dict()
+            self.mkldnn_pool_fprop_netlist = dict()
+            self.mkldnn_pool_bprop_netlist = dict()
             self.mkldnn_innerproduct_fprop_netlist = dict()
             self.mkldnn_elementwise_add_netlist = dict()
             self.mkldnn_relu_fprop_netlist = dict()
+            self.mkldnn_relu_bprop_netlist = dict()
 
     def close(self):
         if (self.mkldnn_engine_initialized):
@@ -108,12 +134,18 @@ class Mkldnn(object):
                 self.cleanup_mkldnn_fn(self.mkldnn_conv_fprop_netlist[i])
             for i in self.mkldnn_conv_bprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_conv_bprop_netlist[i])
+            for i in self.mkldnn_pool_fprop_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_pool_fprop_netlist[i])
+            for i in self.mkldnn_pool_bprop_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_pool_bprop_netlist[i])
             for i in self.mkldnn_innerproduct_fprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_innerproduct_fprop_netlist[i])
             for i in self.mkldnn_elementwise_add_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_elementwise_add_netlist[i])
             for i in self.mkldnn_relu_fprop_netlist:
                 self.cleanup_mkldnn_fn(self.mkldnn_relu_fprop_netlist[i])
+            for i in self.mkldnn_relu_bprop_netlist:
+                self.cleanup_mkldnn_fn(self.mkldnn_relu_bprop_netlist[i])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -232,6 +264,108 @@ class Mkldnn(object):
                 slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
+    def init_pool_fprop(self, pool_type, index, arrI, arrO, kernel, pad, stride):
+        if (self.mkldnn_enabled):
+            C, D, H, W, N = arrI.shape
+            [J, T, R, S] = kernel
+            # Only 2D pooling supported in MKLDNN for now
+            if (D != 1 or T != 1 or J != 1):
+                return
+            # Only single precision float supported for now
+            if ((arrI.dtype != np.float32) or (arrO.dtype != np.float32)):
+                return
+            # Sanity check tensor shapes
+            if ((len(arrI.shape) != 5) or (len(arrO.shape) != 5) or
+               (len(stride) != 3) or (len(pad) != 3)):
+                return
+            input_shape = ((ctypes.c_int) * len(arrI.shape))(*arrI.shape)
+            output_shape = ((ctypes.c_int) * len(arrO.shape))(*arrO.shape)
+            kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
+            pad_data = ((ctypes.c_int) * len(pad))(*pad)
+            stride_data = ((ctypes.c_int) * len(stride))(*stride)
+            self.mkldnn_pool_fprop_netlist[index] = \
+                self.create_mkldnn_pool_fprop_primitives_fn(
+                    self.mkldnn_engine,
+                    len(arrI.shape), len(arrO.shape), len(stride), len(pad),
+                    input_shape, kernel_sizes, output_shape,
+                    arrI.ctypes.data, arrO.ctypes.data,
+                    stride_data, pad_data, pool_type)
+
+    def fprop_pool(self, index, pool_slices, arrI, arrO):
+        if (self.mkldnn_enabled and index in self.mkldnn_pool_fprop_netlist):
+            self.run_mkldnn_netlist_fn(self.mkldnn_pool_fprop_netlist[index])
+        else:
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            K, M, P, Q, N = arrO.shape
+            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                                  enumerate(mSlice),
+                                                                  enumerate(pSlice),
+                                                                  enumerate(qSlice)):
+                sliceC, _ = kS
+                sliceD, _ = mS
+                sliceH, _ = pS
+                sliceW, _ = qS
+
+                sliceI = arrI[sliceC, sliceD, sliceH, sliceW, :].reshape(-1, N)
+                if op == "max":
+                    arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
+                    arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
+                elif op == "avg":
+                    arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
+                elif op == "l2":
+                    arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
+
+    def init_pool_bprop(self, pool_type, index, arrE, arrD, kernel, pad, stride):
+        if (self.mkldnn_enabled):
+            C, D, H, W, N = arrE.shape
+            [J, T, R, S] = kernel
+            # Only 2D pooling supported in MKLDNN for now
+            if (D != 1 or T != 1 or J != 1):
+                return
+            # Only single precision float supported for now
+            if ((arrE.dtype != np.float32) or (arrD.dtype != np.float32)):
+                return
+            input_shape = ((ctypes.c_int) * len(arrE.shape))(*arrE.shape)
+            output_shape = ((ctypes.c_int) * len(arrD.shape))(*arrD.shape)
+            kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
+            pad_data = ((ctypes.c_int) * len(pad))(*pad)
+            stride_data = ((ctypes.c_int) * len(stride))(*stride)
+            self.mkldnn_pool_bprop_netlist[index] = \
+                self.create_mkldnn_pool_bprop_primitives_fn(
+                    self.mkldnn_engine,
+                    len(arrE.shape), len(arrD.shape), len(stride), len(pad),
+                    input_shape, kernel_sizes, output_shape,
+                    arrE.ctypes.data, arrD.ctypes.data,
+                    stride_data, pad_data, pool_type, self.mkldnn_pool_fprop_netlist[index])
+
+    def bprop_pool(self, index, pool_slices, arrE, arrD):
+        if (self.mkldnn_enabled and index in self.mkldnn_pool_bprop_netlist):
+            self.run_mkldnn_netlist_fn(self.mkldnn_pool_bprop_netlist[index])
+        else:
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            arrD[:] = 0
+            K, M, P, Q, N = arrE.shape
+            for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
+                                                                  enumerate(mSlice),
+                                                                  enumerate(pSlice),
+                                                                  enumerate(qSlice)):
+                sliceC, clen = kS
+                sliceD, dlen = mS
+                sliceH, hlen = pS
+                sliceW, wlen = qS
+
+                patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
+                patch_out = (k, m, p, q, slice(None))
+                sliceB = arrD[patch_in].reshape((-1, N))
+                if op == "max":
+                    max_n = arrA[patch_out]
+                    sliceB[max_n, list(range(N))] += arrE[patch_out]
+                elif op == "avg":
+                    sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
+                else:
+                    raise NotImplementedError
+                arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
+
     def init_innerproduct_fprop(self, index, out, x, y):
         if (self.mkldnn_enabled):
             if (self.mkldnn_verbose):
@@ -304,6 +438,26 @@ class Mkldnn(object):
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
+    def init_relu_bprop(self, index, arrE, arrD, slope):
+        if (self.mkldnn_enabled):
+            if (self.mkldnn_verbose):
+                print("Relu Input: ", len(arrE.shape), arrE.shape,
+                      " Outputs: ", arrD.shape, len(arrD.shape))
+            # Only single precision float supported for now
+            if ((arrE.dtype != np.float32) or (arrD.dtype != np.float32)):
+                return
+            input_size = np.prod(arrE.shape)
+            self.mkldnn_relu_bprop_netlist[index] = \
+                self.create_mkldnn_relu_bprop_primitives_fn(
+                    self.mkldnn_engine, arrE.ctypes.data, arrD.ctypes.data,
+                    slope, self.mkldnn_relu_fprop_netlist[index], input_size)
+
+    def bprop_relu(self, index, inputs, out, slope):
+        if (self.mkldnn_enabled and index in self.mkldnn_relu_bprop_netlist):
+            self.run_mkldnn_netlist_fn(self.mkldnn_relu_bprop_netlist[index])
+        else:
+            np.add(inputs * np.greater(inputs, 0), inputs * slope * np.less(inputs, 0), out=out)
+
 
 def update_conv(conv_slices, I, E, U):
     mSlice, pSlice, qSlice, _, _, _ = conv_slices
@@ -321,56 +475,6 @@ def update_conv(conv_slices, I, E, U):
         slicedE = E[:, m, p, q, :]
         update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
         U[:, sliceT, sliceR, sliceS, :] += update
-
-
-def fprop_pool(pool_slices, arrI, arrO):
-    kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
-    K, M, P, Q, N = arrO.shape
-
-    for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
-                                                          enumerate(mSlice),
-                                                          enumerate(pSlice),
-                                                          enumerate(qSlice)):
-        sliceC, _ = kS
-        sliceD, _ = mS
-        sliceH, _ = pS
-        sliceW, _ = qS
-
-        sliceI = arrI[sliceC, sliceD, sliceH, sliceW, :].reshape(-1, N)
-        if op == "max":
-            arrA[k, m, p, q, :] = np.argmax(sliceI, axis=0)
-            arrO[k, m, p, q, :] = np.max(sliceI, axis=0)
-        elif op == "avg":
-            arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
-        elif op == "l2":
-            arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
-
-
-def bprop_pool(pool_slices, arrE, arrD):
-    kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
-    arrD[:] = 0
-    K, M, P, Q, N = arrE.shape
-
-    for (k, kS), (m, mS), (p, pS), (q, qS) in itt.product(enumerate(kSlice),
-                                                          enumerate(mSlice),
-                                                          enumerate(pSlice),
-                                                          enumerate(qSlice)):
-        sliceC, clen = kS
-        sliceD, dlen = mS
-        sliceH, hlen = pS
-        sliceW, wlen = qS
-
-        patch_in = (sliceC, sliceD, sliceH, sliceW, slice(None))
-        patch_out = (k, m, p, q, slice(None))
-        sliceB = arrD[patch_in].reshape((-1, N))
-        if op == "max":
-            max_n = arrA[patch_out]
-            sliceB[max_n, list(range(N))] += arrE[patch_out]
-        elif op == "avg":
-            sliceB += arrE[patch_out] * (1.0 / sliceB.shape[0])
-        else:
-            raise NotImplementedError
-        arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
 
 
 def fprop_lut(lut, idx, axis, output):
