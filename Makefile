@@ -92,7 +92,7 @@ test_flex: test_prepare clean
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export MKL_TEST_ENABLE=1
-test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
+test_mkldnn: export LD_PRELOAD+=:./mkldnn_engine.so
 test_mkldnn: test_prepare clean test_cpu test_hetr
 
 test_cpu: test_prepare clean
