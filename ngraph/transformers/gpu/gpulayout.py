@@ -16,7 +16,7 @@ import numpy as np
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
-    ReshapeOp, TensorValueOp, tdcache
+    ReshapeOp, TensorValueOp, AssignableTensorOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes
@@ -810,6 +810,8 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, TensorValueOp):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+    elif isinstance(op, AssignableTensorOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, LookupTableOp):
         return GPULayoutAssignment.generate_default_lut_layout(op)
     elif isinstance(op, (update_lut, bprop_lut)):
