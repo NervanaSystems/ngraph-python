@@ -735,6 +735,10 @@ class AssignOp(Op):
     def states_written(self):
         return self.args[0].states_read
 
+    @property
+    def states_read(self):
+        return self.args[1].states_read
+
 
 class AssignOneDOp(Op):
     """
@@ -754,6 +758,10 @@ class AssignOneDOp(Op):
     def states_written(self):
         return self.args[0].states_read
 
+    @property
+    def states_read(self):
+        return self.args[1].states_read
+
 
 def assign(lvalue, rvalue):
     """
@@ -765,6 +773,10 @@ def assign(lvalue, rvalue):
         item (optional):
     """
     return AssignOp(lvalue, rvalue)
+
+
+def set_item(tensor, item, value):
+    return SetItemOp(tensor, item, value)
 
 
 class SetItemOp(Op):
@@ -786,6 +798,10 @@ class SetItemOp(Op):
     @property
     def states_written(self):
         return self.args[0].states_read
+
+    @property
+    def states_read(self):
+        return self.args[0].states_read | self.args[1].states_read
 
 
 class ControlBlockOp(Op):
@@ -923,6 +939,10 @@ class Fill(Op):
     @property
     def states_written(self):
         return self.args[0].states_read
+
+
+def fill(x, scalar):
+    return Fill(x, scalar)
 
 
 class TensorOp(Op):
@@ -1425,10 +1445,12 @@ class TensorValueOp(ValueOp):
 
     This provides a way to maintain different control information on different
     versions of state.
+
+    Arguments:
+        tensor: The tensor being wrapped.
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
-
         for key in ['device', 'device_id', 'parallel']:
             if key in tensor.metadata:
                 self.metadata[key] = tensor.metadata[key]
@@ -1942,15 +1964,15 @@ class TensorSliceOp(ReshapeOp):
             else:
                 # has the buffer already available, this is the [setitem_1,2,3]
                 # node case in the above docstrings
-                updated_delta = delta + tensor_slice(x.first_unslice_op,
+                this_tv = TensorValueOp(x.first_unslice_op.value_tensor)
+                this_tv.add_control_dep(adjoints[x])
+                updated_delta = delta + tensor_slice(this_tv,
                                                      self.slices, axes=delta.axes)
-                new_setitem = SetItemOp(x.first_unslice_op,
-                                        self.slices, updated_delta)
-
-                # set appropriate control_deps, this corresponds to (ct_dep)
-                # in the above docstrings
-                new_setitem.add_control_dep(x.first_unslice_op)
-                adjoints[x].add_control_dep(new_setitem)
+                new_setitem = set_item(this_tv,
+                                       self.slices, updated_delta)
+                final_tv = TensorValueOp(x.first_unslice_op.value_tensor)
+                final_tv.add_control_dep(new_setitem)
+                adjoints[x] = final_tv
 
 
 def slice_along_axis(x, axis, idx):
@@ -2177,7 +2199,7 @@ def value_of(tensor):
     """
     if tensor.is_constant:
         return tensor
-    temp = temporary(axes=tensor.axes, dtype=tensor.dtype)
+    temp = temporary(axes=tensor.axes, dtype=tensor.dtype).named('value_of_' + tensor.name)
     return sequential([
         AssignOp(temp, tensor),
         temp
@@ -2342,7 +2364,7 @@ class StackOp(SequentialOp):
         self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
         slices = [slice(None)] * len(arg_axes)
         self.ops = [
-            doall([SetItemOp(self.storage, [i] + slices, arg)
+            doall([set_item(self.storage, [i] + slices, arg)
                    for i, arg in enumerate(self.x_list)
                    ]),
             axes_with_order(self.storage, result_axes)
@@ -2410,7 +2432,7 @@ class ConcatOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes([concat_axis] + list(axes_0) + list(axes_1))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype).named('concat')
 
         slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
@@ -2421,9 +2443,9 @@ class ConcatOp(SequentialOp):
                                    " other tensors".format(ii))
             if ax.length is None:
                 raise RuntimeError("Tensor {} axis must have a specified length".format(ii))
-            ops.append(SetItemOp(self.storage,
-                                 [slice(start, start + ax.length)] + slices,
-                                 axes_with_order(x, [ax] + list(storage_axes[1:]))))
+            ops.append(set_item(self.storage,
+                                [slice(start, start + ax.length)] + slices,
+                                axes_with_order(x, [ax] + list(storage_axes[1:]))))
             start += ax.length
         concat_axis.length = start
         self.ops = [
@@ -2482,7 +2504,7 @@ class UnsliceOp(SequentialOp):
         temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
         self.ops = [
             Fill(temp, 0),
-            SetItemOp(temp, slices, x),
+            set_item(temp, slices, x),
             temp
         ]
 
