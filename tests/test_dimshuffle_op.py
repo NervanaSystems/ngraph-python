@@ -1,13 +1,14 @@
 from __future__ import print_function
+
 import numpy as np
+import pytest
+from ngraph.testing import executor
+
 import ngraph as ng
-import ngraph.transformers as ngt
-from ngraph.flex.flexargparser import FlexNgraphArgparser
 
-parser = FlexNgraphArgparser()
-args = parser.parse_args()
+pytestmark = [pytest.mark.transformer_dependent("module")]
 
-def test_dimshuffle_op():
+def test_dimshuffle_op(transformer_factory):
     A = ng.make_axis().named('A')
     B = ng.make_axis().named('B')
     C = ng.make_axis().named('C')
@@ -141,13 +142,11 @@ def test_dimshuffle_op():
         input_tensor = ng.placeholder(test['input_tensor_axes'])
         input_tensor_value = np.array(test['input_tensor'], dtype=np.float32)
 
+        #This list of operations should add a dimshuffle operation to the graph.
         a = ng.negative(input_tensor)
         b = ng.axes_with_order(a, test['output_tensor_axes'])
         c = ng.negative(b)
 
-        transformer = ngt.make_transformer()
-
-        comp = transformer.computation(c, input_tensor)
-        out = comp(input_tensor_value)
-
-        ng.testing.assert_allclose(out, test['expected_result'])
+        with executor(c, input_tensor) as ex:
+            out = ex(input_tensor_value)
+            ng.testing.assert_allclose(out, test['expected_result'])
