@@ -172,7 +172,9 @@ class StridedLayoutAssignment(LayoutAssignment):
 
         # Need to divide op axes into `max_out_axes` sets
         if len(axes_list) > max_out_axes:
-            split_points = [(i + 1) for i in range(max_out_axes - 1)]
+            num_splits = max_out_axes - 1
+            num_axes = len(axes_list)
+            split_points = list(reversed([(num_axes - (i + 1)) for i in range(num_splits)]))
             layout = split_points_to_groups(split_points, len(axes_list))
         else:
             layout = [[i] for i in range(len(axes_list))]

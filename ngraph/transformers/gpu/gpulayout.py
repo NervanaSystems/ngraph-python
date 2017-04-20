@@ -159,6 +159,30 @@ class GPULayoutAssignment(StridedLayoutAssignment):
         return [GPUDotLayoutAssignment(True, False, axes_list, [rows_axis, cols_axis])]
 
     @staticmethod
+    def generate_default_onehot_layout(op):
+        """
+        Generates the default layout assignment for a onehot operation on GPU.
+
+        Arguments:
+            op (OneHotOp): op to generate layout for
+
+        Returns:
+            GPULayoutAssignment for this op
+        """
+        axes_list = Axes.as_flattened_list(op.axes)
+        oh_axis = axes_list.index(op.axis)
+        other_group = [i for i, a in enumerate(axes_list) if a is not op.axis]
+
+        if oh_axis == 0:
+            return [GPUDotLayoutAssignment(True, False, axes_list, [[oh_axis], other_group])]
+        elif oh_axis == (len(axes_list) - 1):
+            return [GPUDotLayoutAssignment(True, False, axes_list, [other_group, [oh_axis]])]
+        else:
+            group0 = [i for i in other_group if i < oh_axis]
+            group1 = [i for i in other_group if i > oh_axis]
+            return [GPUDotLayoutAssignment(True, False, axes_list, [group0, [oh_axis], group1])]
+
+    @staticmethod
     def generate_default_lut_layout(op):
         """
         Generates the default layout assignment for a lookup table operation on GPU.
@@ -789,7 +813,7 @@ def gpu_layout_factory(op):
     elif isinstance(op, ReductionOp):
         return GPULayoutAssignment.generate_ew_layouts(op.axes, 2)
     elif isinstance(op, OneHotOp):
-        return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
+        return GPULayoutAssignment.generate_default_onehot_layout(op)
     elif isinstance(op, TensorSizeOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, Fill):
