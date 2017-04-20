@@ -43,6 +43,10 @@ class GPULayoutView(object):
         self.strides = tuple([int(i) for i in strides])
         self.offset = int(offset)
 
+    def __str__(self):
+        out = "shape: {}, strides {}, offset {}".format(self.shape, self.strides, self.offset)
+        return out
+
 
 class DimshuffleOp(TensorOp):
     """

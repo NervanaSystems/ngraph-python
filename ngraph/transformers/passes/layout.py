@@ -398,7 +398,7 @@ class AddLayoutConversions(PeepholeGraphPass):
 
                     # Find matching constraint
                     for arg_op, constraint in self.binary_constraints[op]:
-                        if arg_op.forwarded is dev_op:
+                        if arg_op.forwarded is dev_op and constraint.arg is arg:
                             b_constraint = constraint
                             orig_arg_op = arg_op
                             break
