@@ -2,6 +2,7 @@ from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, Add
 from ngraph.op_graph.convolution import ConvolutionOp
+from ngraph.op_graph.pooling import PoolingOp
 from ngraph.op_graph.ctc import CTCOp
 
 
@@ -68,3 +69,13 @@ class CPUTensorLayout(PeepholeGraphPass):
 
         if replace:
             self.replace_op(op, Add(input1, input2))
+
+    @visit.on_type(PoolingOp)
+    def visit(self, op):
+        """
+        MKLDNN Pooling implementation requires contiguous layout.
+        """
+        inputs = op.args[0]
+        if not isinstance(inputs, ContiguousOp):
+            new_op = PoolingOp(op.pool_params, ContiguousOp(inputs), axes=op.axes)
+            self.replace_op(op, new_op)
