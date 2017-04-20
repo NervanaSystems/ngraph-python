@@ -58,6 +58,12 @@ void set_mkl_dimensions(char *primitive_name, int *primitive_src_sizes,
     mkl_weights_sizes[3] = primitive_weights_sizes[3];
   }
 
+  if (!strcmp(primitive_name, "pooling")){
+     /* Kernel: J, T, R, S -> R, S */
+    mkl_weights_sizes[0] = primitive_weights_sizes[2];
+    mkl_weights_sizes[1] = primitive_weights_sizes[3];
+  }
+
   mkl_strides[0] = primitive_strides[1];
   mkl_strides[1] = primitive_strides[2];
 
