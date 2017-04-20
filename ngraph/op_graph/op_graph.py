@@ -1964,6 +1964,12 @@ class TensorSliceOp(ReshapeOp):
             else:
                 # has the buffer already available, this is the [setitem_1,2,3]
                 # node case in the above docstrings
+                #
+                # Ops get executed exactly once in a computation, and anything that
+                # uses the op as an argument gets the value from that exactly once time.
+                # A TensorValueOp that happens before the modification should never
+                # give the value after the update. so the updates need to work off a
+                # TensorValueOp after the previous update.
                 this_tv = TensorValueOp(x.first_unslice_op.value_tensor)
                 this_tv.add_control_dep(adjoints[x])
                 updated_delta = delta + tensor_slice(this_tv,
