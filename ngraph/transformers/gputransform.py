@@ -1014,7 +1014,7 @@ class GPUTransformer(Transformer):
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
         self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
-                             layout_convert_pass] # , VizPass(show_metadata="layout")]
+                             layout_convert_pass]  # , VizPass(show_metadata="layout")]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
