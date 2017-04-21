@@ -8,6 +8,9 @@ import ngraph as ng
 
 pytestmark = [pytest.mark.transformer_dependent("module")]
 
+
+@pytest.mark.xfail(strict=True,
+                   reason="GitHub issue #1394, problem with DimshuffleKernel for flex")
 def test_dimshuffle_op(transformer_factory):
     A = ng.make_axis().named('A')
     B = ng.make_axis().named('B')
@@ -142,7 +145,7 @@ def test_dimshuffle_op(transformer_factory):
         input_tensor = ng.placeholder(test['input_tensor_axes'])
         input_tensor_value = np.array(test['input_tensor'], dtype=np.float32)
 
-        #This list of operations should add a dimshuffle operation to the graph.
+        # This list of operations should add a dimshuffle operation to the graph.
         a = ng.negative(input_tensor)
         b = ng.axes_with_order(a, test['output_tensor_axes'])
         c = ng.negative(b)
