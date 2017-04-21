@@ -50,7 +50,7 @@ from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLay
 # from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
@@ -293,7 +293,7 @@ class ElementWiseKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = pointer_from_td(self.params[index])
+                self.params[index] = self.pointer_from_td(self.params[index])
 
         super(ElementWiseKernel, self).bind_buffers()
 
@@ -314,7 +314,7 @@ class ElementWiseKernel(GPUKernel):
         if sourcefile is not None:
             # Code generation and compilation are only separate when a sourcefile is
             # provided
-            self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
+            self.name, self.params = sourcefile.add_kernel(self.transformer, self.ops_buffer)
 
         return True
 

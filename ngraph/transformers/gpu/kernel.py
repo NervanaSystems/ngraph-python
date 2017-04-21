@@ -14,18 +14,6 @@
 # ----------------------------------------------------------------------------
 
 
-def pointer_from_td(td):
-    """
-    Gets a GPU address from an allocated TensorDescription
-
-    Arguments:
-        td (TensorDescription): Tensor to get the address of
-
-    Returns: A GPU address (int or pycuda.DeviceAllocation)
-    """
-    return td.value.tensor.gpudata
-
-
 class GPUKernel(object):
     """
     Object which represents a single kernel that will run on the GPU.
@@ -43,6 +31,20 @@ class GPUKernel(object):
     def __init__(self, transformer):
         self.buffers_bound = False
         self.transformer = transformer
+
+    def pointer_from_td(self, td):
+        """
+        Gets a GPU address from an allocated TensorDescription
+
+        Arguments:
+            td (TensorDescription): Tensor to get the address of
+
+        Returns: A GPU address (int or pycuda.DeviceAllocation)
+        """
+        return self.transformer.get_tensor_description_tensor_view(td).tensor.gpudata
+
+    def tensor_view_from_td(self, td):
+        return self.transformer.get_tensor_description_tensor_view(td)
 
     def bind_buffers(self):
         """

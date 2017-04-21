@@ -192,13 +192,13 @@ class PoolFpropKernel(GPUKernel):
         since this is required for bprop. Builds a final list of parameters to
         pass to the kernel.
         """
-        I_data = self.I.value.tensor
-        O_data = self.O.value.tensor
+        I_data = self.tensor_view_from_td(self.I).tensor
+        O_data = self.tensor_view_from_td(self.O).tensor
 
         # Allocate argmax tensor
         if self.op == "max":
             if self.index not in self.transformer.argmax_tensors:
-                argmax = empty_like(self.O.value.tensor)
+                argmax = empty_like(self.tensor_view_from_td(self.O).tensor)
                 self.transformer.argmax_tensors[self.index] = argmax
             else:
                 argmax = self.transformer.argmax_tensors[self.index]
@@ -453,8 +453,8 @@ class PoolBpropKernel(GPUKernel):
         since this is required for bprop. Builds a final list of parameters to
         pass to the kernel.
         """
-        I_data = self.I.value.tensor
-        O_data = self.O.value.tensor
+        I_data = self.tensor_view_from_td(self.I).tensor
+        O_data = self.tensor_view_from_td(self.O).tensor
 
         # Get argmax tensor
         if self.op == "max":

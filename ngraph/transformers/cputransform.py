@@ -736,11 +736,11 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
             if isinstance(x, TensorDescription):
-                return x.value
+                return self.get_tensor_description_tensor_view(x)
             return x
 
         for op in all_ops:
-            out = tensor_description_value(op.tensor_description())
+            out = tensor_description_value(op.forwarded.tensor_description())
             call_info = (tensor_description_value(_) for _ in op.call_info())
             self.allocate_code.allocate_op(op, out, *call_info)
 
@@ -758,12 +758,12 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
 
             def tensor_description_value(x):
                 if isinstance(x, TensorDescription):
-                    return x.value
+                    return self.get_tensor_description_tensor_view(x)
                 return x
 
             with indenting(self.compute_code):
                 for op in ordered_ops:
-                    out = tensor_description_value(op.tensor_description())
+                    out = tensor_description_value(op.forwarded.tensor_description())
                     call_info = (tensor_description_value(_) for _ in op.call_info())
                     self.compute_code.generate_op(op, out, *call_info)
                 if code_length == self.compute_code.code_length:

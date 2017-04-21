@@ -21,14 +21,15 @@ class FlexDECPass(PeepholeGraphPass):
         # copy flex entry if reshape followed by contiguous op
         if self.propagate_flex_entry:
             if isinstance(op, ContiguousOp):
-                op.tensor_description().buffer.flex_entry = self.flex_entry
+                self.transformer.get_op_tensor(op).flex_entry = self.flex_entry
             self.propagate_flex_entry = False
         if isinstance(op, ReshapeOp):
             self.propagate_flex_entry = True
-            self.flex_entry = op.tensor_description().buffer.flex_entry
+            self.flex_entry = self.transformer.get_op_tensor(op).flex_entry
 
 
 class ClearTensorDescriptions(GraphPass):
-    def do_pass(self, ops, inits):
+    def do_pass(self, ops, transformer):
+        transformer.initialize_allocations()
         tdcache.tensor_description_cache.clear()
-        return ops, inits
+        return ops, transformer

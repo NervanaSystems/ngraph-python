@@ -1251,17 +1251,6 @@ class TensorOp(Op):
         """
         return mean(self, reduction_axes=reduction_axes, out_axes=out_axes)
 
-    @property
-    def value(self):
-        """
-        Returns a handle to the device tensor.
-
-        The transformer must have been initialized.
-
-        :return: A handle to the device tensor.
-        """
-        return self.forwarded.tensor_description().value
-
 
 class ValueOp(TensorOp, ControlBlockOp):
     """
@@ -1313,10 +1302,6 @@ class ValueOp(TensorOp, ControlBlockOp):
     @property
     def is_tensor_op(self):
         return self.tensor.is_tensor_op
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):
@@ -2618,10 +2603,6 @@ class StopGradient(UnaryElementWiseOp):
     @property
     def is_tensor_op(self):
         return False
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):

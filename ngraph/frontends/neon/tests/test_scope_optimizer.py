@@ -122,7 +122,7 @@ def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
         network_scope(inputs, targets)
 
         def get_np_ary(seq, layer_ind, layer_type):
-            return getattr(seq.layers[layer_ind], layer_type).W.value.get(None)
+            return ex.get_tensor_view(getattr(seq.layers[layer_ind], layer_type).W)
 
         # check variables not in scope have not changed
         Wactual = get_np_ary(seq_scope, no_update_layer, 'linear')

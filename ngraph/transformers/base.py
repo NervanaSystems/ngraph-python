@@ -85,7 +85,7 @@ class Computation(NameableValue):
 
         # Get the parameters to the device
         for param, arg in zip(self.computation.parameters, args):
-            param.value[()] = arg
+            self.transformer.get_op_tensor_view(param)[...] = arg
 
         self.executor()
 
@@ -98,8 +98,8 @@ class Computation(NameableValue):
             :return: Return value for op.
             """
             if op.is_tensor_op:
-                if op.value is not None:
-                    return op.value.get(None)
+                if self.transformer.has_op_tensor(op):
+                    return self.transformer.get_op_tensor_view(op).get(None)
             else:
                 return None
 
@@ -315,8 +315,13 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.finalized = False
         self.allocated = False
         self.initialized = False
-        self.device_buffers = OrderedSet()
         self.graph_passes = None
+
+        self.__device_buffers = None
+        self.__op_tensors = None
+        self.__op_tensor_views = None
+
+        self.initialize_allocations()
 
     def register_graph_pass(self, graph_pass, position=None):
         """
@@ -336,6 +341,114 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             graph_pass.do_pass(ops, self)
         return ops
 
+    def initialize_allocations(self):
+        """
+        Inititializes allocation caches.
+
+        """
+        self.__op_tensors = dict()
+        self.__op_tensor_views = dict()
+        self.__device_buffers = OrderedSet()
+
+    def get_op_tensor(self, op):
+        """
+        Returns the tensor allocated for this op.
+
+        Args:
+            op: A computation graph op.
+
+        Returns:
+            A device tensor (DeviceBuffer).
+
+        """
+        return self.__op_tensors[op.forwarded.tensor.forwarded.tensor_description().base]
+
+    def has_op_tensor(self, op):
+        """
+        Returns true if the op has a device tensor.
+
+        Args:
+            op: A computation graph op.
+
+        Returns:
+            True if the op has a device tensor.
+
+        """
+        return op.forwarded.tensor.forwarded.tensor_description().base in self.__op_tensors
+
+    def get_op_tensor_view(self, op):
+        """
+        Returns the tensor view for this op.
+
+        Args:
+            op: A computation graph op.
+
+        Returns:
+            A device tensor view.
+
+        """
+        return self.__op_tensor_views[op.forwarded.tensor.forwarded.tensor_description()]
+
+    def get_tensor_view(self, op, host_tensor=None):
+        """
+        Returns the contents of the tensor view for op.
+
+        Args:
+            op: The computation graph op.
+            host_tensor: Optional tensor to copy value into.
+
+        Returns:
+            A NumPy tensor with the elements associated with op.
+
+        """
+        return self.get_op_tensor_view(op).get(host_tensor)
+
+    def get_tensor_description_tensor(self, tensor_description):
+        """
+        Returns a tensor for a tensor description.
+
+        Deprecated. Use op version.
+
+        Args:
+            tensor_description:
+
+        Returns:
+            A device tensor (DeviceBuffer).
+
+
+        """
+        return self.__op_tensors[tensor_description.base]
+
+    def has_tensor_description_tensor(self, tensor_description):
+        """
+        Tests if a tensor description has a device tensor.
+
+        Deprecated, only used by flex.
+
+        Args:
+            tensor_description:
+
+        Returns:
+            True if the tensor description has a device tensor.
+
+        """
+        return tensor_description.base in self.__op_tensors
+
+    def get_tensor_description_tensor_view(self, tensor_description):
+        """
+        Returns a tensor for a tensor description.
+
+        Deprecated, only used by flex.
+
+        Args:
+            tensor_description:
+
+        Returns:
+            A device tensor view.
+
+        """
+        return self.__op_tensor_views[tensor_description]
+
     def _transform_computations(self):
         """
         Transform computation graphs to a form that can be run.
@@ -351,24 +464,29 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # Collect up all ops from the graph and obtain the init graph
         all_ops = OrderedSet(Op.ordered_ops(all_ops))
 
-        def init_tensor_description(tensor_description):
-            if tensor_description.buffer is None:
-                tensor_description.buffer = self.device_buffer_storage(
-                    tensor_description.base.tensor_size,
-                    tensor_description.dtype,
-                    tensor_description.name
+        def ensure_tensor(op):
+            op = op.forwarded
+            tensor_description = op.tensor_description()
+            base = tensor_description.base
+            tensor = self.__op_tensors.get(base, None)
+            if tensor is None:
+                tensor = self.device_buffer_storage(
+                    base.tensor_size,
+                    base.dtype,
+                    base.name
                 )
-                self.device_buffers.add(tensor_description.buffer)
-            tensor_description.value = \
-                tensor_description.buffer.device_tensor(tensor_description)
+                self.__op_tensors[base] = tensor
+                self.__device_buffers.add(tensor)
+            tensor_view = tensor.device_tensor(tensor_description)
+            self.__op_tensor_views[tensor_description] = tensor_view
 
         self.ops = Op.ordered_ops(all_ops)
         for op in self.ops:
             if op.is_tensor_op:
-                init_tensor_description(op.tensor_description())
+                ensure_tensor(op)
 
         self.start_transform_allocate()
-        for device_buffer in self.device_buffers:
+        for device_buffer in self.__device_buffers:
             device_buffer.transform_allocate()
         self.transform_allocate_ops(all_ops)
         self.finish_transform_allocate()
@@ -528,12 +646,17 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         self.allocate_storage()
 
+        init_states = OrderedSet()
         for op in OrderedSet(self.ops):
+            op = op.forwarded
             states = op.states_read | op.states_written
             for state in states:
+                state = state.forwarded
                 if state.initial_value is not None:
-                    tensor_description = state.tensor.tensor_description()
-                    tensor_description.value[()] = state.initial_value
+                    init_states.add(state)
+        for state in init_states:
+            tensor_description = state.tensor.tensor_description()
+            self.get_tensor_description_tensor_view(tensor_description)[...] = state.initial_value
 
         self.allocated = True
 
