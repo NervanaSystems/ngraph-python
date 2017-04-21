@@ -9,8 +9,7 @@ import ngraph as ng
 pytestmark = [pytest.mark.transformer_dependent("module")]
 
 
-@pytest.mark.xfail(strict=True,
-                   reason="GitHub issue #1394, problem with DimshuffleKernel for flex")
+@pytest.mark.xfail(reason="GitHub issue #1394, problem with DimshuffleKernel for flex")
 def test_dimshuffle_op(transformer_factory):
     A = ng.make_axis().named('A')
     B = ng.make_axis().named('B')
