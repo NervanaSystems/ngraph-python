@@ -84,7 +84,7 @@ clean:
 
 test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
-test_flex: test_prepare clean
+test_flex: gpu_prepare test_prepare clean
 	echo Running flex unit tests...
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	--junit-xml=testout_test_flex_$(PY).xml \
