@@ -2595,13 +2595,6 @@ def normal(x, loc=0.0, scale=1.0):
     return RngOp(distribution='normal', params=dict(loc=loc, scale=scale), x=x)
 
 
-class AllReduce(Op):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(AllReduce, self).__init__(args=(x,), **kwargs)
-
-
 class ElementWiseOp(TensorOp):
     pass
 
@@ -3175,35 +3168,7 @@ def softmax(x, normalization_axes=None, **kwargs):
 class ReductionOp(TensorOp):
 
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
-        if reduction_axes is None and out_axes is None:
-            reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axis()
-            out_axes = x.axes - reduction_axes
-        elif reduction_axes is None:
-            out_axes = make_axes(out_axes)
-            reduction_axes = x.axes - out_axes
-        elif out_axes is None:
-            reduction_axes = make_axes(reduction_axes)
-            out_axes = x.axes - reduction_axes
-        else:
-            out_axes = make_axes(out_axes)
-            reduction_axes = make_axes(reduction_axes)
-
-        # reduction_axes and out_axes must not overlap
-        if not reduction_axes & out_axes == make_axes(()):
-            raise ValueError("reduction_axes {} and out_axes {} must not overlap"
-                             .format(reduction_axes, out_axes))
-
-        # union of reduction_axes and out_axes must be x.axes
-        if not (reduction_axes | out_axes).is_equal_set(x.axes):
-            raise ValueError(("union of reduction_axes {} and out_axes {} must "
-                              "be x.axes {}")
-                             .format(reduction_axes, out_axes, x.axes))
-
-        # out_axes must be the same order as x.axes
-        out_axes_index = [x.axes.index(axis) for axis in out_axes]
-        if sorted(out_axes_index) != out_axes_index:
-            raise ValueError("out_axes {} must has same order as x.axes {}"
-                             .format(out_axes, x.axes))
+        reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
@@ -3213,6 +3178,39 @@ class ReductionOp(TensorOp):
             axes=out_axes,
             dtype=dtype
         )
+
+
+def compute_reduction_axes(x, reduction_axes, out_axes):
+    if reduction_axes is None and out_axes is None:
+        reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axis()
+        out_axes = x.axes - reduction_axes
+    elif reduction_axes is None:
+        out_axes = make_axes(out_axes)
+        reduction_axes = x.axes - out_axes
+    elif out_axes is None:
+        reduction_axes = make_axes(reduction_axes)
+        out_axes = x.axes - reduction_axes
+    else:
+        out_axes = make_axes(out_axes)
+        reduction_axes = make_axes(reduction_axes)
+
+    # reduction_axes and out_axes must not overlap
+    if not reduction_axes & out_axes == make_axes(()):
+        raise ValueError("reduction_axes {} and out_axes {} must not overlap"
+                         .format(reduction_axes, out_axes))
+
+    # union of reduction_axes and out_axes must be x.axes
+    if not (reduction_axes | out_axes).is_equal_set(x.axes):
+        raise ValueError(("union of reduction_axes {} and out_axes {} must "
+                          "be x.axes {}")
+                         .format(reduction_axes, out_axes, x.axes))
+
+    # out_axes must be the same order as x.axes
+    out_axes_index = [x.axes.index(axis) for axis in out_axes]
+    if sorted(out_axes_index) != out_axes_index:
+        raise ValueError("out_axes {} must has same order as x.axes {}"
+                         .format(out_axes, x.axes))
+    return reduction_axes, out_axes
 
 
 def create_reduction_op(name,

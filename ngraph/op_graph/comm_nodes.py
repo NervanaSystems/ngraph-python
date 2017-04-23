@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
+from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes
 from orderedset import OrderedSet
 import multiprocessing
 
@@ -318,3 +318,24 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
     @property
     def shared_queues(self):
         return self._shared_queues
+
+
+# TODO : WIP. This will be updated once we define the logic in issue #1378
+class AllReduceOp(CommunicationOp):
+
+    def __init__(self, x, func, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
+        reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
+        self.func = func
+        self.reduction_axes = reduction_axes
+        super(AllReduceOp, self).__init__(node=x, axes=out_axes, dtype=dtype, **kwargs)
+
+
+class MeanAllReduceOp(AllReduceOp):
+
+    def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
+        super(MeanAllReduceOp, self).__init__(x=x,
+                                              func='mean',
+                                              reduction_axes=reduction_axes,
+                                              out_axes=out_axes,
+                                              dtype=dtype,
+                                              **kwargs)
