@@ -124,13 +124,11 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
     input:
     output: new_root of the cloned graph
     """
-
     # clone nodes with GatherSendOp as root using serde
     ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
     new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
 
     orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
-
     # Prune ops that are not control_deps of new_gather_send_op
     # deserialize includes extra referenced nodes
     cloned_graph = Op.ordered_ops([new_root])
@@ -144,7 +142,7 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
         op.metadata['device_id'] = str(clone_id)
 
         if isinstance(op, (ScatterRecvOp, GatherSendOp)):
-            op._shared_queues = orig_ops[op.uuid].shared_queues
+            op._shared_queues = orig_ops[op.uuid]._shared_queues
             op.idx = shared_queues_idx
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()

@@ -19,8 +19,8 @@ from orderedset import OrderedSet
 import ngraph as ng
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass
-from ngraph.transformers.base import transformer_choices
 from multiprocessing import active_children
+
 
 pytestmark = pytest.mark.hetr_only("module")
 
@@ -45,6 +45,7 @@ def check_device_assign_pass(default_device, default_device_id,
         expected_transformers = set()
 
         class MockHetr(object):
+
             def __init__(self):
                 self.transformers = set()
 
@@ -254,11 +255,7 @@ def test_scatter_gather_graph(transformer_factory):
 
 
 @pytest.mark.hetr_gpu_only
-def test_gpu_send_and_recv(transformer_factory):
-    # skip if gpu unavailable
-    if 'gpu' not in transformer_choices():
-        pytest.skip("GPUTransformer not available")
-
+def test_gpu_send_and_recv():
     # put x+1 on cpu numpy
     with ng.metadata(device='cpu'):
         x = ng.placeholder(())
@@ -318,6 +315,7 @@ def test_recvop_tensorupdate(transformer_factory):
     to update both two views (i.e. flat and non-flat view of the same buffer/tensor)
     """
     class ConvParams(object):
+
         def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
                      pad_d=0, pad_h=0, pad_w=0,
                      str_d=1, str_h=1, str_w=1):
@@ -400,6 +398,7 @@ def test_recvop_tensorupdate(transformer_factory):
 def test_terminate_op(transformer_factory):
 
     class TerminateOp(ng.Op):
+
         def __init__(self, **kwargs):
             super(TerminateOp, self).__init__(**kwargs)
 
@@ -426,3 +425,75 @@ def test_process_leak(transformer_factory):
         comp()
         assert len(active_children()) == 2
     assert len(active_children()) == len(baseline)
+
+
+ax_A = ng.make_axis(4)
+ax_B = ng.make_axis(6)
+ax_C = ng.make_axis(12)
+ax_D = ng.make_axis(24)
+
+
+@pytest.mark.hetr_gpu_only
+@pytest.mark.parametrize('config', [
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_B,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_B,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_C,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
+        'device_id': ('1', '2'),
+        'parallel_axis': ax_B,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
+        'device_id': ('1', '2', '3'),
+        'parallel_axis': ax_C,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
+        'device_id': ('1', '2', '3'),
+        'parallel_axis': ax_D,
+    },
+])
+def test_gpu_graph(config):
+    t = config
+    with ng.metadata(device='gpu'):
+        x = ng.placeholder(axes=t['axes'])
+
+    with ng.metadata(device='gpu', device_id=t['device_id'], parallel=t['parallel_axis']):
+        x_plus_one = x + 1
+
+    with ng.metadata(device='gpu'):
+        x_plus_two = x_plus_one + 1
+
+    np_x = np.random.randint(100, size=t['axes'].full_lengths)
+    with ExecutorFactory() as ex:
+        computation = ex.executor(x_plus_two, x)
+        res = computation(np_x)
+        np.testing.assert_array_equal(res, np_x + 2)

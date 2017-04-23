@@ -251,6 +251,49 @@ class GPUQueueRecvOp(RecvOp):
         return self._queue
 
 
+class GPUCudaScatterSendOp(ScatterSendOp):
+
+    def __init__(self, from_node, to_node):
+        super(GPUCudaScatterSendOp, self).__init__(from_node, to_node)
+        self._shared_queues = list()
+        for i in range(len(to_node.metadata['device_id'])):
+            self._shared_queues.append(multiprocessing.Queue())
+        self.metadata['parallel'] = to_node.metadata['parallel']
+
+
+class GPUCudaScatterRecvOp(ScatterRecvOp):
+
+    def __init__(self, to_node, send_node, device_idx=None):
+        super(GPUCudaScatterRecvOp, self).__init__(to_node, send_node)
+        if device_idx:
+            self.idx = device_idx
+        else:
+            self.idx = 0
+        self._shared_queues = send_node._shared_queues
+
+
+class GPUCudaGatherSendOp(GatherSendOp):
+
+    def __init__(self, from_node, clone_node=None, device_idx=None):
+        super(GPUCudaGatherSendOp, self).__init__(from_node)
+        self.metadata['parallel'] = from_node.metadata['parallel']
+        self._shared_queues = list()
+        if clone_node:
+            self.idx = device_idx
+            self._shared_queues = clone_node.shared_queues
+        else:
+            self.idx = 0
+            for i in range(len(from_node.metadata['device_id'])):
+                self._shared_queues.append(multiprocessing.Queue())
+
+
+class GPUCudaGatherRecvOp(GatherRecvOp):
+
+    def __init__(self, from_node, to_node, send_node):
+        super(GPUCudaGatherRecvOp, self).__init__(from_node, to_node, send_node)
+        self._shared_queues = send_node._shared_queues
+
+
 class CPUQueueSendOp(SendOp):
 
     def __init__(self, from_node):

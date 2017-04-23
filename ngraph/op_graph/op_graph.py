@@ -481,6 +481,9 @@ class Op(NameableValue):
 
     @forward.setter
     def forward(self, value):
+        if value is self:
+            return
+
         self.update_forwards()
         value.update_forwards()
 

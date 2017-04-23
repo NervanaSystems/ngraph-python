@@ -45,7 +45,7 @@ def build_transformer(name):
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa
-            transformer = make_transformer_factory('gpu')()
+            transformer = make_transformer_factory('gpu', device_id=int(name[-1]))()
         except ImportError:
             assert False, "Fatal: Unable to initialize GPU, " \
                           "but GPU transformer was requested."
@@ -129,7 +129,6 @@ class AsyncTransformer(Process):
 
         update_comm_deps(returns)
         c = AsyncComputation(self)
-
         self.results_qs[c.comp_id] = self.manager.Queue()
         self.computation_builds[c.comp_id] = (returns, placeholders)
         self.computation_q.put(c.comp_id)

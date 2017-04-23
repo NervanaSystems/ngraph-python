@@ -21,6 +21,7 @@ import socket
 
 
 class DeviceAssignPass(GraphBuildingPass):
+
     def __init__(self, hetr, default_device, default_device_id):
         super(DeviceAssignPass, self).__init__()
         self.hetr = hetr
@@ -45,6 +46,7 @@ class DeviceAssignPass(GraphBuildingPass):
 
 
 class CommunicationPass(GraphBuildingPass):
+
     def __init__(self, send_nodes):
         super(CommunicationPass, self).__init__()
         self.send_nodes = send_nodes
@@ -55,9 +57,8 @@ class CommunicationPass(GraphBuildingPass):
             comm_pattern = get_comm_pattern(from_node=arg, to_node=op)
             if comm_pattern:
                 pair = CommNodePair(from_node=arg, to_node=op, node_type=comm_pattern)
-                send_node, recv_node = pair.get_nodes()
-                self.send_nodes.add(send_node)
-                args.append(recv_node)
+                self.send_nodes.add(pair.get_send_node())
+                args.append(pair.get_recv_node())
             else:
                 args.append(arg)
 

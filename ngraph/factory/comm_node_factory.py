@@ -14,7 +14,9 @@
 # ----------------------------------------------------------------------------
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
-    CPUQueueScatterSendOp, CPUQueueScatterRecvOp
+    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, GPUCudaGatherSendOp, \
+    GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
+
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
@@ -104,8 +106,11 @@ class CommNodePair(object):
                 to_node=to_node,
                 send_node=self.send_node)
 
-    def get_nodes(self):
-        return self.send_node, self.recv_node
+    def get_send_node(self):
+        return self.send_node
+
+    def get_recv_node(self):
+        return self.recv_node
 
 
 class CommNodeFactory(object):
@@ -137,8 +142,8 @@ class GPUCommNodeFactory(CommNodeFactory):
     def send_recv_types(self, location):
         types = [
             ('remote', 'mpi'),
-            ('local', 'queue'),
-            ('local', 'cuda')
+            ('local', 'cuda'),
+            ('local', 'queue')
         ]
 
         send_recv_types = defaultdict(list)
@@ -155,6 +160,26 @@ class GPUCommNodeFactory(CommNodeFactory):
         elif node_type == 'recv':
             if comm_type == 'queue':
                 return GPUQueueRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'scatter_send':
+            if comm_type == 'cuda':
+                return GPUCudaScatterSendOp(
+                    from_node=from_node,
+                    to_node=to_node)
+        elif node_type == 'scatter_recv':
+            if comm_type == 'cuda':
+                return GPUCudaScatterRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'gather_send':
+            if comm_type == 'cuda':
+                return GPUCudaGatherSendOp(
+                    from_node=from_node)
+        elif node_type == 'gather_recv':
+            if comm_type == 'cuda':
+                return GPUCudaGatherRecvOp(
+                    from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
         else:
