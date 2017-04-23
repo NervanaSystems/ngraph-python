@@ -129,9 +129,7 @@ def run_cifar_benchmark(n_iter=10, n_skip=5, batch_size=4,
     batch_cost_computation_op = ng.computation(batch_cost, "all")
 
     benchmark = Benchmark(batch_cost_computation_op, train_set, inputs, transformer_type)
-    benchmarks = dict()
-    benchmarks['cifar_msra_fprop'] = benchmark.time(n_skip, n_iter)
-    benchmark.print_benchmark_results(benchmarks)
+    Benchmark.print_benchmark_results(benchmark.time(n_skip, n_iter))
 
 
 if __name__ == "__main__":
