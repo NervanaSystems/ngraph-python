@@ -15,11 +15,20 @@
 from __future__ import division
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 from ngraph.op_graph.op_graph import Op, DotOp
-from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp
+from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
+    GPUQueueRecvOp, CPUQueueSendOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 
 import uuid
+import collections
+
+
+def get_iterable(x):
+    if isinstance(x, collections.Iterable) and not isinstance(x, str):
+        return x
+    else:
+        return (x,)
 
 
 def comm_path_exists(fro, to):
@@ -40,7 +49,7 @@ def comm_path_exists(fro, to):
         if v == to:
             return True
         if isinstance(v, RecvOp):
-            visit.add(v.send_node())
+            visit |= get_iterable(v.send_node())
         else:
             visit.update(v.args)
 
@@ -56,7 +65,7 @@ def find_recvs(fro):
         v = visit.pop()
         if isinstance(v, RecvOp):
             recvs.add(v)
-            visit.add(v.send_node())
+            visit |= get_iterable(v.send_node())
         else:
             if hasattr(v, 'args'):
                 visit.update(v.args)
@@ -101,8 +110,11 @@ def update_comm_deps(ops):
         for trav_op in other_ops:
             recvs = find_recvs(fro=trav_op)
             for r in recvs:
-                if comm_path_exists(fro=r.send_node(), to=op):
-                    if r.metadata['transformer'] == op.metadata['transformer']:
+                if not r.metadata['transformer'] == op.metadata['transformer']:
+                    continue
+                send_nodes = get_iterable(r.send_node())
+                for s in send_nodes:
+                    if comm_path_exists(fro=s, to=op):
                         r.add_control_dep(op)
 
 
@@ -112,25 +124,38 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
     input:
     output: new_root of the cloned graph
     """
-
     # clone nodes with GatherSendOp as root using serde
     ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
     new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
 
     orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
-
     # Prune ops that are not control_deps of new_gather_send_op
     # deserialize includes extra referenced nodes
     cloned_graph = Op.ordered_ops([new_root])
+
+    new_send_nodes = OrderedSet()
+    replaced_send_nodes = OrderedSet()
+
     # update newly cloned op metadata, generate new UUIDs
     for op in cloned_graph:
         op.metadata['transformer'] = op.metadata['device'] + str(clone_id)
         op.metadata['device_id'] = str(clone_id)
+
         if isinstance(op, (ScatterRecvOp, GatherSendOp)):
-            op._shared_queues = orig_ops[op.uuid].shared_queues
+            op._shared_queues = orig_ops[op.uuid]._shared_queues
             op.idx = shared_queues_idx
             if isinstance(op, ScatterRecvOp):
                 op._send_node = orig_ops[op.uuid].send_node()
+        elif isinstance(op, (CPUQueueRecvOp, GPUQueueRecvOp)):
+            # Cloning a recv node means we need a broadcast, so simulate one by adding an
+            # additional sender with the same input data as the original sender.
+            # TODO replace with real broadcast #1398 #1399
+            send_op = CPUQueueSendOp(orig_ops[op.uuid].send_node().args[0])
+            op._queue = send_op.queue
+            op._send_node = send_op
+            new_send_nodes.add(send_op)
+            replaced_send_nodes.add(orig_ops[op.uuid].send_node())
+
         if hasattr(op, '_axes') and parallel_axis in op._axes:
             op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
             # TODO: Revisit to handle axes updation better. Github Ticket #1355
@@ -145,4 +170,4 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                     raise ValueError("Missing parallel_axis in Op's x_out_axes or y_out_axes")
         op.uuid = uuid.uuid4()
 
-    return new_root
+    return new_root, new_send_nodes, replaced_send_nodes
