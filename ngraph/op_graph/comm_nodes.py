@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
+from orderedset import OrderedSet
 import multiprocessing
 
 
@@ -210,6 +211,22 @@ class GatherRecvOp(RecvOp):
     @property
     def slices(self):
         return self._slices
+
+    @property
+    def send_nodes(self):
+        """
+        :return: iterable of send nodes
+        """
+        from ngraph.util.hetr_utils import get_iterable
+        return OrderedSet(i for i in get_iterable(self._send_node))
+
+    @send_nodes.setter
+    def send_nodes(self, new_send_nodes):
+        self._send_node = new_send_nodes
+
+    def send_node(self):
+        # make it work for general traversal in functions (e.g. find_recv())
+        return self.send_nodes
 
 
 class GPUQueueSendOp(SendOp):

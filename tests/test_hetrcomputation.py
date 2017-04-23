@@ -59,8 +59,11 @@ def check_device_assign_pass(default_device, default_device_id,
         for op in graph_op_metadata.keys():
             assert op.metadata['device'] == graph_op_metadata[op][0]
             assert op.metadata['device_id'] == graph_op_metadata[op][1]
-            assert op.metadata['transformer'] == graph_op_metadata[op][0] +  \
-                str(graph_op_metadata[op][1][0])
+            if isinstance(graph_op_metadata[op][1], (list, tuple)):
+                transformer = [graph_op_metadata[op][0] + str(i) for i in graph_op_metadata[op][1]]
+            else:
+                transformer = graph_op_metadata[op][0] + str(graph_op_metadata[op][1][0])
+            assert op.metadata['transformer'] == transformer
 
             for device_id in graph_op_metadata[op][1]:
                 expected_transformers.add(graph_op_metadata[op][0] + device_id)

@@ -215,21 +215,39 @@ class CPUCommNodeFactory(CommNodeFactory):
             assert False, "Not supported!!!"
 
 
-def get_node_type(from_node, to_node):
-    if isinstance(to_node.metadata['device_id'], (list, tuple)):
-        if isinstance(from_node, BroadcastOp):
-            if from_node.args[0].is_constant:
-                return None
-        elif not from_node.is_constant:
+def get_comm_pattern(from_node, to_node):
+    """
+    determine type of communication based on from_node and to_node
+    """
+    if not from_node or not to_node:
+        return None
+
+    if from_node.is_constant is True:
+        return None
+
+    if isinstance(from_node, BroadcastOp) and from_node.args[0].is_constant:
+        return None
+
+    # todo check 'host_transformer' or consolidate metadata #
+    from_node_transformer = from_node.metadata['transformer']
+    to_node_transformer = to_node.metadata['transformer']
+
+    if from_node_transformer == to_node_transformer:
+        return None
+
+    if isinstance(to_node_transformer, (list, tuple)) and to_node.metadata['parallel']:
+        # todo check if metadata['device_id'] and 'parallel' co-exists
+        if not to_node.metadata['parallel'] in from_node.axes:
+            # todo use 'broadcast'?
+            return 'direct'
+        else:
             from_node.metadata['marker'] = 'scatter'
             return 'scatter'
-        else:
-            return None
-    elif isinstance(from_node.metadata['device_id'], (list, tuple)):
+
+    if isinstance(from_node_transformer, (list, tuple)):
         return 'gather'
-    elif from_node.metadata['device_id'] != to_node.metadata['device_id']:
+
+    if from_node_transformer != to_node_transformer:
         return 'direct'
-    elif from_node.metadata['device'] != to_node.metadata['device']:
-        return 'direct'
-    else:
-        return None
+
+    return None
