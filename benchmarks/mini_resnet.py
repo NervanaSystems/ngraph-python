@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from __future__ import print_function
-from benchmark import fill_feed_dict, run_benchmark, print_benchmark_results
+from benchmark import Benchmark
 from fake_cifar_generator import FakeCIFAR
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
@@ -128,11 +128,10 @@ def run_cifar_benchmark(n_iter=10, n_skip=5, batch_size=4,
     batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
     batch_cost_computation_op = ng.computation(batch_cost, "all")
 
-    feed_dict = fill_feed_dict(train_set, inputs)
+    benchmark = Benchmark(batch_cost_computation_op, train_set, inputs, transformer_type)
     benchmarks = dict()
-    benchmarks['cifar_msra_fprop'] = run_benchmark(batch_cost_computation_op, transformer_type,
-                                                   feed_dict, n_skip, n_iter)
-    print_benchmark_results(benchmarks)
+    benchmarks['cifar_msra_fprop'] = benchmark.time(n_skip, n_iter)
+    benchmark.print_benchmark_results(benchmarks)
 
 
 if __name__ == "__main__":
