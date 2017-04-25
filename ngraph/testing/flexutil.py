@@ -18,6 +18,8 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
 
+MINIMUM_FLEX_VALUE = -2 ** 15
+MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
 def get_executor_result(arg_array1, arg_array2, ng_placeholder1, ng_placeholder2, ng_fun):
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as m_executor:
@@ -74,9 +76,13 @@ def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, de
 
 def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2,
                               expected_values, description):
+    print (tuple_values[0])
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as const_executor:
         print(description)
         for values, expected_value in zip(tuple_values, expected_values):
+            print (values[0])
+            print (values[1])
+            print (np.maximum(values[0], values[1]))
             flex = const_executor(values[0], values[1])
             print("flex_value: ", flex)
             print("expected_value: ", expected_value)

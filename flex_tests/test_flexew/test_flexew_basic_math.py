@@ -17,13 +17,10 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-from ngraph.testing.flexutil import template_one_placeholder
+from ngraph.testing.flexutil import template_one_placeholder, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE
 from ngraph.testing import executor
 
 pytestmark = pytest.mark.transformer_dependent("module")
-
-MINIMUM_FLEX_VALUE = -2 ** 15
-MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
 # Known issues
 bug_1062 = pytest.mark.xfail(strict=True, reason="GitHub issue #1062, problem with ng.sqrt corner cases")

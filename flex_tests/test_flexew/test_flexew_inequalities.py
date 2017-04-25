@@ -14,12 +14,9 @@
 # ----------------------------------------------------------------------------
 import pytest
 import ngraph as ng
-from ngraph.testing.flexutil import template_two_placeholders
+from ngraph.testing.flexutil import template_two_placeholders, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE
 
 pytestmark = pytest.mark.transformer_dependent("module")
-
-MINIMUM_FLEX_VALUE = -2 ** 15
-MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
 x = ng.placeholder(())
 z = ng.placeholder(())
