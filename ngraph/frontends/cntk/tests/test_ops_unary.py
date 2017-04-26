@@ -112,6 +112,56 @@ def test_tanh_3():
     assert np.isclose(cntk_ret, ng_ret).all()
 
 
+def test_relu_1():
+    cntk_op = C.relu([-2, -1., 0., 1., 2.])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_relu_2():
+    cntk_op = C.relu([0.])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_relu_3():
+    cntk_op = C.relu([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_relu_4():
+    cntk_op = C.relu([[1, 2, 3], [4, 5, 6]])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_relu_5():
+    cntk_op = C.relu([[-3, -2, -1], [1, 2, 3]])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
 if __name__ == "__main__":
     test_sigmoid_1()
     test_sigmoid_2()
@@ -122,3 +172,8 @@ if __name__ == "__main__":
     test_tanh_1()
     test_tanh_2()
     test_tanh_3()
+    test_relu_1()
+    test_relu_2()
+    test_relu_3()
+    test_relu_4()
+    test_relu_5()
