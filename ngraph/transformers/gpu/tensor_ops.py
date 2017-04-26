@@ -20,8 +20,34 @@ from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.op_graph.axes import TensorDescription
-
+from queue import Empty
 import numpy as np
+import pycuda.driver as drv
+
+SLEEP_S = 0.1
+
+
+def set_ipc_handle(op, shared_queue, handle):
+    lock = drv.mem_alloc(1)
+    drv.memset_d8(lock, 0, 1)
+    buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
+    lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
+    shared_queue.put((buf_ipc_hdl, lock_ipc_hdl))
+    return (lock)
+
+
+def open_ipc_handle(shared_queue):
+    while True:
+        try:
+            (buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
+            buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
+            lock = drv.IPCMemoryHandle(lock_ipc_hdl)
+            return (buf_hdl, lock)
+        except Exception as e:
+            if isinstance(e, Empty):
+                pass
+            else:
+                raise
 
 
 def get_dimshuffle(dtype, shape, axes, src, dst):
@@ -58,6 +84,7 @@ class DimShuffleKernel(GPUKernel):
             dimshuffle operation
         params (list): List of parameters to pass to kernel
     """
+
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
@@ -116,6 +143,7 @@ class FillKernel(GPUKernel):
         value : Scalar value to fill tensor
         out (GPUTensor): Tensor to fill with value
     """
+
     def __init__(self, transformer, tensor, value):
         super(FillKernel, self).__init__(transformer)
 
@@ -137,23 +165,24 @@ class FillKernel(GPUKernel):
         self.tensor.fill(self.value)
 
 
-class SendKernel(GPUKernel):
+class QueueSendKernel(GPUKernel):
+
     def __init__(self, transformer, send_op):
-        super(SendKernel, self).__init__(transformer)
+        super(QueueSendKernel, self).__init__(transformer)
         self.q = send_op.queue
         self.tensor = send_op.args[0].tensor_description()
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor.value
-        super(SendKernel, self).bind_buffers()
+        super(QueueSendKernel, self).bind_buffers()
 
     def execute(self):
         value = self.tensor.get(None)
         self.q.put(value)
 
 
-class RecvKernel(GPUKernel):
+class QueueRecvKernel(GPUKernel):
     """
     Kernel used to receive a tensor. The tensor's value can be
     a scalar, another tensor, or a numpy array
@@ -166,8 +195,9 @@ class RecvKernel(GPUKernel):
     Attributes:
         tensor (GPUTensor): Dest tensor
     """
+
     def __init__(self, transformer, op):
-        super(RecvKernel, self).__init__(transformer)
+        super(QueueRecvKernel, self).__init__(transformer)
         self.recv_op = op
         self.tensor = op.tensor_description()
 
@@ -177,7 +207,7 @@ class RecvKernel(GPUKernel):
         """
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor.value
-        super(RecvKernel, self).bind_buffers()
+        super(QueueRecvKernel, self).bind_buffers()
 
     def execute(self):
         """
@@ -190,6 +220,108 @@ class RecvKernel(GPUKernel):
             self.tensor.tensor.fill(x)
         else:
             self.tensor.__setitem__(None, x)
+
+
+class CudaScatterSendKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaScatterSendKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.args[0].tensor_description()
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(CudaScatterSendKernel, self).bind_buffers()
+        self.send_ready = list()
+        for i in range(len(self.op.to_id)):
+            self.send_ready.append(
+                set_ipc_handle(
+                    self.op,
+                    self.op._shared_queues[i],
+                    self.tensor.tensor.gpudata))
+
+    def execute(self):
+        for i in range(len(self.op.to_id)):
+            drv.memset_d8(self.send_ready[i], 1, 1)
+
+
+class CudaScatterRecvKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaScatterRecvKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.tensor_description()
+        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(op._shared_queues[op.idx])
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(CudaScatterRecvKernel, self).bind_buffers()
+        chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+        self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+
+    def execute(self):
+        sender_ready = drv.from_device(self.sender_ready, (1,), np.int8)
+        while (sender_ready == 0):
+            sender_ready = drv.from_device(self.sender_ready, (1,), np.int8)
+        drv.memcpy_dtod(
+            self.tensor.tensor.gpudata,
+            self.sender_buf,
+            self.tensor.tensor.size * self.op.dtype.itemsize)
+        drv.memset_d8(self.sender_ready, 0, 1)
+
+
+class CudaGatherSendKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaGatherSendKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.args[0].tensor_description()
+        (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(op._shared_queues[op.idx])
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(CudaGatherSendKernel, self).bind_buffers()
+        chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+        self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+
+    def execute(self):
+        # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
+        # is least contiguous.
+        drv.memcpy_dtod(
+            self.recvr_buf,
+            self.tensor.tensor.gpudata,
+            self.tensor.tensor.size * self.op.dtype.itemsize)
+        drv.memset_d8(self.send_ready, 1, 1)
+
+
+class CudaGatherRecvKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaGatherRecvKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.tensor_description()
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(CudaGatherRecvKernel, self).bind_buffers()
+        self.sender_ready = list()
+        for i in range(len(self.op.from_id)):
+            self.sender_ready.append(
+                set_ipc_handle(
+                    self.op,
+                    self.op._shared_queues[i],
+                    self.tensor.tensor.gpudata))
+
+    def execute(self):
+        for i in range(len(self.op.from_id)):
+            sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
+            while (sender_ready == 0):
+                sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
+            drv.memset_d8(self.sender_ready[i], 0, 1)
 
 
 class RngFillKernel(GPUKernel):
@@ -207,6 +339,7 @@ class RngFillKernel(GPUKernel):
         value : Scalar value to fill tensor
         out (GPUTensor): Tensor to fill with value
     """
+
     def __init__(self, transformer, td, distribution, params):
         super(RngFillKernel, self).__init__(transformer)
 
@@ -249,6 +382,7 @@ class SetItemKernel(GPUKernel):
         value: Source scalar, numpy array, or tensor
         item (slice): Slice to apply to dest tensor
     """
+
     def __init__(self, transformer, op):
         super(SetItemKernel, self).__init__(transformer)
 
@@ -301,6 +435,7 @@ class FlexFillKernel(FillKernel):
     """
     Flex version of FillKernel
     """
+
     def __init__(self, transformer, tensor, value):
         super(FlexFillKernel, self).__init__(transformer, tensor, value)
 
@@ -334,6 +469,7 @@ class FlexRngFillKernel(RngFillKernel):
     """
     Flex version of RngFillKernel
     """
+
     def __init__(self, transformer, td, distribution, params):
         super(FlexRngFillKernel, self).__init__(transformer, td, distribution, params)
 

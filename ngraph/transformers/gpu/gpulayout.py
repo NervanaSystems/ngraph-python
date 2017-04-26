@@ -19,9 +19,11 @@ from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, Assign
     ReshapeOp, TensorValueOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.axes import Axes
+from ngraph.op_graph.axes import Axes, make_axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
+    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherSendOp, \
+    GPUCudaGatherRecvOp
 from ngraph.op_graph.ctc import CTCOp
 
 from ngraph.transformers.passes.layout import UnaryLayoutConstraint
@@ -818,6 +820,10 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaScatterRecvOp)):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, (GPUCudaGatherSendOp, GPUCudaGatherRecvOp)):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, CTCOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     else:
@@ -869,6 +875,10 @@ def gpu_constraint_factory(op, arg):
         return GPUBinaryLayoutConstraint(op, arg)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPUBinaryLayoutConstraint(op, arg)
+    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
+        axis_least_contig = make_axes(op.metadata['parallel'])
+        new_axes = axis_least_contig + (op.axes - axis_least_contig)
+        return GPUFixedLayoutConstraint(op, arg, new_axes)
     elif isinstance(op, CTCOp):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     else:
