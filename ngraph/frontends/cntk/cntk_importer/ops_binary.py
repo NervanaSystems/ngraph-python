@@ -14,13 +14,57 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
-from ngraph.frontends.tensorflow.tf_importer.ops_binary import OpsBinary as TFOpsBinary
 
 
-class OpsBinary(TFOpsBinary):
+class OpsBinary():
     """
     Bridging binary operations between CNTK and ngraph.
     """
+
+    def _match_axes(self, bigger, smaller):
+        """
+        Returns set of axes for bigger input with axes
+        matching axes in smaller input.
+
+        Arguments:
+            bigger: Input with more axes.
+            smaller: Input with fewer axes.
+
+        Returns:
+            List of axes to be casted.
+        """
+        axes = []
+        for i, axis_0 in enumerate(bigger):
+            for axis_1 in smaller:
+                if axis_0.length == axis_1.length:
+                    if axis_1 not in axes:
+                        axes.append(axis_1)
+                        break
+            if len(axes) == i:
+                axes.append(axis_0)
+        return axes
+
+    def _cast_for_binary_op(self, inputs):
+        """
+        Cast axes for input with more axes by matching
+        its axes with second input's axes.
+
+        Arguments:
+            inputs: List of inputs to be casted.
+
+        Returns:
+            Casted inputs.
+        """
+        cast_0, cast_1 = inputs
+
+        if len(cast_0.axes) >= len(cast_1.axes):
+            axes = self._match_axes(cast_0.axes, cast_1.axes)
+            cast_0 = ng.cast_axes(cast_0, axes)
+        else:
+            axes = self._match_axes(cast_1.axes, cast_0.axes)
+            cast_1 = ng.cast_axes(cast_1, axes)
+
+        return cast_0, cast_1
 
     def Plus(self, cntk_op, inputs):
         """
@@ -32,7 +76,8 @@ class OpsBinary(TFOpsBinary):
         Returns:
             A ngraph Op.
         """
-        return self._element_wise_binary(ng.Add, cntk_op, inputs)
+        cast_0, cast_1 = self._cast_for_binary_op(inputs)
+        return ng.add(cast_0, cast_1).named(cntk_op.uid)
 
     def Minus(self, cntk_op, inputs):
         """
@@ -44,7 +89,8 @@ class OpsBinary(TFOpsBinary):
         Returns:
             A ngraph Op.
         """
-        return self._element_wise_binary(ng.Subtract, cntk_op, inputs)
+        cast_0, cast_1 = self._cast_for_binary_op(inputs)
+        return ng.subtract(cast_0, cast_1).named(cntk_op.uid)
 
     def ElementTimes(self, cntk_op, inputs):
         """
@@ -56,7 +102,8 @@ class OpsBinary(TFOpsBinary):
         Returns:
             A ngraph Op.
         """
-        return self._element_wise_binary(ng.Multiply, cntk_op, inputs)
+        cast_0, cast_1 = self._cast_for_binary_op(inputs)
+        return ng.multiply(cast_0, cast_1).named(cntk_op.uid)
 
     def Times(self, cntk_op, inputs):
         """
@@ -70,18 +117,25 @@ class OpsBinary(TFOpsBinary):
         """
         cast_0, cast_1 = inputs
 
-        if len(cast_0.axes) == 1 & len(cast_1.axes) == 1:
-            pass
-        elif len(cast_0.axes) == 1:
-            temp = next((x for x in cast_1.axes if x.length == 1), None)
-            if temp is None:
-                temp = ng.make_axis(1)
-            cast_0 = ng.broadcast(cast_0, [temp, cast_0.axes])
-        elif len(cast_1.axes) == 1:
-            temp = next((x for x in cast_0.axes if x.length == 1), None)
-            if temp is None:
-                temp = ng.make_axis(1)
-            cast_1 = ng.broadcast(cast_1, [ng.make_axis(1), cast_1.axes])
+        cast_0_len = len(cast_0.axes)
+        cast_1_len = len(cast_1.axes)
 
-        cast_0 = ng.cast_axes(cast_0, [cast_0.axes[0], cast_1.axes[0]])
+        if cast_0_len == cast_1_len == 1:
+            if cast_0.axes[0] != cast_1.axes[0]:
+                cast_0 = ng.cast_axes(cast_0, cast_1.axes)
+        elif cast_0_len == cast_1_len:
+            if cast_0.axes[1].length == cast_1.axes[0].length:
+                axes = [cast_0.axes[0], cast_1.axes[0]]
+                axes.extend(cast_0.axes[2::])
+                cast_0 = ng.cast_axes(cast_0, axes=axes)
+            else:
+                axes = self._match_axes(cast_0.axes, cast_1.axes)
+                cast_0 = ng.cast_axes(cast_0, axes=axes)
+        elif cast_0_len > cast_1_len:
+            axes = self._match_axes(cast_0.axes, cast_1.axes)
+            cast_0 = ng.cast_axes(cast_0, axes=axes)
+        else:
+            axes = self._match_axes(cast_1.axes, cast_0.axes)
+            cast_1 = ng.cast_axes(cast_1, axes=axes)
+
         return ng.dot(cast_0, cast_1).named(cntk_op.uid)
