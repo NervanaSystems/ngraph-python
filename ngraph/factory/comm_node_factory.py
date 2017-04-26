@@ -14,7 +14,9 @@
 # ----------------------------------------------------------------------------
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
-    CPUQueueScatterSendOp, CPUQueueScatterRecvOp
+    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, GPUCudaGatherSendOp, \
+    GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
+
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
@@ -104,8 +106,11 @@ class CommNodePair(object):
                 to_node=to_node,
                 send_node=self.send_node)
 
-    def get_nodes(self):
-        return self.send_node, self.recv_node
+    def get_send_node(self):
+        return self.send_node
+
+    def get_recv_node(self):
+        return self.recv_node
 
 
 class CommNodeFactory(object):
@@ -137,8 +142,8 @@ class GPUCommNodeFactory(CommNodeFactory):
     def send_recv_types(self, location):
         types = [
             ('remote', 'mpi'),
-            ('local', 'queue'),
-            ('local', 'cuda')
+            ('local', 'cuda'),
+            ('local', 'queue')
         ]
 
         send_recv_types = defaultdict(list)
@@ -155,6 +160,26 @@ class GPUCommNodeFactory(CommNodeFactory):
         elif node_type == 'recv':
             if comm_type == 'queue':
                 return GPUQueueRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'scatter_send':
+            if comm_type == 'cuda':
+                return GPUCudaScatterSendOp(
+                    from_node=from_node,
+                    to_node=to_node)
+        elif node_type == 'scatter_recv':
+            if comm_type == 'cuda':
+                return GPUCudaScatterRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'gather_send':
+            if comm_type == 'cuda':
+                return GPUCudaGatherSendOp(
+                    from_node=from_node)
+        elif node_type == 'gather_recv':
+            if comm_type == 'cuda':
+                return GPUCudaGatherRecvOp(
+                    from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
         else:
@@ -215,21 +240,39 @@ class CPUCommNodeFactory(CommNodeFactory):
             assert False, "Not supported!!!"
 
 
-def get_node_type(from_node, to_node):
-    if isinstance(to_node.metadata['device_id'], (list, tuple)):
-        if isinstance(from_node, BroadcastOp):
-            if from_node.args[0].is_constant:
-                return None
-        elif not from_node.is_constant:
+def get_comm_pattern(from_node, to_node):
+    """
+    determine type of communication based on from_node and to_node
+    """
+    if not from_node or not to_node:
+        return None
+
+    if from_node.is_constant is True:
+        return None
+
+    if isinstance(from_node, BroadcastOp) and from_node.args[0].is_constant:
+        return None
+
+    # todo check 'host_transformer' or consolidate metadata #
+    from_node_transformer = from_node.metadata['transformer']
+    to_node_transformer = to_node.metadata['transformer']
+
+    if from_node_transformer == to_node_transformer:
+        return None
+
+    if isinstance(to_node_transformer, (list, tuple)) and to_node.metadata['parallel']:
+        # todo check if metadata['device_id'] and 'parallel' co-exists
+        if not to_node.metadata['parallel'] in from_node.axes:
+            # todo use 'broadcast'?
+            return 'direct'
+        else:
             from_node.metadata['marker'] = 'scatter'
             return 'scatter'
-        else:
-            return None
-    elif isinstance(from_node.metadata['device_id'], (list, tuple)):
+
+    if isinstance(from_node_transformer, (list, tuple)):
         return 'gather'
-    elif from_node.metadata['device_id'] != to_node.metadata['device_id']:
+
+    if from_node_transformer != to_node_transformer:
         return 'direct'
-    elif from_node.metadata['device'] != to_node.metadata['device']:
-        return 'direct'
-    else:
-        return None
+
+    return None
