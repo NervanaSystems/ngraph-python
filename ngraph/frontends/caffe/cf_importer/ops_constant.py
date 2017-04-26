@@ -16,13 +16,14 @@
 import ngraph as ng
 from ngraph.frontends.caffe.cf_importer.ops_bridge import register_func_with_ops_bridge
 
+
 class OpsConstant():
     """
     class for constant ops.
-    Note: Op functions in this class should be registered in the OpsBridge 
+    Note: Op functions in this class should be registered in the OpsBridge
     """
 
-    def DummyData(self,layer,inputs):
+    def DummyData(self, layer, inputs):
         '''
         To support the Dummy data layer in caffe
         Arguments:
@@ -30,30 +31,27 @@ class OpsConstant():
             inputs: input ops on which current op depends on
         return:
             ngraph output operation corresponding to the given layer
-            
         '''
         if len(inputs) > 1:
             raise ValueError("Only one input is allowed per data layer")
 
-        data  = layer.dummy_data_param
+        data = layer.dummy_data_param
 
-        shape =[]
+        shape = []
         for dim in data.shape[0].dim:
             shape.append(dim)
         if shape and shape[0] > 1:
-            axes = [ng.make_axis(length = s) for s in shape]
+            axes = [ng.make_axis(length=s) for s in shape]
         else:
             axes = None
 
         if data.data_filler[0].type == "constant":
             val = data.data_filler[0].value
-            return ng.constant(val,axes).named(layer.name)
+            return ng.constant(val, axes).named(layer.name)
 
+    def __call__(self, func, layer, inputs):
+        return getattr(self, func)(layer, inputs)
 
-    def __call__(self,func,layer,inputs):
-        return getattr(self,func)(layer,inputs)
-
-#register all functions in this class with opbridge
+# register all functions in this class with opbridge
 ops_const = OpsConstant()
-register_func_with_ops_bridge("DummyData",ops_const)
-
+register_func_with_ops_bridge("DummyData", ops_const)

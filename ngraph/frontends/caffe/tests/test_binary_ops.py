@@ -15,7 +15,6 @@
 
 from __future__ import print_function
 import numpy as np
-import ngraph as ng
 from ngraph.testing import executor
 import pytest
 from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
@@ -23,22 +22,22 @@ from os.path import join
 pytestmark = pytest.mark.transformer_dependent("module")
 PROTO_PATH = "ngraph/frontends/caffe/tests/protos/"
 
-def test_scalar_const_sum():
 
-    op_map = parse_prototxt(join(PROTO_PATH,"scalar_const_sum.prototxt"))
+def test_scalar_const_sum():
+    op_map = parse_prototxt(join(PROTO_PATH, "scalar_const_sum.prototxt"))
     op = op_map.get("C")
     with executor(op) as ex:
         res = ex()
     assert(res == 4.)
 
-def test_tensor_const_sum():
 
-    op_map=parse_prototxt(join(PROTO_PATH,"tensor_const_sum.prototxt"))
+def test_tensor_const_sum():
+    op_map = parse_prototxt(join(PROTO_PATH, "tensor_const_sum.prototxt"))
     op = op_map.get("C")
     with executor(op) as ex:
         res = ex()
 
-    a = np.full((2,3),4.)
-    b = np.full((2,3),3.)
-    c = a+b
-    assert(np.array_equal(res,c))
+    a = np.full((2, 3), 4.)
+    b = np.full((2, 3), 3.)
+    c = a + b
+    assert(np.array_equal(res, c))

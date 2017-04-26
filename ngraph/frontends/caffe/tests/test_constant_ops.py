@@ -15,7 +15,6 @@
 
 from __future__ import print_function
 import numpy as np
-import ngraph as ng
 from ngraph.testing import executor
 import pytest
 from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
@@ -23,18 +22,20 @@ from os.path import join
 pytestmark = pytest.mark.transformer_dependent("module")
 PROTO_PATH = "ngraph/frontends/caffe/tests/protos/"
 
+
 def test_scalar_dummy_data():
-    op_map = parse_prototxt(join(PROTO_PATH,"scalar_dummy_data.prototxt"))
+    op_map = parse_prototxt(join(PROTO_PATH, "scalar_dummy_data.prototxt"))
     op = op_map.get("A")
     with executor(op) as ex:
         res = ex()
     assert(res == 1.)
 
+
 def test_vector_dummy_data():
-    op_map = parse_prototxt(join(PROTO_PATH,"tensor_dummy_data.prototxt"))
+    op_map = parse_prototxt(join(PROTO_PATH, "tensor_dummy_data.prototxt"))
     op = op_map.get("A")
-    a = np.full((2,3),4.)
+    a = np.full((2, 3), 4.)
     with executor(op) as ex:
         res = ex()
-    assert(np.array_equal(res,a))
-
+    assert(np.array_equal(res, a))
+# EOF

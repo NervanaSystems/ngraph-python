@@ -17,6 +17,7 @@ import ngraph as ng
 import caffe_pb2
 from ngraph.frontends.caffe.cf_importer.ops_bridge import register_func_with_ops_bridge
 
+
 class OpsBinary():
     """
     This class supports all the binary operations required for caffe.
@@ -26,7 +27,7 @@ class OpsBinary():
     """
     def Eltwise(self, layer, inputs):
         """
-        To support the Eltwise layer of caffe. 
+        To support the Eltwise layer of caffe.
 
         Arguments:
             layer: Layer which needs to be be mapped to ngrpah op
@@ -34,21 +35,20 @@ class OpsBinary():
         return:
             ngraph output operation corresponding to the given layer
         """
-        operation  = layer.eltwise_param.operation
+        operation = layer.eltwise_param.operation
 
         if operation == caffe_pb2.EltwiseParameter.SUM:
             ax = inputs[0].axes
-            out = ng.add(inputs[0],ng.cast_axes(inputs[1],ax))
+            out = ng.add(inputs[0], ng.cast_axes(inputs[1], ax))
             for inp in inputs[2:]:
-                out = ng.add(out,ng.cast_axes(inp,ax))
+                out = ng.add(out, ng.cast_axes(inp, ax))
             out.named = layer.name
             return out
 
+    def __call__(self, func, layer, inputs):
+        return getattr(self, func)(layer, inputs)
 
-    def __call__(self,func,layer,inputs):
-        return getattr(self,func)(layer,inputs)
-
-#register all functions in this class with opbridge
+# register all functions in this class with opbridge
 ops_binary = OpsBinary()
-register_func_with_ops_bridge("Eltwise",ops_binary)
-
+register_func_with_ops_bridge("Eltwise", ops_binary)
+# EOF

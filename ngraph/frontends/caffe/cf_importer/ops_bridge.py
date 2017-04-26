@@ -15,14 +15,16 @@
 
 funcs_class_bridge = {}
 
-def register_func_with_ops_bridge(func,class_obj):
+
+def register_func_with_ops_bridge(func, class_obj):
     """
     This function registers the op function against its class to ops bridge
     """
-    if not funcs_class_bridge.has_key(func):
+    if func not in funcs_class_bridge:
         funcs_class_bridge[func] = class_obj
     else:
-        raise  ValueError (func," already exists in the class:",class_obj.__class__.__name__)
+        raise ValueError(func, " already exists in the class:", class_obj.__class__.__name__)
+
 
 class OpsBridge():
     """
@@ -32,15 +34,14 @@ class OpsBridge():
     def __init__(self):
         pass
 
-    def get_op_class_by_func(self,func):
+    def get_op_class_by_func(self, func):
         """
         returns the op class for a given op function
         """
-        if funcs_class_bridge.has_key(func):
+        if func in funcs_class_bridge:
             return funcs_class_bridge[func]
         else:
-            raise NotImplementedError (func," is not defined in any class")
-
+            raise NotImplementedError(func, " is not defined in any class")
 
     def __call__(self, layer, input_ops):
         """
@@ -55,4 +56,4 @@ class OpsBridge():
         """
         func = layer.type
         op_class = self.get_op_class_by_func(func)
-        return op_class(func,layer,input_ops)
+        return op_class(func, layer, input_ops)

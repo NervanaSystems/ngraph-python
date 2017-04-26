@@ -18,11 +18,11 @@ import ngraph.transformers as ngt
 from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
 
 model = "sum.prototxt"
-#import graph from the prototxt
-op_map = parse_prototxt(model,verbose=True)
-#get the op handle for any layer
+# import graph from the prototxt
+op_map = parse_prototxt(model, verbose=True)
+# get the op handle for any layer
 op = op_map.get("D")
-#execute the op handle
+# execute the op handle
 res = ngt.make_transformer().computation(op)()
-print("Result is:",res)
-
+print("Result is:", res)
+# EOF
