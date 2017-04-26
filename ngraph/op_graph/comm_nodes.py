@@ -13,7 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis
+from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes
+from orderedset import OrderedSet
 import multiprocessing
 
 
@@ -211,6 +212,22 @@ class GatherRecvOp(RecvOp):
     def slices(self):
         return self._slices
 
+    @property
+    def send_nodes(self):
+        """
+        :return: iterable of send nodes
+        """
+        from ngraph.util.hetr_utils import get_iterable
+        return OrderedSet(i for i in get_iterable(self._send_node))
+
+    @send_nodes.setter
+    def send_nodes(self, new_send_nodes):
+        self._send_node = new_send_nodes
+
+    def send_node(self):
+        # make it work for general traversal in functions (e.g. find_recv())
+        return self.send_nodes
+
 
 class GPUQueueSendOp(SendOp):
 
@@ -232,6 +249,49 @@ class GPUQueueRecvOp(RecvOp):
     @property
     def queue(self):
         return self._queue
+
+
+class GPUCudaScatterSendOp(ScatterSendOp):
+
+    def __init__(self, from_node, to_node):
+        super(GPUCudaScatterSendOp, self).__init__(from_node, to_node)
+        self._shared_queues = list()
+        for i in range(len(to_node.metadata['device_id'])):
+            self._shared_queues.append(multiprocessing.Queue())
+        self.metadata['parallel'] = to_node.metadata['parallel']
+
+
+class GPUCudaScatterRecvOp(ScatterRecvOp):
+
+    def __init__(self, to_node, send_node, device_idx=None):
+        super(GPUCudaScatterRecvOp, self).__init__(to_node, send_node)
+        if device_idx:
+            self.idx = device_idx
+        else:
+            self.idx = 0
+        self._shared_queues = send_node._shared_queues
+
+
+class GPUCudaGatherSendOp(GatherSendOp):
+
+    def __init__(self, from_node, clone_node=None, device_idx=None):
+        super(GPUCudaGatherSendOp, self).__init__(from_node)
+        self.metadata['parallel'] = from_node.metadata['parallel']
+        self._shared_queues = list()
+        if clone_node:
+            self.idx = device_idx
+            self._shared_queues = clone_node.shared_queues
+        else:
+            self.idx = 0
+            for i in range(len(from_node.metadata['device_id'])):
+                self._shared_queues.append(multiprocessing.Queue())
+
+
+class GPUCudaGatherRecvOp(GatherRecvOp):
+
+    def __init__(self, from_node, to_node, send_node):
+        super(GPUCudaGatherRecvOp, self).__init__(from_node, to_node, send_node)
+        self._shared_queues = send_node._shared_queues
 
 
 class CPUQueueSendOp(SendOp):
@@ -301,3 +361,24 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
     @property
     def shared_queues(self):
         return self._shared_queues
+
+
+# TODO : WIP. This will be updated once we define the logic in issue #1378
+class AllReduceOp(CommunicationOp):
+
+    def __init__(self, x, func, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
+        reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
+        self.func = func
+        self.reduction_axes = reduction_axes
+        super(AllReduceOp, self).__init__(node=x, axes=out_axes, dtype=dtype, **kwargs)
+
+
+class MeanAllReduceOp(AllReduceOp):
+
+    def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
+        super(MeanAllReduceOp, self).__init__(x=x,
+                                              func='mean',
+                                              reduction_axes=reduction_axes,
+                                              out_axes=out_axes,
+                                              dtype=dtype,
+                                              **kwargs)
