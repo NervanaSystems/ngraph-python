@@ -31,7 +31,6 @@ from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
-from ngraph.transformers.passes.nviz import VizPass
 
 
 def build_transformer(name):
@@ -45,7 +44,7 @@ def build_transformer(name):
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa
-            transformer = make_transformer_factory('gpu')()
+            transformer = make_transformer_factory('gpu', device_id=int(name[-1]))()
         except ImportError:
             assert False, "Fatal: Unable to initialize GPU, " \
                           "but GPU transformer was requested."
@@ -129,7 +128,6 @@ class AsyncTransformer(Process):
 
         update_comm_deps(returns)
         c = AsyncComputation(self)
-
         self.results_qs[c.comp_id] = self.manager.Queue()
         self.computation_builds[c.comp_id] = (returns, placeholders)
         self.computation_q.put(c.comp_id)
@@ -226,7 +224,7 @@ class HetrComputation(Computation):
 
         # Do Hetr passes
         pass_ops = new_returns | OrderedSet(self.computation.parameters)
-        for graph_pass in self.transformer.passes:
+        for graph_pass in self.transformer.graph_passes:
             pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
             graph_pass.do_pass(pass_ops, self.transformer)
 
@@ -306,9 +304,11 @@ class HetrTransformer(Transformer):
         self.is_closed = False
         self.child_transformers = dict()
         self.send_nodes = OrderedSet()
-        self.passes = [DeviceAssignPass(hetr=self, default_device='cpu', default_device_id=0),
-                       CommunicationPass(self.send_nodes),
-                       DistributedPass(self.send_nodes)]
+        self.graph_passes = [DeviceAssignPass(hetr=self,
+                                              default_device='cpu',
+                                              default_device_id=0),
+                             CommunicationPass(self.send_nodes),
+                             DistributedPass(self.send_nodes)]
 
     def close(self):
         if self.is_closed:
@@ -346,15 +346,15 @@ class HetrTransformer(Transformer):
         hetr_comp = HetrComputation(self, computation)
         return hetr_comp
 
+    """
+    These APIs are internally used between regular transformers and
+    their computations.  HeTr has no use or need for them but is
+    required to provide the functions by the metaclass in order
+    to be a 'Transformer', which it wants to be in order to expose
+    the user-facing parts of the Transformer API.
+    """
     def initialize(self):
-        # print("Dummy Initialize, skipping")
         pass
-
-    def register_graph_pass(self, graph_pass):
-        if isinstance(graph_pass, VizPass):
-            self.passes.append(graph_pass)
-        else:
-            raise RuntimeError("Unsupported Graph Pass for Hetr: {}".format(graph_pass))
 
     def device_buffer_storage(self, bytes, dtype, name):
         assert False, "Should not be used, TODO cleanup"
@@ -372,8 +372,7 @@ class HetrTransformer(Transformer):
         assert False, "Should not be used, TODO cleanup"
 
     def transform_ordered_ops(self, ordered_ops, name):
-        # print(name, ordered_ops)
-        return name + str(1)
+        pass
 
     def finish_transform(self):
         assert False, "Should not be used, TODO cleanup"
