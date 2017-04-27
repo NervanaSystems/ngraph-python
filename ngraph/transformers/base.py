@@ -52,6 +52,16 @@ class Computation(NameableValue):
         self.computation = computation
         self.computation_name = None
         self.executor = None
+        self.pool_params = dict()
+        self.pool_slices = dict()
+        self.conv_params = dict()
+        self.conv_slices = dict()
+        self.send_nodes = []
+        self.recv_nodes = []
+        self.scatter_send_nodes = []
+        self.scatter_recv_nodes = []
+        self.gather_send_nodes = []
+        self.gather_recv_nodes = []
 
     def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)
@@ -370,13 +380,13 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.start_transform_allocate()
         for device_buffer in self.device_buffers:
             device_buffer.transform_allocate()
-        self.transform_allocate_ops(all_ops)
         self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
         for comp in self.computations:
             comp.computation_name = \
-                self.transform_ordered_ops(Op.ordered_ops([comp.computation]),
+                self.transform_ordered_ops(comp,
+                                           Op.ordered_ops([comp.computation]),
                                            name=comp.name)
         self.finish_transform()
         self.finalized = True
@@ -394,12 +404,14 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
 
     @abc.abstractmethod
-    def transform_ordered_ops(self, ordered_ops):
+    def transform_ordered_ops(self, computation, ordered_ops, name):
         """
         Generate code to compute ordered_ops.
 
         Arguments:
-        ordered_ops: Ops to compute
+            computation: The computation being compiled.
+            ordered_ops: Ops to compute
+            name: The name of the computation.
 
         Returns: Handle for generated code
         """
