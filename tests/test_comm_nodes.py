@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from ngraph.op_graph.op_graph import TensorValueOp
+from ngraph.factory.comm_node_factory import get_comm_pattern
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 import ngraph as ng
 import pytest
@@ -57,3 +59,52 @@ def test_calculate_new_axes_null_parallel_axis():
     new_axes = calculate_scatter_axes(axes=axes, scatter_axis=None, num_devices=1)
     # Checks null parallel axis. The axes calculated should have the same length as original
     assert new_axes.full_lengths == axes.full_lengths
+
+
+@pytest.mark.parametrize("from_node, to_node, expected_type", [
+    (None, None, None),
+    (
+        ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        None
+    ),
+    (
+        ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        ng.Op(metadata=dict(device='cpu', device_id='1', transformer='cpu1')),
+        'direct'
+    ),
+    (
+        ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        ng.Op(metadata=dict(device='gpu', device_id='0', transformer='gpu0')),
+        'direct'
+    ),
+    (
+        TensorValueOp(ng.constant(1),
+                      metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_B,
+              transformer=['cpu1', 'cpu2'])),
+        None
+    ),
+    (
+        TensorValueOp(ng.placeholder([ax_A, ax_B]),
+                      metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_B,
+                            transformer=['cpu1', 'cpu2'])),
+        'scatter'
+    ),
+    (
+        TensorValueOp(ng.placeholder([ax_A, ax_B]),
+                      metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
+                            transformer=['cpu1', 'cpu2'])),
+        'direct'
+    ),
+    (
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
+                            transformer=['cpu1', 'cpu2'])),
+        ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
+        'gather'
+    ),
+])
+def test_get_node_type(from_node, to_node, expected_type):
+    assert expected_type == get_comm_pattern(from_node, to_node)

@@ -318,8 +318,18 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.device_buffers = OrderedSet()
         self.graph_passes = None
 
-    def register_graph_pass(self, graph_pass):
-        self.graph_passes.append(graph_pass)
+    def register_graph_pass(self, graph_pass, position=None):
+        """
+        Register a graph pass to be run.
+
+        Arguments:
+            graph_pass (): The pass to register
+            position (int): insert index in the list of passes, append by default
+        """
+        if position:
+            self.graph_passes.insert(position, graph_pass)
+        else:
+            self.graph_passes.append(graph_pass)
 
     def run_registered_graph_passes(self, ops):
         for graph_pass in self.graph_passes:

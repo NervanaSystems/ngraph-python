@@ -34,7 +34,9 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
+    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -55,7 +57,8 @@ from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    RngFillKernel, SendKernel, RecvKernel
+    RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
+    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -65,11 +68,11 @@ from ngraph.transformers.gpu.gpulayout import gpu_layout_factory, GPUUnaryLayout
 import cachetools
 import numpy as np
 
-
 _none_slice = slice(None, None, None)
 
 
 class Function(TensorOp):
+
     def __init__(self, **kwargs):
         super(TensorOp, self).__init__(**kwargs)
         self.instructions = []
@@ -98,6 +101,7 @@ class ElementWiseKernel(GPUKernel):
         kernel (pycuda.driver.Function): Handle to the compiled GPU kernel
         shared_size (int): Size of shared memory needed by kernel
     """
+
     def __init__(self, transformer):
         super(ElementWiseKernel, self).__init__(transformer)
         self.ops_buffer = []
@@ -438,11 +442,27 @@ class GPUKernelGroup(object):
 
     @add_kernel.on_type(GPUQueueSendOp)
     def add_kernel(self, op):
-        self.kernels.append(SendKernel(self.transformer, op))
+        self.kernels.append(QueueSendKernel(self.transformer, op))
 
     @add_kernel.on_type(GPUQueueRecvOp)
     def add_kernel(self, op):
-        self.kernels.append(RecvKernel(self.transformer, op))
+        self.kernels.append(QueueRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaScatterSendOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaScatterSendKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaScatterRecvOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaScatterRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaGatherSendOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaGatherSendKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaGatherRecvOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaGatherRecvKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -600,6 +620,7 @@ class GPUDeviceBufferReference(DeviceBufferReference):
     """
     Analogous to NumPyDeviceBufferReference.
     """
+
     def __init__(self, transformer, **kwargs):
         super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
@@ -642,6 +663,7 @@ class GPUDeviceTensor(DeviceTensor):
     """
     Used to transform device tensor allocations. Analogous to NumPyDeviceTensor.
     """
+
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(GPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                               **kwargs)
@@ -868,6 +890,7 @@ class GPUDeviceTensor(DeviceTensor):
 
 
 class GPURuntime(object):
+
     def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
                  scratch_size=0):
 
@@ -877,7 +900,6 @@ class GPURuntime(object):
             sys.exit(PYCUDA_LOGIC_ERROR_CODE)
 
         self.device_id = device_id if device_id is not None else 0
-
         # check compute capability
         self.compute_capability = drv.Device(self.device_id).compute_capability()
         if self.compute_capability[0] < 3:
@@ -1006,7 +1028,7 @@ class GPUTransformer(Transformer):
             GPUTransformer.__runtime.close()
             GPUTransformer.__runtime = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, device_id=None, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
         layout_domain_pass = GenerateLayoutDomains(self)
         layout_constraints_pass = GenerateLayoutConstraints(self)
@@ -1022,10 +1044,11 @@ class GPUTransformer(Transformer):
         self.argmax_tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
+        self.device_id = device_id
 
     def initialize_runtime(self):
         if GPUTransformer.__runtime is None:
-            GPUTransformer.__runtime = GPURuntime()
+            GPUTransformer.__runtime = GPURuntime(device_id=self.device_id)
             atexit.register(GPUTransformer.close_gpu)
 
         self.runtime = GPUTransformer.__runtime
