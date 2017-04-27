@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
 from functools import wraps
 from collections import OrderedDict
 import ngraph.transformers as ngt
@@ -71,7 +70,7 @@ class Benchmark(object):
 
         return wrapper
 
-    def time(self, n_iterations, n_skip):
+    def time(self, n_iterations, n_skip, computation_name):
         """
         This runs _any_ computation repeatedly with data from feed_dict, and times it
 
@@ -88,12 +87,11 @@ class Benchmark(object):
             model_out_computation = transformer.add_computation(self.computation)
             for i in range(n_skip):
                 model_out_computation(feed_dict=feed_dict)
-
             for i in range(n_iterations):
                 Benchmark.marker.record_mark(start)
                 model_out_computation(feed_dict=feed_dict)
                 Benchmark.marker.record_mark(end)
-                times['cifar_msra_fprop'][i] = Benchmark.marker.get_time(start, end)
+                times[computation_name][i] = Benchmark.marker.get_time(start, end)
         return times
 
     @staticmethod
