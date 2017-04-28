@@ -1,3 +1,4 @@
+from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, tdcache, ContiguousOp, ReshapeOp
@@ -26,6 +27,8 @@ class FlexDECPass(PeepholeGraphPass):
         if isinstance(op, ReshapeOp):
             self.propagate_flex_entry = True
             self.flex_entry = op.tensor_description().buffer.flex_entry
+        if isinstance(op, DimshuffleOp):
+            op.tensor_description().buffer.flex_entry = self.flex_entry
 
 
 class ClearTensorDescriptions(GraphPass):
