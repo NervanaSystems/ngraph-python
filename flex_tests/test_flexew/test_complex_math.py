@@ -20,7 +20,8 @@ from ngraph.testing.flexutil import template_one_placeholder, id_func, MINIMUM_F
 pytestmark = pytest.mark.transformer_dependent("module")
 
 test_data_single_operand = (
-    # template:(operation, operand, expected_result, description)
+    # template: (ng_operation, [(operand, expected_result, *case_description)], test_description),
+    # *case_description is optional
 
     # test_exp
     (ng.exp, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Exponential function - overflow expected"),

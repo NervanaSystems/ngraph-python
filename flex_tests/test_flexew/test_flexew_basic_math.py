@@ -32,7 +32,8 @@ bug_1461 = pytest.mark.xfail(strict=True, reason="GitHub issue #1461, results of
                                                  "than for numpy, instead of vector - matrix is returned")
 
 test_assign_data = (
-    # template:(operand_to_assign, expected_result, description)
+    # template: ([(operand, expected_result, *case_description)], test_description),
+    # *case_description is optional
 
     # test_assign
     ([(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], "Assign function - underflow expected"),
