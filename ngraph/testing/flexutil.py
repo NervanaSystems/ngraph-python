@@ -21,6 +21,7 @@ from ngraph.testing import executor, assert_allclose
 MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
+
 def get_executor_result(arg_array1, arg_array2, ng_placeholder1, ng_placeholder2, ng_fun):
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as m_executor:
         result = m_executor(arg_array1, arg_array2)
@@ -112,7 +113,8 @@ def template_two_placeholders(operands, ng_fun):
     ng_placeholder1 = get_placeholder_from_operand(operands[0][0])
     ng_placeholder2 = get_placeholder_from_operand(operands[0][1])
     iterations = len(operands) != 1
-    with executor(ng_fun(ng_placeholder1, ng_placeholder2), ng_placeholder1, ng_placeholder2) as const_executor:
+    with executor(ng_fun(ng_placeholder1, ng_placeholder2),
+                  ng_placeholder1, ng_placeholder2) as const_executor:
         for i in operands:
             print("Operand 1: ", i[0])
             print("Operand 2: ", i[1])
@@ -128,7 +130,6 @@ def template_two_placeholders(operands, ng_fun):
                 assert flex_result == i[2]
             else:
                 assert_allclose(flex_result, i[2])
-
 
 
 def template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters):

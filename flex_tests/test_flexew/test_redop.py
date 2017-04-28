@@ -21,8 +21,8 @@ from ngraph.testing.flexutil import template_one_placeholder, template_two_place
 
 bug_1424 = pytest.mark.xfail(strict=True, reason="GitHub issue #1424, for ng.argmax and ng.argmin, "
                                                  "the values outside of the flex range are computed")
-bug_1461 = pytest.mark.xfail(strict=True, reason="GitHub issue #1461, ng.maximum and ng.minimum results are different "
-                                                 "than for numpy, instead of vector matrix is returned")
+bug_1461 = pytest.mark.xfail(strict=True, reason="GitHub issue #1461, results of some functions are different "
+                                                 "than for numpy, instead of vector - matrix is returned")
 
 test_data_single_operand = (
     # template: (ng_operation, [(operand, expected_result, *case_description)], test_description),
@@ -40,6 +40,7 @@ test_data_single_operand = (
               (np.array([0.4, 0.03, 0.44, 1.47]), 2.3398),
               (np.array([100, 2000, 3500.4, 10000]), 31.9990, "Array's elements and result overflow to 31.9990")],
      "Iterations sum of x"),
+    (ng.sum, [(np.array([1, 2, 14, 4, 5, 6, 7, 8, 9, -1]), 55)], "Redop sum function - values within flex range"),
 
     # test_prod
     (ng.prod, [(np.array([MINIMUM_FLEX_VALUE, 2.0]), MINIMUM_FLEX_VALUE)],
