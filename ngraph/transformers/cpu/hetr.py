@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
+from functools import reduce
 
 
 class HetrLocals(object):
     def __init__(self, send_nodes, recv_nodes,
                  scatter_send_nodes, scatter_recv_nodes,
                  gather_send_nodes, gather_recv_nodes,
-                 **kwargs):
+                 allreduce_nodes, **kwargs):
         super(HetrLocals, self).__init__(**kwargs)
         self.send_nodes = send_nodes
         self.recv_nodes = recv_nodes
@@ -26,6 +28,7 @@ class HetrLocals(object):
         self.scatter_recv_nodes = scatter_recv_nodes
         self.gather_send_nodes = gather_send_nodes
         self.gather_recv_nodes = gather_recv_nodes
+        self.allreduce_nodes = allreduce_nodes
 
     def queue_send(self, send_id):
         send_op = self.send_nodes[send_id]
@@ -80,3 +83,29 @@ class HetrLocals(object):
         q = scatter_recv_op.shared_queues[scatter_recv_op.idx]
         x = q.get()
         return x
+
+    def queue_allreduce(self, allreduce_id):
+        allreduce_op = self.allreduce_nodes[allreduce_id]
+        x_devicetensor = allreduce_op.args[0].value
+        x_nparr = x_devicetensor.get(None)
+        recv_buf = list()
+
+        # Send to all devices
+        for i in range(len(allreduce_op.metadata['device_id'])):
+            if i != allreduce_op.idx:
+                q = allreduce_op.shared_queues[i]
+                q.put(x_nparr)
+
+        # Receive from all devices
+        recv_buf.append(x_nparr)
+        q = allreduce_op.shared_queues[allreduce_op.idx]
+        for i in range(len(allreduce_op.metadata['device_id']) - 1):
+            recv_buf.append(q.get())
+
+        # Apply reduce function
+        if allreduce_op.reduce_func is 'sum':
+            output = reduce(lambda x, y: x + y, recv_buf)
+        elif allreduce_op.reduce_func is 'mean':
+            output = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
+
+        return output

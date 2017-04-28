@@ -86,10 +86,14 @@ class CommunicationOp(TensorOp):
 
     def __init__(self, node, args=None, axes=None, dtype=None):
         super(CommunicationOp, self).__init__(args=args, axes=axes, dtype=dtype)
-        self.metadata['device'] = node.metadata['device']
-        self.metadata['device_id'] = node.metadata['device_id']
-        self.metadata['transformer'] = node.metadata['transformer']
-        self.metadata['host_transformer'] = node.metadata['host_transformer']
+        self.metadata['device'] = node.metadata['device']\
+            if 'device' in node.metadata else None
+        self.metadata['device_id'] = node.metadata['device_id']\
+            if 'device_id' in node.metadata else None
+        self.metadata['transformer'] = node.metadata['transformer']\
+            if 'transformer' in node.metadata else None
+        self.metadata['host_transformer'] = node.metadata['host_transformer']\
+            if 'host_transformer' in node.metadata else None
 
     @property
     def is_communication_op(self):
@@ -321,7 +325,6 @@ class CPUQueueScatterSendOp(ScatterSendOp):
     def __init__(self, from_node, to_node):
         super(CPUQueueScatterSendOp, self).__init__(from_node, to_node)
         self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
-        self.comm_type = 'queue'
 
     @property
     def shared_queues(self):
@@ -366,19 +369,29 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
 # TODO : WIP. This will be updated once we define the logic in issue #1378
 class AllReduceOp(CommunicationOp):
 
-    def __init__(self, x, func, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
-        reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
-        self.func = func
-        self.reduction_axes = reduction_axes
-        super(AllReduceOp, self).__init__(node=x, axes=out_axes, dtype=dtype, **kwargs)
-
-
-class MeanAllReduceOp(AllReduceOp):
-
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
-        super(MeanAllReduceOp, self).__init__(x=x,
-                                              func='mean',
-                                              reduction_axes=reduction_axes,
-                                              out_axes=out_axes,
-                                              dtype=dtype,
-                                              **kwargs)
+        reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
+        self.reduction_axes = reduction_axes
+        super(AllReduceOp, self).__init__(node=x, args=(x,), axes=out_axes, dtype=dtype, **kwargs)
+
+
+class CPUQueueAllReduceOp(AllReduceOp):
+
+    def __init__(self, input_node, func=None, clone_node=None, device_idx=None):
+        # TODO: Do we need reduction_axes, out_axes?
+        super(CPUQueueAllReduceOp, self).__init__(x=input_node,
+                                                  out_axes=input_node.axes,
+                                                  dtype=input_node.dtype)
+        if clone_node:
+            self.idx = device_idx
+            self.reduce_func = clone_node.reduce_func
+            self._shared_queues = clone_node.shared_queues
+        else:
+            self.idx = 0
+            self.reduce_func = func
+            self._shared_queues =\
+                [multiprocessing.Queue() for i in input_node.metadata['device_id']]
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues

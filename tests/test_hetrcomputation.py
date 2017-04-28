@@ -14,12 +14,16 @@
 # ----------------------------------------------------------------------------
 import numpy as np
 import pytest
+from contextlib import closing
 from ngraph.testing import ExecutorFactory
 from orderedset import OrderedSet
 import ngraph as ng
+import ngraph.transformers as ngt
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass
+from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
 from multiprocessing import active_children
+import threading
 
 
 pytestmark = pytest.mark.hetr_only("module")
@@ -497,3 +501,56 @@ def test_gpu_graph(config):
         computation = ex.executor(x_plus_two, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 2)
+
+
+@pytest.mark.parametrize('config', [
+    {
+        'device_id': ('1', '2', '3'),
+        'x_input': [6, 3, 9],
+        'func': 'mean',
+        'results': [6, 6, 6],
+    },
+    {
+        'device_id': ('1', '2', '3', '4', '5'),
+        'x_input': [5, 6, 11, 13, 2],
+        'func': 'sum',
+        'results': [37, 37, 37, 37, 37],
+    },
+])
+def test_allreduce_op(config):
+    class myThread(threading.Thread):
+        def __init__(self, y):
+            threading.Thread.__init__(self)
+            self.y = y
+
+        def run(self):
+            with closing(ngt.make_transformer_factory('cpu')()) as t:
+                comp = t.computation(self.y)
+                self.result = comp()
+
+        def join(self):
+            threading.Thread.join(self)
+            return self.result
+
+    c = config
+    x = list()
+    y = list()
+    thread = list()
+    results = list()
+
+    with ng.metadata(device_id=c['device_id']):
+        for i in range(len(c['device_id'])):
+            x.append(ng.constant(c['x_input'][i]))
+
+    for i in range(len(c['device_id'])):
+        y.append(CPUQueueAllReduceOp(x[i], c['func'])
+                 if i == 0 else CPUQueueAllReduceOp(x[i], clone_node=y[0], device_idx=i))
+
+    for i in range(len(c['device_id'])):
+        thread.append(myThread(y[i]))
+        thread[i].start()
+
+    for i in range(len(c['device_id'])):
+        results.append(thread[i].join())
+
+    np.testing.assert_array_equal(results, c['results'])
