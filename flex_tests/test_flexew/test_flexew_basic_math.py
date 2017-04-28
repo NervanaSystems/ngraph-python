@@ -17,7 +17,8 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-from ngraph.testing.flexutil import template_one_placeholder, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE
+from ngraph.testing.flexutil import template_one_placeholder, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, id_func, \
+    template_two_placeholders, assert_allclose
 from ngraph.testing import executor
 
 pytestmark = pytest.mark.transformer_dependent("module")
@@ -28,124 +29,175 @@ bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower
                                                  "modulus and ZeroDivisionError clarification")
 bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
 
-EPSILON = 0.2
-x = ng.placeholder(())
-
-
 test_assign_data = (
     # template:(operand_to_assign, expected_result, description)
 
     # test_assign
-    (MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE, "Assign function - underflow expected"),
-    (MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE, "Assign function - overflow expected"),
-    (MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE, "Assign function of negative boundary value"),
-    (MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, "Assign function of positive boundary value"),
-    (0.4, 0.399993896484375, "Assign function of positive values from flex range - check high precision"),
+    ([(MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)], "Assign function - underflow expected"),
+    ([(MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE)], "Assign function - overflow expected"),
+    ([(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)], "Assign function of negative boundary value"),
+    ([(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Assign function of positive boundary value"),
+    ([(0.4, 0.399993896484375, "High precision check")],
+     "Assign function of positive values from flex range - check high precision"),
+    ([(1, 1),
+      (5, 1.9999, "Operand overflow to 1.9999"),
+      (10, 7.9997, "Operand overflow to 7.9997"),
+      (MINIMUM_FLEX_VALUE, -32, "Operand underflow to -32")],
+     "Iterations assign of x"),
 )
 
 test_data_single_operand = (
-    # template:(operation, operand, expected_result, description)
+    # template: (ng_operation, [(operand, expected_result, *case_description)], test_description),
+    # *case_description is optional
 
     # test_neg
-    (ng.negative, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Negate function - overflow expected"),
-    (ng.negative, [MINIMUM_FLEX_VALUE + 1], [MAXIMUM_FLEX_VALUE],
+    (ng.negative, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Negate function - overflow expected"),
+    (ng.negative, [(MINIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE)],
      "Negate function of negative boundary value inside of flex range"),
-    (ng.negative, [MAXIMUM_FLEX_VALUE], [MINIMUM_FLEX_VALUE + 1],
+    (ng.negative, [(MAXIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE + 1)],
      "Negate function of positive boundary value inside of flex range"),
     # test_sqrt
-    (ng.sqrt, [0], [0], "Square root of zero and zero"),
-    (ng.sqrt, [MAXIMUM_FLEX_VALUE], [181.015625], "Square root of positive boundary value"),
-    bug_1062((ng.sqrt, [MINIMUM_FLEX_VALUE], [np.nan], "Square root of negative boundary value - NaN expected")),
-    (ng.sqrt, [1, 124, 10000, 32000], [1, 1.4141, 2.8283, 5.6567], "Iterations sqrt(x)"),
+    bug_1062((ng.sqrt, [(0, np.NaN)], "Square root of zero and zero")),
+    (ng.sqrt, [(MAXIMUM_FLEX_VALUE, 181.015625, "High precision check")], "Square root of positive boundary value"),
+    bug_1062((ng.sqrt, [(MINIMUM_FLEX_VALUE, np.nan)], "Square root of negative boundary value - NaN expected")),
+    (ng.sqrt, [(1, 1),
+               (124, 1.4141, "Overflow of operand to 1.9999"),
+               (10000, 2.8283, "Overflow of operand to 7.9997"),
+               (32000, 5.6567, "Overflow of operand to 31.9990")],
+     "Iterations sqrt of x "),
 
     # test_abs
-    (ng.absolute, [MINIMUM_FLEX_VALUE], [MAXIMUM_FLEX_VALUE], "Absolute value from the flex range - overflow expected"),
-    (ng.absolute, [MAXIMUM_FLEX_VALUE - 2], [MAXIMUM_FLEX_VALUE - 2], "Absolute value outside of the flex range"),
-    (ng.absolute, [-1, 10000, -0.4, MINIMUM_FLEX_VALUE], [1, 1.9999, 0.3999, 15.9995], "Iterations abs(x)"),
+    (ng.absolute, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Absolute value from the flex range - overflow expected"),
+    (ng.absolute, [(MAXIMUM_FLEX_VALUE - 2, MAXIMUM_FLEX_VALUE - 2)], "Absolute value within of the flex range"),
+    (ng.absolute, [(-1, 1),
+                   (10000, 1.9999, "Overflow of operand to 1.9999"),
+                   (-0.4, 0.3999),
+                   (MINIMUM_FLEX_VALUE, 15.9995, "Overflow of operand to 15.9995")],
+     "Iterations abs of x"),
+    (ng.absolute, [(1, 1), (5, 1.99993896484), (-10, 7.99975585938), (22, 22)], "Iterations abs(x)"),
 )
 
 test_data_double_operand = (
-    # template:(operation, operand_1, operand_2, expected_result, description)
+    # template:(ng_operation, [(operand_1, operand_2, expected_result, *case_description)], test_description),
+    # *case_description is optional
 
     # test_add
-    (ng.add, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE], "Positive boundary value plus one - overflow expected"),
-    (ng.add, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE + 1], "Negative boundary value plus one"),
-    (ng.add,  [0, 1, 2, 3, 4], 1.5, [1.5, 1.99993896484375, 3.5, 4.5], "x + 1.5"),
+    (ng.add, [(MAXIMUM_FLEX_VALUE, 2, MAXIMUM_FLEX_VALUE)], "Positive boundary value plus one - overflow expected"),
+    (ng.add, [(MINIMUM_FLEX_VALUE, 1, MINIMUM_FLEX_VALUE + 1)], "Negative boundary value plus one"),
+    (ng.add, [(0, 1.5, 1.5),
+              (1, 1.5, 1.99993896484375, "Overflow of result to 1.9999"),
+              (2, 1.5, 3.5),
+              (3, 1.5, 4.5)],
+     "Iterations x + 1.5"),
 
     # test_subtraction
-    (ng.subtract, [MINIMUM_FLEX_VALUE], 1, [MINIMUM_FLEX_VALUE],
+    (ng.subtract, [(MINIMUM_FLEX_VALUE, 1, MINIMUM_FLEX_VALUE)],
      "Negative boundary value minus one - underflow expected"),
-    (ng.subtract, [MINIMUM_FLEX_VALUE], 2, [MINIMUM_FLEX_VALUE],
+    (ng.subtract, [(MINIMUM_FLEX_VALUE, 2, MINIMUM_FLEX_VALUE)],
      "Negative boundary value minus two - underflow expected"),
-    (ng.subtract, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE - 1], "Positive boundary value minus one"),
-    (ng.subtract, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE - 2], "Positive boundary value minus two"),
-    (ng.subtract, [10, 1000, 10000, 1], 0.4, [9.6, 15.5996, 31.999, 0.6015],  "Iterations x - 0.4"),
-    (ng.subtract, [10000, 5000, 2500, 1000, 750, 500, 250, 100, 75, 50, 25, 10, 1], 0.4,
-     [9999.5, 4999.5, 2500, 1000, 750, 500, 250, 100, 75, 50, 25, 10, 1],  "More complex Iterations x - 0.4"),
+    (ng.subtract, [(MAXIMUM_FLEX_VALUE, 1, MAXIMUM_FLEX_VALUE - 1)], "Positive boundary value minus one"),
+    (ng.subtract, [(MAXIMUM_FLEX_VALUE, 2, MAXIMUM_FLEX_VALUE - 2)], "Positive boundary value minus two"),
+    (ng.subtract, [(10, 0.4, 9.6),
+                   (1000, 0.4, 15.5996, "Overflow of operand 1 to 15.9995"),
+                   (10000, 0.4, 31.999, "Overflow of operand 1 to 63.9980"),
+                   (1, 0.4, 0.6015)],
+     "Iterations x - 0.4"),
+    (ng.subtract, [(10000, 0.4, 9999.5, "Overflow of result to 9999.5"),
+                   (5000, 0.4, 4999.5, "Overflow of result to 4999.5 "),
+                   (2500, 0.4, 2500, "Overflow of result to 2500"),
+                   (1000, 0.4, 1000, "Overflow of result to 1000"),
+                   (750, 0.4, 750, "Overflow of result to 750"),
+                   (500, 0.4, 500, "Overflow of result to 500"),
+                   (250, 0.4, 250, "Overflow of result to 250"),
+                   (100, 0.4, 100, "Overflow of result to 100"),
+                   (75, 0.4, 75, "Overflow of result to 75"),
+                   (50, 0.4, 50, "Overflow of result to 50"),
+                   (25, 0.4, 25, "Overflow of result to 25"),
+                   (10, 0.4, 10, "Overflow of result to 10"),
+                   (1, 0.4, 1, "Overflow of result to 1")],
+    "More complex iterations x - 0.4"),
 
     # test_multiplication
-    (ng.multiply, [MINIMUM_FLEX_VALUE], 2, [MINIMUM_FLEX_VALUE],
+    (ng.multiply, [(MINIMUM_FLEX_VALUE, 2, MINIMUM_FLEX_VALUE)],
      "Negative boundary value multiplied by two - underflow expected",),
-    (ng.multiply, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
+    (ng.multiply, [(MAXIMUM_FLEX_VALUE, 2, MAXIMUM_FLEX_VALUE)],
      "Positive boundary value multiplied by two - overflow expected",),
-    (ng.multiply, [MINIMUM_FLEX_VALUE], 0, [0], "Negative boundary value multiplied by zero equals zero"),
-    (ng.multiply, [MAXIMUM_FLEX_VALUE], 1, [MAXIMUM_FLEX_VALUE],
+    (ng.multiply, [(MINIMUM_FLEX_VALUE, 0, 0)], "Negative boundary value multiplied by zero equals zero"),
+    (ng.multiply, [(MAXIMUM_FLEX_VALUE, 1, MAXIMUM_FLEX_VALUE)],
      "Positive boundary value multiplied by one is the same"),
-    (ng.multiply, [0], 0, [0], "Zero multiplied by zero equals zero"),
-    (ng.multiply, [MINIMUM_FLEX_VALUE], -0.5, [MINIMUM_FLEX_VALUE * (-0.5)],
+    (ng.multiply, [(0, 0, 0)], "Zero multiplied by zero equals zero"),
+    (ng.multiply, [(MINIMUM_FLEX_VALUE, -0.5, MINIMUM_FLEX_VALUE * (-0.5))],
      "Negative sign value multiplied by negative sign value equals positive sign"),
-    (ng.multiply, [1, 1000, 2, -1000, 0.4], 10.1, [10.0996, 15.9995, 20.1992, -64, 4.0312],
+    (ng.multiply, [(1, 10.1, 10.0996),
+                   (1000, 10.1, 15.9995, "Overflow of operand 1 to 1.9999 and result to 15.999"),
+                   (2, 10.1, 20.1992,),
+                   (-1000, 10.1, -64, "Underflow of operand 1 to -8 and result to -64"),
+                   (0.4, 10.1, 4.0312)],
      "Iterations x * 10.1"),
 
     # test_division
-    (ng.divide, [MAXIMUM_FLEX_VALUE], 0.5, [MAXIMUM_FLEX_VALUE],
+    (ng.divide, [(MAXIMUM_FLEX_VALUE, 0.5, MAXIMUM_FLEX_VALUE)],
      "Positive boundary value division - overflow expected"),
-    (ng.divide, [MINIMUM_FLEX_VALUE], 0.5, [MINIMUM_FLEX_VALUE],
+    (ng.divide, [(MINIMUM_FLEX_VALUE, 0.5, MINIMUM_FLEX_VALUE)],
      "Negative boundary value division - underflow expected"),
-    bug_1227((ng.divide, [MAXIMUM_FLEX_VALUE], 3, [10922], "Positive boundary value division")),
-    bug_1227((ng.divide, [MINIMUM_FLEX_VALUE], 3, [-10922], "Negative boundary value division")),
-    (ng.divide, [-10, 0.4, MAXIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE, 0], 7, [-1.4285, 0.0571, 3.9998, -16, 0],
+    bug_1227((ng.divide, [(MAXIMUM_FLEX_VALUE, 3, 10922)], "Positive boundary value division")),
+    bug_1227((ng.divide, [(MINIMUM_FLEX_VALUE, 3, -10922)], "Negative boundary value division")),
+    (ng.divide, [(-10, 7, -1.4285),
+                 (0.4, 7, 0.0571),
+                 (MAXIMUM_FLEX_VALUE, 7, 3.9998, "Overflow operand 1 to 31.9990 and result to 3,9998"),
+                 (MINIMUM_FLEX_VALUE, 7, -16, "Underflow operand 1 to -128 and result to -16"),
+                 (0, 7, 0)],
      "Iterations x / 7"),
 
     # test_modulo
-    bug_1064((ng.mod, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE % 3], "Negative boundary value mod 3")),
-    (ng.mod, [MAXIMUM_FLEX_VALUE], 3, [MAXIMUM_FLEX_VALUE % 3], "Positive boundary value mod 3"),
-    bug_1064((ng.mod, [MAXIMUM_FLEX_VALUE], -3, [MAXIMUM_FLEX_VALUE % (-3)], "Positive boundary value mod -3")),
-    bug_1064((ng.mod, [2.1], 2, [0.09999847412109375], "Modulo of floating point")),
+    bug_1064((ng.mod, [(MINIMUM_FLEX_VALUE, 3, MINIMUM_FLEX_VALUE % 3)], "Negative boundary value mod 3")),
+    (ng.mod, [(MAXIMUM_FLEX_VALUE, 3, MAXIMUM_FLEX_VALUE % 3)], "Positive boundary value mod 3"),
+    bug_1064((ng.mod, [(MAXIMUM_FLEX_VALUE, -3, MAXIMUM_FLEX_VALUE % (-3))], "Positive boundary value mod -3")),
+    bug_1064((ng.mod, [(2.1, 2, 0.09999847412109375, "High precision check")], "Modulo of floating point")),
 
     # test_power
-    (ng.power, [MAXIMUM_FLEX_VALUE], 2, [MAXIMUM_FLEX_VALUE],
+    (ng.power, [(MAXIMUM_FLEX_VALUE, 2, MAXIMUM_FLEX_VALUE)],
      "Positive boundary value exponentiation - overflow expected"),
-    (ng.power, [MINIMUM_FLEX_VALUE], 3, [MINIMUM_FLEX_VALUE],
+    (ng.power, [(MINIMUM_FLEX_VALUE, 3, MINIMUM_FLEX_VALUE)],
      "Negative boundary value exponentiation - underflow expected"),
     # Not sure of this case, results should be tracked
-    (ng.power, [MAXIMUM_FLEX_VALUE], 0.4, [63.99609375], "Positive boundary value exponentiation"),
-    (ng.power, [MINIMUM_FLEX_VALUE], -2, [MINIMUM_FLEX_VALUE ** (-2)],
+    (ng.power, [(MAXIMUM_FLEX_VALUE, 0.4, 63.99609375, "High precision check")],
+     "Positive boundary value exponentiation"),
+    (ng.power, [(MINIMUM_FLEX_VALUE, -2, MINIMUM_FLEX_VALUE ** (-2))],
      "Negative boundary value negative exponentiation"),
-    (ng.power, [1, 5, -10, 22], 3, [1, 1.9999, -8, 31.999], "Iterations x ^ 3")
+    (ng.power, [(1, 3, 1),
+                (5, 3, 1.9999, "Underflow operand 1 and result to 1.9999"),
+                (-10, 3, -8, "Underflow operand 1 and result to -8"),
+                (22, 3, 31.999, "Overflow result to 31.999")],
+     "Iterations x ^ 3")
 )
 
 
-@pytest.mark.parametrize("operation, operand, expected_result, description", test_data_single_operand)
-def test_single_operand(transformer_factory, operation, operand, expected_result, description):
-    template_one_placeholder(operand, operation(x), x, expected_result, description)
+@pytest.mark.parametrize("operation, operands, test_name", test_data_single_operand, ids=id_func)
+def test_single_operand(transformer_factory, operation, operands, test_name):
+    template_one_placeholder(operands, operation)
 
 
-@pytest.mark.parametrize("operation, operand_1, operand_2, expected_result, description", test_data_double_operand)
-def test_double_operand(transformer_factory, operation, operand_1, operand_2, expected_result, description):
-    template_one_placeholder(operand_1, operation(x, operand_2), x, expected_result, description)
+@pytest.mark.parametrize("operation, operands, test_name", test_data_double_operand, ids=id_func)
+def test_double_operand(transformer_factory, operation, operands, test_name):
+    template_two_placeholders(operands, operation)
 
 
-@pytest.mark.parametrize("operand, expected_result, description", test_assign_data)
-def test_assign(transformer_factory, operand, expected_result, description):
+@pytest.mark.parametrize("operands, test_name", test_assign_data, ids=id_func)
+def test_assign(transformer_factory, operands, test_name):
     v = ng.variable(())
+    ng_placeholder = ng.placeholder(())
     vset = ng.sequential([
-        ng.assign(v, operand),
+        ng.assign(v, ng_placeholder),
         v
     ])
-    with executor(vset) as ex:
-        print(description)
-        vset_ex = ex()
-        print("flex: ", vset_ex)
-        print("expected: ", expected_result)
-        assert vset_ex == expected_result
+    iterations = len(operands) != 1
+    with executor(vset, ng_placeholder) as ex:
+        for i in operands:
+            flex_result = ex(i[0])
+            print("flex: ", flex_result)
+            print("expected: ", i[1])
+            if iterations:
+                assert_allclose(flex_result, i[1])
+            else:
+                assert flex_result == i[1]

@@ -51,43 +51,84 @@ def template_create_placeholders_for_multiplication(n, c, d):
     return X, Y
 
 
+def get_placeholder_from_operand(operand):
+    if not isinstance(operand, np.ndarray):
+        return ng.placeholder(())
+    else:
+        return ng.placeholder(ng.make_axes([ng.make_axis(length=operand.size)]))
+
+
 def id_func(param):
+    description = ""
     if isinstance(param, str):
         return param
     elif isinstance(param, FunctionType):
         return param.func_name.title()
+    elif isinstance(param, list):
+        if len(param) != 1:
+            description = " of iterating ("
+        for i in param:
+            description += " of {} equals {} | ".format(i[0], i[1])
+            if len(i) > 2:
+                description += ", because of {}".format(i[2])
+        if len(param) != 1:
+            return description + ")"
+
     return " "
 
 
-def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, description):
-    with executor(ng_fun, ng_placeholder) as const_executor:
-        print(description)
-        iterations = len(values) != 1
-        for value, expected_value in zip(values, expected_values):
-            flex = const_executor(value)
-            print("flex_value: ", flex)
-            print("expected_value: ", expected_value)
-            print("difference: ", flex - expected_value)
+def template_one_placeholder(operands, ng_fun):
+    print("first operand: ", operands[0][0])
+    print("second operand: ", operands[0][1])
+    if not isinstance(operands[0][0], np.ndarray):
+        ng_placeholder = ng.placeholder(())
+    else:
+        ng_placeholder = ng.placeholder(ng.make_axes([ng.make_axis(length=operands[0][0].size)]))
+
+    with executor(ng_fun(ng_placeholder), ng_placeholder) as const_executor:
+        print("operants: ", operands)
+        print("ng_fun: ", ng_fun)
+        print("ng_placeholder: ", ng_placeholder)
+        iterations = len(operands) != 1
+        for i in operands:
+            print(i)
+            print("Operand: ", i[0])
+            print("Expected result: ", i[1])
+            flex_result = const_executor(i[0])
+            if len(i) > 2:
+                print("Description: ", i[2])
+            print("flex_result: ", flex_result)
             if iterations:
-                assert_allclose(flex, expected_value)
+                assert_allclose(flex_result, i[1])
+            elif not isinstance(operands[0][0], np.ndarray):
+                assert(flex_result == i[1])
             else:
-                assert (flex == expected_value).all()
+                assert np.array_equal(flex_result, i[1])
 
 
-def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2,
-                              expected_values, description):
-    print (tuple_values[0])
-    with executor(ng_fun, ng_placeholder1, ng_placeholder2) as const_executor:
-        print(description)
-        for values, expected_value in zip(tuple_values, expected_values):
-            print (values[0])
-            print (values[1])
-            print (np.maximum(values[0], values[1]))
-            flex = const_executor(values[0], values[1])
-            print("flex_value: ", flex)
-            print("expected_value: ", expected_value)
-            print("difference: ", flex - expected_value)
-            assert flex == expected_value
+def template_two_placeholders(operands, ng_fun):
+    print("first operand: ", operands[0][0])
+    print("second operand: ", operands[0][1])
+    ng_placeholder1 = get_placeholder_from_operand(operands[0][0])
+    ng_placeholder2 = get_placeholder_from_operand(operands[0][1])
+    iterations = len(operands) != 1
+    with executor(ng_fun(ng_placeholder1, ng_placeholder2), ng_placeholder1, ng_placeholder2) as const_executor:
+        for i in operands:
+            print("Operand 1: ", i[0])
+            print("Operand 2: ", i[1])
+            print("Expected result: ", i[2])
+            flex_result = const_executor(i[0], i[1])
+            temporary_numpy = np.maximum(i[0], i[1])
+            print("flex_result: ", flex_result)
+            print("Temporary NumPy results: ", temporary_numpy)
+            print("difference: ", flex_result - i[2])
+            if iterations:
+                assert_allclose(flex_result, i[2])
+            elif not isinstance(operands[0][0], np.ndarray):
+                assert flex_result == i[2]
+            else:
+                assert_allclose(flex_result, i[2])
+
 
 
 def template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters):
