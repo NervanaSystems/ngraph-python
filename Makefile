@@ -29,7 +29,7 @@ STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
 TEST_OPTS := --timeout=600 --cov=ngraph
-TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
+TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests/
 TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
@@ -124,7 +124,7 @@ test_gpu: gpu_prepare test_prepare clean
 	py.test --transformer hetr -m "hetr_gpu_only" \
 	--junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
-	py.test --transformer gpu -m "transformer_dependent" --boxed -n auto \
+	py.test --transformer gpu -m "transformer_dependent" --boxed -n 2 \
 	--junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
