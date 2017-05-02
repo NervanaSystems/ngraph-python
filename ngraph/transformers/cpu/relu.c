@@ -79,7 +79,7 @@ mkldnn_netlist_t create_mkldnn_relu_fprop_primitives(
 mkldnn_netlist_t create_mkldnn_relu_bprop_primitives(
             mkldnn_engine_t engine,
             float* relu_src, float* relu_out, double slope,
-            mkldnn_netlist_t mkldnn_fprop_net, int src_size
+            float* relu_fprop_src, int src_size
         )
 {
     mkldnn_netlist_t mkldnn_net = create_mkldnn_netlist();
@@ -115,7 +115,7 @@ mkldnn_netlist_t create_mkldnn_relu_bprop_primitives(
                                    &mkldnn_memory_prim_user_dst);
     create_mkldnn_memory_primitive(mkl_src_dims, mkl_src_sizes, mkldnn_x,
                                    mkldnn_f32, engine,
-                                   mkldnn_fprop_net->fprop_src_addr,
+                                   relu_fprop_src,
                                    &mkldnn_memory_prim_user_fprop_src);
 
     const_mkldnn_primitive_t relu_dsts[] = { mkldnn_memory_prim_user_dst };
