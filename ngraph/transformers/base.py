@@ -389,7 +389,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         return self.__op_tensor_views[op.forwarded.tensor.forwarded.tensor_description()]
 
-    def get_tensor_view(self, op, host_tensor=None):
+    def get_tensor_view_value(self, op, host_tensor=None):
         """
         Returns the contents of the tensor view for op.
 
