@@ -65,13 +65,13 @@ if __name__ == "__main__":
     z = linear_layer(input, output_dim)
 
     label = C.input_variable((num_output_classes), np.float32)
-    loss = C.ops.cross_entropy_with_softmax(z, label)
-    eval_error = C.ops.classification_error(z, label)
+    loss = C.cross_entropy_with_softmax(z, label)
+    eval_error = C.classification_error(z, label)
 
     learning_rate = 0.05
     lr_schedule = C.learning_rate_schedule(learning_rate, C.UnitType.sample)
 
-    learner = C.learner.sgd(z.parameters, lr_schedule)
+    learner = C.sgd(z.parameters, lr_schedule)
     trainer = C.Trainer(z, (loss, eval_error), [learner])
 
     # ngraph
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     for i in range(0, number_of_iterations):
         for xs, ys in zip(features, labels):
             trainer.train_minibatch({input: [xs], label: [ys]})
-        training_loss = C.utils.get_train_loss(trainer)
+        training_loss = trainer.previous_minibatch_loss_average
         print("cntk iteration {0} -> loss: {1}".format(i, training_loss))
 
     # ngraph training
