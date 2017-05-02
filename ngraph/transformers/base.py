@@ -52,10 +52,7 @@ class Computation(NameableValue):
         self.computation = computation
         self.computation_name = None
         self.executor = None
-        self.pool_params = dict()
-        self.pool_slices = dict()
-        self.conv_params = dict()
-        self.conv_slices = dict()
+
         self.send_nodes = []
         self.recv_nodes = []
         self.scatter_send_nodes = []
@@ -522,9 +519,22 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             raise ValueError(
                 'Cannot create computations from a finalized transformer'
             )
-        result = Computation(self, computation)
+        result = self.make_computation(computation)
         self.computations.add(result)
         return result
+
+    def make_computation(self, computation):
+        """
+        Wrap in Computation or a transformer-specific subclass.
+
+        Args:
+            computation:
+
+        Returns:
+            Computation or a subclass.
+
+        """
+        return Computation(self, computation)
 
     def allocate(self):
         """

@@ -45,7 +45,7 @@ from ngraph.transformers.passes.cpufusion import FusionPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
-    set_transformer_factory
+    set_transformer_factory, Computation
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
@@ -141,6 +141,15 @@ class CPUPoolEngine(object):
                     firstI = x
                 lastI = x
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
+
+
+class CPUComputation(Computation):
+    def __init__(self, transformer, computation, **kwargs):
+        super(CPUComputation, self).__init__(transformer, computation, **kwargs)
+        self.pool_params = dict()
+        self.pool_slices = dict()
+        self.conv_params = dict()
+        self.conv_slices = dict()
 
 
 class CPUDeviceBufferStorage(DeviceBufferStorage):
@@ -866,6 +875,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         if devlist[buf_index] is None:
             devlist[buf_index] = np.empty_like(hb)
         devlist[buf_index][:] = hb
+
+    def make_computation(self, computation):
+        return CPUComputation(self, computation)
 
 
 set_transformer_factory(
