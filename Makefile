@@ -125,7 +125,7 @@ test_mkldnn:
 
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
-	py.test -m "not hetr_only" --boxed -n auto \
+	py.test -m "not hetr_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
