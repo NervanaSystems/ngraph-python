@@ -528,8 +528,8 @@ def test_allreduce_op(config):
                 comp = t.computation(self.y)
                 self.result = comp()
 
-        def join(self):
-            threading.Thread.join(self)
+        def get_result(self):
+            self.join()
             return self.result
 
     c = config
@@ -557,6 +557,6 @@ def test_allreduce_op(config):
         thread[i].start()
 
     for i in range(len(c['device_id'])):
-        results.append(thread[i].join())
+        results.append(thread[i].get_result())
 
     np.testing.assert_array_equal(results, c['results'])
