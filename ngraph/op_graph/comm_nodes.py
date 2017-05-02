@@ -86,14 +86,10 @@ class CommunicationOp(TensorOp):
 
     def __init__(self, node, args=None, axes=None, dtype=None):
         super(CommunicationOp, self).__init__(args=args, axes=axes, dtype=dtype)
-        self.metadata['device'] = node.metadata['device']\
-            if 'device' in node.metadata else None
-        self.metadata['device_id'] = node.metadata['device_id']\
-            if 'device_id' in node.metadata else None
-        self.metadata['transformer'] = node.metadata['transformer']\
-            if 'transformer' in node.metadata else None
-        self.metadata['host_transformer'] = node.metadata['host_transformer']\
-            if 'host_transformer' in node.metadata else None
+        self.metadata['device'] = node.metadata['device']
+        self.metadata['device_id'] = node.metadata['device_id']
+        self.metadata['transformer'] = node.metadata['transformer']
+        self.metadata['host_transformer'] = node.metadata['host_transformer']
 
     @property
     def is_communication_op(self):
@@ -259,36 +255,37 @@ class GPUCudaScatterSendOp(ScatterSendOp):
 
     def __init__(self, from_node, to_node):
         super(GPUCudaScatterSendOp, self).__init__(from_node, to_node)
-        self._shared_queues = list()
-        for i in range(len(to_node.metadata['device_id'])):
-            self._shared_queues.append(multiprocessing.Queue())
+        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
         self.metadata['parallel'] = to_node.metadata['parallel']
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class GPUCudaScatterRecvOp(ScatterRecvOp):
 
-    def __init__(self, to_node, send_node, device_idx=None):
+    def __init__(self, to_node, send_node):
         super(GPUCudaScatterRecvOp, self).__init__(to_node, send_node)
-        if device_idx:
-            self.idx = device_idx
-        else:
-            self.idx = 0
+        self.idx = 0
         self._shared_queues = send_node._shared_queues
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class GPUCudaGatherSendOp(GatherSendOp):
 
-    def __init__(self, from_node, clone_node=None, device_idx=None):
+    def __init__(self, from_node):
         super(GPUCudaGatherSendOp, self).__init__(from_node)
+        self.idx = 0
+        self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
         self.metadata['parallel'] = from_node.metadata['parallel']
-        self._shared_queues = list()
-        if clone_node:
-            self.idx = device_idx
-            self._shared_queues = clone_node.shared_queues
-        else:
-            self.idx = 0
-            for i in range(len(from_node.metadata['device_id'])):
-                self._shared_queues.append(multiprocessing.Queue())
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class GPUCudaGatherRecvOp(GatherRecvOp):
@@ -296,6 +293,10 @@ class GPUCudaGatherRecvOp(GatherRecvOp):
     def __init__(self, from_node, to_node, send_node):
         super(GPUCudaGatherRecvOp, self).__init__(from_node, to_node, send_node)
         self._shared_queues = send_node._shared_queues
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class CPUQueueSendOp(SendOp):
@@ -377,20 +378,14 @@ class AllReduceOp(CommunicationOp):
 
 class CPUQueueAllReduceOp(AllReduceOp):
 
-    def __init__(self, input_node, func=None, clone_node=None, device_idx=None):
+    def __init__(self, input_node, func=None):
         # TODO: Do we need reduction_axes, out_axes?
         super(CPUQueueAllReduceOp, self).__init__(x=input_node,
                                                   out_axes=input_node.axes,
                                                   dtype=input_node.dtype)
-        if clone_node:
-            self.idx = device_idx
-            self.reduce_func = clone_node.reduce_func
-            self._shared_queues = clone_node.shared_queues
-        else:
-            self.idx = 0
-            self.reduce_func = func
-            self._shared_queues =\
-                [multiprocessing.Queue() for i in input_node.metadata['device_id']]
+        self.idx = 0
+        self.reduce_func = func
+        self._shared_queues = [multiprocessing.Queue() for i in input_node.metadata['device_id']]
 
     @property
     def shared_queues(self):

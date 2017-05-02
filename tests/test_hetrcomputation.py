@@ -538,13 +538,19 @@ def test_allreduce_op(config):
     thread = list()
     results = list()
 
-    with ng.metadata(device_id=c['device_id']):
-        for i in range(len(c['device_id'])):
-            x.append(ng.constant(c['x_input'][i]))
+    with ng.metadata(device='cpu',
+                     device_id=c['device_id'],
+                     transformer='None',
+                     host_transformer='None'):
+        for i in c['x_input']:
+            x.append(ng.constant(i))
 
     for i in range(len(c['device_id'])):
-        y.append(CPUQueueAllReduceOp(x[i], c['func'])
-                 if i == 0 else CPUQueueAllReduceOp(x[i], clone_node=y[0], device_idx=i))
+        ar_op = CPUQueueAllReduceOp(x[i], c['func'])
+        if (i != 0):
+            ar_op.idx = i
+            ar_op._shared_queues = y[0].shared_queues
+        y.append(ar_op)
 
     for i in range(len(c['device_id'])):
         thread.append(myThread(y[i]))
