@@ -98,7 +98,7 @@ class HetrLocals(object):
         # Receive from all devices
         recv_buf.append(x_nparr)
         q = allreduce_op.shared_queues[allreduce_op.idx]
-        for i in range(len(allreduce_op.metadata['device_id']) - 1):
+        for i in range(len(allreduce_op.shared_queues) - 1):
             recv_buf.append(q.get())
 
         # Apply reduce function
