@@ -91,9 +91,8 @@ class HetrLocals(object):
         recv_buf = list()
 
         # Send to all devices
-        for i in range(len(allreduce_op.metadata['device_id'])):
+        for i, q in enumerate(allreduce_op.shared_queues):
             if i != allreduce_op.idx:
-                q = allreduce_op.shared_queues[i]
                 q.put(x_nparr)
 
         # Receive from all devices
