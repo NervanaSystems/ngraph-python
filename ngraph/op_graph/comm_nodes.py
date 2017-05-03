@@ -369,7 +369,16 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
 
 # TODO : WIP. This will be updated once we define the logic in issue #1378
 class AllReduceOp(CommunicationOp):
+    """
+    Represents an AllReduce op. Sets reduction axes and out axes.
+    TODO: revisit the need for reduction_axes and out_axes in HeTr.
 
+    Arguments:
+        x: The input node.
+        reduction_axes: The reduction axes.
+        out_axes: The output axes.
+        dtype: The data type.
+    """
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
         reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
         self.reduction_axes = reduction_axes
@@ -377,9 +386,15 @@ class AllReduceOp(CommunicationOp):
 
 
 class CPUQueueAllReduceOp(AllReduceOp):
+    """
+    Represents CPU-based queue implementation for AllReduce op. Sets reduction function and creates
+    shared queues.
 
+    Arguments:
+        x: The input node.
+        func: The reduction function, e.g. 'sum', 'mean'.
+    """
     def __init__(self, input_node, func=None):
-        # TODO: Do we need reduction_axes, out_axes?
         super(CPUQueueAllReduceOp, self).__init__(x=input_node,
                                                   out_axes=input_node.axes,
                                                   dtype=input_node.dtype)

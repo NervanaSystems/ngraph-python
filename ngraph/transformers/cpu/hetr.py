@@ -104,8 +104,8 @@ class HetrLocals(object):
 
         # Apply reduce function
         if allreduce_op.reduce_func is 'sum':
-            output = reduce(lambda x, y: x + y, recv_buf)
+            result = reduce(lambda x, y: x + y, recv_buf)
         elif allreduce_op.reduce_func is 'mean':
-            output = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
+            result = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
 
-        return output
+        return result
