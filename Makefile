@@ -105,7 +105,7 @@ test_flex: gpu_prepare test_prepare clean
 	@echo Running flex unit tests...
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	--junit-xml=testout_test_flex_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS_FLEX)
+	--timeout=1200 --cov=ngraph $(TEST_DIRS_FLEX)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export MKL_TEST_ENABLE=1
