@@ -14,10 +14,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-Convnet-Alexnet Benchmark with spelled out neon model framework in one file
+Convnet-overfeat Benchmark with spelled out neon model framework in one file
 https://github.com/soumith/convnet-benchmarks
 
-./alexnet.py
+./overfeat.py
 
 """
 
@@ -34,16 +34,16 @@ from ngraph.frontends.neon import loop_train, ax
 
 np.seterr(all='raise')
 
-parser = NgraphArgparser(description='Train convnet-alexnet model on random dataset')
+parser = NgraphArgparser(description='Train convnet-overfeat model on random dataset')
 parser.set_defaults()
 args = parser.parse_args()
 
-# Default batch_size for convnet-alexnet is 128.
+# Default batch_size for convnet-overfeat is 128.
 args.batch_size = 128
 args.num_iterations = 100
 
 # Setup data provider
-image_size = 224
+image_size = 231
 X_train = np.random.uniform(-1, 1, (args.batch_size, 3, image_size, image_size))
 y_train = np.ones(shape=(args.batch_size), dtype=np.int32)
 train_data = {'image': {'data': X_train,
@@ -58,20 +58,20 @@ ax.Y.length = 1000  # number of outputs of last layer.
 
 # Setup model
 seq1 = Sequential([
-          Convolution((11, 11, 64), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=3, strides=4),
-          Pool2D(3, strides=2),
-          Convolution((5, 5, 192), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=2),
-          Pool2D(3, strides=2),
-          Convolution((3, 3, 384), filter_init=GaussianInit(var=0.03),
+          Convolution((11, 11, 96), filter_init=GaussianInit(var=0.01),
+                   activation=Rectlin(), padding=0, strides=4),
+          Pool2D(2, strides=2),
+          Convolution((5, 5, 256), filter_init=GaussianInit(var=0.01),
+                   activation=Rectlin(), padding=0),
+          Pool2D(2, strides=2),
+          Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
                    activation=Rectlin(), padding=1),
-          Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
+          Convolution((3, 3, 1024), filter_init=GaussianInit(var=0.01),
                    activation=Rectlin(), padding=1),
-          Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
+          Convolution((3, 3, 1024), filter_init=GaussianInit(var=0.01),
                    activation=Rectlin(), padding=1),
-          Pool2D(3, strides=2),
-          Affine(nout=4096, weight_init=GaussianInit(var=0.01), activation=Rectlin()),
+          Pool2D(2, strides=2),
+          Affine(nout=3072, weight_init=GaussianInit(var=0.01), activation=Rectlin()),
           Affine(nout=4096, weight_init=GaussianInit(var=0.01), activation=Rectlin()),
           Affine(nout=1000, weight_init=GaussianInit(var=0.01), activation=Softmax())])
 
