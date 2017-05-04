@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 import ngraph as ng
 
@@ -5,15 +6,36 @@ import ngraph as ng
 np.random.seed(0)
 
 
-def test_sum(transformer_factory):
+@pytest.fixture(params=[10, 50, 75, 100])
+def sequence_length(request):
+    return request.param
+
+
+@pytest.fixture(params=[4, 16])
+def batch_size(request):
+    return request.param
+
+
+@pytest.fixture(params=[2, 4, 100])
+def num_units(request):
+    return request.param
+
+
+@pytest.fixture(params=[0, 1, 2])
+def extra_axes(request):
+    return request.param
+
+
+def test_sum(transformer_factory, num_units, sequence_length, batch_size, extra_axes):
     """
     There is a non-deterministic error in ng.sum with the gpu transformer. The test below should show it.
     :param transformer_factory: 
     :return: 
     """
 
-    # Mimic the output of a convolutional layer
-    shape = (256, 1, 1, 100, 4)
+    # Mimic the output of a convolutional layer (if extra_axes > 0)
+    # This doesn't seem to matter like I thought it did.
+    shape = tuple([num_units] + [1] * extra_axes + [sequence_length, batch_size])
     np_inp = np.random.uniform(-1, 1, shape)
 
     # Use an identity weight matrix on top of it
