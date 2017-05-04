@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
 
 import ngraph as ng
 
@@ -21,65 +22,59 @@ class OpsCompound:
     Bridging compoud operations between CNTK and ngraph.
     """
 
-    def cast_axes_for_compound_op(self, inputs):
-        left, right = inputs
+    def Dense(self, cntk_op, inputs):
+        """
+        Computes fully-connected layer with optional activation function.
 
-        left_dim = len(left.axes)
-        right_dim = len(right.axes)
+        Arguments:
+            inputs: List of inputs to this node.
 
-        # pad left and right axis to be the same length, align right
-        result_dim = max(left_dim, right_dim)
-        left_axes_pad = [
-            ng.make_axis(length=1) for _ in range(result_dim - left_dim)
-        ] + list(left.axes)
-        right_axes_pad = [
-            ng.make_axis(length=1) for _ in range(result_dim - right_dim)
-        ] + list(right.axes)
-        result_axes = [
-            ng.make_axis(length=max(l.length, r.length))
-            for l, r in zip(left_axes_pad, right_axes_pad)
-        ]
+        Returns:
+            A ngraph Op.
+        """
+        return_op = cntk_op.block_root.uid
 
-        # broadcast left / right, introducing dummy length 1 axes
-        left = ng.broadcast(left, left_axes_pad)
-        right = ng.broadcast(right, right_axes_pad)
+        block_ops = []
+        stack = [cntk_op.block_root]
+        while stack:
+            node = stack.pop()
+            node = node.root_function
 
-        # make two-way map of lr matching axes and map for result axes
-        lr_axes_map = dict()
-        result_axes_map = dict()
-        for l, r, re in zip(left.axes, right.axes, result_axes):
-            lr_axes_map[l] = r
-            lr_axes_map[r] = l
-            result_axes_map[l] = re
-            result_axes_map[r] = re
-
-        # get left / right slice
-        left_slice = []
-        right_slice = []
-        for l, r in zip(left.axes, right.axes):
-            if l.length == 1 and r.length != 1:
-                left_slice.append(0)
+            if node in block_ops:
+                continue
             else:
-                left_slice.append(slice(None))
-            if r.length == 1 and l.length != 1:
-                right_slice.append(0)
-            else:
-                right_slice.append(slice(None))
+                block_ops.append(node)
 
-        # perform slicing
-        left_sliced = ng.tensor_slice(left, left_slice)
-        right_sliced = ng.tensor_slice(right, right_slice)
+            for i in node.inputs:
+                if i.is_output:
+                    stack.append(i.owner)
 
-        # now cast the right_sliced to left_sliced from the axis map
-        right_casted_axes = []
-        for r in right_sliced.axes:
-            if r in lr_axes_map and lr_axes_map[r] in left_sliced.axes:
-                right_casted_axes.append(lr_axes_map[r])
-            else:
-                right_casted_axes.append(r)
-        right_sliced_casted = ng.cast_axes(right_sliced, right_casted_axes)
+        imported_ops = dict()
+        while block_ops:
+            node = block_ops.pop()
+            node_inputs = []
+            for i in node.inputs:
+                if i.is_placeholder:
+                    temp = next(iter([
+                        v for v in inputs if not isinstance(v, ng.AssignableTensorOp)
+                    ]))
+                elif i.is_output:
+                    temp = imported_ops.get(i.owner.root_function.uid)
+                else:
+                    temp = next(iter([
+                        v for v in inputs if v.name == i.uid
+                    ]))
 
-        return left_sliced, right_sliced_casted
+                if temp is not None:
+                    node_inputs.append(temp)
+                else:
+                    raise ValueError("Unknown input: " + i.uid)
+            try:
+                imported_ops[node.uid] = getattr(self, node.op_name)(node, node_inputs)
+            except AttributeError:
+                raise TypeError("Unknown operation: " + node.op_name)
+
+        return imported_ops[return_op]
 
     def CrossEntropyWithSoftmax(self, cntk_op, inputs):
         """
@@ -91,14 +86,16 @@ class OpsCompound:
         Returns:
             A ngraph Op.
         """
-        cast_0, cast_1 = self.cast_axes_for_compound_op(inputs)
+        cast_0, cast_1 = inputs
 
-        if isinstance(cast_0, ng.AssignableTensorOp):
-            cast_1 = ng.softmax(cast_1)
-        else:
-            cast_0 = ng.softmax(cast_0)
+        if cast_0.axes.lengths != cast_1.axes.lengths:
+            cast_0 = ng.Transpose(cast_0)
+        assert cast_0.axes.lengths == cast_1.axes.lengths
 
-        return ng.cross_entropy_multi(cast_0, cast_1).named(cntk_op.uid)
+        cast_0 = ng.cast_axes(cast_0, axes=cast_1.axes)
+        loss = ng.cross_entropy_multi(ng.softmax(cast_0), cast_1)
+
+        return ng.mean(loss, out_axes=()).named(cntk_op.uid)
 
     def Combine(self, cntk_op, inputs):
         """
@@ -110,4 +107,4 @@ class OpsCompound:
         Returns:
             A ngraph Op.
         """
-        return ng.stack(inputs, ng.make_axis(len(inputs)))
+        return ng.stack(inputs, ng.make_axis(len(inputs))).named(cntk_op.uid)
