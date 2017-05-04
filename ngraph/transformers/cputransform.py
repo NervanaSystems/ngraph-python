@@ -378,9 +378,9 @@ class CPUCodeGenerator(PyGen):
                     op.index, inputs, outputs, op.slope)
 
     @allocate_op.on_type(BpropReluOp)
-    def allocate_op(self, op, outputs, delta):
-        self.append("mkldnn.init_relu_bprop({}, arrE={}, arrD={}, slope={})",
-                    op.index, delta, outputs, op.fprop.slope)
+    def allocate_op(self, op, outputs, delta, fprop_input):
+        self.append("mkldnn.init_relu_bprop({}, arrE={}, arrD={}, slope={}, fprop_input={})",
+                    op.index, delta, outputs, op.fprop.slope, fprop_input)
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -496,8 +496,9 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.fprop_relu({}, {}, {}, {})", op.index, inputs, outputs, op.slope)
 
     @generate_op.on_type(BpropReluOp)
-    def generate_op(self, op, outputs, delta):
-        self.append("mkldnn.bprop_relu({}, {}, {}, {})", op.index, delta, outputs, op.fprop.slope)
+    def generate_op(self, op, outputs, delta, fprop_input):
+        self.append("mkldnn.bprop_relu({}, {}, {}, {}, {})", op.index, delta,
+                    outputs, op.fprop.slope, fprop_input)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):

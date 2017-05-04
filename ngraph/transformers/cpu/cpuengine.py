@@ -438,7 +438,7 @@ class Mkldnn(object):
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
-    def init_relu_bprop(self, index, arrE, arrD, slope):
+    def init_relu_bprop(self, index, arrE, arrD, slope, fprop_input):
         if (self.mkldnn_enabled):
             if (self.mkldnn_verbose):
                 print("Relu Input: ", len(arrE.shape), arrE.shape,
@@ -452,11 +452,12 @@ class Mkldnn(object):
                     self.mkldnn_engine, arrE.ctypes.data, arrD.ctypes.data,
                     slope, self.mkldnn_relu_fprop_netlist[index], input_size)
 
-    def bprop_relu(self, index, inputs, out, slope):
+    def bprop_relu(self, index, inputs, out, slope, fprop_input):
         if (self.mkldnn_enabled and index in self.mkldnn_relu_bprop_netlist):
             self.run_mkldnn_netlist_fn(self.mkldnn_relu_bprop_netlist[index])
         else:
-            np.add(inputs * np.greater(inputs, 0), inputs * slope * np.less(inputs, 0), out=out)
+            np.add(inputs * np.greater(fprop_input, 0),
+                   inputs * slope * np.less(fprop_input, 0), out=out)
 
 
 def update_conv(conv_slices, I, E, U):
