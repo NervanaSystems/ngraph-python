@@ -98,13 +98,13 @@ class Benchmark(object):
     def print_benchmark_results(benchmarks):
         for stat in benchmarks:
             times = np.array(benchmarks[stat].values())
-            header = ('Func', 'Sum', 'Mean', 'Min', 'Max', 'Units')
+            header = ('Func', 'Sum', 'Mean', 'Min', 'Max', 'Median', 'Units')
             formatter = '| {:^20} ' * len(header) + '|'
 
             head_str = formatter.format(*header)
             sep = '-' * len(head_str)
             results = (stat, times.sum(), times.mean(),
-                       times.min(), times.max(), 'msec')
+                       times.min(), times.max(), np.median(times), 'msec')
             results_str = formatter.format(*results)
             print(sep)
             print(head_str)
