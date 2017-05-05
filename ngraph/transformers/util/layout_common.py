@@ -69,15 +69,15 @@ def split_points_to_groups(split_points, num_axes):
 @cached(cache=LRUCache(maxsize=100))
 def get_split_groups(num_axes, num_groups):
     num_splits = num_groups - 1
-    split_points = [(i + 1) for i in range(num_splits)]
+    split_points = list(reversed([(num_axes - (i + 1)) for i in range(num_splits)]))
     results = []
 
-    for split in reversed(tuple(range(num_splits))):
-        limit = num_axes if split == (num_splits - 1) else split_points[split + 1]
+    for split in tuple(range(num_splits)):
+        limit = 0 if split == 0 else split_points[split - 1]
 
-        while split_points[split] < (limit - 1):
+        while split_points[split] > (limit + 1):
             results.append(split_points_to_groups(split_points, num_axes))
-            split_points[split] += 1
+            split_points[split] -= 1
 
     results.append(split_points_to_groups(split_points, num_axes))
 
@@ -172,7 +172,9 @@ class StridedLayoutAssignment(LayoutAssignment):
 
         # Need to divide op axes into `max_out_axes` sets
         if len(axes_list) > max_out_axes:
-            split_points = [(i + 1) for i in range(max_out_axes - 1)]
+            num_splits = max_out_axes - 1
+            num_axes = len(axes_list)
+            split_points = list(reversed([(num_axes - (i + 1)) for i in range(num_splits)]))
             layout = split_points_to_groups(split_points, len(axes_list))
         else:
             layout = [[i] for i in range(len(axes_list))]
