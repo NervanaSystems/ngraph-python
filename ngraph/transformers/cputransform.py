@@ -49,7 +49,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
-    CPUQueueScatterRecvOp
+    CPUQueueScatterRecvOp, CPUQueueAllReduceOp
 
 
 class CPUConvEngine(object):
@@ -285,6 +285,7 @@ class CPUCodeGenerator(PyGen):
         self.scatter_recv_nodes = []
         self.gather_send_nodes = []
         self.gather_recv_nodes = []
+        self.allreduce_nodes = []
 
     def name(self, x):
         if isinstance(x, CPUDeviceBufferStorage):
@@ -661,6 +662,12 @@ class CPUCodeGenerator(PyGen):
         self.append("{}[...] = self.scatter_recv_from_queue_scatter_send({})",
                     out, scatter_recv_id)
 
+    @generate_op.on_type(CPUQueueAllReduceOp)
+    def generate_op(self, op, out, *args):
+        allreduce_id = len(self.allreduce_nodes)
+        self.allreduce_nodes.append(op)
+        self.append("{}[...] = self.queue_allreduce({})", out, allreduce_id)
+
 
 class CPUTransformer(Transformer):
     """
@@ -802,7 +809,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
                            scatter_send_nodes=self.compute_code.scatter_send_nodes,
                            scatter_recv_nodes=self.compute_code.scatter_recv_nodes,
                            gather_send_nodes=self.compute_code.gather_send_nodes,
-                           gather_recv_nodes=self.compute_code.gather_recv_nodes)
+                           gather_recv_nodes=self.compute_code.gather_recv_nodes,
+                           allreduce_nodes=self.compute_code.allreduce_nodes)
             computation.executor = executor
 
     def allocate_storage(self):
