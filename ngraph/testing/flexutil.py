@@ -79,20 +79,14 @@ def id_func(param):
 
 
 def template_one_placeholder(operands, ng_fun):
-    print("first operand: ", operands[0][0])
-    print("second operand: ", operands[0][1])
     if not isinstance(operands[0][0], np.ndarray):
         ng_placeholder = ng.placeholder(())
     else:
         ng_placeholder = ng.placeholder(ng.make_axes([ng.make_axis(length=operands[0][0].size)]))
 
     with executor(ng_fun(ng_placeholder), ng_placeholder) as const_executor:
-        print("operants: ", operands)
-        print("ng_fun: ", ng_fun)
-        print("ng_placeholder: ", ng_placeholder)
         iterations = len(operands) != 1
         for i in operands:
-            print(i)
             print("Operand: ", i[0])
             print("Expected result: ", i[1])
             flex_result = const_executor(i[0])
@@ -108,8 +102,6 @@ def template_one_placeholder(operands, ng_fun):
 
 
 def template_two_placeholders(operands, ng_fun):
-    print("first operand: ", operands[0][0])
-    print("second operand: ", operands[0][1])
     ng_placeholder1 = get_placeholder_from_operand(operands[0][0])
     ng_placeholder2 = get_placeholder_from_operand(operands[0][1])
     iterations = len(operands) != 1
@@ -120,9 +112,7 @@ def template_two_placeholders(operands, ng_fun):
             print("Operand 2: ", i[1])
             print("Expected result: ", i[2])
             flex_result = const_executor(i[0], i[1])
-            temporary_numpy = np.maximum(i[0], i[1])
             print("flex_result: ", flex_result)
-            print("Temporary NumPy results: ", temporary_numpy)
             print("difference: ", flex_result - i[2])
             if iterations:
                 assert_allclose(flex_result, i[2])
