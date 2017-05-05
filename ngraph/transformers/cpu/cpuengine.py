@@ -60,6 +60,8 @@ class Mkldnn(object):
                  ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_conv_bprop_primitives_fn.restype = ctypes.c_void_p
             self.create_mkldnn_pool_fprop_primitives_fn = \

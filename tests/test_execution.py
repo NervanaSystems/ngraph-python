@@ -997,6 +997,21 @@ def test_argmax(transformer_factory):
         ng.testing.assert_allclose(baseline, expected)
 
 
+def test_fill_slice(transformer_factory):
+    axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=8)])
+    a = ng.placeholder(axes=axes)
+    b = ng.sequential([ng.fill(a[:, 1], 0), ng.value_of(a)])
+
+    with ExecutorFactory() as ex:
+        func = ex.executor(b, a)
+        baseline = func(np.array([[1, 2, 3, 4, 5, 6, 7, 8],
+                                  [8, 7, 6, 5, 4, 3, 2, 1]],
+                                 dtype=np.float32))
+        expected = np.array([[1, 0, 3, 4, 5, 6, 7, 8],
+                             [8, 0, 6, 5, 4, 3, 2, 1]])
+        ng.testing.assert_allclose(baseline, expected)
+
+
 def test_empty_finalize():
     """Evaluating an empty CPUTransformer shouldn't raise any exceptions."""
     with ExecutorFactory() as ex:
