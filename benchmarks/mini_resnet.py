@@ -77,7 +77,8 @@ class f_module(object):
 
 
 class mini_residual_network(Sequential):
-    def __init__(self, inputs, dataset, stage_depth, batch_norm=False, activation=False, preprocess=False):
+    def __init__(self, inputs, dataset, stage_depth,
+                 batch_norm=False, activation=False, preprocess=False):
         nfms = [2**(stage + 4) for stage in sorted(list(range(3)) * stage_depth)]
         strides = [1 if cur == prev else 2 for cur, prev in zip(nfms[1:], nfms[:-1])]
         layers = []
@@ -99,7 +100,7 @@ class mini_residual_network(Sequential):
         if dataset == 'cifar10':
             ax.Y.length = 10
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                batch_norm=batch_norm, activation=Softmax()))
+                                 batch_norm=batch_norm, activation=Softmax()))
         elif dataset == 'i1k':
             ax.Y.length = 1000
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
@@ -110,7 +111,8 @@ class mini_residual_network(Sequential):
         self.layers = layers
 
 
-def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False, activation=True, preprocess=False):
+def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False,
+                    activation=True, preprocess=False):
     return mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
 
 
@@ -125,7 +127,7 @@ def get_fake_data(dataset, batch_size, n_iter):
     return inputs, train_data, train_set
 
 
-def run_cifar_benchmark(dataset='cifar10',n_iter=10, n_skip=1, batch_size=128,
+def run_cifar_benchmark(dataset='cifar10', n_iter=10, n_skip=1, batch_size=128,
                         transformer_type='cpu', bprop=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
     model = get_mini_resnet(inputs, dataset)
@@ -133,7 +135,8 @@ def run_cifar_benchmark(dataset='cifar10',n_iter=10, n_skip=1, batch_size=128,
     # Running forward propagation
     fprop_computation_op = ng.computation(model(inputs['image']), 'all')
     benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type)
-    Benchmark.print_benchmark_results(benchmark_fprop.time(n_skip, n_iter, dataset+'_msra_fprop'))
+    Benchmark.print_benchmark_results(benchmark_fprop.time(n_skip, n_iter,
+                                                           dataset + '_msra_fprop'))
 
     if bprop:
         optimizer = GradientDescentMomentum(0.01, 0.9)
@@ -144,7 +147,7 @@ def run_cifar_benchmark(dataset='cifar10',n_iter=10, n_skip=1, batch_size=128,
         batch_cost_computation_op = ng.computation(batch_cost, "all")
 
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs, transformer_type)
-        Benchmark.print_benchmark_results(benchmark.time(n_skip, n_iter, dataset+'_msra_bprop'))
+        Benchmark.print_benchmark_results(benchmark.time(n_skip, n_iter, dataset + '_msra_bprop'))
 
 
 if __name__ == "__main__":
