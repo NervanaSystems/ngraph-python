@@ -77,7 +77,7 @@ class f_module(object):
 
 
 class mini_residual_network(Sequential):
-    def __init__(self, inputs, dataset, stage_depth, batch_norm=False, activation=True, preprocess=False):
+    def __init__(self, inputs, dataset, stage_depth, batch_norm=False, activation=False, preprocess=False):
         nfms = [2**(stage + 4) for stage in sorted(list(range(3)) * stage_depth)]
         strides = [1 if cur == prev else 2 for cur, prev in zip(nfms[1:], nfms[:-1])]
         layers = []
@@ -110,7 +110,7 @@ class mini_residual_network(Sequential):
         self.layers = layers
 
 
-def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False, activation=False, preprocess=False):
+def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False, activation=True, preprocess=False):
     return mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
 
 
