@@ -6,31 +6,32 @@ import ngraph as ng
 np.random.seed(0)
 
 
-@pytest.fixture(params=[10, 50, 75, 100])
+@pytest.fixture(params=[50, 75, 100])
 def sequence_length(request):
     return request.param
 
 
-@pytest.fixture(params=[4, 16])
+@pytest.fixture(params=[16])
 def batch_size(request):
     return request.param
 
 
-@pytest.fixture(params=[2, 4, 100])
+@pytest.fixture(params=[2, 4])
 def num_units(request):
     return request.param
 
 
-@pytest.fixture(params=[0, 1, 2])
+@pytest.fixture(params=[0, 1])
 def extra_axes(request):
     return request.param
 
 
 def test_sum(transformer_factory, num_units, sequence_length, batch_size, extra_axes):
     """
-    There is a non-deterministic error in ng.sum with the gpu transformer. The test below should show it.
-    :param transformer_factory: 
-    :return: 
+    There is a non-deterministic error in ng.sum with the gpu transformer. The test below
+    should show it.
+    :param transformer_factory:
+    :return:
     """
 
     # Mimic the output of a convolutional layer (if extra_axes > 0)
@@ -69,7 +70,9 @@ def test_sum(transformer_factory, num_units, sequence_length, batch_size, extra_
     f = t.computation([y, x])
     y_val, x_val = f()
 
-    assert np.allclose(x_val.ravel(), np_x.ravel(), atol=1e-5), "Max difference: {}".format(np.max(np.abs(x_val - np_x)))
-    assert np.allclose(y_val, np_y, atol=1e-5), "Max difference: {}".format(np.max(np.abs(y_val - np_y)))
-
-
+    assert np.allclose(x_val.ravel(),
+                       np_x.ravel(),
+                       atol=1e-5), "Max difference: {}".format(np.max(np.abs(x_val - np_x)))
+    assert np.allclose(y_val,
+                       np_y,
+                       atol=1e-5), "Max difference: {}".format(np.max(np.abs(y_val - np_y)))
