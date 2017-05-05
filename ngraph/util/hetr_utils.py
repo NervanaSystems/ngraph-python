@@ -16,7 +16,7 @@ from __future__ import division
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 from ngraph.op_graph.op_graph import Op, DotOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
-    GPUQueueRecvOp, CPUQueueSendOp
+    GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 
@@ -155,7 +155,9 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             op._send_node = send_op
             new_send_nodes.add(send_op)
             replaced_send_nodes.add(orig_ops[op.uuid].send_node())
-
+        elif isinstance(op, AllReduceOp):
+            op._shared_queues = orig_ops[op.uuid]._shared_queues
+            op.idx = shared_queues_idx
         if hasattr(op, '_axes') and parallel_axis in op._axes:
             op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
             # TODO: Revisit to handle axes updation better. Github Ticket #1355
