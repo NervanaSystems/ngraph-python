@@ -1283,7 +1283,10 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The op that supplies the value.
         """
-        return self._tensor.tensor
+        if self._tensor:
+            return self._tensor.forwarded.tensor.forwarded
+        else:
+            return None
 
     @property
     def value_tensor(self):
@@ -1292,7 +1295,10 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The immediate value returned by this op; see tensor for the closure.
         """
-        return self._tensor
+        if self._tensor:
+            return self._tensor.forwarded
+        else:
+            return None
 
     @value_tensor.setter
     def value_tensor(self, tensor):

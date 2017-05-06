@@ -59,6 +59,7 @@ class Computation(NameableValue):
         self.scatter_recv_nodes = []
         self.gather_send_nodes = []
         self.gather_recv_nodes = []
+        self.allreduce_nodes = []
 
     def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)

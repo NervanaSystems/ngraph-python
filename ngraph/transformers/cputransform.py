@@ -49,7 +49,7 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
-    CPUQueueScatterRecvOp
+    CPUQueueScatterRecvOp, CPUQueueAllReduceOp
 
 
 class CPUConvEngine(object):
@@ -348,6 +348,10 @@ class CPUCodeGenerator(PyGen):
     def gather_recv_nodes(self):
         return self.transformer.current_computation.gather_recv_nodes
 
+    @property
+    def allreduce_nodes(self):
+        return self.transformer.current_computation.allreduce_nodes
+
     @generic_method(Op)
     def allocate_op(self, op, *args):
         pass
@@ -422,8 +426,8 @@ class CPUCodeGenerator(PyGen):
                     op.name, inputs, outputs, op.slope)
 
     @allocate_op.on_type(BpropReluOp)
-    def allocate_op(self, op, outputs, delta, inputs):
-        self.append("mkldnn.init_relu_bprop('{}', arrE={}, arrD={}, arrSrc={}, slope={})",
+    def allocate_op(self, op, outputs, delta, fprop, inputs):
+        self.append("mkldnn.init_relu_bprop('{}', arrE={}, arrD={}, inputs={}, slope={})",
                     op.name, delta, outputs, inputs, op.fprop.slope)
 
     @generic_method(Op)
@@ -535,7 +539,7 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.fprop_relu('{}', {}, {}, {})", op.name, inputs, outputs, op.slope)
 
     @generate_op.on_type(BpropReluOp)
-    def generate_op(self, op, outputs, delta, inputs):
+    def generate_op(self, op, outputs, delta, fprop, inputs):
         self.append("mkldnn.bprop_relu('{}', {}, {}, {})", op.name, delta, outputs, op.fprop.slope)
 
     @generate_op.on_type(Equal)
@@ -700,6 +704,12 @@ class CPUCodeGenerator(PyGen):
         self.append("{}[...] = self.scatter_recv_from_queue_scatter_send({})",
                     out, scatter_recv_id)
 
+    @generate_op.on_type(CPUQueueAllReduceOp)
+    def generate_op(self, op, out, *args):
+        allreduce_id = len(self.allreduce_nodes)
+        self.allreduce_nodes.append(op)
+        self.append("{}[...] = self.queue_allreduce({})", out, allreduce_id)
+
 
 class CPUTransformer(Transformer):
     """
@@ -850,7 +860,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
                            scatter_send_nodes=computation.scatter_send_nodes,
                            scatter_recv_nodes=computation.scatter_recv_nodes,
                            gather_send_nodes=computation.gather_send_nodes,
-                           gather_recv_nodes=computation.gather_recv_nodes)
+                           gather_recv_nodes=computation.gather_recv_nodes,
+                           allreduce_nodes=computation.allreduce_nodes)
             computation.executor = executor
 
     def allocate_storage(self):
