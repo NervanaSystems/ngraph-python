@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # ----------------------------------------------------------------------------
-from ngraph.op_graph.op_graph import UnaryElementWiseOp
+from ngraph.op_graph.op_graph import UnaryElementWiseOp, ElementWiseOp
 
 
 class ReluOp(UnaryElementWiseOp):
@@ -29,15 +29,15 @@ class ReluOp(UnaryElementWiseOp):
         inputs.generate_add_delta(adjoints, bprop_relu_op)
 
 
-class ReluDerivOp(UnaryElementWiseOp):
+class ReluDerivOp(ElementWiseOp):
     """
     Maintains index and conv_params through forwarding of the original relu.
 
     Arguments:
         fprop: The original relu.
     """
-    def __init__(self, delta, fprop):
-        super(ReluDerivOp, self).__init__(delta)
+    def __init__(self, delta, fprop, inputs):
+        super(ReluDerivOp, self).__init__(args=(delta, inputs), axes=delta.axes)
         self.fprop = fprop
 
     @property
@@ -53,5 +53,5 @@ class ReluDerivOp(UnaryElementWiseOp):
 class BpropReluOp(ReluDerivOp):
 
     def __init__(self, delta, inputs, fprop, **kwargs):
-        super(BpropReluOp, self).__init__(delta, fprop)
+        super(BpropReluOp, self).__init__(delta, fprop, inputs)
         self.inputs = inputs
