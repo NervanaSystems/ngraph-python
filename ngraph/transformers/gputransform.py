@@ -1094,7 +1094,7 @@ class GPUTransformer(Transformer):
     def gpu_kernel_group(self, name):
         return GPUKernelGroup(self, name)
 
-    def transform_ordered_ops(self, ordered_ops, name):
+    def transform_ordered_ops(self, computation, ordered_ops, name):
         self.initialize_runtime()
 
         # Create kernel group
