@@ -434,12 +434,12 @@ class Mkldnn(object):
                     self.mkldnn_engine, arrE.ctypes.data, arrD.ctypes.data,
                     slope, inputs.ctypes.data, input_size)
 
-    def bprop_relu(self, name, inputs, out, slope):
+    def bprop_relu(self, name, delta, out, slope, inputs):
         if (self.mkldnn_enabled and name in self.kernels):
             self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
-            np.add(inputs * np.greater(inputs, 0),
-                   inputs * slope * np.less(inputs, 0), out=out)
+            np.add(delta * np.greater(inputs, 0),
+                   delta * slope * np.less(inputs, 0), out=out)
 
 
 def update_conv(conv_slices, I, E, U):
