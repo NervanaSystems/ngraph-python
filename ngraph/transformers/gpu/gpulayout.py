@@ -16,7 +16,7 @@ import numpy as np
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
-    ReshapeOp, TensorValueOp, tdcache
+    ReshapeOp, TensorValueOp, AssignableTensorOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes, make_axes
@@ -44,6 +44,10 @@ class GPULayoutView(object):
         self.shape = tuple([int(i) for i in shape])
         self.strides = tuple([int(i) for i in strides])
         self.offset = int(offset)
+
+    def __str__(self):
+        out = "shape: {}, strides {}, offset {}".format(self.shape, self.strides, self.offset)
+        return out
 
 
 class DimshuffleOp(TensorOp):
@@ -159,6 +163,30 @@ class GPULayoutAssignment(StridedLayoutAssignment):
         # By default allow first argument to be transposed, but not second
         # TODO: this could be bad for perf some heuristic?
         return [GPUDotLayoutAssignment(True, False, axes_list, [rows_axis, cols_axis])]
+
+    @staticmethod
+    def generate_default_onehot_layout(op):
+        """
+        Generates the default layout assignment for a onehot operation on GPU.
+
+        Arguments:
+            op (OneHotOp): op to generate layout for
+
+        Returns:
+            GPULayoutAssignment for this op
+        """
+        axes_list = Axes.as_flattened_list(op.axes)
+        oh_axis = axes_list.index(op.axis)
+        other_group = [i for i, a in enumerate(axes_list) if a is not op.axis]
+
+        if oh_axis == 0:
+            return [GPUDotLayoutAssignment(True, False, axes_list, [[oh_axis], other_group])]
+        elif oh_axis == (len(axes_list) - 1):
+            return [GPUDotLayoutAssignment(True, False, axes_list, [other_group, [oh_axis]])]
+        else:
+            group0 = [i for i in other_group if i < oh_axis]
+            group1 = [i for i in other_group if i > oh_axis]
+            return [GPUDotLayoutAssignment(True, False, axes_list, [group0, [oh_axis], group1])]
 
     @staticmethod
     def generate_default_lut_layout(op):
@@ -791,7 +819,7 @@ def gpu_layout_factory(op):
     elif isinstance(op, ReductionOp):
         return GPULayoutAssignment.generate_ew_layouts(op.axes, 2)
     elif isinstance(op, OneHotOp):
-        return GPULayoutAssignment.generate_ew_layouts(op.axes, 3)
+        return GPULayoutAssignment.generate_default_onehot_layout(op)
     elif isinstance(op, TensorSizeOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, Fill):
@@ -812,6 +840,8 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, TensorValueOp):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
+    elif isinstance(op, AssignableTensorOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, LookupTableOp):
         return GPULayoutAssignment.generate_default_lut_layout(op)
     elif isinstance(op, (update_lut, bprop_lut)):
