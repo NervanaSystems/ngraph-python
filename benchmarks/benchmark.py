@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from functools import wraps
 from collections import OrderedDict
 import ngraph.transformers as ngt
 import ngraph.transformers.passes.nviz
@@ -26,48 +27,87 @@ class DefaultOrderedDict(OrderedDict):
         return self[key]
 
 
-def fill_feed_dict(dataset, feed_inputs):
-    data = next(iter(dataset))
-    return {feed_inputs[k]: data[k] for k in feed_inputs.keys()}
+class Mark(object):
+    def init_mark(self):
+        return {'time': 0}
+
+    def synchronize_mark(self):
+        return
+
+    def record_mark(self, marker):
+        marker['time'] = time.time()
+
+    def get_time(self, start_mark, end_mark):
+        return (end_mark['time'] - start_mark['time']) * 1000.0
 
 
-def run_benchmark(model_out_comp, transformer_type, feed_dict, n_skip, n_iter):
-    """
-    This runs _any_ computation repeatedly with data from feed_dict, and times it
+class Benchmark(object):
 
-    (Nothing model-specific inside, can be reused)
-    """
-    times = DefaultOrderedDict()
-    with closing(ngt.make_transformer_factory(transformer_type)()) as transformer:
-        nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True, show_all_metadata=False)
-        transformer.register_graph_pass(nviz)
-        model_out_computation = transformer.add_computation(model_out_comp)
-        for i in range(n_skip):
-            model_out_computation(feed_dict=feed_dict)
-        for i in range(n_iter):
-            times[i]['start'] = time.time() * 1000.0
-            model_out_computation(feed_dict=feed_dict)
-            times[i]['stop'] = time.time() * 1000.0
-    return times
+    marker = Mark()
 
+    def __init__(self, computation, train_set, inputs, transformer):
+        self.computation = computation
+        self.train_set = train_set
+        self.inputs = inputs
+        self.transformer = transformer
 
-def print_benchmark_results(benchmarks):
-    for label in benchmarks.keys():
-        k = 0
-        compute_time = np.zeros(len(benchmarks[label]))
-        for v in benchmarks[label].values():
-            compute_time[k] = v.values()[1] - v.values()[0]
-            k += 1
-        header = ('Func', 'Sum', 'Mean', 'Min', 'Max', 'Units')
-        formatter = '| {:^20} ' * len(header) + '|'
+    def fill_feed_dict(self, dataset, feed_inputs):
+        data = next(iter(dataset))
+        return {feed_inputs[k]: data[k] for k in feed_inputs.keys()}
 
-        head_str = formatter.format(*header)
-        sep = '-' * len(head_str)
-        results = (label, compute_time.sum(), compute_time.mean(),
-                   compute_time.min(), compute_time.max(), 'msec')
-        results_str = formatter.format(*results)
-        print(sep)
-        print(head_str)
-        print(sep)
-        print(results_str)
-        print(sep)
+    @staticmethod
+    def timing_wrapper(func, start, end, output):
+        marker = Benchmark.marker
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            marker.record_mark(start)
+            res = func(*args, **kwargs)
+            marker.record_mark(end)
+            marker.synchronize_mark(end)
+            output.append(marker.get_time(start, end))
+            return res
+
+        return wrapper
+
+    def time(self, n_iterations, n_skip, computation_name):
+        """
+        This runs _any_ computation repeatedly with data from feed_dict, and times it
+
+        (Nothing model-specific inside, can be reused)
+        """
+        times = DefaultOrderedDict()
+        feed_dict = self.fill_feed_dict(self.train_set, self.inputs)
+        start = Benchmark.marker.init_mark()
+        end = Benchmark.marker.init_mark()
+        with closing(ngt.make_transformer_factory(self.transformer)()) as transformer:
+            nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
+                                                           show_all_metadata=False)
+            transformer.register_graph_pass(nviz)
+            model_out_computation = transformer.add_computation(self.computation)
+            for i in range(n_skip):
+                model_out_computation(feed_dict=feed_dict)
+            for i in range(n_iterations):
+                Benchmark.marker.record_mark(start)
+                model_out_computation(feed_dict=feed_dict)
+                Benchmark.marker.record_mark(end)
+                times[computation_name][i] = Benchmark.marker.get_time(start, end)
+        return times
+
+    @staticmethod
+    def print_benchmark_results(benchmarks):
+        for stat in benchmarks:
+            times = np.array(benchmarks[stat].values())
+            header = ('Func', 'Sum', 'Mean', 'Min', 'Max', 'Median', 'Units')
+            formatter = '| {:^20} ' * len(header) + '|'
+
+            head_str = formatter.format(*header)
+            sep = '-' * len(head_str)
+            results = (stat, times.sum(), times.mean(),
+                       times.min(), times.max(), np.median(times), 'msec')
+            results_str = formatter.format(*results)
+            print(sep)
+            print(head_str)
+            print(sep)
+            print(results_str)
+            print(sep)

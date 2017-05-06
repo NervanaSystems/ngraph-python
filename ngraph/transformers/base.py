@@ -53,6 +53,14 @@ class Computation(NameableValue):
         self.computation_name = None
         self.executor = None
 
+        self.send_nodes = []
+        self.recv_nodes = []
+        self.scatter_send_nodes = []
+        self.scatter_recv_nodes = []
+        self.gather_send_nodes = []
+        self.gather_recv_nodes = []
+        self.allreduce_nodes = []
+
     def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)
         if feed_dict is not None:
@@ -488,13 +496,13 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.start_transform_allocate()
         for device_buffer in self.__device_buffers:
             device_buffer.transform_allocate()
-        self.transform_allocate_ops(all_ops)
         self.finish_transform_allocate()
 
         # Compile the computations now that we know their storage
         for comp in self.computations:
             comp.computation_name = \
-                self.transform_ordered_ops(Op.ordered_ops([comp.computation]),
+                self.transform_ordered_ops(comp,
+                                           Op.ordered_ops([comp.computation]),
                                            name=comp.name)
         self.finish_transform()
         self.finalized = True
@@ -512,12 +520,14 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
 
     @abc.abstractmethod
-    def transform_ordered_ops(self, ordered_ops):
+    def transform_ordered_ops(self, computation, ordered_ops, name):
         """
         Generate code to compute ordered_ops.
 
         Arguments:
-        ordered_ops: Ops to compute
+            computation: The computation being compiled.
+            ordered_ops: Ops to compute
+            name: The name of the computation.
 
         Returns: Handle for generated code
         """
@@ -628,9 +638,22 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             raise ValueError(
                 'Cannot create computations from a finalized transformer'
             )
-        result = Computation(self, computation)
+        result = self.make_computation(computation)
         self.computations.add(result)
         return result
+
+    def make_computation(self, computation):
+        """
+        Wrap in Computation or a transformer-specific subclass.
+
+        Args:
+            computation:
+
+        Returns:
+            Computation or a subclass.
+
+        """
+        return Computation(self, computation)
 
     def allocate(self):
         """

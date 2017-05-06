@@ -813,7 +813,7 @@ class GPUDeviceTensor(DeviceTensor):
         else:
             # Convert to correct dtype if necessary
             if value.dtype != self.tensor.dtype:
-                new_value = np.ndarray(self.tensor.shape, dtype=self.tensor.dtype)
+                new_value = np.ndarray(value.shape, dtype=self.tensor.dtype)
                 new_value[:] = value
                 value = new_value
 
@@ -1036,7 +1036,7 @@ class GPUTransformer(Transformer):
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
         self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
-                             layout_convert_pass]  # , VizPass()]
+                             layout_convert_pass]  # , VizPass(show_metadata="layout")]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
@@ -1094,7 +1094,7 @@ class GPUTransformer(Transformer):
     def gpu_kernel_group(self, name):
         return GPUKernelGroup(self, name)
 
-    def transform_ordered_ops(self, ordered_ops, name):
+    def transform_ordered_ops(self, computation, ordered_ops, name):
         self.initialize_runtime()
 
         # Create kernel group

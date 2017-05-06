@@ -15,7 +15,7 @@
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice
+from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, Fill, AssignOp
 
 
 class GPUSubstitution(PeepholeGraphPass):
@@ -49,3 +49,9 @@ class GPUSubstitution(PeepholeGraphPass):
         if flip:
             self.replace_op(op, SetItemOp(tensor, new_slices,
                                           tensor_slice(value, copy_slices)))
+
+    @visit.on_type(Fill)
+    def visit(self, op):
+        # Fill op must operate on contiguous tensor
+        if not op.args[0].tensor_description().c_contiguous:
+            self.replace_op(op, AssignOp(op.args[0], op.scalar))

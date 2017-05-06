@@ -1272,7 +1272,10 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The op that supplies the value.
         """
-        return self._tensor.tensor
+        if self._tensor:
+            return self._tensor.forwarded.tensor.forwarded
+        else:
+            return None
 
     @property
     def value_tensor(self):
@@ -1281,7 +1284,10 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The immediate value returned by this op; see tensor for the closure.
         """
-        return self._tensor
+        if self._tensor:
+            return self._tensor.forwarded
+        else:
+            return None
 
     @value_tensor.setter
     def value_tensor(self, tensor):
@@ -2875,12 +2881,8 @@ def sqrt(x):
 
 class BinaryElementWiseOp(ElementWiseOp):
 
-    _index = 0
-
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
-        self.index = BinaryElementWiseOp._index
-        BinaryElementWiseOp._index += 1
         x, y = as_ops((x, y))
 
         x_axes_bcast = x.axes + (y.axes - x.axes)
@@ -3108,12 +3110,8 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
-    _index = 0
-
     def __init__(self, x, y, axes, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
-        self.index = DotLowDimension._index
-        DotLowDimension._index += 1
 
 
 class SoftmaxOp(ValueOp):

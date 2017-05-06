@@ -22,6 +22,14 @@ import numpy as np
 
 from pycuda.gpuarray import empty_like
 
+_op_indices = dict()
+def index(op):
+    result = _op_indices.get(op, None)
+    if result is None:
+        result = len(_op_indices)
+        _op_indices[op] = result
+    return result
+
 
 class PoolFpropKernel(GPUKernel):
     """
@@ -46,7 +54,7 @@ class PoolFpropKernel(GPUKernel):
         (self.I, ) = (_ for _ in op.call_info())
         self.O = op.tensor_description()
         self.dtype = self.O.dtype
-        self.index = op.index
+        self.index = index(op)
 
         if self.dtype.type is np.float16:
             clss = "hpool"
@@ -242,14 +250,14 @@ class PoolBpropKernel(GPUKernel):
         (self.I, ) = (_ for _ in op.call_info())
         self.O = op.tensor_description()
         self.dtype = self.O.dtype
-        self.index = op.index
+        self.index = index(op.fprop.forwarded)
 
         if self.dtype.type is np.float16:
             clss = "hpool"
         elif self.dtype.type is np.float32:
             clss = "spool"
         else:
-            raise TypeError("Type not supported {}".format(clss))
+            raise TypeError("Type not supported {}".format(self.dtype.type))
 
         C, D, H, W, _ = self.O.axes.lengths
         K, M, P, Q, N = self.I.axes.lengths

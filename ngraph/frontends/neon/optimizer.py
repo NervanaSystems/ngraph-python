@@ -43,7 +43,7 @@ def get_learning_rate_policy_callback(lr_params):
                          )
 
 
-def clip_gradient_norm(grad_list, bsz, clip_norm=None):
+def clip_gradient_norm(grad_list, clip_norm=None):
     """
     Returns a scaling factor to apply to the gradients.
 
@@ -56,7 +56,6 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
         param_list (list): List of layer parameters
         clip_norm (float, optional): Target norm for the gradients. If not provided
                                      the returned scale_factor will equal 1.
-        bsz: the batch size
 
 
     Returns:
@@ -72,7 +71,8 @@ def clip_gradient_norm(grad_list, bsz, clip_norm=None):
                 s = term
             else:
                 s = s + term
-        s = s / bsz
+
+        s = ng.sqrt(s)
         return clip_norm / ng.maximum(s, clip_norm)
 
 
@@ -123,7 +123,7 @@ class LearningRateOptimizer(Optimizer):
         if variable_scope is not None:
             selected_variables = [op for op in selected_variables if op.scope == variable_scope]
         grads = [ng.deriv(batch_cost, v) / batch_size for v in selected_variables]
-        scale_factor = clip_gradient_norm(grads, batch_size, self.gradient_clip_norm)
+        scale_factor = clip_gradient_norm(grads, self.gradient_clip_norm)
 
         for variable, grad in zip(selected_variables, grads):
             updates = self.variable_update(variable, grad, scale_factor)
