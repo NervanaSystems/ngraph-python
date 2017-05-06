@@ -540,7 +540,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(BpropReluOp)
     def generate_op(self, op, outputs, delta, fprop, inputs):
-        self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})", op.name, delta, outputs, op.fprop.slope, inputs)
+        self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})",
+                    op.name, delta, outputs, op.fprop.slope, inputs)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
