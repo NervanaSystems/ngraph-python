@@ -99,8 +99,9 @@ class FlexGPUTransformer(GPUTransformer):
 
         FlexDECPass().do_pass(self.ops, self)
 
-    def transform_ordered_ops(self, ordered_ops, name):
-        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
+            computation, ordered_ops, name)
 
         # device memory allocation after drv init
         self.flex_manager.allocate()

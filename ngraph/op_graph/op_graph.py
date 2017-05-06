@@ -2900,12 +2900,8 @@ def sqrt(x):
 
 class BinaryElementWiseOp(ElementWiseOp):
 
-    _index = 0
-
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
-        self.index = BinaryElementWiseOp._index
-        BinaryElementWiseOp._index += 1
         x, y = as_ops((x, y))
 
         x_axes_bcast = x.axes + (y.axes - x.axes)
@@ -3133,12 +3129,8 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
-    _index = 0
-
     def __init__(self, x, y, axes, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
-        self.index = DotLowDimension._index
-        DotLowDimension._index += 1
 
 
 class SoftmaxOp(ValueOp):

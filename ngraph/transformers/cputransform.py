@@ -45,7 +45,7 @@ from ngraph.transformers.passes.cpufusion import FusionPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
-    set_transformer_factory
+    set_transformer_factory, Computation
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
@@ -141,6 +141,15 @@ class CPUPoolEngine(object):
                     firstI = x
                 lastI = x
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
+
+
+class CPUComputation(Computation):
+    def __init__(self, transformer, computation, **kwargs):
+        super(CPUComputation, self).__init__(transformer, computation, **kwargs)
+        self.pool_params = dict()
+        self.pool_slices = dict()
+        self.conv_params = dict()
+        self.conv_slices = dict()
 
 
 class CPUDeviceBufferStorage(DeviceBufferStorage):
@@ -271,21 +280,9 @@ def get_tensors(f):
 
 class CPUCodeGenerator(PyGen):
 
-    def __init__(self, **kwargs):
+    def __init__(self, transformer, **kwargs):
         super(CPUCodeGenerator, self).__init__(prefix="op", **kwargs)
-
-        # These will get passed over to the computation in the model
-        self.conv_params = dict()
-        self.conv_slices = dict()
-        self.pool_params = dict()
-        self.pool_slices = dict()
-        self.send_nodes = []
-        self.recv_nodes = []
-        self.scatter_send_nodes = []
-        self.scatter_recv_nodes = []
-        self.gather_send_nodes = []
-        self.gather_recv_nodes = []
-        self.allreduce_nodes = []
+        self.transformer = transformer
 
     def name(self, x):
         if isinstance(x, CPUDeviceBufferStorage):
@@ -311,18 +308,65 @@ class CPUCodeGenerator(PyGen):
         np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
         return np_axis[0] if len(np_axis) == 1 else np_axis
 
+    @property
+    def pool_params(self):
+        return self.transformer.current_computation.pool_params
+
+    @property
+    def pool_slices(self):
+        return self.transformer.current_computation.pool_slices
+
+    @property
+    def conv_params(self):
+        return self.transformer.current_computation.conv_params
+
+    @property
+    def conv_slices(self):
+        return self.transformer.current_computation.conv_slices
+
+    @property
+    def send_nodes(self):
+        return self.transformer.current_computation.send_nodes
+
+    @property
+    def recv_nodes(self):
+        return self.transformer.current_computation.recv_nodes
+
+    @property
+    def scatter_send_nodes(self):
+        return self.transformer.current_computation.scatter_send_nodes
+
+    @property
+    def scatter_recv_nodes(self):
+        return self.transformer.current_computation.scatter_recv_nodes
+
+    @property
+    def gather_send_nodes(self):
+        return self.transformer.current_computation.gather_send_nodes
+
+    @property
+    def gather_recv_nodes(self):
+        return self.transformer.current_computation.gather_recv_nodes
+
+    @property
+    def allreduce_nodes(self):
+        return self.transformer.current_computation.allreduce_nodes
+
     @generic_method(Op)
     def allocate_op(self, op, *args):
         pass
 
     @allocate_op.on_type(ConvolutionOp)
     def allocate_op(self, op, outputs, inputs, filters):
+        self.conv_params[op.name] = op.conv_params
+        self.conv_slices[op.name] = \
+            CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]
         stride = [str_d, str_h, str_w]
-        self.append("mkldnn.init_conv_fprop(index={}, I={}, F={}, O={}, pad={}, stride={})",
-                    op.index, inputs, filters, outputs, pad, stride)
+        self.append("mkldnn.init_conv_fprop('{}', I={}, F={}, O={}, pad={}, stride={})",
+                    op.name, inputs, filters, outputs, pad, stride)
 
     @allocate_op.on_type(bprop_conv)
     def allocate_op(self, op, gI, delta, filters):
@@ -330,11 +374,13 @@ class CPUCodeGenerator(PyGen):
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]
         stride = [str_d, str_h, str_w]
-        self.append("mkldnn.init_conv_bprop(index={}, E={}, F={}, gI={}, pad={}, stride={})",
-                    op.index, delta, filters, gI, pad, stride)
+        self.append("mkldnn.init_conv_bprop('{}', E={}, F={}, gI={}, pad={}, stride={})",
+                    op.name, delta, filters, gI, pad, stride)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
+        self.pool_params[op.name] = op.pool_params
+        self.pool_slices[op.name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
         pad = [pad_d, pad_h, pad_w]
@@ -345,8 +391,8 @@ class CPUCodeGenerator(PyGen):
         pool_type = 0
         if op_type['op'] == 'avg':
             pool_type = 1
-        self.append("mkldnn.init_pool_fprop({}, index={}, arrI={}, arrO={}, kernel={}, pad={}, stride={})",  # noqa
-                    pool_type, op.index, arrI, arrO, kernel, pad, stride)
+        self.append("mkldnn.init_pool_fprop({}, '{}', arrI={}, arrO={}, kernel={}, pad={}, stride={})",  # noqa
+                    pool_type, op.name, arrI, arrO, kernel, pad, stride)
 
     @allocate_op.on_type(BpropPoolOp)
     def allocate_op(self, op, outputs, delta):
@@ -360,28 +406,29 @@ class CPUCodeGenerator(PyGen):
         pool_type = 0
         if op_type['op'] == 'avg':
             pool_type = 1
-        self.append("mkldnn.init_pool_bprop({}, index={}, arrE={}, arrD={}, kernel={}, pad={}, stride={})",  # noqa
-                    pool_type, op.index, delta, outputs, kernel, pad, stride)
+        self.append("mkldnn.init_pool_bprop({}, '{}', '{}', arrE={}, arrD={}, kernel={}, pad={}, stride={})",  # noqa
+                    pool_type, op.name, op.fprop.forwarded.name,
+                    delta, outputs, kernel, pad, stride)
 
     @allocate_op.on_type(DotLowDimension)
     def allocate_op(self, op, out, x, y):
-        self.append("mkldnn.init_innerproduct_fprop({}, out={}, x={}, y={})",
-                    op.index, out, x, y)
+        self.append("mkldnn.init_innerproduct_fprop('{}', out={}, x={}, y={})",
+                    op.name, out, x, y)
 
     @allocate_op.on_type(Add)
     def allocate_op(self, op, out, x, y):
-        self.append("mkldnn.init_elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
-                    op.index, x, y, out)
+        self.append("mkldnn.init_elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
+                    op.name, x, y, out)
 
     @allocate_op.on_type(ReluOp)
     def allocate_op(self, op, outputs, inputs):
-        self.append("mkldnn.init_relu_fprop({}, inputs={}, out={}, slope={})",
-                    op.index, inputs, outputs, op.slope)
+        self.append("mkldnn.init_relu_fprop('{}', inputs={}, out={}, slope={})",
+                    op.name, inputs, outputs, op.slope)
 
     @allocate_op.on_type(BpropReluOp)
-    def allocate_op(self, op, outputs, delta, fprop_input):
-        self.append("mkldnn.init_relu_bprop({}, arrE={}, arrD={}, slope={}, fprop_input={})",
-                    op.index, delta, outputs, op.fprop.slope, fprop_input)
+    def allocate_op(self, op, outputs, delta, fprop, inputs):
+        self.append("mkldnn.init_relu_bprop('{}', arrE={}, arrD={}, inputs={}, slope={})",
+                    op.name, delta, outputs, inputs, op.fprop.slope)
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -401,8 +448,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
-        self.append("mkldnn.elementwise_add({}, I_array1={}, I_array2={}, O_array={})",
-                    op.index, x, y, out)
+        self.append("mkldnn.elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
+                    op.name, x, y, out)
 
     @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
@@ -414,33 +461,28 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(ConvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
-        self.conv_params[op.index] = op.conv_params
-        self.conv_slices[op.index] = \
-            CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
-        self.append("mkldnn.fprop_conv({}, self.conv_slices[{}], I={}, F={}, O={})",
-                    op.index, op.index, inputs, filters, outputs)
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
+                    op.name, op.name, inputs, filters, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
-        self.append("mkldnn.bprop_conv({}, self.conv_slices[{}], E={}, F={}, gI={})",
-                    op.index, op.index, delta, filters, outputs)
+        self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
+                    op.name, op.fprop.forwarded.name, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("update_conv(self.conv_slices[{}], I={}, E={}, U={})",
-                    op.index, inputs, delta, outputs)
+        self.append("update_conv(self.conv_slices['{}'], I={}, E={}, U={})",
+                    op.fprop.forwarded.name, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
-        self.pool_params[op.index] = op.pool_params
-        self.pool_slices[op.index] = CPUPoolEngine.get_slices(inputs, outputs, op.pool_params)
-        self.append("mkldnn.fprop_pool({}, self.pool_slices[{}], arrI={}, arrO={})",
-                    op.index, op.index, inputs, outputs)
+        self.append("mkldnn.fprop_pool('{}', self.pool_slices['{}'], arrI={}, arrO={})",
+                    op.name, op.name, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
-        self.append("mkldnn.bprop_pool({}, self.pool_slices[{}], arrE={}, arrD={})",
-                    op.index, op.index, delta, outputs)
+        self.append("mkldnn.bprop_pool('{}', self.pool_slices['{}'], arrE={}, arrD={})",
+                    op.name, op.fprop.forwarded.name, delta, outputs)
 
     @generate_op.on_type(LookupTableOp)
     def generate_op(self, op, outputs, lut, idx):
@@ -489,17 +531,17 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
-        self.append("mkldnn.innerproduct_fprop({}, {}, {}, out={})",
-                    op.index, x, y, out)
+        self.append("mkldnn.innerproduct_fprop('{}', {}, {}, out={})",
+                    op.name, x, y, out)
 
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):
-        self.append("mkldnn.fprop_relu({}, {}, {}, {})", op.index, inputs, outputs, op.slope)
+        self.append("mkldnn.fprop_relu('{}', {}, {}, {})", op.name, inputs, outputs, op.slope)
 
     @generate_op.on_type(BpropReluOp)
-    def generate_op(self, op, outputs, delta, fprop_input):
-        self.append("mkldnn.bprop_relu({}, {}, {}, {}, {})", op.index, delta,
-                    outputs, op.fprop.slope, fprop_input)
+    def generate_op(self, op, outputs, delta, fprop, inputs):
+        self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})",
+                    op.name, delta, outputs, op.fprop.slope, inputs)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -685,12 +727,13 @@ class CPUTransformer(Transformer):
 
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
+        self.current_computation = None
         self.conv_engine = CPUConvEngine()
-        self.init_code = CPUCodeGenerator()
-        self.allocate_storage_code = CPUCodeGenerator()
-        self.allocate_code = CPUCodeGenerator()
-        self.compute_code = CPUCodeGenerator()
-        self.code = CPUCodeGenerator()
+        self.init_code = CPUCodeGenerator(self)
+        self.allocate_storage_code = CPUCodeGenerator(self)
+        self.allocate_code = CPUCodeGenerator(self)
+        self.compute_code = CPUCodeGenerator(self)
+        self.code = CPUCodeGenerator(self)
         self.globals = self.code.globals
         self.n_computations = 0
         self.use_pinned_mem = False
@@ -750,17 +793,25 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         for op in all_ops:
             out = tensor_description_value(op.tensor_description())
             call_info = (tensor_description_value(_) for _ in op.call_info())
-            self.allocate_code.allocate_op(op, out, *call_info)
+            self.compute_code.allocate_op(op, out, *call_info)
 
     def finish_transform_allocate(self):
         pass
 
-    def transform_ordered_ops(self, ordered_ops, name):
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        self.current_computation = computation
         if name is None:
             name = "C_" + str(self.n_computations)
         self.n_computations += 1
         self.compute_code.append("class {}(HetrLocals, ConvLocals):", name)
         with indenting(self.compute_code):
+            self.compute_code.append("def __init__(self, **kwargs):")
+            with indenting(self.compute_code):
+                self.compute_code.append('super({}, self).__init__(**kwargs)', name)
+                self.transform_allocate_ops(ordered_ops)
+
+            self.compute_code.endl()
+
             self.compute_code.append("def __call__(self):")
             code_length = self.compute_code.code_length
 
@@ -801,17 +852,17 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
 
         for computation in self.computations:
             cls = self.globals[computation.name]
-            executor = cls(conv_params=self.compute_code.conv_params,
-                           pool_params=self.compute_code.pool_params,
-                           conv_slices=self.compute_code.conv_slices,
-                           pool_slices=self.compute_code.pool_slices,
-                           send_nodes=self.compute_code.send_nodes,
-                           recv_nodes=self.compute_code.recv_nodes,
-                           scatter_send_nodes=self.compute_code.scatter_send_nodes,
-                           scatter_recv_nodes=self.compute_code.scatter_recv_nodes,
-                           gather_send_nodes=self.compute_code.gather_send_nodes,
-                           gather_recv_nodes=self.compute_code.gather_recv_nodes,
-                           allreduce_nodes=self.compute_code.allreduce_nodes)
+            executor = cls(conv_params=computation.conv_params,
+                           pool_params=computation.pool_params,
+                           conv_slices=computation.conv_slices,
+                           pool_slices=computation.pool_slices,
+                           send_nodes=computation.send_nodes,
+                           recv_nodes=computation.recv_nodes,
+                           scatter_send_nodes=computation.scatter_send_nodes,
+                           scatter_recv_nodes=computation.scatter_recv_nodes,
+                           gather_send_nodes=computation.gather_send_nodes,
+                           gather_recv_nodes=computation.gather_recv_nodes,
+                           allreduce_nodes=computation.allreduce_nodes)
             computation.executor = executor
 
     def allocate_storage(self):
@@ -836,6 +887,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         if devlist[buf_index] is None:
             devlist[buf_index] = np.empty_like(hb)
         devlist[buf_index][:] = hb
+
+    def make_computation(self, computation):
+        return CPUComputation(self, computation)
 
 
 set_transformer_factory(
