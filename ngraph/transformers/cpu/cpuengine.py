@@ -28,6 +28,8 @@ class Mkldnn(object):
         self.mkldnn_engine_initialized = False
         self.mkldnn_verbose = False
         self.kernels = dict()
+        self.op_layouts = dict()
+        self.op_uses_opkernel_api = dict() # Temporary dictionary to track opkernels
         try:
             self.mkldnn_engine_dll = ctypes.CDLL(engine_path)
             self.mkldnn_enabled = True
@@ -41,28 +43,97 @@ class Mkldnn(object):
         if (self.mkldnn_enabled):
             self.init_mkldnn_engine_fn = self.mkldnn_engine_dll.init_mkldnn_engine
             self.init_mkldnn_engine_fn.restype = ctypes.c_void_p
-            self.create_mkldnn_conv_fprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_conv_fprop_primitives
-            self.create_mkldnn_conv_fprop_primitives_fn.argtypes = \
+            
+            self.create_mkldnn_netlist_fn = self.mkldnn_engine_dll.create_mkldnn_netlist
+            self.create_mkldnn_netlist_fn.restype = ctypes.c_void_p
+
+            self.create_empty_kernel = self.mkldnn_engine_dll.create_empty_kernel
+            self.create_empty_kernel.restype = ctypes.c_void_p
+
+            self.query_prim_layout_fn = self.mkldnn_engine_dll.query_prim_layout
+            self.query_prim_layout_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            self.query_prim_layout_fn.restype = ctypes.c_void_p
+
+            self.output_layout = self.mkldnn_engine_dll.query_opkernel_layout
+            self.output_layout.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            self.output_layout.restype = ctypes.c_void_p
+            
+            self.create_reorder_kernel_fn = self.mkldnn_engine_dll.create_reorder_kernel
+            self.create_reorder_kernel_fn.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_void_p,
+                 ctypes.c_void_p]
+            
+            self.alloc_reorder_kernel_fn = self.mkldnn_engine_dll.alloc_reorder_kernel
+            self.alloc_reorder_kernel_fn.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
+            
+            self.conv_fprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_conv_fprop_kernel
+            self.conv_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p]
-            self.create_mkldnn_conv_fprop_primitives_fn.restype = ctypes.c_void_p
-            self.create_mkldnn_conv_bprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_conv_bprop_primitives
-            self.create_mkldnn_conv_bprop_primitives_fn.argtypes = \
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p
+                 ]
+            self.run_conv_fprop = \
+                self.mkldnn_engine_dll.run_mkldnn_conv_fprop_kernel
+            self.run_conv_fprop.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
+            
+            self.conv_bprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_conv_bprop_data_kernel
+            self.conv_bprop_kernel.argtypes = \
                 [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p
+                 ]
+            self.run_conv_bprop = \
+                self.mkldnn_engine_dll.run_mkldnn_conv_bprop_data_kernel
+            self.run_conv_bprop.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
+
+            self.relu_fprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_relu_fprop_kernel
+            self.relu_fprop_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_double,
                  ctypes.c_void_p, ctypes.c_void_p]
-            self.create_mkldnn_conv_bprop_primitives_fn.restype = ctypes.c_void_p
+            self.run_relu_fprop = \
+                self.mkldnn_engine_dll.run_mkldnn_relu_fprop_kernel
+            self.run_relu_fprop.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+            self.relu_bprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_relu_bprop_kernel
+            self.relu_bprop_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_double,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
+            self.run_relu_bprop = \
+                self.mkldnn_engine_dll.run_mkldnn_relu_bprop_kernel
+            self.run_relu_bprop.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
+                 ctypes.c_void_p]
+
+            self.create_mkldnn_pool_fprop_descriptors_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_pool_fprop_descriptors
+            self.create_mkldnn_pool_fprop_descriptors_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_pool_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_pool_fprop_primitives
             self.create_mkldnn_pool_fprop_primitives_fn.argtypes = \
@@ -70,8 +141,9 @@ class Mkldnn(object):
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_int]
+                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
             self.create_mkldnn_pool_fprop_primitives_fn.restype = ctypes.c_void_p
+            
             self.create_mkldnn_pool_bprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_pool_bprop_primitives
             self.create_mkldnn_pool_bprop_primitives_fn.argtypes = \
@@ -81,6 +153,7 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
             self.create_mkldnn_pool_bprop_primitives_fn.restype = ctypes.c_void_p
+            
             self.create_mkldnn_innerproduct_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
             self.create_mkldnn_innerproduct_fprop_primitives_fn.argtypes = \
@@ -89,6 +162,7 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
+            
             self.create_mkldnn_add_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_add_primitives
             self.create_mkldnn_add_primitives_fn.argtypes = \
@@ -96,23 +170,16 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int]
             self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
-            self.create_mkldnn_relu_fprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_relu_fprop_primitives
-            self.create_mkldnn_relu_fprop_primitives_fn.argtypes = \
-                [ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double, ctypes.c_int]
-            self.create_mkldnn_relu_fprop_primitives_fn.restype = ctypes.c_void_p
-            self.create_mkldnn_relu_bprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_relu_bprop_primitives
-            self.create_mkldnn_relu_bprop_primitives_fn.argtypes = \
-                [ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_double,
-                 ctypes.c_void_p, ctypes.c_int]
-            self.create_mkldnn_relu_bprop_primitives_fn.restype = ctypes.c_void_p
+            
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
+            
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
             self.cleanup_mkldnn_fn.argtypes = [ctypes.c_void_p]
+
+            self.delete_opkernel = self.mkldnn_engine_dll.delete_mkldnn_opkernel
+            self.delete_opkernel.argtypes = [ctypes.c_void_p]
+
             self.destroy_mkldnn_engine_fn = self.mkldnn_engine_dll.destroy_mkldnn_engine
             self.destroy_mkldnn_engine_fn.argtypes = [ctypes.c_void_p]
 
@@ -125,56 +192,16 @@ class Mkldnn(object):
         if (self.mkldnn_engine_initialized):
             for op in self.kernels:
                 if self.kernels[op]:
-                    self.cleanup_mkldnn_fn(self.kernels[op])
+                    if op in self.op_uses_opkernel_api:
+                        self.delete_opkernel(self.kernels[op])
+                    else:
+                        self.cleanup_mkldnn_fn(self.kernels[op])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
-    def init_conv_fprop(self, name, I, F, O, pad, stride):
-        if (self.mkldnn_enabled):
-            C, D, H, W, N = I.shape
-            if (self.mkldnn_verbose):
-                print("C,D,H,W,N", C, D, H, W, N)
-                print("Input: ", hex(I.ctypes.data), I.shape)
-                print("Filter: ", hex(F.ctypes.data), F.shape)
-                print("Output: ", hex(O.ctypes.data), O.shape)
-                print("Stride: ", stride, len(stride))
-                print("Pad: ", pad, len(pad))
-            # Only 2D convolution supported in MKLDNN for now
-            if (D != 1):
-                return
-            # Only single precision float supported for now
-            if ((I.dtype != np.float32) or (O.dtype != np.float32)):
-                return
-            # Sanity check tensor shapes
-            if ((len(I.shape) != 5) or (len(F.shape) != 5) or
-                    (len(O.shape) != 5) or (len(stride) != 3) or
-                    (len(pad) != 3)):
-                return
-            # NumPy Tensors need to be contiguous
-            if (not (I.flags['C_CONTIGUOUS'] and
-                     F.flags['C_CONTIGUOUS'] and
-                     O.flags['C_CONTIGUOUS'])):
-                return
-            input_shape = ((ctypes.c_int) * len(I.shape))(*I.shape)
-            filter_shape = ((ctypes.c_int) * len(F.shape))(*F.shape)
-            output_shape = ((ctypes.c_int) * len(O.shape))(*O.shape)
-            pad_data = ((ctypes.c_int) * len(pad))(*pad)
-            stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.kernels[name] = \
-                self.create_mkldnn_conv_fprop_primitives_fn(
-                    self.mkldnn_engine,
-                    len(I.shape), len(F.shape),
-                    1, len(O.shape), len(stride),
-                    len(pad),
-                    input_shape, filter_shape,
-                    None, output_shape,
-                    I.ctypes.data, F.ctypes.data,
-                    None, O.ctypes.data,
-                    stride_data, pad_data)
-
     def fprop_conv(self, name, conv_slices, I, F, O):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.run_conv_fprop(I.ctypes.data, F.ctypes.data, O.ctypes.data, self.kernels[name])
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = O.shape
@@ -189,46 +216,9 @@ class Mkldnn(object):
                 slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
-    def init_conv_bprop(self, name, E, F, gI, pad, stride):
-        if (self.mkldnn_enabled):
-            C, D, H, W, N = E.shape
-            if (self.mkldnn_verbose):
-                print("MKL INIT CONV BPROP name: ", name,
-                      " E.shape: ", E.shape, " F.shape: ", F.shape,
-                      " gI.shape: ", gI.shape, " Stride: ", stride,
-                      " Pad: ", pad)
-            # Only 2D convolution supported in MKLDNN for now
-            if (D != 1):
-                return
-            # Only single precision float supported for now
-            if ((E.dtype != np.float32) or (F.dtype != np.float32)):
-                return
-            # Sanity check tensor shapes
-            if ((len(E.shape) != 5) or (len(F.shape) != 5) or
-                    (len(gI.shape) != 5) or (len(stride) != 3) or
-                    (len(pad) != 3)):
-                return
-            # NumPy Tensors need to be contiguous
-            if (not (E.flags['C_CONTIGUOUS'] and
-                     F.flags['C_CONTIGUOUS'] and
-                     gI.flags['C_CONTIGUOUS'])):
-                return
-            input_shape = ((ctypes.c_int) * len(E.shape))(*E.shape)
-            filter_shape = ((ctypes.c_int) * len(F.shape))(*F.shape)
-            output_shape = ((ctypes.c_int) * len(gI.shape))(*gI.shape)
-            pad_data = ((ctypes.c_int) * len(pad))(*pad)
-            stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.kernels[name] =\
-                self.create_mkldnn_conv_bprop_primitives_fn(
-                    self.mkldnn_engine,
-                    len(E.shape), len(F.shape), 1, len(gI.shape), len(stride), len(pad),
-                    input_shape, filter_shape, None, output_shape,
-                    E.ctypes.data, F.ctypes.data, None, gI.ctypes.data,
-                    stride_data, pad_data)
-
     def bprop_conv(self, name, conv_slices, E, F, gI):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.run_conv_bprop(E.ctypes.data, F.ctypes.data, gI.ctypes.data, self.kernels[name])
         else:
             _, _, _, mSlice, pSlice, qSlice = conv_slices
             F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
@@ -263,13 +253,12 @@ class Mkldnn(object):
             kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
             pad_data = ((ctypes.c_int) * len(pad))(*pad)
             stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.kernels[name] = \
-                self.create_mkldnn_pool_fprop_primitives_fn(
-                    self.mkldnn_engine,
-                    len(arrI.shape), len(arrO.shape), len(stride), len(pad),
-                    input_shape, kernel_sizes, output_shape,
-                    arrI.ctypes.data, arrO.ctypes.data,
-                    stride_data, pad_data, pool_type)
+            self.create_mkldnn_pool_fprop_primitives_fn(
+                self.mkldnn_engine,
+                len(arrI.shape), len(arrO.shape), len(stride), len(pad),
+                input_shape, kernel_sizes, output_shape,
+                arrI.ctypes.data, arrO.ctypes.data,
+                stride_data, pad_data, pool_type, self.kernels[name])
 
     def fprop_pool(self, name, pool_slices, arrI, arrO):
         if (self.mkldnn_enabled and name in self.kernels):
@@ -414,29 +403,35 @@ class Mkldnn(object):
 
     def fprop_relu(self, name, inputs, out, slope):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.run_relu_fprop(inputs.ctypes.data, out.ctypes.data, self.kernels[name])
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
-    def init_relu_bprop(self, name, arrE, arrD, arrSrc, slope):
-        if (self.mkldnn_enabled):
-            if (self.mkldnn_verbose):
-                print("Relu Input: ", len(arrE.shape), arrE.shape,
-                      " Outputs: ", arrD.shape, len(arrD.shape))
-            # Only single precision float supported for now
-            if ((arrE.dtype != np.float32) or (arrD.dtype != np.float32)):
-                return
-            input_size = np.prod(arrE.shape)
-            self.kernels[name] = \
-                self.create_mkldnn_relu_bprop_primitives_fn(
-                    self.mkldnn_engine, arrE.ctypes.data, arrD.ctypes.data,
-                    slope, arrSrc.ctypes.data, input_size)
-
-    def bprop_relu(self, name, inputs, out, slope):
+    def bprop_relu(self, name, inputs, out, fpropSrc, slope):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.run_relu_bprop(fpropSrc.ctypes.data, inputs.ctypes.data, 
+                    out.ctypes.data, self.kernels[name])
         else:
             np.add(inputs * np.greater(inputs, 0), inputs * slope * np.less(inputs, 0), out=out)
+
+    def alloc_reorder(self, name, output, input):
+        assert self.mkldnn_enabled
+        self.alloc_reorder_kernel_fn(
+            self.mkldnn_engine,
+            input.ctypes.data,
+            output.ctypes.data,
+            self.kernels[name]
+        )
+        #self.kernels[name] = self.create_mkldnn_netlist_fn()
+        #self.kernels[name] = None
+
+    def mkl_reorder(self, name, output, input):
+        assert self.mkldnn_enabled
+        if name in self.kernels:
+            #output[...] = np.copy(input)
+            self.run_mkldnn_netlist_fn(self.kernels[name])
+        else:
+            output[...] = np.copy(input)
 
 
 def update_conv(conv_slices, I, E, U):

@@ -42,6 +42,8 @@ from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.cpufusion import FusionPass
+from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
+    MklAddLayoutConversions, MklReorderOp
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -348,21 +350,6 @@ class CPUCodeGenerator(PyGen):
         self.conv_params[op.name] = op.conv_params
         self.conv_slices[op.name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
-        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-        pad = [pad_d, pad_h, pad_w]
-        stride = [str_d, str_h, str_w]
-        self.append("mkldnn.init_conv_fprop('{}', I={}, F={}, O={}, pad={}, stride={})",
-                    op.name, inputs, filters, outputs, pad, stride)
-
-    @allocate_op.on_type(bprop_conv)
-    def allocate_op(self, op, gI, delta, filters):
-        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-        pad = [pad_d, pad_h, pad_w]
-        stride = [str_d, str_h, str_w]
-        self.append("mkldnn.init_conv_bprop('{}', E={}, F={}, gI={}, pad={}, stride={})",
-                    op.name, delta, filters, gI, pad, stride)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
@@ -407,15 +394,9 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
                     op.name, x, y, out)
 
-    @allocate_op.on_type(ReluOp)
-    def allocate_op(self, op, outputs, inputs):
-        self.append("mkldnn.init_relu_fprop('{}', inputs={}, out={}, slope={})",
-                    op.name, inputs, outputs, op.slope)
-
-    @allocate_op.on_type(BpropReluOp)
-    def allocate_op(self, op, outputs, delta, inputs):
-        self.append("mkldnn.init_relu_bprop('{}', arrE={}, arrD={}, arrSrc={}, slope={})",
-                    op.name, delta, outputs, inputs, op.fprop.slope)
+    @allocate_op.on_type(MklReorderOp)
+    def generate_op(self, op, out, inp):
+        self.append("mkldnn.alloc_reorder('{}', {}, {})", op.name, out, inp)
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -527,7 +508,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(BpropReluOp)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("mkldnn.bprop_relu('{}', {}, {}, {})", op.name, delta, outputs, op.fprop.slope)
+        self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})", op.name, delta, outputs, inputs, op.fprop.slope)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -576,6 +557,11 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(Minimum)
     def generate_op(self, op, out, x, y):
         self.append("np.minimum({}, {}, out={})", x, y, out)
+
+    @generate_op.on_type(MklReorderOp)
+    def generate_op(self, op, output, input):
+        #self.append("{}[...] = np.copy({})", output, input)
+        self.append("mkldnn.mkl_reorder('{}', {}, {})", op.name, output, input)
 
     @generate_op.on_type(Multiply)
     def generate_op(self, op, out, x, y):
@@ -718,11 +704,14 @@ class CPUTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
+        self.initialize_mkldnn()
         self.graph_passes = [FusionPass(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
-                             CPUTensorShaping()]
+                             CPUTensorShaping(),
+                             MklCreateOpDescriptors(self.mkldnn),
+                             MklAddLayoutConversions(self.mkldnn)]
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
@@ -744,6 +733,16 @@ class CPUTransformer(Transformer):
         """
         return CPUDeviceBufferReference(self)
 
+    def initialize_mkldnn(self):
+        self.code.execute("""
+from ngraph.transformers.cpu.cpuengine import Mkldnn
+""")
+        mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
+        mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
+        self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
+        self.code.execute("mkldnn.open()")
+        self.mkldnn = self.globals.get("mkldnn", None)
+
     def start_transform_allocate(self):
         self.code.execute("""import os
 import numpy as np
@@ -758,11 +757,6 @@ from ngraph.transformers.cpu.cpuengine import ConvLocals
 from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
-
-        mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
-        mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
-        self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
-        self.code.execute("mkldnn.open()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
