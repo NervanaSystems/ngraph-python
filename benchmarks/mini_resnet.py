@@ -69,11 +69,12 @@ class f_module(object):
         self.main_path = Sequential(main_path)
 
     def __call__(self, x):
-        with ng.metadata(device_id=('1', '2'), parallel=ax.N):
-            t_x = self.trunk(x) if self.trunk else x
-            s_y = self.side_path(t_x) if self.side_path else t_x
-            m_y = self.main_path(t_x)
-            return s_y + m_y
+        t_x = self.trunk(x) if self.trunk else x
+        s_y = self.side_path(t_x) if self.side_path else t_x
+        m_y = self.main_path(t_x)
+        return s_y + m_y
+
+
 
 
 class mini_residual_network(Sequential):
@@ -127,15 +128,15 @@ def get_fake_data(dataset, batch_size, n_iter):
     return inputs, train_data, train_set
 
 
-def run_cifar_benchmark(dataset='cifar10', n_iter=10, n_skip=1, batch_size=128,
-                        transformer_type='cpu', bprop=False):
+def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
+                         transformer_type='hetr', bprop=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
     model = get_mini_resnet(inputs, dataset)
 
     # Running forward propagation
     fprop_computation_op = ng.computation(model(inputs['image']), 'all')
     benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type)
-    Benchmark.print_benchmark_results(benchmark_fprop.time(n_skip, n_iter,
+    Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
                                                            dataset + '_msra_fprop'))
 
     if bprop:
@@ -147,9 +148,8 @@ def run_cifar_benchmark(dataset='cifar10', n_iter=10, n_skip=1, batch_size=128,
         batch_cost_computation_op = ng.computation(batch_cost, "all")
 
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs, transformer_type)
-        Benchmark.print_benchmark_results(benchmark.time(n_skip, n_iter, dataset + '_msra_bprop'))
+        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip, dataset + '_msra_bprop'))
 
 
 if __name__ == "__main__":
-    run_cifar_benchmark(dataset='cifar10')
-    run_cifar_benchmark(dataset='i1k')
+    run_resnet_benchmark(dataset='cifar10')

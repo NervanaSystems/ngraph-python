@@ -81,13 +81,10 @@ class Benchmark(object):
         start = Benchmark.marker.init_mark()
         end = Benchmark.marker.init_mark()
         with closing(ngt.make_transformer_factory(self.transformer)()) as transformer:
-            nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
-                                                           show_all_metadata=False)
-            transformer.register_graph_pass(nviz)
             model_out_computation = transformer.add_computation(self.computation)
             for i in range(n_skip):
                 model_out_computation(feed_dict=feed_dict)
-            for i in range(n_iterations):
+            for i in range(n_skip, n_iterations):
                 Benchmark.marker.record_mark(start)
                 model_out_computation(feed_dict=feed_dict)
                 Benchmark.marker.record_mark(end)
