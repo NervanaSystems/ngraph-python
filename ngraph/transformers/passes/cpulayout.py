@@ -1,7 +1,7 @@
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, Add
-from ngraph.op_graph.convolution import ConvolutionOp
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv
 from ngraph.op_graph.pooling import PoolingOp
 from ngraph.op_graph.ctc import CTCOp
 
@@ -37,6 +37,19 @@ class CPUTensorLayout(PeepholeGraphPass):
 
         if replace:
             self.replace_op(op, ConvolutionOp(op.conv_params, inputs, filters, axes=op.axes))
+
+    @visit.on_type(update_conv)
+    def visit(self, op):
+
+        inputs = op.args[1]
+
+        replace = False
+        if not isinstance(inputs, ContiguousOp):
+            inputs = ContiguousOp(inputs)
+            replace = True
+
+        if replace:
+            self.replace_op(op, update_conv(op.args[0], inputs, op.fprop.args[1], op.fprop))
 
     @visit.on_type(CTCOp)
     def visit(self, op):
