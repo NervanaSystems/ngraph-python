@@ -32,16 +32,17 @@ def convolution(conv_params, inputs, filters, axes, docstring=None):
 
 
 class ConvolutionOp(TensorOp):
-    _index = 0
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+
+    Return:
+    """
 
     def __init__(self, conv_params, inputs, filters, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
+        super(ConvolutionOp, self).__init__(args=(inputs, filters), **kwargs)
 
-        Return:
-        """
         if len(inputs.shape) != 5:
             raise ValueError((
                 'convolution input shape must be length 5, found {}'
@@ -68,12 +69,6 @@ class ConvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
-        self.index = ConvolutionOp._index
-        ConvolutionOp._index += 1
-
-        super(ConvolutionOp, self).__init__(
-            args=(inputs, filters), **kwargs
-        )
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
         """
@@ -100,15 +95,6 @@ class ConvDerivOp(TensorOp):
         self.fprop = fprop
 
     @property
-    def index(self):
-        """
-
-        Returns:
-            The slice index of the convolution.
-        """
-        return self.fprop.forwarded.index
-
-    @property
     def conv_params(self):
         """
 
@@ -120,12 +106,12 @@ class ConvDerivOp(TensorOp):
 
 
 class update_conv(ConvDerivOp):
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+    """
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
-        """
         super(update_conv, self).__init__(
             args=(delta, inputs),
             fprop=fprop,
@@ -134,12 +120,12 @@ class update_conv(ConvDerivOp):
 
 
 class bprop_conv(ConvDerivOp):
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+    """
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
-        """
         super(bprop_conv, self).__init__(
             args=(delta, filters),
             fprop=fprop,
