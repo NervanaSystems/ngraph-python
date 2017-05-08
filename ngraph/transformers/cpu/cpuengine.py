@@ -65,6 +65,18 @@ class Mkldnn(object):
                  ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_conv_bprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_conv_bprop_weights_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_conv_bprop_weights_primitives
+            self.create_mkldnn_conv_bprop_weights_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p]
+            self.create_mkldnn_conv_bprop_weights_primitives_fn.restype = ctypes.c_void_p
             self.create_mkldnn_pool_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_pool_fprop_primitives
             self.create_mkldnn_pool_fprop_primitives_fn.argtypes = \
@@ -245,6 +257,58 @@ class Mkldnn(object):
                 slicedF = F[:, sliceT, sliceR, sliceS, :].reshape((-1, K))
                 slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
+
+    def init_update_conv(self, name, arrI, arrE, arrO, pad, stride):
+        if (self.mkldnn_enabled):
+            C, D, H, W, N = arrE.shape
+            # Only 2D convolution supported in MKLDNN for now
+            if (D != 1):
+                return
+            # Only single precision float supported for now
+            if ((arrE.dtype != np.float32) or (arrI.dtype != np.float32)):
+                return
+            # Sanity check tensor shapes
+            if ((len(arrE.shape) != 5) or (len(arrI.shape) != 5) or
+                    (len(arrO.shape) != 5) or (len(stride) != 3) or
+                    (len(pad) != 3)):
+                return
+            # NumPy Tensors need to be contiguous
+            if (not (arrE.flags['C_CONTIGUOUS'] and
+                     arrI.flags['C_CONTIGUOUS'] and
+                     arrO.flags['C_CONTIGUOUS'])):
+                return
+            error_shape = ((ctypes.c_int) * len(arrE.shape))(*arrE.shape)
+            input_shape = ((ctypes.c_int) * len(arrI.shape))(*arrI.shape)
+            output_shape = ((ctypes.c_int) * len(arrO.shape))(*arrO.shape)
+            pad_data = ((ctypes.c_int) * len(pad))(*pad)
+            stride_data = ((ctypes.c_int) * len(stride))(*stride)
+            self.kernels[name] =\
+                self.create_mkldnn_conv_bprop_weights_primitives_fn(
+                    self.mkldnn_engine,
+                    len(arrE.shape), len(arrI.shape), 1, len(arrO.shape), len(stride), len(pad),
+                    error_shape, input_shape, None, output_shape,
+                    arrE.ctypes.data, arrI.ctypes.data, None, arrO.ctypes.data,
+                    stride_data, pad_data)
+
+    def update_conv(self, name, conv_slices, I, E, U):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
+        else:
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = E.shape
+            C, _, _, _, K = U.shape
+            U.fill(0.0)
+
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, tlen = mS
+                sliceR, sliceH, rlen = pS
+                sliceS, sliceW, slen = qS
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                slicedE = E[:, m, p, q, :]
+                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                U[:, sliceT, sliceR, sliceS, :] += update
 
     def init_pool_fprop(self, pool_type, name, arrI, arrO, kernel, pad, stride):
         if (self.mkldnn_enabled):
@@ -440,24 +504,6 @@ class Mkldnn(object):
         else:
             np.add(delta * np.greater(inputs, 0),
                    delta * slope * np.less(inputs, 0), out=out)
-
-
-def update_conv(conv_slices, I, E, U):
-    mSlice, pSlice, qSlice, _, _, _ = conv_slices
-    K, M, P, Q, N = E.shape
-    C, _, _, _, K = U.shape
-    U.fill(0.0)
-
-    for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                 enumerate(pSlice),
-                                                 enumerate(qSlice)):
-        sliceT, sliceD, tlen = mS
-        sliceR, sliceH, rlen = pS
-        sliceS, sliceW, slen = qS
-        slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-        slicedE = E[:, m, p, q, :]
-        update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
-        U[:, sliceT, sliceR, sliceS, :] += update
 
 
 def fprop_lut(lut, idx, axis, output):
