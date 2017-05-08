@@ -145,7 +145,7 @@ _red_template = r"""
     }
     if (!(threadIdx.x & 0x1f))
     {
-        %(shared_buffer)s[threadIdx.x >> 5] = %(out)s;
+        %(shared_buffer)s[(threadIdx.x >> 5) + reduction_offset] = %(out)s;
     }
 
     __syncthreads();
@@ -153,7 +153,7 @@ _red_template = r"""
     // Reduce between warps (max of 32 warps since block has max 1024 threads)
     if (threadIdx.x < 32)
     {
-        %(out)s = %(shared_buffer)s[threadIdx.x];
+        %(out)s = %(shared_buffer)s[threadIdx.x + reduction_offset];
 
         #pragma unroll
         for (int i = 16; i > 0; i >>= 1)
@@ -164,22 +164,27 @@ _red_template = r"""
 
     if (threadIdx.x == 0)
     {
-        %(shared_buffer)s[0] = %(out)s;
+        %(shared_buffer)s[reduction_offset] = %(out)s;
     }
 
     __syncthreads();
 
-    %(out)s = %(shared_buffer)s[0];
+    %(out)s = %(shared_buffer)s[reduction_offset];
 """
 
 _reg_decl_template = r"""
     %(type)s %(regname)s = %(initval)s;"""
 
+_shared_size_template1 = r"""1"""
+_shared_size_template2 = r"""ITEMS_PER_BLOCK1_%(id)s"""
+_shared_size_template3 = r"""(ITEMS_PER_BLOCK1_%(id)s * ITEMS_PER_BLOCK2_%(id)s)"""
+
 _smem_decl_template = r"""
-    __shared__ float %(sbuf)s[32];"""
+    __shared__ float %(sbuf)s[32 * %(shared_size)s];
+    int reduction_offset = 32 * (threadIdx.y + (blockDim.y * threadIdx.z));"""
 
 _smem_init_template = r"""
-        %(sbuf)s[threadIdx.x] = 0.0f;"""
+        %(sbuf)s[threadIdx.x + reduction_offset] = 0.0f;"""
 
 _thread_index_template1 = r"""
     unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
@@ -839,8 +844,8 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
 
 
 def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
-                          kernel_name, argstring, axes_mapping, loop_axis,
-                          kernel_identifier):
+                          _shared_size_template, kernel_name, argstring, axes_mapping,
+                          loop_axis, kernel_identifier):
     """
     Generates entire kernel code which can be passed to the CUDA C compiler.
     Takes care of function header, defines, and initialization code.
@@ -912,8 +917,12 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     smem_decls = ""
     smem_inits = ""
     for sbuf in ctx.shared_buffers:
+        shared_size = _shared_size_template % {
+            "id": kernel_identifier
+        }
         smem_decls = smem_decls + _smem_decl_template % {
-            "sbuf": sbuf
+            "sbuf": sbuf,
+            "shared_size": shared_size
         }
         smem_inits = smem_inits + _smem_init_template % {
             "sbuf": sbuf
@@ -1136,6 +1145,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
         _index_template = _index_template1
         _thread_index_template = _thread_index_template1
         _take_index_template = _take_index_template1
+        _shared_size_template = _shared_size_template1
     elif dims == 2:
         _defines_template = _defines_template2
         if loop_axis == 0:
@@ -1144,6 +1154,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
             _index_template = _index_template21
         _thread_index_template = _thread_index_template2
         _take_index_template = _take_index_template2
+        _shared_size_template = _shared_size_template2
     elif dims == 3:
         _defines_template = _defines_template3
         if loop_axis == 0:
@@ -1154,6 +1165,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
             _index_template = _index_template32
         _thread_index_template = _thread_index_template3
         _take_index_template = _take_index_template3
+        _shared_size_template = _shared_size_template3
     else:
         assert False
 
@@ -1398,8 +1410,8 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
     code = _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
-                                 kernel_name, argstring, axes_mapping, loop_axis,
-                                 kernel_identifier)
+                                 _shared_size_template, kernel_name, argstring, axes_mapping,
+                                 loop_axis, kernel_identifier)
 
     return (code, kernel_name, arg_desc, params)
 
