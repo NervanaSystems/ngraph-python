@@ -377,6 +377,15 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_conv_bprop('{}', E={}, F={}, gI={}, pad={}, stride={})",
                     op.name, delta, filters, gI, pad, stride)
 
+    @allocate_op.on_type(update_conv)
+    def allocate_op(self, op, arrO, arrE, arrI):
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        pad = [pad_d, pad_h, pad_w]
+        stride = [str_d, str_h, str_w]
+        self.append("mkldnn.init_update_conv('{}', arrI={}, arrE={}, arrO={}, pad={}, stride={})",  # noqa
+                    op.name, arrI, arrE, arrO, pad, stride)
+
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
         self.pool_params[op.name] = op.pool_params
@@ -471,8 +480,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("update_conv(self.conv_slices['{}'], I={}, E={}, U={})",
-                    op.fprop.forwarded.name, inputs, delta, outputs)
+        self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={})",
+                    op.name, op.fprop.forwarded.name, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
@@ -771,7 +780,6 @@ import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
 from ngraph.op_graph import axes
-from ngraph.transformers.cpu.cpuengine import update_conv
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals
