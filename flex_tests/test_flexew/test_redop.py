@@ -103,34 +103,33 @@ test_data_double_operand = (
     # *case_description is optional
 
     # test_maximum
-    bug_1461((ng.maximum, [(np.array([1, 1.1, 1.2, 1.3]),
-                            (np.array([1.2, 1, 1.3, 1.4])),
-                            (np.array([1.1999, 1.0999, 1.2999, 1.3999])))],
-              "Maxiumum function - values withing flex range")),
+    bug_1461((ng.maximum, [(np.array([1, 1.1, 1.2, 1.3]), np.array([1.2, 1, 1.3, 1.4]),
+                            np.array([1.199951171875, 1.0999755859375, 1.29998779296875, 1.39996337890625]))],
+              "Maximum function - values withing flex range")),
     bug_1461((ng.maximum, [(np.array([MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE - 1, MAXIMUM_FLEX_VALUE - 2]),
-                            (np.array([MAXIMUM_FLEX_VALUE - 1, MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE - 1])),
-                            (np.array([MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE - 1])))],
+                            np.array([MAXIMUM_FLEX_VALUE - 1, MAXIMUM_FLEX_VALUE + 1, MAXIMUM_FLEX_VALUE - 1]),
+                            np.array([MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE - 1]))],
               "Maximum function - result expected to overflow")),
     (ng.maximum, [(MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)],
      "Maximum function - values from flex range - scalars as input"),
+    (ng.maximum, [(MAXIMUM_FLEX_VALUE + 2.0, MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)],
+     "Maximum function - result expected to overflow - scalars as input"),
 
     # test_minimum
     (ng.minimum, [(MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE - 2, MINIMUM_FLEX_VALUE)],
      "Minimum function - result expected to underflow - scalars as input"),
     (ng.minimum, [(MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE)],
      "Minimum function - values from flex range - scalars as input"),
-    bug_1461((ng.minimum, [(np.array([0.4, MAXIMUM_FLEX_VALUE, 0.3]),
-                            np.array([0.3, 0.4, 0.2]),
+    bug_1461((ng.minimum, [(np.array([0.4, MAXIMUM_FLEX_VALUE, 0.3]), np.array([0.3, 0.4, 0.2]),
                             np.array([0, 0.3999, 0]), "For 1st array: 1st and 2nd elements overflow to 0")],
               "Minimum function - values from flex range"))
-
 )
 
 
-@pytest.mark.parametrize("operation, operands, test_name", test_data_single_operand, ids=id_func)
-def test_single_operand(transformer_factory, operation, operands, test_name):
-    template_one_placeholder(operands, operation)
-
+# @pytest.mark.parametrize("operation, operands, test_name", test_data_single_operand, ids=id_func)
+# def test_single_operand(transformer_factory, operation, operands, test_name):
+#     template_one_placeholder(operands, operation)
+#
 
 @pytest.mark.parametrize("operation, operands, test_name", test_data_double_operand, ids=id_func)
 def test_double_operand(transformer_factory, operation, operands, test_name):

@@ -56,7 +56,13 @@ def get_placeholder_from_operand(operand):
     if not isinstance(operand, np.ndarray):
         return ng.placeholder(())
     else:
-        return ng.placeholder(ng.make_axes([ng.make_axis(length=operand.size)]))
+        if len(operand.shape) > 1:
+            rows, columns = operand.shape
+            N = ng.make_axis(length=rows)
+            M = ng.make_axis(length=columns)
+            return ng.placeholder((N, M))
+        else:
+            return ng.placeholder(ng.make_axes([ng.make_axis(length=operand.size)]))
 
 
 def id_func(param):
@@ -66,60 +72,96 @@ def id_func(param):
     elif isinstance(param, FunctionType):
         return param.func_name.title()
     elif isinstance(param, list):
-        if len(param) != 1:
-            description = " of iterating ("
-        for i in param:
-            description += " of {} equals {} | ".format(i[0], i[1])
-            if len(i) > 2:
-                description += ", because of {}".format(i[2])
-        if len(param) != 1:
-            return description + ")"
-
+        if len(param) > 1:
+            description += "Iterations: ("
+        if len(max(param, key=len)) < 4:
+            for i in param:
+                operand, result, explanation = unpack_list(*i)
+                if len(i) > 2:
+                    description += " of {} equals {} ".format(operand, result)
+                    description += ", because of {} |".format(explanation)
+                else:
+                    description += " of {} equals {} | ".format(operand, result)
+            return description
+        else:
+            for i in param:
+                operand_1, operand_2, result, explanation = unpack_list_2(*i)
+                if len(i) > 3:
+                    description += " {} of {} equals {} ".format(operand_1, operand_2, result)
+                    description += ", because of {} |".format(explanation)
+                else:
+                    description += " {} of {} equals {} | ".format(operand_1, operand_2, result)
+            return description
+        if len(param) > 1:
+            description += ")"
     return " "
 
 
-def template_one_placeholder(operands, ng_fun):
-    if not isinstance(operands[0][0], np.ndarray):
-        ng_placeholder = ng.placeholder(())
-    else:
-        ng_placeholder = ng.placeholder(ng.make_axes([ng.make_axis(length=operands[0][0].size)]))
+def unpack_list(a, b, *c):
+    return a, b, c
 
+
+def unpack_list_2(a, b, c, *d):
+    return a, b, c, d
+
+
+def template_one_placeholder(operands, ng_fun):
+    first_operand = operands[0][0]
+    ng_placeholder = get_placeholder_from_operand(first_operand)
     with executor(ng_fun(ng_placeholder), ng_placeholder) as const_executor:
         iterations = len(operands) != 1
         for i in operands:
-            print("Operand: ", i[0])
-            print("Expected result: ", i[1])
-            flex_result = const_executor(i[0])
+            operand, expected_result, description = unpack_list(*i)
             if len(i) > 2:
-                print("Description: ", i[2])
-            print("flex_result: ", flex_result)
+                print("Description: ", description)
+            print("Operand: ", operand)
+            print("Expected result: ", expected_result)
+            flex_result = const_executor(operand)
+            try:
+                print("flex_result: {0:.30}".format(float(flex_result)))
+            except TypeError:
+                # exception for arrays
+                np.set_printoptions(precision=30)
+                print("flex_result: {}".format(flex_result))
             if iterations:
-                assert_allclose(flex_result, i[1])
-            elif not isinstance(operands[0][0], np.ndarray):
-                assert(flex_result == i[1])
+                assert_allclose(flex_result, expected_result)
+            elif not isinstance(first_operand, np.ndarray):
+                assert (flex_result == expected_result)
             else:
-                assert np.array_equal(flex_result, i[1])
+                assert np.array_equal(flex_result, expected_result)
 
 
 def template_two_placeholders(operands, ng_fun):
-    ng_placeholder1 = get_placeholder_from_operand(operands[0][0])
-    ng_placeholder2 = get_placeholder_from_operand(operands[0][1])
+    first_operand = operands[0][0]
+    second_operand = operands[0][1]
+
+    ng_placeholder1 = get_placeholder_from_operand(first_operand)
+    ng_placeholder2 = get_placeholder_from_operand(second_operand)
+
     iterations = len(operands) != 1
     with executor(ng_fun(ng_placeholder1, ng_placeholder2),
                   ng_placeholder1, ng_placeholder2) as const_executor:
         for i in operands:
-            print("Operand 1: ", i[0])
-            print("Operand 2: ", i[1])
-            print("Expected result: ", i[2])
-            flex_result = const_executor(i[0], i[1])
-            print("flex_result: ", flex_result)
-            print("difference: ", flex_result - i[2])
+            operand_1, operand_2, expected_result, description = unpack_list_2(*i)
+            if len(i) > 3:
+                print("Description: ", description)
+            print("Operand 1: ", operand_1)
+            print("Operand 2: ", operand_2)
+            print("Expected result: ", expected_result)
+            flex_result = const_executor(operand_1, operand_2)
+            try:
+                print("flex_result: {0:.30}".format(float(flex_result)))
+            except TypeError:
+                # exception for arrays
+                np.set_printoptions(precision=30)
+                print("flex_result: {}".format(flex_result))
+            print("difference: ", flex_result - expected_result)
             if iterations:
-                assert_allclose(flex_result, i[2])
-            elif not isinstance(operands[0][0], np.ndarray):
-                assert flex_result == i[2]
+                assert_allclose(flex_result, expected_result)
+            elif not isinstance(first_operand, np.ndarray):
+                assert flex_result == expected_result
             else:
-                assert_allclose(flex_result, i[2])
+                assert np.array_equal(flex_result, expected_result)
 
 
 def template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters):
