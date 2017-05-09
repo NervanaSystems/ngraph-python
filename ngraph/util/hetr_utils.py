@@ -172,7 +172,8 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                     raise ValueError("Missing parallel_axis in Op's x_out_axes or y_out_axes")
 
         if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
-            op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis, num_clones)
+            op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
+                                                       num_clones)
 
         op.uuid = uuid.uuid4()
 
