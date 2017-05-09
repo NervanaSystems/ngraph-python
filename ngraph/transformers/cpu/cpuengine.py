@@ -183,6 +183,16 @@ class Mkldnn(object):
             self.destroy_mkldnn_engine_fn = self.mkldnn_engine_dll.destroy_mkldnn_engine
             self.destroy_mkldnn_engine_fn.argtypes = [ctypes.c_void_p]
 
+            self.create_mkldnn_batchnorm_fprop_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_batchnorm_fprop_primitives
+            self.create_mkldnn_batchnorm_fprop_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_double]
+            self.create_mkldnn_batchnorm_fprop_primitives_fn.restype = ctypes.c_void_p
+
     def open(self):
         if (self.mkldnn_enabled):
             self.mkldnn_engine = self.init_mkldnn_engine_fn()
@@ -198,6 +208,51 @@ class Mkldnn(object):
                         self.cleanup_mkldnn_fn(self.kernels[op])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
+
+        def init_batchnorm_fprop(self, index, inputs, outputs, gamma, bias, mean, variance, epsilon):
+            if (self.mkldnn_enabled):
+
+                input_shape = inputs.shape
+                output_shape = outputs.shape
+
+                # Need 4D tensor for input and output
+                if (len(input_shape) != 4):
+                    while len(input_shape) < 4:
+                        input_shape = input_shape + (1,)
+
+                if (len(output_shape) != 4):
+                    while len(output_shape) < 4:
+                        output_shape = output_shape + (1,)
+
+                mean_ch = mean[:, 0]
+                variance_ch = variance[:, 0]
+                gamma_ch = gamma[:, 0]
+                bias_ch = bias[:, 0]
+
+                mean_size = mean.shape[0]
+                variance_size = variance.shape[0]
+
+                weights = np.vstack([gamma_ch, bias_ch])
+                weights_shape = ((ctypes.c_int) * len(weights.shape))(*weights.shape)
+                input_shape = ((ctypes.c_int) * len(input_shape))(*input_shape)
+                output_shape = ((ctypes.c_int) * len(output_shape))(*output_shape)
+                self.mkldnn_batchnorm_fprop_netlist[index] = \
+                    self.create_mkldnn_batchnorm_fprop_primitives_fn(self.mkldnn_engine,
+                                                                     inputs.ctypes.data, outputs.ctypes.data,
+                                                                     weights.ctypes.data,
+                                                                     mean_ch.ctypes.data, variance_ch.ctypes.data,
+                                                                     input_shape, output_shape,
+                                                                     weights_shape, mean_size, variance_size,
+                                                                     epsilon[0][0])
+
+        def fprop_batchnorm(self, index, inputs, outputs, gamma, bias, mean, variance, epsilon):
+            if (self.mkldnn_enabled and index in self.mkldnn_batchnorm_fprop_netlist):
+                self.run_mkldnn_netlist_fn(self.mkldnn_batchnorm_fprop_netlist[index])
+            else:
+                # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
+                self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+                self.batch_norm_output = gamma * self.xhat + bias
+                np.copyto(outputs, self.batch_norm_output)
 
     def fprop_conv(self, name, conv_slices, I, F, O):
         if (self.mkldnn_enabled and name in self.kernels):
