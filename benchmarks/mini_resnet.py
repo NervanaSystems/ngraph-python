@@ -93,21 +93,21 @@ class mini_residual_network(Sequential):
             for nfm, stride in zip(nfms[1:], strides):
                 layers.append(f_module(nfm, strides=stride, batch_norm=batch_norm))
 
-        if batch_norm:
-            layers.append(BatchNorm())
-        if activation:
-            layers.append(Activation(Rectlin()))
-        layers.append(Pool2D(8, strides=2, op='avg'))
-        if dataset == 'cifar10':
-            ax.Y.length = 10
-            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
+            if batch_norm:
+                layers.append(BatchNorm())
+            if activation:
+                layers.append(Activation(Rectlin()))
+            layers.append(Pool2D(8, strides=2, op='avg'))
+            if dataset == 'cifar10':
+                ax.Y.length = 10
+                layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
                                  batch_norm=batch_norm, activation=Softmax()))
-        elif dataset == 'i1k':
-            ax.Y.length = 1000
-            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
+            elif dataset == 'i1k':
+                ax.Y.length = 1000
+                layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
                                  batch_norm=batch_norm, activation=Softmax()))
-        else:
-            raise ValueError("Incorrect dataset provided")
+            else:
+                raise ValueError("Incorrect dataset provided")
 
         self.layers = layers
 
