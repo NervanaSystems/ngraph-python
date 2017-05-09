@@ -75,8 +75,6 @@ class f_module(object):
         return s_y + m_y
 
 
-
-
 class mini_residual_network(Sequential):
     def __init__(self, inputs, dataset, stage_depth,
                  batch_norm=False, activation=False, preprocess=False):
@@ -101,11 +99,11 @@ class mini_residual_network(Sequential):
             if dataset == 'cifar10':
                 ax.Y.length = 10
                 layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                 batch_norm=batch_norm, activation=Softmax()))
+                                     batch_norm=batch_norm, activation=Softmax()))
             elif dataset == 'i1k':
                 ax.Y.length = 1000
                 layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                 batch_norm=batch_norm, activation=Softmax()))
+                                     batch_norm=batch_norm, activation=Softmax()))
             else:
                 raise ValueError("Incorrect dataset provided")
 
