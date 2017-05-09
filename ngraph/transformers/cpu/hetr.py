@@ -20,7 +20,8 @@ class HetrLocals(object):
     def __init__(self, send_nodes, recv_nodes,
                  scatter_send_nodes, scatter_recv_nodes,
                  gather_send_nodes, gather_recv_nodes,
-                 allreduce_nodes, **kwargs):
+                 allreduce_nodes, broadcast_send_nodes,
+                 broadcast_recv_nodes, **kwargs):
         super(HetrLocals, self).__init__(**kwargs)
         self.send_nodes = send_nodes
         self.recv_nodes = recv_nodes
@@ -29,6 +30,8 @@ class HetrLocals(object):
         self.gather_send_nodes = gather_send_nodes
         self.gather_recv_nodes = gather_recv_nodes
         self.allreduce_nodes = allreduce_nodes
+        self.broadcast_send_nodes = broadcast_send_nodes
+        self.broadcast_recv_nodes = broadcast_recv_nodes
 
     def queue_send(self, send_id):
         send_op = self.send_nodes[send_id]
@@ -108,3 +111,17 @@ class HetrLocals(object):
             result = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
 
         return result
+
+    def queue_broadcast_send(self, broadcast_send_id):
+        broadcast_send_op = self.broadcast_send_nodes[broadcast_send_id]
+        x_devicetensor = broadcast_send_op.args[0].value
+        x_nparr = x_devicetensor.get(None)
+        for i in range(len(broadcast_send_op.to_id)):
+            q = broadcast_send_op.shared_queues[i]
+            q.put(x_nparr)
+
+    def broadcast_recv_from_queue_broadcast_send(self, broadcast_recv_id):
+        broadcast_recv_op = self.broadcast_recv_nodes[broadcast_recv_id]
+        q = broadcast_recv_op.shared_queues[broadcast_recv_op.idx]
+        x = q.get()
+        return x

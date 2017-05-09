@@ -49,7 +49,8 @@ from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
-    CPUQueueScatterRecvOp, CPUQueueAllReduceOp
+    CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
+    CPUQueueBroadcastRecvOp
 
 
 class CPUConvEngine(object):
@@ -351,6 +352,14 @@ class CPUCodeGenerator(PyGen):
     @property
     def allreduce_nodes(self):
         return self.transformer.current_computation.allreduce_nodes
+
+    @property
+    def broadcast_send_nodes(self):
+        return self.transformer.current_computation.broadcast_send_nodes
+
+    @property
+    def broadcast_recv_nodes(self):
+        return self.transformer.current_computation.broadcast_recv_nodes
 
     @generic_method(Op)
     def allocate_op(self, op, *args):
@@ -720,6 +729,19 @@ class CPUCodeGenerator(PyGen):
         self.allreduce_nodes.append(op)
         self.append("{}[...] = self.queue_allreduce({})", out, allreduce_id)
 
+    @generate_op.on_type(CPUQueueBroadcastSendOp)
+    def generate_op(self, op, out, *args):
+        broadcast_send_id = len(self.broadcast_send_nodes)
+        self.broadcast_send_nodes.append(op)
+        self.append("self.queue_broadcast_send({})", broadcast_send_id)
+
+    @generate_op.on_type(CPUQueueBroadcastRecvOp)
+    def generate_op(self, op, out, *args):
+        broadcast_recv_id = len(self.broadcast_recv_nodes)
+        self.broadcast_recv_nodes.append(op)
+        self.append("{}[...] = self.broadcast_recv_from_queue_broadcast_send({})",
+                    out, broadcast_recv_id)
+
 
 class CPUTransformer(Transformer):
     """
@@ -870,7 +892,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
                            scatter_recv_nodes=computation.scatter_recv_nodes,
                            gather_send_nodes=computation.gather_send_nodes,
                            gather_recv_nodes=computation.gather_recv_nodes,
-                           allreduce_nodes=computation.allreduce_nodes)
+                           allreduce_nodes=computation.allreduce_nodes,
+                           broadcast_send_nodes=computation.broadcast_send_nodes,
+                           broadcast_recv_nodes=computation.broadcast_recv_nodes)
             computation.executor = executor
 
     def allocate_storage(self):

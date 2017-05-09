@@ -405,3 +405,59 @@ class CPUQueueAllReduceOp(AllReduceOp):
     @property
     def shared_queues(self):
         return self._shared_queues
+
+
+class BroadcastSendOp(SendOp):
+    """
+    Represents a broadcat send op. Sets destination device ids.
+
+    Arguments:
+        from_node: The source node.
+        to_node: The destination node.
+    """
+
+    def __init__(self, from_node, to_node):
+        super(BroadcastSendOp, self).__init__(from_node)
+        self.to_id = to_node.metadata['device_id']
+
+
+class BroadcastRecvOp(RecvOp):
+    """
+    Represents a broadcast recv op.
+
+    Arguments:
+        to_node: The destination node.
+        send_node: The broadcast send node associated with this node.
+    """
+
+    def __init__(self, to_node, send_node):
+        super(BroadcastRecvOp, self).__init__(to_node, send_node)
+
+
+class CPUQueueBroadcastSendOp(BroadcastSendOp):
+    """
+    Represents CPU-based queue implementation for BroadcastSend op.
+    Creates shared queues.
+    """
+    def __init__(self, from_node, to_node):
+        super(CPUQueueBroadcastSendOp, self).__init__(from_node, to_node)
+        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
+
+
+class CPUQueueBroadcastRecvOp(BroadcastRecvOp):
+    """
+    Represents CPU-based queue implementation for BroadcastRecv op.
+    Creates shared queues.
+    """
+    def __init__(self, to_node, send_node):
+        super(CPUQueueBroadcastRecvOp, self).__init__(to_node, send_node)
+        self.idx = 0
+        self._shared_queues = send_node.shared_queues
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
