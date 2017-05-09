@@ -40,6 +40,10 @@ class ModelWrapper(object):
     """the ModelWrapper is responsible for interacting with neon and ngraph"""
 
     def __init__(self, state_axes, action_size, batch_size, model):
+        """
+        for now, model must be a function which takes action_axes, and
+        returns a neon container
+        """
         super(ModelWrapper, self).__init__()
 
         print(state_axes, action_size, batch_size)
@@ -55,32 +59,6 @@ class ModelWrapper(object):
 
         # todo: except model as input parameter to constructor
         self.model = model(self.axes.action)
-        self.model = neon.Sequential([
-            # neon.Affine(
-            #     nout=20,
-            #     weight_init=neon.GlorotInit(),
-            #     bias_init=neon.ConstantInit(),
-            #     activation=neon.Tanh(),
-            # ),
-            # neon.Affine(
-            #     nout=20,
-            #     weight_init=neon.GlorotInit(),
-            #     bias_init=neon.ConstantInit(),
-            #     activation=neon.Tanh(),
-            # ),
-            neon.Affine(
-                nout=20,
-                weight_init=neon.GlorotInit(),
-                bias_init=neon.ConstantInit(),
-                activation=neon.Tanh(),
-            ),
-            neon.Affine(
-                weight_init=neon.GlorotInit(),
-                bias_init=neon.ConstantInit(),
-                activation=neon.Tanh(),
-                axes=(self.axes.action, )
-            ),
-        ])
 
         # construct inference computation
         with neon.Layer.inference_mode_on():

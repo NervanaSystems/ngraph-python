@@ -3,17 +3,20 @@ import simple_environments
 from dqn import Agent
 
 
-def rl_loop(environment, agent, episodes):
+
+def rl_loop(environment, agent, episodes, render=False):
     """
     train an agent inside an environment for a set number of episodes
     """
+    total_steps = 0
     for episode in range(episodes):
         state = environment.reset()
         done = False
         step = 0
         total_reward = 0
         while not done:
-            # environment.render()
+            if render:
+                environment.render()
 
             action = agent.act(state)
             next_state, reward, done, _ = environment.step(action)
@@ -24,14 +27,14 @@ def rl_loop(environment, agent, episodes):
             total_reward += reward
 
         agent.end_of_episode()
+        total_steps += step
         print(
-            'episode: {}, steps: {}, last_reward: {}, sum(reward): {}'.format(
-                episode, step, reward, total_reward
+            'episode: {}, total_steps: {}, steps: {}, last_reward: {}, sum(reward): {}'.format(
+                episode, total_steps, step, reward, total_reward
             )
         )
 
-
-def evaluate_single_episode(environment, agent):
+def evaluate_single_episode(environment, agent, render=False):
     """
     evaluate a single episode of agent operating inside of an environment
     """
@@ -40,7 +43,8 @@ def evaluate_single_episode(environment, agent):
     step = 0
     total_reward = 0
     while not done:
-        # environment.render()
+        if render:
+            environment.render()
 
         action = agent.act(state, training=False)
         next_state, reward, done, _ = environment.step(action)
@@ -52,7 +56,6 @@ def evaluate_single_episode(environment, agent):
     agent.end_of_episode()
 
     return total_reward
-
 
 def main():
     environment = gym.make('CartPole-v0')
