@@ -9,8 +9,6 @@ from contextlib import closing
 import ngraph as ng
 from ngraph.frontends import neon
 
-EPISODES = 3000
-
 
 class Namespace(object):
     pass
@@ -41,7 +39,7 @@ def make_axes(lengths, name=None):
 class ModelWrapper(object):
     """the ModelWrapper is responsible for interacting with neon and ngraph"""
 
-    def __init__(self, state_axes, action_size, batch_size):
+    def __init__(self, state_axes, action_size, batch_size, model):
         super(ModelWrapper, self).__init__()
 
         print(state_axes, action_size, batch_size)
@@ -56,6 +54,7 @@ class ModelWrapper(object):
         self.target = ng.placeholder([self.axes.action, self.axes.n])
 
         # todo: except model as input parameter to constructor
+        self.model = model(self.axes.action)
         self.model = neon.Sequential([
             # neon.Affine(
             #     nout=20,
@@ -137,7 +136,7 @@ def space_shape(space):
 class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
-    def __init__(self, observation_space, action_space):
+    def __init__(self, observation_space, action_space, model):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
@@ -152,7 +151,8 @@ class Agent(object):
         self.model_wrapper = ModelWrapper(
             state_axes=space_shape(observation_space),
             action_size=action_space.n,
-            batch_size=self.batch_size
+            batch_size=self.batch_size,
+            model=model,
         )
 
     def act(self, state, training=True):

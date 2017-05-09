@@ -2,11 +2,33 @@ import gym
 import simple_environments
 import rl_loop
 from dqn import Agent
+from ngraph.frontends import neon
+
+
+def small_model(action_axes):
+    return neon.Sequential([
+        neon.Affine(
+            nout=20,
+            weight_init=neon.GlorotInit(),
+            bias_init=neon.ConstantInit(),
+            activation=neon.Tanh(),
+        ),
+        neon.Affine(
+            weight_init=neon.GlorotInit(),
+            bias_init=neon.ConstantInit(),
+            activation=neon.Tanh(),
+            axes=(action_axes, )
+        ),
+    ])
 
 
 def test_dependent_environment():
     environment = gym.make('DependentEnv-v0')
-    agent = Agent(environment.observation_space, environment.action_space)
+    agent = Agent(
+        environment.observation_space,
+        environment.action_space,
+        model=small_model
+    )
 
     rl_loop.rl_loop(environment, agent, episodes=20)
 

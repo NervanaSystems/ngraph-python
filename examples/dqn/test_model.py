@@ -5,8 +5,27 @@ import dqn
 from ngraph.frontends import neon
 
 
+def small_model(action_axes):
+    return neon.Sequential([
+        # neon.Affine(
+        #     nout=20,
+        #     weight_init=neon.GlorotInit(),
+        #     bias_init=neon.ConstantInit(),
+        #     activation=neon.Tanh(),
+        # ),
+        neon.Affine(
+            weight_init=neon.GlorotInit(),
+            bias_init=neon.ConstantInit(),
+            activation=neon.Tanh(),
+            axes=(action_axes, )
+        ),
+    ])
+
+
 def test_model_predict():
-    model = dqn.ModelWrapper(state_axes=1, action_size=2, batch_size=3)
+    model = dqn.ModelWrapper(
+        state_axes=1, action_size=2, batch_size=3, model=small_model
+    )
 
     result = model.predict(np.zeros((1, 3)))
 
@@ -15,7 +34,9 @@ def test_model_predict():
 
 def test_model_predict_wrong_shape():
     # todo: this should now raise an exception
-    model = dqn.ModelWrapper(state_axes=1, action_size=2, batch_size=3)
+    model = dqn.ModelWrapper(
+        state_axes=1, action_size=2, batch_size=3, model=small_model
+    )
 
     # missing axis is assumed to be a single length batch access
     with pytest.raises(ValueError):
@@ -24,7 +45,9 @@ def test_model_predict_wrong_shape():
 
 def test_model_predict_single_shape():
     # todo: this should now raise an exception
-    model = dqn.ModelWrapper(state_axes=1, action_size=2, batch_size=3)
+    model = dqn.ModelWrapper(
+        state_axes=1, action_size=2, batch_size=3, model=small_model
+    )
 
     # missing axis is assumed to be a single length batch access
     result = model.predict_single(np.zeros((1, )))
@@ -33,7 +56,9 @@ def test_model_predict_single_shape():
 
 
 def test_model_predict_different():
-    model = dqn.ModelWrapper(state_axes=1, action_size=2, batch_size=3)
+    model = dqn.ModelWrapper(
+        state_axes=1, action_size=2, batch_size=3, model=small_model
+    )
 
     result_before = model.predict(np.zeros((1, 3)))
     result_before = np.copy(result_before)
@@ -43,7 +68,9 @@ def test_model_predict_different():
 
 
 def test_model_train():
-    model = dqn.ModelWrapper(state_axes=1, action_size=2, batch_size=3)
+    model = dqn.ModelWrapper(
+        state_axes=1, action_size=2, batch_size=3, model=small_model
+    )
 
     result_before = model.predict(np.ones((1, 3)))
     result_before = np.copy(result_before)
