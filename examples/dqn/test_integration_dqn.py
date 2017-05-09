@@ -23,6 +23,7 @@ def small_model(action_axes):
 
 
 def test_dependent_environment():
+    # todo: total_reward isn't always greater than 95 even with a working implementation
     environment = gym.make('DependentEnv-v0')
     agent = Agent(
         environment.observation_space,

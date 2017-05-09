@@ -4,6 +4,9 @@ from dqn import Agent
 
 
 def rl_loop(environment, agent, episodes):
+    """
+    train an agent inside an environment for a set number of episodes
+    """
     for episode in range(episodes):
         state = environment.reset()
         done = False
@@ -13,7 +16,6 @@ def rl_loop(environment, agent, episodes):
             # environment.render()
 
             action = agent.act(state)
-            # print(action)
             next_state, reward, done, _ = environment.step(action)
             agent.observe_results(state, action, reward, next_state, done)
 
@@ -30,6 +32,9 @@ def rl_loop(environment, agent, episodes):
 
 
 def evaluate_single_episode(environment, agent):
+    """
+    evaluate a single episode of agent operating inside of an environment
+    """
     state = environment.reset()
     done = False
     step = 0
@@ -38,9 +43,7 @@ def evaluate_single_episode(environment, agent):
         # environment.render()
 
         action = agent.act(state, training=False)
-        # print(action)
         next_state, reward, done, _ = environment.step(action)
-        agent.observe_results(state, action, reward, next_state, done)
 
         state = next_state
         step += 1

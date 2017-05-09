@@ -7,12 +7,6 @@ from ngraph.frontends import neon
 
 def small_model(action_axes):
     return neon.Sequential([
-        # neon.Affine(
-        #     nout=20,
-        #     weight_init=neon.GlorotInit(),
-        #     bias_init=neon.ConstantInit(),
-        #     activation=neon.Tanh(),
-        # ),
         neon.Affine(
             weight_init=neon.GlorotInit(),
             bias_init=neon.ConstantInit(),
