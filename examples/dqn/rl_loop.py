@@ -3,7 +3,6 @@ import simple_environments
 from dqn import Agent
 
 
-
 def rl_loop(environment, agent, episodes):
     for episode in range(episodes):
         state = environment.reset()
@@ -29,6 +28,7 @@ def rl_loop(environment, agent, episodes):
             )
         )
 
+
 def evaluate_single_episode(environment, agent):
     state = environment.reset()
     done = False
@@ -49,6 +49,7 @@ def evaluate_single_episode(environment, agent):
     agent.end_of_episode()
 
     return total_reward
+
 
 def main():
     environment = gym.make('CartPole-v0')
