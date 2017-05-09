@@ -44,6 +44,7 @@ from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.cpufusion import FusionPass
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
+from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -411,8 +412,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("update_conv(self.conv_slices['{}'], I={}, E={}, U={})",
-                    op.fprop.forwarded.name, inputs, delta, outputs)
+        self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={})",
+                    op.name, op.fprop.forwarded.name, inputs, delta, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
@@ -683,7 +684,9 @@ class CPUTransformer(Transformer):
                              RequiredTensorShaping(),
                              CPUTensorShaping(),
                              MklCreateOpDescriptors(self.mkldnn),
-                             MklAddLayoutConversions(self.mkldnn)]
+                             MklAddLayoutConversions(self.mkldnn)
+                             # ,VizPass()
+                             ]
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
@@ -722,7 +725,6 @@ import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
 from ngraph.op_graph import axes
-from ngraph.transformers.cpu.cpuengine import update_conv
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals

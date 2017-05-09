@@ -102,6 +102,22 @@ class Mkldnn(object):
             self.run_conv_bprop.argtypes = \
                 [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p]
+            self.update_conv_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_conv_bprop_weights_kernel
+            self.update_conv_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p
+                 ]
+            self.run_update_conv = \
+                self.mkldnn_engine_dll.run_mkldnn_conv_bprop_weights_kernel
+            self.run_update_conv.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
 
             self.relu_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_relu_fprop_kernel
@@ -441,23 +457,25 @@ class Mkldnn(object):
         else:
             output[...] = np.copy(input)
 
+    def update_conv(self, name, conv_slices, I, E, U):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_update_conv(E.ctypes.data, U.ctypes.data, I.ctypes.data, self.kernels[name])
+        else:
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = E.shape
+            C, _, _, _, K = U.shape
+            U.fill(0.0)
 
-def update_conv(conv_slices, I, E, U):
-    mSlice, pSlice, qSlice, _, _, _ = conv_slices
-    K, M, P, Q, N = E.shape
-    C, _, _, _, K = U.shape
-    U.fill(0.0)
-
-    for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                 enumerate(pSlice),
-                                                 enumerate(qSlice)):
-        sliceT, sliceD, tlen = mS
-        sliceR, sliceH, rlen = pS
-        sliceS, sliceW, slen = qS
-        slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-        slicedE = E[:, m, p, q, :]
-        update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
-        U[:, sliceT, sliceR, sliceS, :] += update
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, tlen = mS
+                sliceR, sliceH, rlen = pS
+                sliceS, sliceW, slen = qS
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                slicedE = E[:, m, p, q, :]
+                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                U[:, sliceT, sliceR, sliceS, :] += update
 
 
 def fprop_lut(lut, idx, axis, output):
