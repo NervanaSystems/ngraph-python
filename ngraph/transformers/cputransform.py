@@ -355,34 +355,6 @@ class CPUCodeGenerator(PyGen):
     def allocate_op(self, op, arrO, arrI):
         self.pool_params[op.name] = op.pool_params
         self.pool_slices[op.name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
-        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-        pad = [pad_d, pad_h, pad_w]
-        stride = [str_d, str_h, str_w]
-        kernel = [op.pool_params['J'], op.pool_params['T'],
-                  op.pool_params['R'], op.pool_params['S']]
-        op_type = op.pool_params
-        pool_type = 0
-        if op_type['op'] == 'avg':
-            pool_type = 1
-        self.append("mkldnn.init_pool_fprop({}, '{}', arrI={}, arrO={}, kernel={}, pad={}, stride={})",  # noqa
-                    pool_type, op.name, arrI, arrO, kernel, pad, stride)
-
-    @allocate_op.on_type(BpropPoolOp)
-    def allocate_op(self, op, outputs, delta):
-        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-        pad = [pad_d, pad_h, pad_w]
-        stride = [str_d, str_h, str_w]
-        kernel = [op.pool_params['J'], op.pool_params['T'],
-                  op.pool_params['R'], op.pool_params['S']]
-        op_type = op.pool_params
-        pool_type = 0
-        if op_type['op'] == 'avg':
-            pool_type = 1
-        self.append("mkldnn.init_pool_bprop({}, '{}', '{}', arrE={}, arrD={}, kernel={}, pad={}, stride={})",  # noqa
-                    pool_type, op.name, op.fprop.forwarded.name,
-                    delta, outputs, kernel, pad, stride)
 
     @allocate_op.on_type(DotLowDimension)
     def allocate_op(self, op, out, x, y):

@@ -15,7 +15,7 @@
 from operator import itemgetter
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass
-from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv
+from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, ComputationOp, Flatten
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -166,6 +166,103 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
 
+    @visit.on_type(PoolingOp)
+    def visit(self, op):
+        if (self.mkldnn.mkldnn_enabled):
+            arg = op.args[0]
+            input_layout = None
+            if arg.name in self.mkldnn.op_layouts:
+                input_layout = self.mkldnn.op_layouts[arg.name]
+            C, D, H, W, N = op.axes.lengths
+            input_shape = op.args[0].axes.lengths
+            output_shape = op.axes.lengths
+            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            pad = [pad_d, pad_h, pad_w]
+            stride = [str_d, str_h, str_w]
+            kernel = [op.pool_params['J'], op.pool_params['T'],
+                      op.pool_params['R'], op.pool_params['S']]
+            op_type = op.pool_params
+            pool_type = 0
+            if op_type['op'] == 'avg':
+                pool_type = 1
+            [J, T, R, S] = kernel
+            # Only 2D pooling supported in MKLDNN for now
+            if (D != 1 or T != 1 or J != 1):
+                return
+            # Only single precision float supported for now
+            if op.dtype != np.float32:
+                return
+            # Sanity check tensor shapes
+            if ((len(op.axes.lengths) != 5) or
+                    (len(stride) != 3) or (len(pad) != 3)):
+                return
+            input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
+            output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
+            kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
+            pad_data = ((ct.c_int) * len(pad))(*pad)
+            stride_data = ((ct.c_int) * len(stride))(*stride)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            self.mkldnn.pool_fprop_kernel(
+                self.mkldnn.mkldnn_engine,
+                len(input_shape), len(output_shape), len(stride), len(pad),
+                input_shape_arg, kernel_sizes, output_shape_arg,
+                stride_data, pad_data, pool_type,
+                input_layout, self.mkldnn.kernels[op.name])
+            output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            if (output_layout):
+                self.mkldnn.op_layouts[op.name] = output_layout
+            self.mkldnn.op_uses_opkernel_api[op.name] = True
+
+    @visit.on_type(BpropPoolOp)
+    def visit(self, op):
+        if (self.mkldnn.mkldnn_enabled):
+            arg = op.args[0]
+            input_layout = None
+            if arg.name in self.mkldnn.op_layouts:
+                input_layout = self.mkldnn.op_layouts[arg.name]
+            C, D, H, W, N = op.axes.lengths
+            input_shape = op.args[0].axes.lengths
+            output_shape = op.axes.lengths
+            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            pad = [pad_d, pad_h, pad_w]
+            stride = [str_d, str_h, str_w]
+            kernel = [op.pool_params['J'], op.pool_params['T'],
+                      op.pool_params['R'], op.pool_params['S']]
+            op_type = op.pool_params
+            pool_type = 0
+            if op_type['op'] == 'avg':
+                pool_type = 1
+            [J, T, R, S] = kernel
+            # Only 2D pooling supported in MKLDNN for now
+            if (D != 1 or T != 1 or J != 1):
+                return
+            # Only single precision float supported for now
+            if op.dtype != np.float32:
+                return
+            # Sanity check tensor shapes
+            if ((len(op.axes.lengths) != 5) or
+                    (len(stride) != 3) or (len(pad) != 3)):
+                return
+            input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
+            output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
+            kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
+            pad_data = ((ct.c_int) * len(pad))(*pad)
+            stride_data = ((ct.c_int) * len(stride))(*stride)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            self.mkldnn.pool_bprop_kernel(
+                self.mkldnn.mkldnn_engine,
+                len(input_shape), len(output_shape), len(stride), len(pad),
+                input_shape_arg, kernel_sizes, output_shape_arg,
+                stride_data, pad_data, pool_type,
+                input_layout, self.mkldnn.kernels[op.fprop.forwarded.name],
+                self.mkldnn.kernels[op.name])
+            output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            if (output_layout):
+                self.mkldnn.op_layouts[op.name] = output_layout
+            self.mkldnn.op_uses_opkernel_api[op.name] = True
+
     @visit.on_type(MapRolesOp)
     def visit(self, op):
         arg = op.args[0]
@@ -226,6 +323,22 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     def visit(self, op):
         pass
 
+    @visit.on_type(update_conv)
+    def visit(self, op):
+        replace = False
+        new_args = []
+        for arg in op.args:
+            if arg.name in self.mkldnn.op_layouts:
+                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
+                self.init_mkldnn_reorder(reorder_op)
+                new_args.append(reorder_op)
+                replace = True
+            else:
+                new_args.append(arg)
+        if replace:
+            filters = op.fprop.args[1]
+            self.replace_op(op, update_conv(new_args[0], new_args[1], filters, op.fprop))
+
     @visit.on_type(PoolingOp)
     def visit(self, op):
         arg = op.args[0]
@@ -234,53 +347,10 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             #reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
             #self.init_mkldnn_reorder(reorder_op)
             #self.replace_op(op, PoolingOp(op.pool_params, reorder_op, axes=op.axes))
-        if (self.mkldnn.mkldnn_enabled):
-            input_layout = None
-            if arg.name in self.mkldnn.op_layouts:
-                input_layout = self.mkldnn.op_layouts[arg.name]
-            C, D, H, W, N = op.axes.lengths
-            input_shape = op.args[0].axes.lengths
-            output_shape = op.axes.lengths
-            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-            pad = [pad_d, pad_h, pad_w]
-            stride = [str_d, str_h, str_w]
-            kernel = [op.pool_params['J'], op.pool_params['T'],
-                      op.pool_params['R'], op.pool_params['S']]
-            op_type = op.pool_params
-            pool_type = 0
-            if op_type['op'] == 'avg':
-                pool_type = 1
-            [J, T, R, S] = kernel
-            # Only 2D pooling supported in MKLDNN for now
-            if (D != 1 or T != 1 or J != 1):
-                return
-            # Only single precision float supported for now
-            if op.dtype != np.float32:
-                return
-            # Sanity check tensor shapes
-            if ((len(op.axes.lengths) != 5) or
-                    (len(stride) != 3) or (len(pad) != 3)):
-                return
-            input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
-            output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-            kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
-            pad_data = ((ct.c_int) * len(pad))(*pad)
-            stride_data = ((ct.c_int) * len(stride))(*stride)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_mkldnn_netlist_fn()
-            self.mkldnn.create_mkldnn_pool_fprop_descriptors_fn(
-                self.mkldnn.mkldnn_engine,
-                len(input_shape), len(output_shape), len(stride), len(pad),
-                input_shape_arg, kernel_sizes, output_shape_arg,
-                stride_data, pad_data, pool_type, input_layout, self.mkldnn.kernels[op.name])
 
     @visit.on_type(BpropPoolOp)
     def visit(self, op):
         arg = op.args[0]
-        if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
-            self.replace_op(op, BpropPoolOp(reorder_op, op.inputs, op.fprop))
 
     @visit.on_type(Flatten)
     def visit(self, op):

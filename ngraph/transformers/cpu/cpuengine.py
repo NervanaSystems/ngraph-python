@@ -126,34 +126,34 @@ class Mkldnn(object):
                 [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p]
 
-            self.create_mkldnn_pool_fprop_descriptors_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_pool_fprop_descriptors
-            self.create_mkldnn_pool_fprop_descriptors_fn.argtypes = \
+            self.pool_fprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_pool_fprop_kernel
+            self.pool_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p]
-            self.create_mkldnn_pool_fprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_pool_fprop_primitives
-            self.create_mkldnn_pool_fprop_primitives_fn.argtypes = \
+            self.run_pool_fprop = \
+                self.mkldnn_engine_dll.run_mkldnn_pool_fprop_kernel
+            self.run_pool_fprop.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
+
+            self.pool_bprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_pool_bprop_kernel
+            self.pool_bprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
-            self.create_mkldnn_pool_fprop_primitives_fn.restype = ctypes.c_void_p
-            
-            self.create_mkldnn_pool_bprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_pool_bprop_primitives
-            self.create_mkldnn_pool_bprop_primitives_fn.argtypes = \
-                [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
-            self.create_mkldnn_pool_bprop_primitives_fn.restype = ctypes.c_void_p
-            
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+            self.run_pool_bprop = \
+                self.mkldnn_engine_dll.run_mkldnn_pool_bprop_kernel
+            self.run_pool_bprop.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p]
+
             self.create_mkldnn_innerproduct_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
             self.create_mkldnn_innerproduct_fprop_primitives_fn.argtypes = \
@@ -262,7 +262,11 @@ class Mkldnn(object):
 
     def fprop_pool(self, name, pool_slices, arrI, arrO):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            argmax = arrA.ctypes.data
+            if op == 'avg':
+                argmax = None
+            self.run_pool_fprop(arrI.ctypes.data, arrO.ctypes.data, argmax, self.kernels[name])
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             K, M, P, Q, N = arrO.shape
@@ -309,7 +313,11 @@ class Mkldnn(object):
 
     def bprop_pool(self, name, pool_slices, arrE, arrD):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
+            argmax = arrA.ctypes.data
+            if op == 'avg':
+                argmax = None
+            self.run_pool_bprop(arrE.ctypes.data, argmax, arrD.ctypes.data, self.kernels[name])
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             arrD[:] = 0
