@@ -23,7 +23,7 @@ def make_axes(lengths, name=None):
     note: this function may be removable if the ngraph version of make_axes is changed
     """
     if isinstance(lengths, ng.Axes):
-        return lengths5
+        return lengths
 
     if isinstance(lengths, (int, long)):
         lengths = [lengths]
@@ -57,12 +57,12 @@ class ModelWrapper(object):
 
         # todo: except model as input parameter to constructor
         self.model = neon.Sequential([
-            neon.Affine(
-                nout=20,
-                weight_init=neon.GlorotInit(),
-                bias_init=neon.ConstantInit(),
-                activation=neon.Tanh(),
-            ),
+            # neon.Affine(
+            #     nout=20,
+            #     weight_init=neon.GlorotInit(),
+            #     bias_init=neon.ConstantInit(),
+            #     activation=neon.Tanh(),
+            # ),
             # neon.Affine(
             #     nout=20,
             #     weight_init=neon.GlorotInit(),
@@ -127,10 +127,11 @@ class ModelWrapper(object):
 
 
 def space_shape(space):
+    """return the shape of tensor expected for a given space"""
     if isinstance(space, spaces.Discrete):
-        state_size = [space.n]
+        return [space.n]
     else:
-        state_size = space.shape
+        return space.shape
 
 
 class Agent(object):
@@ -154,12 +155,19 @@ class Agent(object):
             batch_size=self.batch_size
         )
 
-    def act(self, state):
-        if self.epsilon > self.epsilon_minimum:
-            self.epsilon *= self.epsilon_decay
+    def act(self, state, training=True):
+        """
+        given a state, return the index of the action that should be taken
 
-        if np.random.rand() <= self.epsilon:
-            return self.action_space.sample()
+        if training is true, occasionally return a randomly sampled action
+        from the action space instead
+        """
+        if training:
+            if self.epsilon > self.epsilon_minimum:
+                self.epsilon *= self.epsilon_decay
+
+            if np.random.rand() <= self.epsilon:
+                return self.action_space.sample()
 
         # print(self.model_wrapper.predict(state))
         return np.argmax(self.model_wrapper.predict_single(state))

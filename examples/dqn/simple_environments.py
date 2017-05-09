@@ -92,7 +92,6 @@ class DependentEnv(gym.Env):
         return self.last_observation
 
     def _terminate(self, reward):
-        return not reward
         return self.steps >= 100
 
     def _reward(self, observation, action):
