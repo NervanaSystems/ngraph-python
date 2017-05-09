@@ -77,20 +77,18 @@ def id_func(param):
         if len(max(param, key=len)) < 4:
             for i in param:
                 operand, result, explanation = unpack_list(*i)
+                description += " of {} equals {} ".format(operand, result)
                 if len(i) > 2:
-                    description += " of {} equals {} ".format(operand, result)
-                    description += ", because of {} |".format(explanation)
-                else:
-                    description += " of {} equals {} | ".format(operand, result)
+                    description += ", because of {} ".format(explanation)
+                description += "|"
             return description
         else:
             for i in param:
                 operand_1, operand_2, result, explanation = unpack_list_2(*i)
+                description += " {} of {} equals {} ".format(operand_1, operand_2, result)
                 if len(i) > 3:
-                    description += " {} of {} equals {} ".format(operand_1, operand_2, result)
-                    description += ", because of {} |".format(explanation)
-                else:
-                    description += " {} of {} equals {} | ".format(operand_1, operand_2, result)
+                    description += ", because of {} ".format(explanation)
+                description += "|"
             return description
         if len(param) > 1:
             description += ")"
@@ -123,6 +121,7 @@ def template_one_placeholder(operands, ng_fun):
                 # exception for arrays
                 np.set_printoptions(precision=30)
                 print("flex_result: {}".format(flex_result))
+                print("difference: ", flex_result - expected_result)
             if iterations:
                 assert_allclose(flex_result, expected_result)
             elif not isinstance(first_operand, np.ndarray):
