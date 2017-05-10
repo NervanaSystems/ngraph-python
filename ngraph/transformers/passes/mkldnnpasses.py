@@ -66,12 +66,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             stride_arg = ((ct.c_int) * len(stride))(*stride)
             pad_arg = ((ct.c_int) * len(pad))(*pad)
-            input_layout = None
-            if input.name in self.mkldnn.kernels:
-                input_layout = self.mkldnn.op_layouts[input.name]
-            filter_layout = None
-            if filter.name in self.mkldnn.kernels:
-                filter_layout = self.mkldnn.op_layouts[filter.name]
+            input_layout = self.mkldnn.op_layouts.get(input.name)
+            filter_layout = self.mkldnn.op_layouts.get(filter.name)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
             self.mkldnn.conv_fprop_kernel(
                 self.mkldnn.mkldnn_engine,
@@ -81,7 +77,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 stride_arg, pad_arg,
                 input_layout, filter_layout,
                 self.mkldnn.kernels[op.name])
-            self.mkldnn.op_layouts[op.name] = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            if output_layout:
+                self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
 
     @visit.on_type(bprop_conv)
@@ -109,12 +107,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             stride_arg = ((ct.c_int) * len(stride))(*stride)
             pad_arg = ((ct.c_int) * len(pad))(*pad)
-            input_layout = None
-            if input.name in self.mkldnn.kernels:
-                input_layout = self.mkldnn.op_layouts[input.name]
-            filter_layout = None
-            if filter.name in self.mkldnn.kernels:
-                filter_layout = self.mkldnn.op_layouts[filter.name]
+            input_layout = self.mkldnn.op_layouts.get(input.name)
+            filter_layout = self.mkldnn.op_layouts.get(filter.name)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
             self.mkldnn.conv_bprop_kernel(
                 self.mkldnn.mkldnn_engine,
@@ -129,6 +123,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(update_conv)
     def visit(self, op):
+        return
         if self.mkldnn.mkldnn_enabled:
             delta = op.args[0]
             inputs = op.args[1]
@@ -175,6 +170,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if self.mkldnn.mkldnn_enabled:
             if (op.dtype.type != np.float32):
                 return
+            if (len(op.axes) != 5):
+                return
             input = op.args[0]
             input_layout = self.mkldnn.op_layouts.get(input.name)
             input_size = np.prod(input.axes.lengths)
@@ -191,8 +188,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(BpropReluOp)
     def visit(self, op):
+        return
         if self.mkldnn.mkldnn_enabled:
             if (op.dtype.type != np.float32):
+                return
+            if (len(op.axes) != 5):
                 return
             delta = op.args[0]
             fprop_src = op.args[1]
@@ -214,9 +214,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op):
         if (self.mkldnn.mkldnn_enabled):
             arg = op.args[0]
-            input_layout = None
-            if arg.name in self.mkldnn.op_layouts:
-                input_layout = self.mkldnn.op_layouts[arg.name]
+            input_layout = self.mkldnn.op_layouts.get(arg.name)
             C, D, H, W, N = op.axes.lengths
             input_shape = op.args[0].axes.lengths
             output_shape = op.axes.lengths
@@ -262,9 +260,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op):
         if (self.mkldnn.mkldnn_enabled):
             arg = op.args[0]
-            input_layout = None
-            if arg.name in self.mkldnn.op_layouts:
-                input_layout = self.mkldnn.op_layouts[arg.name]
+            input_layout = self.mkldnn.op_layouts.get(arg.name)
             C, D, H, W, N = op.axes.lengths
             input_shape = op.args[0].axes.lengths
             output_shape = op.axes.lengths
@@ -378,28 +374,47 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         if op.name in self.mkldnn.kernels:
             pass
         else:
-            assert(0)
+            arg = op.args[0]
+            if arg.name in self.mkldnn.op_layouts:
+                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
+                self.init_mkldnn_reorder(reorder_op)
+                self.replace_op(op, ReluOp(reorder_op, op.slope))
 
     @visit.on_type(BpropReluOp)
     def visit(self, op):
         if op.name in self.mkldnn.kernels:
             pass
         else:
-            assert(0)
+            replace = False
+            new_args = []
+            for arg in op.args:
+                if arg.name in self.mkldnn.op_layouts:
+                    reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
+                    self.init_mkldnn_reorder(reorder_op)
+                    new_args.append(reorder_op)
+                    replace = True
+                else:
+                    new_args.append(arg)
+            if replace:
+                self.replace_op(op, BpropReluOp(new_args[0], new_args[1], op.fprop))
 
     @visit.on_type(ConvolutionOp)
     def visit(self, op):
         if op.name in self.mkldnn.kernels:
             pass
         else:
-            assert(0)
+            arg = op.args[0]
+            if arg.name in self.mkldnn.op_layouts:
+                assert(0)
 
     @visit.on_type(bprop_conv)
     def visit(self, op):
         if op.name in self.mkldnn.kernels:
             pass
         else:
-            assert (0)
+            arg = op.args[0]
+            if arg.name in self.mkldnn.op_layouts:
+                assert (0)
 
     @visit.on_type(BroadcastOp)
     def visit(self, op):
@@ -419,34 +434,44 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     @visit.on_type(update_conv)
     def visit(self, op):
-        replace = False
-        new_args = []
-        for arg in op.args:
-            if arg.name in self.mkldnn.op_layouts:
-                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                self.init_mkldnn_reorder(reorder_op)
-                new_args.append(reorder_op)
-                replace = True
-            else:
-                new_args.append(arg)
-        replace = False
-        if replace:
-            filters = op.fprop.args[1]
-            self.replace_op(op, update_conv(new_args[0], new_args[1], filters, op.fprop))
+        if op.name in self.mkldnn.kernels:
+            pass
+        else:
+            replace = False
+            new_args = []
+            for arg in op.args:
+                if arg.name in self.mkldnn.op_layouts:
+                    reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
+                    self.init_mkldnn_reorder(reorder_op)
+                    new_args.append(reorder_op)
+                    replace = True
+                else:
+                    new_args.append(arg)
+            if replace:
+                filters = op.fprop.args[1]
+                self.replace_op(op, update_conv(new_args[0], new_args[1], filters, op.fprop))
 
     @visit.on_type(PoolingOp)
     def visit(self, op):
         if op.name in self.mkldnn.kernels:
             pass
         else:
-            assert (0)
+            arg = op.args[0]
+            if arg.name in self.mkldnn.op_layouts:
+                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
+                self.init_mkldnn_reorder(reorder_op)
+                self.replace_op(op, PoolingOp(op.pool_params, reorder_op, axes=op.axes))
 
     @visit.on_type(BpropPoolOp)
     def visit(self, op):
         if op.name in self.mkldnn.kernels:
             pass
         else:
-            assert (0)
+            arg = op.args[0]
+            if arg.name in self.mkldnn.op_layouts:
+                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
+                self.init_mkldnn_reorder(reorder_op)
+                self.replace_op(op, BpropPoolOp(reorder_op, op.fprop.args[0], op.fprop))
 
     @visit.on_type(Flatten)
     def visit(self, op):

@@ -685,7 +685,7 @@ class CPUTransformer(Transformer):
                              CPUTensorShaping(),
                              MklCreateOpDescriptors(self.mkldnn),
                              MklAddLayoutConversions(self.mkldnn)
-                             # ,VizPass()
+                             #,VizPass(show_axes=True,view=False)
                              ]
 
     def device_buffer_storage(self, bytes, dtype, name):

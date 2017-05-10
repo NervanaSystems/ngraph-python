@@ -87,6 +87,8 @@ void create_mkldnn_conv_fprop_kernel(
     mkldnn_memory_desc_t dst_md = *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
     create_mkldnn_tensor_from_pd(mkl_dst_dims, mkl_dst_sizes, &dst_md,
                         engine, &(opkernel->outputs[0]));
+    //create_mkldnn_tensor(mkl_dst_dims, mkl_dst_sizes, mkldnn_f32, mkldnn_chwn,
+    //                     engine, &(opkernel->outputs[0]));
     opkernel->num_inputs = 2;
     opkernel->num_outputs = 1;
     
@@ -104,7 +106,6 @@ void create_mkldnn_conv_fprop_kernel(
         opkernel->reorder_i[0] = NULL;
     }
 
-
     if (!mkldnn_memory_primitive_desc_equal(opkernel->inputs[1].desc, kernel_weights_pd)) {
         mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(kernel_weights_pd);
         create_mkldnn_tensor_from_pd(mkl_weights_dims, mkl_weights_sizes, &md, engine, &(opkernel->internal_inputs[1]));
@@ -118,8 +119,18 @@ void create_mkldnn_conv_fprop_kernel(
         opkernel->reorder_i[1] = NULL;
     }
 
-    // No reorder on the output side
-    opkernel->reorder_o[0] = NULL; 
+    if (!mkldnn_memory_primitive_desc_equal(opkernel->outputs[0].desc, kernel_dst_pd)) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
+        create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md, engine, &(opkernel->internal_outputs[0]));
+        mkldnn_primitive_desc_t reorder_pd;
+        MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
+                    opkernel->outputs[0].desc, kernel_dst_pd));
+        mkldnn_primitive_at_t outputs[] = {opkernel->outputs[0].prim};
+        const_mkldnn_primitive_t inputs[] = {opkernel->internal_outputs[0].prim};
+        MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_o[0]), reorder_pd, inputs, outputs));
+    } else {
+        opkernel->reorder_o[0] = NULL;
+    }
 
     /* Allocate memory for internal format conversions */
     if (opkernel->reorder_i[0]) {
@@ -136,6 +147,13 @@ void create_mkldnn_conv_fprop_kernel(
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                                 tmp_buf));
     }
+    if (opkernel->reorder_o[0]) {
+        float* tmp_buf =
+            (float*)calloc(product(conv_dst_sizes, dst_dims), sizeof(float));
+        opkernel->internal_outputs[0].buffer = tmp_buf;
+        MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_outputs[0].prim,
+                                                tmp_buf));
+    }
 
     /* select input and output primitives for convolution */
     mkldnn_primitive_t mkldnn_memory_prim_src =
@@ -144,7 +162,9 @@ void create_mkldnn_conv_fprop_kernel(
     mkldnn_primitive_t mkldnn_memory_prim_weights =
         opkernel->reorder_i[1] ? opkernel->internal_inputs[1].prim
                                 : opkernel->inputs[1].prim;
-    mkldnn_primitive_t mkldnn_memory_prim_dst = opkernel->outputs[0].prim;
+    mkldnn_primitive_t mkldnn_memory_prim_dst =
+        opkernel->reorder_o[0] ? opkernel->internal_outputs[0].prim
+                                : opkernel->outputs[0].prim;
 
     const_mkldnn_primitive_t conv_dsts[] = {mkldnn_memory_prim_dst};
 
@@ -432,8 +452,8 @@ void create_mkldnn_conv_bprop_weights_kernel(
         mkldnn_primitive_desc_t reorder_pd;
         MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
                     opkernel->outputs[0].desc, kernel_weights_pd));
-        mkldnn_primitive_at_t inputs[] = {opkernel->outputs[0].prim};
-        const_mkldnn_primitive_t outputs[] = {opkernel->internal_outputs[0].prim};
+        mkldnn_primitive_at_t outputs[] = {opkernel->outputs[0].prim};
+        const_mkldnn_primitive_t inputs[] = {opkernel->internal_outputs[0].prim};
         MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_o[0]), reorder_pd, inputs, outputs));
     } else {
         opkernel->reorder_o[0] = NULL;

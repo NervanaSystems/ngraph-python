@@ -436,7 +436,7 @@ class Mkldnn(object):
             self.run_relu_bprop(fpropSrc.ctypes.data, inputs.ctypes.data, 
                     out.ctypes.data, self.kernels[name])
         else:
-            np.add(inputs * np.greater(inputs, 0), inputs * slope * np.less(inputs, 0), out=out)
+            np.add(inputs * np.greater(fpropSrc, 0), inputs * slope * np.less(fpropSrc, 0), out=out)
 
     def alloc_reorder(self, name, output, input):
         assert self.mkldnn_enabled
