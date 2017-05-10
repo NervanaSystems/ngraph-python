@@ -16,9 +16,10 @@ from operator import itemgetter
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
-from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, ComputationOp, Flatten
+from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, ComputationOp, Flatten, unflatten
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.op_graph.batchnorm import BatchnormOp
 
 from ngraph.util.generics import generic_method
 
@@ -39,6 +40,64 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         pass
+
+    @visit.on_type(BatchnormOp)
+    def visit(self, op):
+        if self.mkldnn.mkldnn_enabled:
+            inputs = op.args[0]
+            gamma = op.args[1]
+            bias = op.args[2]
+            #epsilon = op.args[3]
+            epsilon = 0.01
+            mean = op.args[4]
+            variance = op.args[5]
+
+
+            # unflatten the inputs and extract C H W N params
+            unflatten_inputs = unflatten(inputs)
+            C = unflatten_inputs.axes.find_by_name('C').size
+            H = unflatten_inputs.axes.find_by_name('height').size
+            W = unflatten_inputs.axes.find_by_name('width').size
+            N = unflatten_inputs.axes.find_by_name('N').size
+            inputs_shape = (C, H, W, N)
+
+            mean_shape = mean.axes.find_by_name('C').size
+            gamma_shape = gamma.axes.find_by_name('C').size
+            bias_shape = bias.axes.find_by_name('C').size
+            variance = variance.axes.find_by_name('C').size
+
+            outputs_shape = op.axes.lengths
+
+            # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
+            weights_shape = (2, gamma_shape)
+            weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
+
+            input_shape_arg = ((ct.c_int) * len(inputs_shape))(*inputs_shape)
+            outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
+
+            inputs_layout = None
+            if inputs.name in self.mkldnn.kernels:
+                input_layout = self.mkldnn.op_layouts[inputs.name]
+
+            mean_layout = None
+            if mean.name in self.mkldnn.kernels:
+                mean_layout = self.mkldnn.op_layouts[mean.name]
+
+            variance_layout = None
+            if variance.name in self.mkldnn.kernels:
+                variance_layout = self.mkldnn.op_layouts[variance.name]
+
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+
+            self.mkldnn.batchnorm_fprop_kernel(
+                self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
+                len(outputs_shape), input_shape_arg, weights_shape_arg, outputs_shape_arg,
+                epsilon, inputs_layout, None, mean_layout, variance_layout, self.mkldnn.kernels[op.name])
+
+            output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            if output_layout:
+                self.mkldnn.op_layouts[op.name] = output_layout
+            self.mkldnn.op_uses_opkernel_api[op.name] = True
 
     @visit.on_type(ConvolutionOp)
     def visit(self, op):

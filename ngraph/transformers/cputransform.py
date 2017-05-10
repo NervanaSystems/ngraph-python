@@ -36,9 +36,9 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
+from ngraph.op_graph.batchnorm import BatchnormOp
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
-from ngraph.op_graph.batchnorm import BatchnormOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
@@ -371,12 +371,6 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, inp):
         self.append("mkldnn.alloc_reorder('{}', {}, {})", op.name, out, inp)
 
-    @allocate_op.on_type(BatchnormOp)
-    def allocate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
-        self.append("mkldnn.init_batchnorm_fprop({}, inputs={}, outputs={}, gamma={},\
-                         bias={}, mean={}, variance={}, epsilon={})", op.index, inputs,
-                    output, gamma, bias, mean, variance, epsilon)
-
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -388,12 +382,6 @@ class CPUCodeGenerator(PyGen):
                 class_name=self.__class__.__name__,
                 op=op.__class__.__name__,
             ))
-
-    @generate_op.on_type(BatchnormOp)
-    def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
-        self.append("mkldnn.fprop_batchnorm({}, inputs={}, outputs={}, gamma={},\
-                         bias={}, mean={}, variance={}, epsilon={})", op.index, inputs,
-                    output, gamma, bias, mean, variance, epsilon)
 
     @generate_op.on_type(AbsoluteOp)
     def generate_op(self, op, out, x):
@@ -486,6 +474,12 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, x, y):
         self.append("mkldnn.innerproduct_fprop('{}', {}, {}, out={})",
                     op.name, x, y, out)
+
+    @generate_op.on_type(BatchnormOp)
+    def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
+        self.append("mkldnn.fprop_batchnorm({}, inputs={}, outputs={}, gamma={},\
+                     bias={}, mean={}, variance={}, epsilon={})", op.index, inputs,
+                     output, gamma, bias, mean, variance, epsilon)
 
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):

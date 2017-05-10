@@ -3,7 +3,7 @@ from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Add, Maximum, Multiply, Minimum, Greater, Less
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp, AssignableTensorOp, variable, TensorOp
 from ngraph.op_graph.op_graph import Unflatten, ContiguousOp, BroadcastOp, BinaryElementWiseOp, Flatten, Divide
-from ngraph.transformers.cpu.batchnorm import BatchnormOp
+from ngraph.op_graph.batchnorm import BatchnormOp
 from ngraph.op_graph.relu import ReluOp, BpropReluOp
 from collections import deque as Queue
 
@@ -244,7 +244,6 @@ class FusionPass(PeepholeGraphPass):
                 level = level + 1
             
             elif ((level == 6) and isinstance(Op, Add)):
-                import pdb; pdb.set_trace()
                 if (self.check_for_pattern(op_args[0], op_args[1], Divide, BroadcastOp)):
                     self.map_ops_to_batch_params(["epsilon", "variance"], Op, [op_args[0], op_args[1]], op_dict)
                     level = level + 1

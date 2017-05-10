@@ -18,15 +18,12 @@
 
 /* Create list of mkldnn primitives to run batch norm fprop */
 mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
-    mkldnn_engine_t engine, float *batch_norm_src, float *batch_norm_dst,
-    float *weights, float *mean, float *variance, int *src_sizes,
-    int *dst_sizes, int *weights_size, int mean_sizes, int variance_sizes,
-    double epsilon) {
-
-    mkldnn_netlist_t mkldnn_net = create_mkldnn_netlist();
-    mkldnn_primitive_t batch_norm;
-
-    // TODO - src_dims and dst_dims are incorrect should figure out the right format from the previous layer
+    mkldnn_engine_t engine,
+    int src_dims, int weights_dims, int dest_dims,
+    int *batchnorm_src_sizes, int *batchnorm_weights_sizes,
+    int *batchnorm_dst_sizes, double epsilon, mkldnn_primitive_desc_t input_src_pd,
+    mkldnn_primitive_desc_t input_weights_pd, mkldnn_primitive_desc_t input_mean_pd,
+    mkldnn_primitive_desc_t input_variance_pd,  mkldnn_opkernel_t opkernel) {
 
     int mkl_src_dims = 4;
     int mkl_dst_dims = 4;
@@ -39,77 +36,111 @@ mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
     int mkl_mean_sizes[1];
     int mkl_variance_sizes[1];
 
+    // C,H,W,N -> N, C, H, W
+    mkl_src_sizes[0] = batchnorm_src_sizes[3];
+    mkl_src_sizes[1] = batchnorm_src_sizes[0];
+    mkl_src_sizes[2] = batchnorm_src_sizes[1];
+    mkl_src_sizes[3] = batchnorm_src_sizes[2];
 
-    mkl_src_sizes[0] = src_sizes[1];
-    mkl_src_sizes[1] = src_sizes[0];
-    mkl_src_sizes[2] = src_sizes[2];
-    mkl_src_sizes[3] = src_sizes[3];
+    mkl_dst_sizes[0] = batchnorm_src_sizes[3];
+    mkl_dst_sizes[1] = batchnorm_src_sizes[0];
+    mkl_dst_sizes[2] = batchnorm_src_sizes[1];
+    mkl_dst_sizes[3] = batchnorm_src_sizes[2];
 
-    mkl_dst_sizes[0] = dst_sizes[1];
-    mkl_dst_sizes[1] = dst_sizes[0];
-    mkl_dst_sizes[2] = dst_sizes[2];
-    mkl_dst_sizes[3] = dst_sizes[3];
 
-    mkl_dst_sizes[0] = dst_sizes;
-    mkl_weight_sizes[0] = weights_size[0];
-    mkl_weight_sizes[1] = weights_size[1];
+    mkl_weight_sizes[0] = batchnorm_weights_sizes[0];
+    mkl_weight_sizes[1] = batchnorm_weights_sizes[1];
     mkl_mean_sizes[0] = mean_sizes;
     mkl_variance_sizes[0] = variance_sizes;
 
-    mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_dst_md;
-
-    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                      mkl_src_sizes, mkldnn_f32, mkldnn_chwn));
 
     /* create a batch norm descriptor - logical descriptor of the batch norm */
+     mkldnn_memory_desc_t mkldnn_memory_desc_src_md;
+     if (input_src_pd) {
+          mkldnn_memory_desc_src_md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_src_pd));
+     } else {
+         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
+                                           mkl_src_sizes, mkldnn_f32, mkldnn_chwn));
+     }
+
     mkldnn_batch_normalization_desc_t batch_norm_desc;
     MKL_CHECK(mkldnn_batch_normalization_forward_desc_init(&batch_norm_desc, mkldnn_forward_training,
                                                 &mkldnn_memory_desc_src_md, epsilon, mkldnn_use_global_stats));
 
     /* create a batch norm primitive descriptor - convolution descriptor bound to the CPU engine */
-    mkldnn_primitive_desc_t batch_norm_pd;
-    MKL_CHECK(mkldnn_primitive_desc_create(&batch_norm_pd, &batch_norm_desc, engine, NULL));
+    MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc, engine, NULL));
 
-    /* create memory primitives for input and output data in user format */
-    mkldnn_primitive_t mkldnn_memory_prim_user_src, mkldnn_memory_prim_user_dst, \
-    mkldnn_memory_prim_user_mean, mkldnn_memory_prim_user_variance, mkldnn_memory_prim_user_weight;
+    if (input_src_pd) {
+            mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_src_pd));
+            create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
+                                engine, &(opkernel->inputs[0]));
+        } else {
+            create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_chwn,
+                                engine, &(opkernel->inputs[0]));
+        }
 
-    create_mkldnn_memory_primitive(mkl_src_dims, mkl_src_sizes, mkldnn_chwn,
-                                   mkldnn_f32, engine, batch_norm_src,
-                                   &mkldnn_memory_prim_user_src);
-    create_mkldnn_memory_primitive(mkl_dst_dims, mkl_dst_sizes, mkldnn_chwn,
-                                   mkldnn_f32, engine, batch_norm_dst,
-                                   &mkldnn_memory_prim_user_dst);
-    create_mkldnn_memory_primitive(mkl_weight_dims, mkl_weight_sizes, mkldnn_nc,
-                                   mkldnn_f32, engine, weights,
-                                   &mkldnn_memory_prim_user_weight);
-    create_mkldnn_memory_primitive(mkl_mean_dims, mkl_mean_sizes, mkldnn_x,
-                                   mkldnn_f32, engine, mean,
-                                   &mkldnn_memory_prim_user_mean);
-    create_mkldnn_memory_primitive(mkl_variance_dims, mkl_variance_sizes, mkldnn_x,
-                                   mkldnn_f32, engine, variance,
-                                   &mkldnn_memory_prim_user_variance);
+    if (input_mean_pd) {
+            mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_mean_pd));
+            create_mkldnn_tensor_from_pd(mkl_mean_dims, mkl_mean_sizes, &md,
+                                engine, &(opkernel->inputs[1]));
+        } else {
+            create_mkldnn_tensor(mkl_mean_dims, mkl_mean_sizes, mkldnn_f32, mkldnn_x,
+                                engine, &(opkernel->inputs[1]));
+        }
+
+    if (input_variance_pd) {
+            mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_variance_pd));
+            create_mkldnn_tensor_from_pd(mkl_variance_dims, mkl_variance_sizes, &md,
+                                engine, &(opkernel->inputs[2]));
+        } else {
+            create_mkldnn_tensor(mkl_variance_dims, mkl_variance_sizes, mkldnn_f32, mkldnn_x,
+                                engine, &(opkernel->inputs[2]));
+        }
+
+    if (input_weights_pd) {
+            mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_weights_pd));
+            create_mkldnn_tensor_from_pd(mkl_weight_dims, mkl_weight_sizes, &md,
+                                engine, &(opkernel->inputs[3]));
+        } else {
+            create_mkldnn_tensor(mkl_weight_dims, mkl_weight_sizes, mkldnn_f32, mkldnn_nc,
+                                engine, &(opkernel->inputs[3]));
+        }
+
+    mkldnn_memory_desc_t dst_md = mkldnn_memory_desc_src_md;
+    create_mkldnn_tensor_from_pd(mkl_dst_dims, mkl_dst_sizes, &dst_md,
+                          engine, &(opkernel->outputs[0]));
+
+    opkernel->num_inputs = 4;
+    op_kernel-> num_ouputs = 1;
+
+    // No reorders required
+    opkernel->reorder_i[0] = NULL;
+    opkernel->reorder_o[0] = NULL;
 
     /* create batch norm primitive */
-    const_mkldnn_primitive_t batch_norm_prim_dsts[] = { mkldnn_memory_prim_user_dst};
+    const_mkldnn_primitive_t batch_norm_prim_dsts[] = { opkernel->outputs[0].prim};
     mkldnn_primitive_at_t batch_norm_prim_srcs[] = {
-                                            mkldnn_primitive_at(mkldnn_memory_prim_user_src,0),
-                                            mkldnn_primitive_at(mkldnn_memory_prim_user_mean,0),
-                                            mkldnn_primitive_at(mkldnn_memory_prim_user_variance,0),
-                                            mkldnn_primitive_at(mkldnn_memory_prim_user_weight,0)};
+                                            mkldnn_primitive_at(opkernel->inputs[0].prim,0),
+                                            mkldnn_primitive_at(opkernel->inputs[1].prim,0),
+                                            mkldnn_primitive_at(opkernel->inputs[2].prim,0),
+                                            mkldnn_primitive_at(opkernel->inputs[3].prim,0)};
 
-    MKL_CHECK(mkldnn_primitive_create(&batch_norm, batch_norm_pd, batch_norm_prim_srcs, batch_norm_prim_dsts));
-
-    /* account resources for clean up */
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = batch_norm;
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_src;
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_dst;
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_mean;
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_variance;
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = mkldnn_memory_prim_user_weight;
-    mkldnn_net->prim_desc_list[mkldnn_net->prim_desc_count++] = batch_norm_pd;
-    mkldnn_net->net[mkldnn_net->net_size++] = batch_norm;
-
-    return mkldnn_net;
+    MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc, batch_norm_prim_srcs, batch_norm_prim_dsts));
+    opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 
 }
+
+void run_mkldnn_conv_fprop_kernel(
+    void *batchnorm_src, void *batchnorm_weights, void *batchnorm_mean,
+    void *batchnorm_variance, void *batchnorm_dst,
+    mkldnn_opkernel_t opkernel) {
+
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, batchnorm_src));
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[1].prim, batchnorm_mean));
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[2].prim, batchnorm_variance));
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[3].prim, batchnorm_weights));
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, batchnorm_dst));
+    run_mkldnn_opkernel(opkernel);
+}
+
+
