@@ -1,7 +1,7 @@
 from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, tdcache, ReshapeOp
+from ngraph.op_graph.op_graph import Op, tdcache
 from ngraph.flex import gpuflex16
 
 
