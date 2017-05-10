@@ -188,7 +188,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(BpropReluOp)
     def visit(self, op):
-        return
         if self.mkldnn.mkldnn_enabled:
             if (op.dtype.type != np.float32):
                 return

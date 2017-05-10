@@ -154,14 +154,20 @@ void create_mkldnn_relu_bprop_kernel(
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                                 tmp_buf));
     }
-    
+
+    mkldnn_primitive_t mkldnn_memory_prim_fprop_src =
+        opkernel->reorder_i[0] ? opkernel->internal_inputs[0].prim
+                                : opkernel->inputs[0].prim;
+
     const_mkldnn_primitive_t relu_dsts[] = { opkernel->outputs[0].prim };
     mkldnn_primitive_at_t relu_srcs[] =
-        { mkldnn_primitive_at(opkernel->inputs[0].prim, 0),
+        { mkldnn_primitive_at(mkldnn_memory_prim_fprop_src, 0),
           mkldnn_primitive_at(opkernel->inputs[1].prim, 0),
         };
 
     MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc, relu_srcs, relu_dsts));
+    if (opkernel->reorder_i[0])
+        opkernel->net[opkernel->net_size++] = opkernel->reorder_i[0];
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
