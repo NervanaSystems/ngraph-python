@@ -19,12 +19,12 @@ class FlexDECPass(PeepholeGraphPass):
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
-        # copy flex entry if reshape followed by dimshuffle op
+        # copy flex entry for any op followed by dimshuffle op
         if self.propagate_flex_entry:
             if isinstance(op, DimshuffleOp):
                 op.tensor_description().buffer.flex_entry = self.flex_entry
             self.propagate_flex_entry = False
-        if isinstance(op, ReshapeOp):
+        if op.tensor_description():
             self.propagate_flex_entry = True
             self.flex_entry = op.tensor_description().buffer.flex_entry
 
