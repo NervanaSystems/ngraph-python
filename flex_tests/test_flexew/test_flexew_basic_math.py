@@ -28,8 +28,6 @@ bug_1062 = pytest.mark.xfail(strict=True, reason="GitHub issue #1062, problem wi
 bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues:"
                                                  "modulus and ZeroDivisionError clarification")
 bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
-bug_1461 = pytest.mark.xfail(strict=True, reason="GitHub issue #1461, results of some functions are different "
-                                                 "than for numpy, instead of vector - matrix is returned")
 
 test_assign_data = (
     # template: ([(operand, expected_result, *case_description)], test_description),
@@ -95,8 +93,8 @@ test_data_double_operand = (
               (2, 1.5, 3.5),
               (3, 1.5, 4.5)],
      "Iterations x + 1.5"),
-    bug_1461((ng.add, [(np.array([1, 1, 1, 1]), np.array([2, 3, 4, 5]), np.array([3, 4, 5, 6]))],
-              "Add element-wise two arrays to each other")),
+    (ng.add, [(np.array([1, 1, 1, 1]), np.array([2, 3, 4, 5]), np.array([3, 4, 5, 6]))],
+     "Add element-wise two arrays to each other"),
 
     # test_subtraction
     (ng.subtract, [(MINIMUM_FLEX_VALUE, 1, MINIMUM_FLEX_VALUE)],
@@ -132,8 +130,8 @@ test_data_double_operand = (
                    (10, 0.4, 9.625, "Overflow of result to 10"),
                    (1, 0.4, 0.625, "Overflow of result to 1")],
      "More complex iterations x - 0.4"),
-    bug_1461((ng.subtract, [(np.array([2, 3, 4, 5]), np.array([1, 1, 1, 1]), np.array([1, 2, 3, 4]))],
-              "Subtract element-wise two arrays to each other")),
+    (ng.subtract, [(np.array([2, 3, 4, 5]), np.array([1, 1, 1, 1]), np.array([1, 2, 3, 4]))],
+     "Subtract element-wise two arrays to each other"),
 
     # test_multiplication
     (ng.multiply, [(MINIMUM_FLEX_VALUE, 2, MINIMUM_FLEX_VALUE)],
@@ -152,8 +150,8 @@ test_data_double_operand = (
                    (-1000, 10.1, -64, "Underflow of operand 1 to -8 and result to -64"),
                    (0.4, 10.1, 4.0312)],
      "Iterations x * 10.1"),
-    bug_1461((ng.multiply, [(np.array([2, 3, 4, 5]), np.array([1, 1, 1, 1]), np.array([2, 3, 4, 5]))],
-              "Multiply element-wise two arrays to each other")),
+    (ng.multiply, [(np.array([2, 3, 4, 5]), np.array([1, 1, 1, 1]), np.array([2, 3, 4, 5]))],
+     "Multiply element-wise two arrays to each other"),
 
     # test_division
     (ng.divide, [(MAXIMUM_FLEX_VALUE, 0.5, MAXIMUM_FLEX_VALUE)],
