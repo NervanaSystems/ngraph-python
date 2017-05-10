@@ -23,7 +23,7 @@ class FlexDECPass(PeepholeGraphPass):
         if self.propagate_flex_entry:
             if isinstance(op, DimshuffleOp):
                 op.tensor_description().buffer.flex_entry = self.flex_entry
-            self.propagate_flex_entry = False
+                self.propagate_flex_entry = False
         if op.tensor_description():
             self.propagate_flex_entry = True
             self.flex_entry = op.tensor_description().buffer.flex_entry
