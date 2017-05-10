@@ -21,9 +21,11 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass
-from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
-from multiprocessing import active_children
+from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp, \
+    GPUCudaAllReduceOp
+from multiprocessing import active_children, Process, Event, Queue
 import threading
+import time
 
 
 pytestmark = pytest.mark.hetr_only("module")
@@ -517,7 +519,7 @@ def test_gpu_graph(config):
         'results': [37, 37, 37, 37, 37],
     },
 ])
-def test_allreduce_op(config):
+def test_allreduce_cpu_op(config):
     class myThread(threading.Thread):
         def __init__(self, y):
             threading.Thread.__init__(self)
@@ -560,3 +562,83 @@ def test_allreduce_op(config):
         results.append(thread[i].get_result())
 
     np.testing.assert_array_equal(results, c['results'])
+
+
+@pytest.mark.hetr_gpu_only
+@pytest.mark.parametrize('config', [
+    {
+        'device_id': (0, 1),
+        'x_input': np.arange(24),
+        'func': 'mean',
+    },
+    {
+        'device_id': (0, 1),
+        'x_input': np.arange(32),
+        'func': 'sum',
+    },
+    {
+        'device_id': (0, 1, 2, 3),
+        'x_input': np.arange(48),
+        'func': 'mean',
+    },
+    {
+        'device_id': (0, 1, 2, 3),
+        'x_input': np.arange(64),
+        'func': 'sum',
+    }
+])
+def test_allreduce_gpu_op(config):
+    class myProcess(Process):
+        def __init__(self, y, device_id, queue):
+            Process.__init__(self)
+            self.y = y
+            self.device_id = device_id
+            self.exit = Event()
+            self.queue = queue
+
+        def run(self):
+            with closing(ngt.make_transformer_factory('gpu', device_id=self.device_id)()) as t:
+                comp = t.computation(self.y)
+                self.queue.put(comp())
+
+            while not self.exit.is_set():
+                time.sleep(0.1)
+
+    c = config
+    x = list()
+    y = list()
+    input_list = list()
+    process_list = list()
+    result_list = list()
+    np_result_list = list()
+    queue = Queue()
+
+    with ng.metadata(device='gpu', device_id=c['device_id'],
+                     transformer='None', host_transformer='None'):
+        for i in range(len(c['device_id'])):
+            x_input = c['x_input'] * (i + 1)
+            x.append(ng.constant(x_input))
+            input_list.append(x_input)
+
+    for i in range(len(c['device_id'])):
+        ar_op = GPUCudaAllReduceOp(x[i], c['func'])
+        if (i != 0):
+            ar_op._shared_queues = y[0].shared_queues
+        y.append(ar_op)
+
+    if c['func'] == 'mean':
+        np_result = np.mean(input_list, axis=0)
+    elif c['func'] == 'sum':
+        np_result = np.sum(input_list, axis=0)
+
+    for i, d in enumerate(c['device_id']):
+        process_list.append(myProcess(y[i], d, queue))
+        process_list[i].start()
+
+    for p in reversed(process_list):
+        np_result_list.append(np_result)
+        result_list.append(queue.get())
+        p.exit.set()
+        p.join()
+
+    np.testing.assert_array_equal(result_list, np_result_list)

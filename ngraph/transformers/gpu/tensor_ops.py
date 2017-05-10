@@ -23,8 +23,13 @@ from ngraph.op_graph.axes import TensorDescription
 from queue import Empty
 import numpy as np
 import pycuda.driver as drv
+import pycuda.gpuarray as gpuarray
+from pycuda.compiler import SourceModule
+from pycuda.driver import event_flags
+
 
 SLEEP_S = 0.1
+ITEMS_PER_THREAD = 32
 
 
 def set_ipc_handle(op, shared_queue, handle):
@@ -48,6 +53,113 @@ def open_ipc_handle(shared_queue):
                 pass
             else:
                 raise
+
+
+def _mean_reduction_kernel():
+    _float_accum_kernel = SourceModule("""
+        #define ITEMS_PER_THREAD 32
+
+        __global__ void float_accum(float *dest, float *scratch, int max_size,
+                                    int num_scratch_arrays, int scratch_array_size)
+        {
+            float4 dest_regs;
+            float4 scratch_regs;
+            int offset = (blockIdx.x * ITEMS_PER_THREAD * blockDim.x) + (threadIdx.x * 4);
+            float ndevs = num_scratch_arrays + 1;
+
+            #pragma unroll
+            for(int i = 0; i < ITEMS_PER_THREAD; i+=4)
+            {
+                if(offset < max_size)
+                {
+                    dest_regs = *((float4*)(&(dest[offset])));
+                }
+
+                for(int array_id = 0; array_id < num_scratch_arrays; array_id++)
+                {
+                    int scratch_offset = (array_id * scratch_array_size) + offset;
+
+                    if(offset < max_size)
+                    {
+                        scratch_regs = *((float4*)(&(scratch[scratch_offset])));
+
+                        dest_regs.x += scratch_regs.x;
+                        dest_regs.y += scratch_regs.y;
+                        dest_regs.z += scratch_regs.z;
+                        dest_regs.w += scratch_regs.w;
+                    }
+                }
+
+                if(offset < max_size)
+                {
+                    dest_regs.x /= ndevs;
+                    dest_regs.y /= ndevs;
+                    dest_regs.z /= ndevs;
+                    dest_regs.w /= ndevs;
+                }
+
+                if(offset < max_size)
+                {
+                    *((float4*)(&(dest[offset]))) = dest_regs;
+                }
+
+                offset += (blockDim.x * 4);
+            }
+        }
+        """)
+
+    kernel = _float_accum_kernel.get_function("float_accum")
+    kernel.prepare("PPiii")
+    return kernel
+
+
+def _sum_reduction_kernel():
+    _float_accum_kernel = SourceModule("""
+        #define ITEMS_PER_THREAD 32
+
+        __global__ void float_accum(float *dest, float *scratch, int max_size,
+                                    int num_scratch_arrays, int scratch_array_size)
+        {
+            float4 dest_regs;
+            float4 scratch_regs;
+            int offset = (blockIdx.x * ITEMS_PER_THREAD * blockDim.x) + (threadIdx.x * 4);
+
+            #pragma unroll
+            for(int i = 0; i < ITEMS_PER_THREAD; i+=4)
+            {
+                if(offset < max_size)
+                {
+                    dest_regs = *((float4*)(&(dest[offset])));
+                }
+
+                for(int array_id = 0; array_id < num_scratch_arrays; array_id++)
+                {
+                    int scratch_offset = (array_id * scratch_array_size) + offset;
+
+                    if(offset < max_size)
+                    {
+                        scratch_regs = *((float4*)(&(scratch[scratch_offset])));
+
+                        dest_regs.x += scratch_regs.x;
+                        dest_regs.y += scratch_regs.y;
+                        dest_regs.z += scratch_regs.z;
+                        dest_regs.w += scratch_regs.w;
+                    }
+                }
+
+                if(offset < max_size)
+                {
+                    *((float4*)(&(dest[offset]))) = dest_regs;
+                }
+
+                offset += (blockDim.x * 4);
+            }
+        }
+        """)
+
+    kernel = _float_accum_kernel.get_function("float_accum")
+    kernel.prepare("PPiii")
+    return kernel
 
 
 def get_dimshuffle(dtype, shape, axes, src, dst):
@@ -322,6 +434,208 @@ class CudaGatherRecvKernel(GPUKernel):
             while (sender_ready == 0):
                 sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
             drv.memset_d8(self.sender_ready[i], 0, 1)
+
+
+class CudaAllReduceKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaAllReduceKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.tensor_description()
+        self.device_id = transformer.device_id
+        self.event = drv.Event(flags=event_flags.INTERPROCESS | event_flags.DISABLE_TIMING)
+        self.stream = drv.Stream()
+        self.output_buff_dict = {}
+        self.scratch_buff_dict = {}
+        self.event_buff_dict = {}
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(CudaAllReduceKernel, self).bind_buffers()
+        self.input_tensor = self.op.args[0].value
+
+        # Allocate output and scratch buffers
+        self.output_buff = gpuarray.zeros(self.input_tensor.shape, self.input_tensor.dtype)
+        self.scratch_buff = gpuarray.zeros(self.input_tensor.shape, self.input_tensor.dtype)
+
+        self.output_buff_dict[self.device_id] = self.output_buff.gpudata
+        self.scratch_buff_dict[self.device_id] = self.scratch_buff.gpudata
+
+        # Allocate IPC handles
+        output_ipc_hdl = drv.mem_get_ipc_handle(self.output_buff.gpudata)
+        scratch_ipc_hdl = drv.mem_get_ipc_handle(self.scratch_buff.gpudata)
+        event_ipc_hdl = self.event.ipc_handle()
+
+        # Put handles in queues
+        for i in self.op.shared_queues.keys():
+            if i != self.device_id:
+                self.op.shared_queues[i].put(
+                    (self.device_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl))
+
+        # Get handles from others
+        q = self.op.shared_queues[self.device_id]
+        for i in range(len(self.op.shared_queues) - 1):
+            peer_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl = q.get()
+            output_hdl = drv.IPCMemoryHandle(output_ipc_hdl)
+            scratch_hdl = drv.IPCMemoryHandle(scratch_ipc_hdl)
+            event_hdl = drv.Event.from_ipc_handle(event_ipc_hdl)
+            self.output_buff_dict[peer_id] = output_hdl
+            self.scratch_buff_dict[peer_id] = scratch_hdl
+            self.event_buff_dict[peer_id] = event_hdl
+
+    def execute(self):
+        ndevs = len(self.op.device_ids)
+        size = self.input_tensor.tensor.size
+        dtype = self.input_tensor.dtype
+        segment_size = int(size / ndevs)
+        if ((segment_size * ndevs) < size):
+            segment_size += 1
+
+        # Align segment size to 16 bytes
+        if (segment_size & 0x03):
+            segment_size = (segment_size & (~0x03)) + 4
+
+        # Determine GPU active mask based on segment size
+        num_active = int(size / segment_size)
+        if ((segment_size * num_active) < size):
+            num_active += 1
+
+        # Copy tensor to output buffer
+        drv.memcpy_dtod(
+            self.output_buff.gpudata,
+            self.input_tensor.tensor.gpudata,
+            size * dtype.itemsize)
+
+        # Send each GPU its assigned segment
+        for peer_id in range(ndevs):
+            if (peer_id == self.device_id):
+                continue
+
+            # Only send if peer is active
+            if (peer_id >= num_active):
+                continue
+
+            # Compute size and offset of this peer's segment
+            peer_segment_size = segment_size
+            peer_segment_offset = peer_id * segment_size
+
+            if (self.device_id > peer_id):
+                peer_scratch_offset = segment_size * (self.device_id - 1)
+            else:
+                peer_scratch_offset = segment_size * self.device_id
+
+            if ((peer_id + 1) == num_active):
+                peer_segment_size = size - peer_segment_offset
+
+            # Enqueue peer to peer memcpy
+            src = int(self.output_buff_dict.get(self.device_id)) + \
+                peer_segment_offset * dtype.itemsize
+            scratch = int(self.scratch_buff_dict.get(peer_id)) + \
+                peer_scratch_offset * dtype.itemsize
+
+            drv.memcpy_dtod_async(scratch, src,
+                                  peer_segment_size * dtype.itemsize,
+                                  self.stream)
+
+        # Record event in stream
+        self.event.record(self.stream)
+
+        # Sync with other devices
+        self.process_sync()
+
+        # Wait for other GPUs events
+        for peer_id in self.op.device_ids:
+            if (peer_id == self.device_id):
+                continue
+            self.stream.wait_for_event(self.event_buff_dict[peer_id])
+
+        segment_offset = self.device_id * segment_size
+        this_segment_size = segment_size
+        if ((self.device_id + 1) == num_active):
+            this_segment_size = size - segment_offset
+
+        src = int(self.output_buff_dict.get(self.device_id)) + \
+            segment_offset * dtype.itemsize
+
+        # Sum received peer segments
+        block_size = 1024
+        grid_size = int(this_segment_size / (block_size * ITEMS_PER_THREAD))
+        if ((grid_size * block_size * ITEMS_PER_THREAD) < this_segment_size):
+            grid_size += 1
+
+            # Perform reduction operation
+            if (self.device_id < num_active):
+                num_arrays = ndevs - 1
+                params = [src, self.scratch_buff_dict[self.device_id],
+                          this_segment_size, num_arrays, segment_size]
+                grid_dim = (grid_size, 1, 1)
+                block_dim = (block_size, 1, 1)
+                if (self.op.reduce_func == 'mean'):
+                    kernel = _mean_reduction_kernel()
+                elif (self.op.reduce_func == 'sum'):
+                    kernel = _sum_reduction_kernel()
+                else:
+                    raise RuntimeError(
+                        'Reduce function {} is not supported!'.format(self.op.reduce_func))
+                kernel.prepared_async_call(grid_dim, block_dim, self.stream, *params)
+
+                # Send other GPUs this GPU's assigned segment
+                for peer_id in self.op.device_ids:
+                    if (peer_id == self.device_id):
+                        continue
+
+                    # Enqueue peer to peer memcpy
+                    dst = int(self.output_buff_dict.get(peer_id)) + \
+                        segment_offset * dtype.itemsize
+                    drv.memcpy_dtod_async(dst, src,
+                                          this_segment_size * dtype.itemsize,
+                                          self.stream)
+
+            self.event.record(self.stream)
+
+            self.process_sync()
+
+            # Wait for other GPUs events
+            for peer_id in self.op.device_ids:
+                if (peer_id == self.device_id):
+                    continue
+                self.event_buff_dict[peer_id].synchronize()
+            self.event.synchronize()
+
+            drv.memcpy_dtod_async(
+                self.tensor.tensor.gpudata,
+                self.output_buff.gpudata,
+                size * dtype.itemsize,
+                self.stream)
+
+            # This sync is only needed if we call this kernel 'synchronously'
+            # if the assumption is that another kernel is called right after,
+            # and uses the same streams as us, then we can remove this and
+            # rely on the next kernel being put into our stream.
+
+            # Record event in stream
+            self.event.record(self.stream)
+
+            # Sync with other devices
+            self.process_sync()
+
+            # Wait for other GPUs events
+            for peer_id in self.op.device_ids:
+                if (peer_id == self.device_id):
+                    continue
+                self.event_buff_dict[peer_id].synchronize()
+            self.event.synchronize()
+
+    def process_sync(self):
+        x = None
+        queues = self.op.shared_queues
+        ndevs = len(self.op.device_ids)
+        for peer_id in self.op.device_ids:
+            if peer_id != self.device_id:
+                queues[peer_id].put(x)
+        for i in range(ndevs - 1):
+            x = queues[self.device_id].get()
 
 
 class RngFillKernel(GPUKernel):

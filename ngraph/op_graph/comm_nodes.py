@@ -405,3 +405,27 @@ class CPUQueueAllReduceOp(AllReduceOp):
     @property
     def shared_queues(self):
         return self._shared_queues
+
+
+class GPUCudaAllReduceOp(AllReduceOp):
+    """
+    Represents GPU implementation for AllReduce op. Sets reduction function and creates
+    shared queues.
+
+    Arguments:
+        x: The input node.
+        func: The reduction function, e.g. 'sum', 'mean'.
+    """
+    def __init__(self, input_node, func=None):
+        super(GPUCudaAllReduceOp, self).__init__(x=input_node,
+                                                 out_axes=input_node.axes,
+                                                 dtype=input_node.dtype)
+        self.idx = 0
+        self.reduce_func = func
+        self.device_ids = input_node.metadata['device_id']
+        self._shared_queues = \
+            {i: multiprocessing.Queue() for i in input_node.metadata['device_id']}
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
