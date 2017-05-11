@@ -1,6 +1,6 @@
 import gym
 import simple_environments
-from dqn import Agent
+from ngraph.frontends.neon.dqn import Agent
 
 
 

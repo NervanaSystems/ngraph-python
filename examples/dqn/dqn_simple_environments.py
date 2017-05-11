@@ -1,7 +1,7 @@
 import gym
 import simple_environments
 from rl_loop import rl_loop
-from dqn import Agent
+from ngraph.frontends.neon.dqn import Agent
 
 
 def main():

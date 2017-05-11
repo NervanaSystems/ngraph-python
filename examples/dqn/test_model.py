@@ -1,7 +1,7 @@
 import ngraph as ng
 import pytest
 import numpy as np
-import dqn
+from ngraph.frontends.neon import dqn
 from ngraph.frontends import neon
 
 

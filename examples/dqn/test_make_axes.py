@@ -1,5 +1,5 @@
 import ngraph as ng
-import dqn
+from ngraph.frontends.neon import dqn
 
 
 def test_make_axes_noop():
