@@ -243,7 +243,7 @@ class FusionPass(PeepholeGraphPass):
                     self.map_ops_to_batch_params(["epsilon", "variance"], Op, [op_args[0], op_args[1]], op_dict)
                     level = level + 1
 
-        # if we reach the correct depth and all the pattren matches then fuse to form BatchnormOp
+        # if we reach the correct depth and all the pattern matches then fuse to form BatchnormOp
         if (level == 7):
             self.fuse_fprop_batch_norm(op_dict, op)
 
