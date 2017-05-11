@@ -206,60 +206,24 @@ class Mkldnn(object):
 
     def close(self):
         if (self.mkldnn_engine_initialized):
-            pass
-            # for op in self.kernels:
-            #     if self.kernels[op]:
-            #         if op in self.op_uses_opkernel_api:
-            #             self.delete_opkernel(self.kernels[op])
-            #         else:
-            #             self.cleanup_mkldnn_fn(self.kernels[op])
-            # self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
-            # self.mkldnn_engine_initialized = False
+            for op in self.kernels:
+                if self.kernels[op]:
+                    if op in self.op_uses_opkernel_api:
+                        self.delete_opkernel(self.kernels[op])
+                    else:
+                        self.cleanup_mkldnn_fn(self.kernels[op])
+            self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
+            self.mkldnn_engine_initialized = False
 
-    # def init_batchnorm_fprop(self, index, inputs, outputs, gamma, bias, mean, variance, epsilon):
-    #     if (self.mkldnn_enabled):
-    #
-    #         input_shape = inputs.shape
-    #         output_shape = outputs.shape
-    #
-    #         # Need 4D tensor for input and output
-    #         if (len(input_shape) != 4):
-    #             while len(input_shape) < 4:
-    #                 input_shape = input_shape + (1,)
-    #
-    #         if (len(output_shape) != 4):
-    #             while len(output_shape) < 4:
-    #                 output_shape = output_shape + (1,)
-    #
-    #         mean_ch = mean[:, 0]
-    #         variance_ch = variance[:, 0]
-    #         gamma_ch = gamma[:, 0]
-    #         bias_ch = bias[:, 0]
-    #
-    #         mean_size = mean.shape[0]
-    #         variance_size = variance.shape[0]
-    #
-    #         weights = np.vstack([gamma_ch, bias_ch])
-    #         weights_shape = ((ctypes.c_int) * len(weights.shape))(*weights.shape)
-    #         input_shape = ((ctypes.c_int) * len(input_shape))(*input_shape)
-    #         output_shape = ((ctypes.c_int) * len(output_shape))(*output_shape)
-    #         self.mkldnn_batchnorm_fprop_netlist[index] = \
-    #             self.create_mkldnn_batchnorm_fprop_primitives_fn(self.mkldnn_engine,
-    #                                                              inputs.ctypes.data, outputs.ctypes.data,
-    #                                                              weights.ctypes.data,
-    #                                                              mean_ch.ctypes.data, variance_ch.ctypes.data,
-    #                                                              input_shape, output_shape,
-    #                                                              weights_shape, mean_size, variance_size,
-    #                                                              epsilon[0][0])
+
 
     def fprop_batchnorm(self, name, inputs, outputs, gamma, bias, mean, variance, epsilon):
         if (self.mkldnn_enabled and name in self.kernels):
             weights = np.vstack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
             variance_ch = variance[:, 0]
-            self.run_batchnorm_fprop(inputs.ctypes.data, mean_ch.ctypes.data, variance_ch.ctypes.data,
-                                     weights.ctypes.data, outputs.ctypes.data, self.kernels[name])
-            import pdb;pdb.set_trace()
+            self.run_batchnorm_fprop(inputs.ctypes.data, weights.ctypes.data, mean_ch.ctypes.data, variance_ch.ctypes.data,
+                                     outputs.ctypes.data, self.kernels[name])
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)

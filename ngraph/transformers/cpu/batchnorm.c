@@ -115,6 +115,9 @@ mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
 
     // No reorders required
     opkernel->reorder_i[0] = NULL;
+    opkernel->reorder_i[1] = NULL;
+    opkernel->reorder_i[2] = NULL;
+    opkernel->reorder_i[3] = NULL;
     opkernel->reorder_o[0] = NULL;
 
     /* create batch norm primitive */

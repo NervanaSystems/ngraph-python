@@ -48,24 +48,24 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             gamma = op.args[1]
             bias = op.args[2]
             #epsilon = op.args[3]
-            epsilon = 0.01
+            epsilon = 0.001
             mean = op.args[4]
             variance = op.args[5]
-
-
             # unflatten the inputs and extract C H W N params
             unflatten_inputs = unflatten(inputs)
-            C = unflatten_inputs.axes.find_by_name('C').size
-            H = unflatten_inputs.axes.find_by_name('height').size
-            W = unflatten_inputs.axes.find_by_name('width').size
-            N = unflatten_inputs.axes.find_by_name('N').size
+
+            # Only single precision float supported for now
+            if op.dtype != np.float32:
+                return
+            # Sanity check tensor shapes
+            if (len(unflatten_inputs.axes.lengths) != 5):
+                return
+            C, D, H, W, N = unflatten_inputs.axes.lengths
             inputs_shape = (C, H, W, N)
-
-            mean_size = mean.axes.find_by_name('C').size
-            gamma_shape = gamma.axes.find_by_name('C').size
-            bias_shape = bias.axes.find_by_name('C').size
-            variance_size = variance.axes.find_by_name('C').size
-
+            mean_size = mean.axes.lengths[0]
+            gamma_shape = gamma.axes.lengths[0]
+            bias_shape = bias.axes.lengths[0]
+            variance_size = variance.axes.lengths[0]
             outputs_shape = op.axes.lengths
 
             # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
@@ -93,7 +93,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
                 len(outputs_shape), mean_size, variance_size, input_shape_arg, weights_shape_arg, outputs_shape_arg,
                 epsilon, inputs_layout, None, mean_layout, variance_layout, self.mkldnn.kernels[op.name])
-
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if output_layout:
                 self.mkldnn.op_layouts[op.name] = output_layout
