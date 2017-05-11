@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import
 from builtins import object
-
+import functools
 import collections
+import logging
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
+
+
+logger = logging.getLogger(__name__)
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -46,33 +50,71 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
-def inference_mode(*args, **kwargs):
-    """
-    cachetools.cached key function to ensure that caching takes into account the current value of
-    Layer.inference_mode.
-    """
+def neon_layer(f, cache_key=None):
 
-    # If the value is provided, just use that instead of the global flag.
-    if "inference_mode" not in kwargs:
-        kwargs["inference_mode"] = Layer.inference_mode
+    @functools.wraps(f)
+    def layer_wrapper(self, in_obj, *inputs, **kwargs):
+        # TODO: We could do some axes management here - casting or reordering as needed
+        # if self.inputs is not None:
+        #     for prev_inp, inp in zip(self.inputs, [in_obj] + list(inputs)):
+        #         if prev_inp.axes.sample_axes() != inp.axes.sample_axes():
+        #             invalid_input_axes(prev_inp.axes, inp.axes)
 
-    return keys.hashkey(*args, **kwargs)
+        with ng.Op.all_ops() as ops:
+            output = f(self, in_obj, *inputs, **kwargs)
+
+        if self.ops is None:
+            self.ops = list()
+        for op in ops:
+            op.metadata.setdefault("neon_layer", []).append(self.__class__.__name__.lower())
+        self.ops.append(ops)
+
+        return output
+
+    return layer_wrapper
 
 
 class Layer(object):
+    """TODO: Document this class"""
+
     inference_mode = False
     active_scope = None
 
     def __init__(self, name=None):
         self.name = name
         self.scope = Layer.active_scope
+        self.ops = None
 
-    def __call__(self, in_obj, inference):
+    def __call__(self, in_obj, reuse=True):
+        raise NotImplementedError()
+
+    @property
+    def initialized(self):
+        return self.ops is not None
+
+    @property
+    def variables(self):
+        if self.ops is None:
+            return None
+        else:
+            return [op.tensor for op in self.ops[0] if op.tensor.is_trainable]
+
+    # @property
+    # def inputs(self):
+    #     if self.ops is None:
+    #         return None
+    #     else:
+    #         return [op for op in self.ops[0] if is_input(op)]
+
+    def construct(self, in_obj, reuse=True):
         raise NotImplementedError()
 
     @staticmethod
     @contextmanager
     def inference_mode_on():
+        """
+        TODO: Document
+        """
         Layer.inference_mode = True
         yield Layer.inference_mode
         Layer.inference_mode = False
@@ -89,23 +131,31 @@ class Layer(object):
     @staticmethod
     @contextmanager
     def variable_scope(name):
+        """
+        TODO: Document
+        """
         Layer.active_scope = name
         yield Layer.active_scope
         Layer.active_scope = None
 
 
 class Preprocess(Layer):
-
+    """
+    TODO: Document
+    """
     def __init__(self, functor, **kwargs):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
     @cached({})
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         return self.functor(in_obj)
 
 
 def cast_tuple(x):
+    """
+    TODO: Document
+    """
     # cast x to a tuple
     if isinstance(x, collections.Iterable):
         return tuple(x)
@@ -115,6 +165,7 @@ def cast_tuple(x):
 
 def infer_axes(nout=None, axes=None):
     """
+    TODO: Document
     Args:
         nout: int or iterable of ints specifying the lengths of the axes to be returned
         axes: Axes object that describe the output axes that should be returned
@@ -142,6 +193,9 @@ def infer_axes(nout=None, axes=None):
 
 
 class Linear(Layer):
+    """
+    TODO: Document
+    """
     metadata = {'layer_type': 'linear'}
 
     def __init__(self, init, nout=None, axes=None, **kwargs):
@@ -176,20 +230,23 @@ class Linear(Layer):
                     "Linear.  Found {}."
                 ).format([is_shadow_axis(axis) for axis in axes]))
 
+        self.input_axes = None
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
 
         self.init = init
         self.W = None
 
-    @ng.with_op_metadata
-    @cached({})
-    def __call__(self, in_obj):
-        if self.W is None:
+
+    @neon_layer
+    def __call__(self, in_obj, reuse=True):
+
+        if not self.initialized:
             self.W = ng.variable(
-                axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
-                initial_value=self.init, scope=self.scope,
+                    axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
+                    initial_value=self.init, scope=self.scope,
             ).named('LinW')
+
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -351,7 +408,9 @@ class ConvBase(Layer):
 
 
 class Conv2D(ConvBase):
-
+    """
+    TODO: Document
+    """
     def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         if isinstance(fshape, tuple) or isinstance(fshape, list):
             if len(fshape) == 2:
@@ -370,6 +429,9 @@ class Conv2D(ConvBase):
 
 
 class Activation(Layer):
+    """
+    TODO: Document. Why should we pass through this instead of just defining functions? Cacheing?
+    """
     metadata = {'layer_type': 'activation'}
 
     def __init__(self, transform, **kwargs):
@@ -439,7 +501,9 @@ class PoolBase(Layer):
 
 
 class Pool2D(PoolBase):
-
+    """
+    TODO: Document
+    """
     def __init__(self, fshape, strides=1, padding=0, **kwargs):
 
         if isinstance(fshape, int):
@@ -465,6 +529,8 @@ class Bias(Layer):
         init (function): function for later initializing bias values
         shared (bool): applies only to convolutional biases.  Whether to use same bias for
                        entire feature map.  Default true.
+
+    TODO: Should default be None or 0?
     """
     metadata = {'layer_type': 'bias'}
 
@@ -489,7 +555,9 @@ class Bias(Layer):
 
 
 class Affine(Layer):
-
+    """
+    TODO: Document, bias should not be used when batch norm is
+    """
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
                  batch_norm=False, **kwargs):
         self.weight_init = weight_init
@@ -511,7 +579,9 @@ class Affine(Layer):
 
 
 class Convolution(Layer):
-
+    """
+    TODO: Document, bias should not be used when batch norm is
+    """
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
         self.conv = Conv2D(fshape, filter_init, strides, padding, dilation, **kwargs)
@@ -633,9 +703,13 @@ class Dropout(Layer):
 
 
 def get_steps(x, time_axis, backward=False):
+    """
+    TODO: Document
+    """
     time_iter = list(range(time_axis.length))
     if backward:
         time_iter = reversed(time_iter)
+    # TODO: This is pretty ugly. Is there a better way to handle gates?
     if isinstance(x, dict):
         return [{k: ng.slice_along_axis(x[k], time_axis, i) for k in x.keys()} for i in time_iter]
     else:
@@ -758,6 +832,7 @@ class Recurrent(Layer):
                 self.h_init = ng.variable(
                     initial_value=0, axes=self.out_axes).named('h_init')
 
+        # TODO: Fix this! Reuse!
         self.W_input = ng.variable(axes=self.w_in_axes,
                                    initial_value=self.init,
                                    scope=self.scope).named("W_in")
