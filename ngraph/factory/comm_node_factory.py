@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
-    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, GPUCudaGatherSendOp, \
-    GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
+    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp, \
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
 
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
@@ -91,6 +91,18 @@ class CommNodePair(object):
                 to_node=to_node)
             self.recv_node = recv_node_factory.build(
                 node_type='gather_recv',
+                comm_type=comm_type,
+                from_node=from_node,
+                to_node=to_node,
+                send_node=self.send_node)
+        elif node_type == 'broadcast':
+            self.send_node = send_node_factory.build(
+                node_type='broadcast_send',
+                comm_type=comm_type,
+                from_node=from_node,
+                to_node=to_node)
+            self.recv_node = recv_node_factory.build(
+                node_type='broadcast_recv',
                 comm_type=comm_type,
                 from_node=from_node,
                 to_node=to_node,
@@ -236,6 +248,16 @@ class CPUCommNodeFactory(CommNodeFactory):
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
+        elif node_type == 'broadcast_send':
+            if comm_type == 'queue':
+                return CPUQueueBroadcastSendOp(
+                    from_node=from_node,
+                    to_node=to_node)
+        elif node_type == 'broadcast_recv':
+            if comm_type == 'queue':
+                return CPUQueueBroadcastRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
         else:
             assert False, "Not supported!!!"
 
@@ -260,14 +282,17 @@ def get_comm_pattern(from_node, to_node):
     if from_node_transformer == to_node_transformer:
         return None
 
-    if isinstance(to_node_transformer, (list, tuple)) and to_node.metadata['parallel']:
-        # todo check if metadata['device_id'] and 'parallel' co-exists
-        if not to_node.metadata['parallel'] in from_node.axes:
-            # todo use 'broadcast'?
-            return 'direct'
+    if isinstance(to_node_transformer, (list, tuple)):
+        if to_node.metadata['parallel']:
+            # todo check if metadata['device_id'] and 'parallel' co-exists
+            if not to_node.metadata['parallel'] in from_node.axes:
+                # todo use 'broadcast'?
+                return 'direct'
+            else:
+                from_node.metadata['marker'] = 'scatter'
+                return 'scatter'
         else:
-            from_node.metadata['marker'] = 'scatter'
-            return 'scatter'
+            return 'broadcast'
 
     if isinstance(from_node_transformer, (list, tuple)):
         return 'gather'

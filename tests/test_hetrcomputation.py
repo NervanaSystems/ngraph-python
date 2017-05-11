@@ -399,36 +399,36 @@ def test_recvop_tensorupdate(transformer_factory):
                                             [8., 8., 8., 8.]])
 
 
-def test_terminate_op(transformer_factory):
+# def test_terminate_op(transformer_factory):
 
-    class TerminateOp(ng.Op):
+    # class TerminateOp(ng.Op):
 
-        def __init__(self, **kwargs):
-            super(TerminateOp, self).__init__(**kwargs)
+        # def __init__(self, **kwargs):
+            # super(TerminateOp, self).__init__(**kwargs)
 
-    baseline = active_children()
-    termOp = TerminateOp()
-    assert len(baseline) == 0
-    with ExecutorFactory() as ex:
-        comp = ex.executor(termOp)
-        assert len(active_children()) == 1
-        with pytest.raises(RuntimeError):
-            comp()
-        assert len(active_children()) == 1
-    assert len(active_children()) == len(baseline)
+    # baseline = active_children()
+    # termOp = TerminateOp()
+    # assert len(baseline) == 0
+    # with ExecutorFactory() as ex:
+        # comp = ex.executor(termOp)
+        # assert len(active_children()) == 1
+        # with pytest.raises(RuntimeError):
+            # comp()
+        # assert len(active_children()) == 1
+    # assert len(active_children()) == len(baseline)
 
 
-def test_process_leak(transformer_factory):
-    baseline = active_children()
-    with ng.metadata(device_id=('2')):
-        x = ng.constant(2)
-    assert len(active_children()) == 0
-    with ExecutorFactory() as ex:
-        comp = ex.executor(x)
-        assert len(active_children()) == 1
-        comp()
-        assert len(active_children()) == 2
-    assert len(active_children()) == len(baseline)
+# def test_process_leak(transformer_factory):
+    # baseline = active_children()
+    # with ng.metadata(device_id=('2')):
+        # x = ng.constant(2)
+    # assert len(active_children()) == 0
+    # with ExecutorFactory() as ex:
+        # comp = ex.executor(x)
+        # assert len(active_children()) == 1
+        # comp()
+        # assert len(active_children()) == 2
+    # assert len(active_children()) == len(baseline)
 
 
 ax_A = ng.make_axis(4)
@@ -558,80 +558,5 @@ def test_allreduce_op(config):
 
     for i in range(len(c['device_id'])):
         results.append(thread[i].get_result())
-
-    np.testing.assert_array_equal(results, c['results'])
-
-
-@pytest.mark.parametrize('config', [
-    {
-        'sender_index': 0,
-        'device_ids': ['0', '1', '2'],
-        'x_input': [1., 2., 3., 4., 5., 6.],
-        'shape_input': [1, 6],
-        'results': [[1., 2., 3., 4., 5., 6.], [1., 2., 3., 4., 5., 6.]],
-    },
-    {
-        'sender_index': 0,
-        'device_ids': ['0', '1', '2', '3', '4', '5'],
-        'x_input': [5., 9.],
-        'shape_input': [1, 2],
-        'results': [[5., 9.], [5., 9.], [5., 9.], [5., 9.], [5., 9.]],
-    },
-])
-def test_broadcast_ops(config):
-    class myProcess(Process):
-        def __init__(self, y, comp_name):
-            super(myProcess, self).__init__()
-            self.y = y
-            self.comp_name = comp_name
-            self.manager = Manager()
-            self.results_qs = self.manager.Queue()
-
-        def run(self):
-            with closing(ngt.make_transformer_factory('cpu')()) as t:
-                comp = t.computation(self.y)
-                self.results_qs.put(comp())
-
-        def get_result(self):
-            while True:
-                try:
-                    result = self.results_qs.get(timeout=0.2)
-                    return result
-                except Exception as e:
-                    raise
-
-    c = config
-    y = [None] * len(c['device_ids'])
-    active_processes = list()
-    results = list()
-    sender_id = c['device_ids'][c['sender_index']]
-    receiver_ids = c['device_ids'][:c['sender_index']] + c['device_ids'][c['sender_index']+1 :]
-
-    ax_a = ng.make_axis(length=c['shape_input'][0], name='A')
-    ax_b = ng.make_axis(length=c['shape_input'][1], name='B')
-    axes = ng.make_axes([ax_a, ax_b])
-
-    with ng.metadata(device='cpu', device_id=sender_id,
-                     transformer='None', host_transformer='None'):
-        from_node = ng.constant(axes=axes, const=c['x_input'])
-
-    with ng.metadata(device='cpu', device_id=tuple(receiver_ids),
-                     transformer='None', host_transformer='None'):
-        to_node = ng.constant(axes=axes, const=0)
-
-    y[c['sender_index']] = CPUQueueBroadcastSendOp(from_node=from_node, to_node=to_node)
-    for i in range(len(c['device_ids'])):
-        if i != c['sender_index']:
-            sc_op = CPUQueueBroadcastRecvOp(to_node=to_node, send_node=y[c['sender_index']])
-            sc_op.idx = i if i < c['sender_index'] else i-1
-            y[i] = sc_op
-
-    for i in range(len(c['device_ids'])):
-        active_processes.append(myProcess(y[i], 'cpu'+str(i)))
-        active_processes[i].start()
-
-    for i in range(len(c['device_ids'])):
-        if i != c['sender_index']:
-            results.append(active_processes[i].get_result().tolist())
 
     np.testing.assert_array_equal(results, c['results'])
