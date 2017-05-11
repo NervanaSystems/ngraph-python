@@ -123,7 +123,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(update_conv)
     def visit(self, op):
-        return
         if self.mkldnn.mkldnn_enabled:
             delta = op.args[0]
             inputs = op.args[1]

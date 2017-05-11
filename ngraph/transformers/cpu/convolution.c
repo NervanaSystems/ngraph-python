@@ -451,7 +451,7 @@ void create_mkldnn_conv_bprop_weights_kernel(
         create_mkldnn_tensor_from_pd(mkl_weights_dims, mkl_weights_sizes, &md, engine, &(opkernel->internal_outputs[0]));
         mkldnn_primitive_desc_t reorder_pd;
         MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
-                    opkernel->outputs[0].desc, kernel_weights_pd));
+                    kernel_weights_pd, opkernel->outputs[0].desc));
         mkldnn_primitive_at_t outputs[] = {opkernel->outputs[0].prim};
         const_mkldnn_primitive_t inputs[] = {opkernel->internal_outputs[0].prim};
         MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_o[0]), reorder_pd, inputs, outputs));
