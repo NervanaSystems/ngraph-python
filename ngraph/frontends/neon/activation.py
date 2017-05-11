@@ -191,3 +191,23 @@ class Logistic(object):
             Tensor or optree: Output activation
         """
         return ng.sigmoid(x)
+
+
+class LogisticAtomic(object):
+    """
+    Logistic sigmoid activation function for flex, :math:`calculated directly on processing unit`
+
+    Squashes the input from range :math:`[-\infty,+\infty]` to :math:`[0, 1]`
+    """
+
+    def __call__(self, x):
+        """
+        Returns the sigmoidal activation.
+
+        Arguments:
+            x (Tensor or optree): Input value
+
+        Returns:
+            Tensor or optree: Output activation
+        """
+        return ng.sigmoidAtomic(x)

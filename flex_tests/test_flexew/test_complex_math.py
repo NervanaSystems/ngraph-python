@@ -85,7 +85,17 @@ test_data_single_operand = (
     #  test_square
     (ng.square, [(1, 1)], "Square of 1 equals 1"),
     (ng.square, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Square of negative boundary value - overflow expected"),
-    (ng.square, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Square of positive boundary value - overflow expected")
+    (ng.square, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Square of positive boundary value - overflow expected"),
+
+    # test_sigmoid and sigmoidAtomic
+    (ng.sigmoid,       [(-10, 0.00004539825022220611572265625)], ""),
+    (ng.sigmoidAtomic, [(-10, 0.00004539825022220611572265625)], ""),
+    (ng.sigmoid,       [(-11, 0.000030517578125)], "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
+    (ng.sigmoidAtomic, [(-11, 0.000016701407730579376220703125)], ""),
+    (ng.sigmoid,       [(-20, 0.000030517578125)], "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
+    (ng.sigmoidAtomic, [(-20, 0.00000000186264514923095703125)], ""),
+    (ng.sigmoid,       [(-30, 0.000030517578125)], "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
+    (ng.sigmoidAtomic, [(-30, 0.0)], ""),
 )
 
 ExpMinus11 = 0.000016701407730579376220703125
