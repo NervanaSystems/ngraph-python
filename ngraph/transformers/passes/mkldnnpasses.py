@@ -47,13 +47,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             inputs = op.args[0]
             gamma = op.args[1]
             bias = op.args[2]
-            #epsilon = op.args[3]
-            epsilon = 0.001
             mean = op.args[4]
             variance = op.args[5]
             # unflatten the inputs and extract C H W N params
             unflatten_inputs = unflatten(inputs)
-
             # Only single precision float supported for now
             if op.dtype != np.float32:
                 return
@@ -92,7 +89,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.batchnorm_fprop_kernel(
                 self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
                 len(outputs_shape), mean_size, variance_size, input_shape_arg, weights_shape_arg, outputs_shape_arg,
-                epsilon, inputs_layout, None, mean_layout, variance_layout, self.mkldnn.kernels[op.name])
+                op.eps, inputs_layout, None, mean_layout, variance_layout, self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if output_layout:
                 self.mkldnn.op_layouts[op.name] = output_layout

@@ -20,12 +20,7 @@ class BatchnormOp(TensorOp):
 
     def __init__(self, inputs, gamma, bias, epsilon, mean, variance, **kwargs):
         super(BatchnormOp, self).__init__(args=(inputs, gamma, bias, epsilon, mean, variance), axes=inputs.axes, **kwargs)
-        # self.inputs = inputs
-        # self.gamma = gamma
-        # self.bias = bias
-        # self.epsilon = epsilon
-        # self.mean = mean
-        # self.variance = variance
+        self.eps = epsilon
         self.index = BatchnormOp._index
         BatchnormOp._index += 1
 
