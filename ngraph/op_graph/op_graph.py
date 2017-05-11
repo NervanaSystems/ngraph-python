@@ -3339,7 +3339,7 @@ class TensorSizeOp(TensorOp):
         elif reduction_axes is None:
             reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
-        super(TensorSizeOp, self).__init__(axes=())
+        super(TensorSizeOp, self).__init__(args=(x,), axes=())
 
 
 def tensor_size(x, reduction_axes=None, out_axes=None):
