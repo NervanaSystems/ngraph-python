@@ -27,6 +27,10 @@ from orderedset import OrderedSet
 logger = logging.getLogger(__name__)
 
 
+LABELS = {"weight": "weight",
+          "bias": "bias"}
+
+
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     """
     Compute along 1 dimension, with these sizes, what will be the output dimension.
@@ -270,8 +274,8 @@ class Linear(Layer):
             self.W = ng.variable(
                     axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
                     initial_value=self.init, scope=self.scope,
+                    metadata={"label": LABELS["weight"]},
             ).named('LinW')
-
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -349,6 +353,7 @@ class LookupTable(Layer):
                                  initial_value=self.lut_init(
                                      self.w_axes, self.lut_v_axis, self.pad_idx),
                                  scope=self.scope,
+                                 metadata={"label": LABELS["weight"]},
                                  ).named('LutW')
 
         lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
@@ -408,7 +413,8 @@ class ConvBase(Layer):
             ])
 
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init,
-                                 scope=self.scope).named('convwt')
+                                 scope=self.scope,
+                                 metadata={"label": LABELS["weight"]}).named('convwt')
 
             self.o_axes = ng.make_axes([
                 ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
@@ -568,7 +574,8 @@ class Bias(Layer):
                 w_axes = in_obj.axes.sample_axes()
                 if self.shared and in_obj.axes.channel_axis() is not None:
                     w_axes = ng.make_axes(in_obj.axes.channel_axis())
-                self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope)
+                self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
+                                     metadata={"label": LABELS["bias"]}).named("bias")
             return in_obj + self.W
         else:
             return in_obj
@@ -677,10 +684,12 @@ class BatchNorm(Layer):
             self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0)
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,
-                                     scope=self.scope).named('gamma')
+                                     scope=self.scope,
+                                     metadata={"label": LABELS["weight"]}).named('gamma')
             self.beta = ng.variable(axes=out_axes,
                                     initial_value=self.init_beta,
-                                    scope=self.scope).named('beta')
+                                    scope=self.scope,
+                                    metadata={"label": LABELS["bias"]}).named('beta')
 
         xmean = ng.mean(in_obj, out_axes=out_axes)
         xvar = ng.variance(in_obj, out_axes=out_axes)
@@ -864,12 +873,18 @@ class Recurrent(Layer):
 
             self.W_input = ng.variable(axes=self.w_in_axes,
                                        initial_value=self.init,
-                                       scope=self.scope).named("W_in")
+                                       scope=self.scope,
+                                       metadata={"label": LABELS["weight"]},
+                                       ).named("W_in")
             self.W_recur = ng.variable(axes=self.w_re_axes,
                                        initial_value=self.init_inner,
-                                       scope=self.scope).named("W_re")
+                                       scope=self.scope,
+                                       metadata={"label": LABELS["weight"]},
+                                       ).named("W_re")
             self.b = ng.variable(axes=self.out_feature_axes, initial_value=0,
-                                 scope=self.scope).named("bias")
+                                 scope=self.scope,
+                                 metadata={"label": LABELS["bias"]},
+                                 ).named("bias")
 
         h = self.h_init
         h_list = []
@@ -1113,18 +1128,21 @@ class LSTM(Recurrent):
             # params are dictionary for i, f, o, g
             self.W_input = {k: ng.variable(axes=self.w_in_axes,
                                            initial_value=self.init,
-                                           scope=self.scope).
-                            named("W_in_{}".format(k)) for k in self.metadata['gates']}
+                                           scope=self.scope,
+                                           metadata={"label": LABELS["weight"]},
+                                           ).named("W_in_{}".format(k)) for k in self.metadata['gates']}
 
             self.W_recur = {k: ng.variable(axes=self.w_re_axes,
                                            initial_value=self.init_inner,
-                                           scope=self.scope).
-                            named("W_re_{}".format(k)) for k in self.metadata['gates']}
+                                           scope=self.scope,
+                                           metadata={"label": LABELS["weight"]},
+                                           ).named("W_re_{}".format(k)) for k in self.metadata['gates']}
 
             self.b = {k: ng.variable(axes=self.out_feature_axes,
                                      initial_value=0,
-                                     scope=self.scope).
-                      named("bias_{}".format(k)) for k in self.metadata['gates']}
+                                     scope=self.scope,
+                                     metadata={"label": LABELS["bias"]},
+                                     ).named("bias_{}".format(k)) for k in self.metadata['gates']}
 
         h = self.h_init
         c = self.c_init
