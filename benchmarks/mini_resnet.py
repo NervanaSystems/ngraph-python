@@ -84,35 +84,37 @@ class mini_residual_network(Sequential):
         if preprocess:
             layers = Preprocess(functor=cifar_mean_subtract)
         parallel_axis = inputs['image'].axes.batch_axes()
-        with ng.metadata(device_id=('1', '2'), parallel=parallel_axis[0]):
-            layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
-            layers.append(f_module(nfms[0], first=True, batch_norm=batch_norm))
+        layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
+        layers.append(f_module(nfms[0], first=True, batch_norm=batch_norm))
 
-            for nfm, stride in zip(nfms[1:], strides):
-                layers.append(f_module(nfm, strides=stride, batch_norm=batch_norm))
+        for nfm, stride in zip(nfms[1:], strides):
+            layers.append(f_module(nfm, strides=stride, batch_norm=batch_norm))
 
-            if batch_norm:
-                layers.append(BatchNorm())
-            if activation:
-                layers.append(Activation(Rectlin()))
-            layers.append(Pool2D(8, strides=2, op='avg'))
-            if dataset == 'cifar10':
-                ax.Y.length = 10
-                layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                     batch_norm=batch_norm, activation=Softmax()))
-            elif dataset == 'i1k':
-                ax.Y.length = 1000
-                layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                     batch_norm=batch_norm, activation=Softmax()))
-            else:
-                raise ValueError("Incorrect dataset provided")
+        if batch_norm:
+            layers.append(BatchNorm())
+        if activation:
+            layers.append(Activation(Rectlin()))
+        layers.append(Pool2D(8, strides=2, op='avg'))
+        if dataset == 'cifar10':
+            ax.Y.length = 10
+            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
+                                 batch_norm=batch_norm, activation=Softmax()))
+        elif dataset == 'i1k':
+            ax.Y.length = 1000
+            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
+                                 batch_norm=batch_norm, activation=Softmax()))
+        else:
+            raise ValueError("Incorrect dataset provided")
 
         self.layers = layers
 
 
 def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False,
                     activation=True, preprocess=False):
-    return mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
+    model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
+    with ng.metadata(device_id=('1', '2'), parallel=ax.N):
+        model_out = model(inputs['image'])
+    return model_out
 
 
 def get_fake_data(dataset, batch_size, n_iter):
@@ -129,17 +131,18 @@ def get_fake_data(dataset, batch_size, n_iter):
 def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
                          transformer_type='hetr', bprop=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
-    model = get_mini_resnet(inputs, dataset)
+    model_out = get_mini_resnet(inputs, dataset)
 
     # Running forward propagation
-    fprop_computation_op = ng.computation(model(inputs['image']), 'all')
+    #model_out = model(inputs['image'])
+    fprop_computation_op = ng.computation(model_out, 'all')
     benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type)
     Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
                                                            dataset + '_msra_fprop'))
 
     if bprop:
         optimizer = GradientDescentMomentum(0.01, 0.9)
-        train_loss = ng.cross_entropy_multi(model(inputs['image']),
+        train_loss = ng.cross_entropy_multi(model_out,
                                             ng.one_hot(inputs['label'], axis=ax.Y))
 
         batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
