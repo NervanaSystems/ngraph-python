@@ -119,7 +119,6 @@ class FusionPass(PeepholeGraphPass):
         mean = BroadcastOp(dict_ops_to_params["mean"], axes=inputs.axes)
         new_op = BatchnormOp(inputs, gamma, bias, epsilon, mean, variance)
         self.replace_op(op, new_op)
-        temp1 = gamma
 
     def check_for_pattern(self, args1, args2, op_type1, op_type2):
         """
