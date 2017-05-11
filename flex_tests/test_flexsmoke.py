@@ -6,6 +6,14 @@ import re
 
 pytestmark = pytest.mark.transformer_dependent("module")
 
+# known issues:
+bug_1295 = pytest.mark.xfail(strict=True, reason="GitHub issue #1295: Flexgpu transformer broken in current master, "		
+                                                 "the lack of the CIFAR10 convergence")
+
+@pytest.mark.parametrize("script_path, description", (
+    ("examples/mnist/mnist_mlp.py", "Check if MNIST MLP is trainable"),
+    bug_1295(("examples/cifar10/cifar10_mlp.py", "Check if CIFAR10 MLP is trainable"))
+))
 def test_if_mlp_network_is_trainable(script_path, description):
     """
     :param script_path: Path to the script with training of MLP neural network using specific data set
