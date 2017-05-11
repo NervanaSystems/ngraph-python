@@ -1468,6 +1468,32 @@ class TensorValueOp(ValueOp):
     def states_read(self):
         return OrderedSet([self.tensor])
 
+class PatternLabelOp(TensorOp):
+    """
+    An op to represent label in the pattern to be matched in graph
+
+    constraint_fn is a predicate that must hold in order to bind the
+    label to its matching op. By default, constraint_fn is always true.
+
+    """
+    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
+      dummy = make_axis(length=1)
+      super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+      self.label = label
+      self.constraint_fn = constraint_fn
+
+class PatternSkipOp(TensorOp):
+    """
+    An op to allow user of pattern matching to skip match for certain ops
+
+    is_optional_op_fn is a predicate that must be defined to specify
+    optional ops. By default, is_optional_op_fn is false.
+
+    """
+    def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
+      dummy = make_axis(length=1)
+      super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
+      self.is_optional_op_fn = is_optional_op_fn
 
 class ReshapeOp(TensorOp):
 
