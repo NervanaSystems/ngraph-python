@@ -55,6 +55,7 @@ class ModelWrapper(object):
         self.axes.n = ng.make_axis(name='N', length=batch_size)
 
         self.state = ng.placeholder(self.axes.state + [self.axes.n])
+        self.state_single = ng.placeholder(self.axes.state)
         self.target = ng.placeholder([self.axes.action, self.axes.n])
 
         # todo: except model as input parameter to constructor
@@ -69,12 +70,19 @@ class ModelWrapper(object):
             inference, self.state
         )
 
+        # construct inference computation
+        with neon.Layer.inference_mode_on():
+            inference_single = self.model(self.state_single)
+
+        self.inference_computation_single = self.transformer.computation(
+            inference_single, self.state_single
+        )
+
         # construct training computation
         loss = ng.mean(
             ng.squared_L2(self.model(self.state) - self.target), out_axes=()
         )
 
-        # optimizer = neon.GradientDescentMomentum(0.01)
         optimizer = neon.RMSProp(learning_rate=0.0001)
         train_output = ng.sequential([
             optimizer(loss),
@@ -88,7 +96,8 @@ class ModelWrapper(object):
     def predict_single(self, state):
         """run inference on the model for a single input state"""
         state = state.reshape(self.axes.state.lengths + (1, ))
-        # todo: build a single sample inference computation
+        # return self.inference_computation_single(state)
+        state = np.concatenate([state]*self.axes.n.length, axis=-1)
         return self.inference_computation(state)[..., 0]
 
     def predict(self, state):
