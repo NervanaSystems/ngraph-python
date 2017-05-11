@@ -477,8 +477,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(BatchnormOp)
     def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
-        self.append("mkldnn.fprop_batchnorm({}, inputs={}, outputs={}, gamma={},\
-                     bias={}, mean={}, variance={}, epsilon={})", op.index, inputs,
+        self.append("mkldnn.fprop_batchnorm('{}', inputs={}, outputs={}, gamma={},\
+                     bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
                      output, gamma, bias, mean, variance, epsilon)
 
     @generate_op.on_type(ReluOp)

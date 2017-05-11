@@ -19,7 +19,7 @@
 /* Create list of mkldnn primitives to run batch norm fprop */
 mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
     mkldnn_engine_t engine,
-    int src_dims, int weights_dims, int dest_dims,
+    int src_dims, int weights_dims, int dest_dims,int mean_sizes, int variance_sizes,
     int *batchnorm_src_sizes, int *batchnorm_weights_sizes,
     int *batchnorm_dst_sizes, double epsilon, mkldnn_primitive_desc_t input_src_pd,
     mkldnn_primitive_desc_t input_weights_pd, mkldnn_primitive_desc_t input_mean_pd,
@@ -65,7 +65,7 @@ mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
 
     mkldnn_batch_normalization_desc_t batch_norm_desc;
     MKL_CHECK(mkldnn_batch_normalization_forward_desc_init(&batch_norm_desc, mkldnn_forward_training,
-                                                &mkldnn_memory_desc_src_md, epsilon, mkldnn_use_global_stats));
+                                                &mkldnn_memory_desc_src_md, epsilon, mkldnn_use_global_stats | mkldnn_use_scaleshift));
 
     /* create a batch norm primitive descriptor - convolution descriptor bound to the CPU engine */
     MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc, engine, NULL));
@@ -111,7 +111,7 @@ mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
                           engine, &(opkernel->outputs[0]));
 
     opkernel->num_inputs = 4;
-    op_kernel-> num_ouputs = 1;
+    opkernel-> num_outputs = 1;
 
     // No reorders required
     opkernel->reorder_i[0] = NULL;
@@ -130,7 +130,7 @@ mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
 
 }
 
-void run_mkldnn_conv_fprop_kernel(
+void run_mkldnn_batchnorm_fprop_kernel(
     void *batchnorm_src, void *batchnorm_weights, void *batchnorm_mean,
     void *batchnorm_variance, void *batchnorm_dst,
     mkldnn_opkernel_t opkernel) {

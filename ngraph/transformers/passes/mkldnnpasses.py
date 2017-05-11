@@ -61,10 +61,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             N = unflatten_inputs.axes.find_by_name('N').size
             inputs_shape = (C, H, W, N)
 
-            mean_shape = mean.axes.find_by_name('C').size
+            mean_size = mean.axes.find_by_name('C').size
             gamma_shape = gamma.axes.find_by_name('C').size
             bias_shape = bias.axes.find_by_name('C').size
-            variance = variance.axes.find_by_name('C').size
+            variance_size = variance.axes.find_by_name('C').size
 
             outputs_shape = op.axes.lengths
 
@@ -91,7 +91,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
             self.mkldnn.batchnorm_fprop_kernel(
                 self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
-                len(outputs_shape), input_shape_arg, weights_shape_arg, outputs_shape_arg,
+                len(outputs_shape), mean_size, variance_size, input_shape_arg, weights_shape_arg, outputs_shape_arg,
                 epsilon, inputs_layout, None, mean_layout, variance_layout, self.mkldnn.kernels[op.name])
 
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)

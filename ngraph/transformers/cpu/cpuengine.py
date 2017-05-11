@@ -73,12 +73,13 @@ class Mkldnn(object):
                 self.mkldnn_engine_dll.create_mkldnn_batchnorm_fprop_primitives
             self.batchnorm_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_double, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
 
             self.run_batchnorm_fprop = \
-                self.mkldnn_engine_dll.run_mkldnn_conv_fprop_kernel
+                self.mkldnn_engine_dll.run_mkldnn_batchnorm_fprop_kernel
             self.run_batchnorm_fprop.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
@@ -205,14 +206,15 @@ class Mkldnn(object):
 
     def close(self):
         if (self.mkldnn_engine_initialized):
-            for op in self.kernels:
-                if self.kernels[op]:
-                    if op in self.op_uses_opkernel_api:
-                        self.delete_opkernel(self.kernels[op])
-                    else:
-                        self.cleanup_mkldnn_fn(self.kernels[op])
-            self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
-            self.mkldnn_engine_initialized = False
+            pass
+            # for op in self.kernels:
+            #     if self.kernels[op]:
+            #         if op in self.op_uses_opkernel_api:
+            #             self.delete_opkernel(self.kernels[op])
+            #         else:
+            #             self.cleanup_mkldnn_fn(self.kernels[op])
+            # self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
+            # self.mkldnn_engine_initialized = False
 
     # def init_batchnorm_fprop(self, index, inputs, outputs, gamma, bias, mean, variance, epsilon):
     #     if (self.mkldnn_enabled):
@@ -250,13 +252,14 @@ class Mkldnn(object):
     #                                                              weights_shape, mean_size, variance_size,
     #                                                              epsilon[0][0])
 
-    def fprop_batchnorm(self, index, inputs, outputs, gamma, bias, mean, variance, epsilon):
-        if (self.mkldnn_enabled and index in self.mkldnn_batchnorm_fprop_netlist):
+    def fprop_batchnorm(self, name, inputs, outputs, gamma, bias, mean, variance, epsilon):
+        if (self.mkldnn_enabled and name in self.kernels):
             weights = np.vstack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
             variance_ch = variance[:, 0]
             self.run_batchnorm_fprop(inputs.ctypes.data, mean_ch.ctypes.data, variance_ch.ctypes.data,
-                                     weights.ctypes.data, outputs.ctypes.data)
+                                     weights.ctypes.data, outputs.ctypes.data, self.kernels[name])
+            import pdb;pdb.set_trace()
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
