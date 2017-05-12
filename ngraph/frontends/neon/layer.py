@@ -16,7 +16,6 @@ from __future__ import division, print_function, absolute_import
 from builtins import object
 import functools
 import collections
-import logging
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
@@ -24,9 +23,8 @@ from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_
 from orderedset import OrderedSet
 
 
-logger = logging.getLogger(__name__)
-
-
+# Labels should be added as metadata on specific ops and variables
+# Hopefully these can be used to efficiently display and filter the computational graph
 LABELS = {"weight": "weight",
           "bias": "bias"}
 
@@ -56,7 +54,14 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
 
 
 def neon_layer(cache_key=keys.hashkey):
-
+    """
+    A decorator for the __call__ method of neon layers. Supports cacheing of the output 
+    using a specified cacheing function.
+    
+    Arguments:
+        cache_key (function): A function to use for determining the cache's hashkey. 
+                              See cachetools.keys.hashkey 
+    """
     def create_decorator(f):
         @cached({}, key=cache_key)
         @functools.wraps(f)
@@ -90,7 +95,20 @@ def neon_layer(cache_key=keys.hashkey):
 
 
 class Layer(object):
-    """TODO: Document this class"""
+    """
+    Base class from which all other layers should inherit. 
+    
+    Attributes:
+        initialized - Whether or not the layer's variables have been created
+        variables - All trainable variables defined in the layer
+        inputs - Ops that are given as input to the layer
+        side_effects - Ops not required to produce the output of the layer but which must run anyway
+    
+    Methods:
+        inference_mode_on - Context manager for inference mode
+        inference_mode_key - cachetools hashing function that accounts for the value of inference mode
+        variable_scope - Context manager to set the variable scope of subsequently defined ops
+    """
 
     inference_mode = False
     active_scope = None
@@ -105,19 +123,28 @@ class Layer(object):
 
     @property
     def initialized(self):
+        """
+        True if the layer's __call__ method has been successfully executed
+        """
         return self.ops is not None
 
     @property
-    @cached({}, key=lambda self: keys.hashkey(self.ops is None))
+    @cached({}, key=lambda self: keys.hashkey(self, self.ops is None))
     def variables(self):
+        """
+        An OrderedSet of all trainable variables created in this layer
+        """
         if self.ops is None:
             return None
         else:
             return OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable)
 
     @property
-    @cached({}, key=lambda self: keys.hashkey(self.ops is None))
+    @cached({}, key=lambda self: keys.hashkey(self, self.ops is None))
     def inputs(self):
+        """
+        An OrderedSet of input ops to this layer
+        """
         if self.ops is None:
             return None
         else:
@@ -135,8 +162,11 @@ class Layer(object):
             return inputs
 
     @property
-    @cached({}, key=lambda self: keys.hashkey(self.ops is None))
+    @cached({}, key=lambda self: keys.hashkey(self, self.ops is None))
     def side_effects(self):
+        """
+        An OrderedSet of side-effect ops in this layer
+        """
         if self.ops is None:
             return None
         else:
@@ -152,7 +182,13 @@ class Layer(object):
     @contextmanager
     def inference_mode_on():
         """
-        TODO: Document
+        Provides a context manager for doing model inference. This puts certain layers into "inference mode",
+        if necessary (e.g. batch normalization and dropout).
+        
+        Examples:
+            train_loss = ng.squared_l2(target - model(input))
+            with Layer.inference_mode_on():
+                eval_loss = ng.squared_l2(target - model(input))        
         """
         Layer.inference_mode = True
         yield Layer.inference_mode

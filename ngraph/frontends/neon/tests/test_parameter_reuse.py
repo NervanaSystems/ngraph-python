@@ -1,14 +1,10 @@
 import pytest
 import numpy as np
-import logging
 import ngraph as ng
-from ngraph.frontends.neon import Linear, ConvBase, Recurrent, BatchNorm, Layer
+from ngraph.frontends.neon import Linear, ConvBase, Recurrent, BatchNorm, Layer, LookupTable, LSTM
 
 
 dummy_init = lambda axes: np.ones(axes.lengths)
-logger = logging.getLogger()
-logging.basicConfig()
-logger.setLevel(logging.DEBUG)
 
 
 # TODO: Move the following *_size fixtures to conftest.py and refactor other tests to use them
@@ -88,6 +84,33 @@ def test_inference_reuse_recurrent(recurrent_input):
     with Layer.inference_mode_on():
         inference_out = layer(recurrent_input)
         inference_params = (layer.W_input, layer.W_recur)
+
+    for train_param, inference_param in zip(train_params, inference_params):
+        assert train_param is inference_param
+
+
+def test_inference_reuse_lstm(recurrent_input):
+
+    layer = LSTM(10, dummy_init, activation=lambda x: x)
+    train_out = layer(recurrent_input)
+    train_params = (layer.W_input["f"], layer.W_recur["f"])
+    with Layer.inference_mode_on():
+        inference_out = layer(recurrent_input)
+        inference_params = (layer.W_input["f"], layer.W_recur["f"])
+
+    for train_param, inference_param in zip(train_params, inference_params):
+        assert train_param is inference_param
+
+
+def test_inference_reuse_lut(recurrent_axis, batch_axis):
+
+    seq_input = ng.placeholder(axes=[recurrent_axis, batch_axis])
+    layer = LookupTable(20, 10, dummy_init)
+    train_out = layer(seq_input)
+    train_params = (layer.W, )
+    with Layer.inference_mode_on():
+        inference_out = layer(seq_input)
+        inference_params = (layer.W, )
 
     for train_param, inference_param in zip(train_params, inference_params):
         assert train_param is inference_param
