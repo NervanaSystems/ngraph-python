@@ -219,7 +219,7 @@ class Mkldnn(object):
 
     def fprop_batchnorm(self, name, inputs, outputs, gamma, bias, mean, variance, epsilon):
         if (self.mkldnn_enabled and name in self.kernels):
-            weights = np.vstack([gamma[:, 0], bias[:,0]])
+            weights = np.stack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
             variance_ch = variance[:, 0]
             self.run_batchnorm_fprop(inputs.ctypes.data, weights.ctypes.data, mean_ch.ctypes.data, variance_ch.ctypes.data,

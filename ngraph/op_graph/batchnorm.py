@@ -16,11 +16,8 @@
 from ngraph.op_graph.op_graph import TensorOp
 
 class BatchnormOp(TensorOp):
-    _index=0
 
     def __init__(self, inputs, gamma, bias, epsilon, mean, variance, **kwargs):
         super(BatchnormOp, self).__init__(args=(inputs, gamma, bias, epsilon, mean, variance), axes=inputs.axes, **kwargs)
         self.eps = epsilon
-        self.index = BatchnormOp._index
-        BatchnormOp._index += 1
 
