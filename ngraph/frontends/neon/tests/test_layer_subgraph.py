@@ -1,5 +1,4 @@
 import pytest
-import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import neon_layer, LABELS, Layer
 

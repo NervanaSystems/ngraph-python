@@ -343,7 +343,6 @@ class LookupTable(Layer):
         pad_idx (int): by knowing the pad value, the update will make sure always
                        have the vector representing pad value to be 0s.
     """
-    metadata = {'layer_type': 'lookuptable'}
 
     def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None,
                  **kwargs):
@@ -420,7 +419,6 @@ class ConvBase(Layer):
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
         dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
     """
-    metadata = {'layer_type': 'convolution'}
 
     def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
@@ -506,8 +504,6 @@ class Activation(Layer):
     """
     TODO: Document. Why should we pass through this instead of just defining functions? Cacheing?
     """
-    metadata = {'layer_type': 'activation'}
-
     def __init__(self, transform, **kwargs):
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
@@ -532,8 +528,6 @@ class PoolBase(Layer):
         strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
     """
-    metadata = {'layer_type': 'pooling'}
-
     def __init__(self, fshape, strides, padding, op='max', **kwargs):
         super(PoolBase, self).__init__(**kwargs)
         self.poolparams = dict(J=None, T=None, R=None, S=None,
@@ -605,8 +599,6 @@ class Bias(Layer):
 
     TODO: Should default be None or 0?
     """
-    metadata = {'layer_type': 'bias'}
-
     def __init__(self, init, shared=True, **kwargs):
         super(Bias, self).__init__(**kwargs)
         self.W = None
@@ -694,8 +686,6 @@ class BatchNorm(Layer):
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
     .. [Laurent2016] https://arxiv.org/abs/1510.01378
     """
-    metadata = {'layer_type': 'batch_norm'}
-
     def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
@@ -761,9 +751,6 @@ class Dropout(Layer):
         keep (float):  Number between 0 and 1 that indicates probability of any particular
                        activation being dropped.  Default 0.5.
     """
-
-    metadata = {'layer_type': 'dropout'}
-
     def __init__(self, keep=0.5, **kwargs):
         super(Dropout, self).__init__(**kwargs)
         self.keep = keep
@@ -824,8 +811,6 @@ class Recurrent(Layer):
             (output_size, output_size)
         b (Tensor): Biases on output units (output_size, 1)
     """
-    metadata = {'layer_type': 'recurrent'}
-
     def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
                  reset_cells=True, return_sequence=True, backward=False, **kwargs):
         super(Recurrent, self).__init__(**kwargs)
@@ -979,8 +964,6 @@ class BiRNN(Layer):
                            list.
         name (str, optional): name to refer to this layer as.
     """
-    metadata = {'layer_type': 'birnn'}
-
     def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
                  reset_cells=False, return_sequence=True, sum_out=False,
                  concat_out=False, **kwargs):
@@ -1088,8 +1071,7 @@ class LSTM(Recurrent):
 
     Gates: i - input gate, f - forget gate, o - output gate, g - input modulation
     """
-    metadata = {'layer_type': 'LSTM',
-                'gates': ['i', 'f', 'o', 'g']}
+    metadata = {'gates': ['i', 'f', 'o', 'g']}
 
     def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
                  batch_norm=False, reset_cells=True, return_sequence=True, backward=False,

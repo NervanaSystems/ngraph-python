@@ -15,14 +15,12 @@
 '''
 Test generic Layer properties
 '''
-import cachetools
 import ngraph as ng
 from ngraph.frontends.neon import Layer, neon_layer
 
 
 class SimpleLayer(Layer):
 
-    # @cachetools.cached({}, key=Layer.inference_mode_key)
     @neon_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
         if Layer.inference_mode:
