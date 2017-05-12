@@ -63,7 +63,10 @@ def neon_layer(f, cache_key=None):
         if self.inputs is not None:
             for prev_inp, inp in zip(self.inputs, [in_obj] + list(inputs)):
                 if prev_inp.axes.sample_axes() != inp.axes.sample_axes():
-                    invalid_input_axes(prev_inp.axes, inp.axes)
+                    pass
+                    # TODO: Throw a useful error message
+                    #invalid_input_axes(prev_inp.axes, inp.axes)
+
 
         with ng.Op.all_ops() as ops:
             output = f(self, in_obj, *inputs, **kwargs)
@@ -101,6 +104,7 @@ class Layer(object):
         return self.ops is not None
 
     @property
+    @cached({}, key=lambda self: keys.hashkey(self.ops is None))
     def variables(self):
         if self.ops is None:
             return None
@@ -108,6 +112,7 @@ class Layer(object):
             return OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable)
 
     @property
+    @cached({}, key=lambda self: keys.hashkey(self.ops is None))
     def inputs(self):
         if self.ops is None:
             return None
@@ -116,7 +121,7 @@ class Layer(object):
             for op in self.ops[0]:
                 if op.tensor.is_trainable:
                     continue
-                if op.is_placeholder:
+                if op.tensor.is_placeholder:
                     inputs.add(op.tensor)
                 else:
                     for arg in op.args:
@@ -126,6 +131,7 @@ class Layer(object):
             return inputs
 
     @property
+    @cached({}, key=lambda self: keys.hashkey(self.ops is None))
     def side_effects(self):
         if self.ops is None:
             return None
