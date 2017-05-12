@@ -53,9 +53,10 @@ class ModelWrapper(object):
         self.axes.state = make_axes(state_axes, name='state')
         self.axes.action = ng.make_axis(name='action', length=action_size)
         self.axes.n = ng.make_axis(name='N', length=batch_size)
+        self.axes.n1 = ng.make_axis(name='N', length=1)
 
         self.state = ng.placeholder(self.axes.state + [self.axes.n])
-        self.state_single = ng.placeholder(self.axes.state)
+        self.state_single = ng.placeholder(self.axes.state + [self.axes.n1])
         self.target = ng.placeholder([self.axes.action, self.axes.n])
 
         # todo: except model as input parameter to constructor
@@ -95,6 +96,8 @@ class ModelWrapper(object):
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
+        print(state.shape)
+        print(self.axes.state.lengths)
         state = state.reshape(self.axes.state.lengths + (1, ))
         # return self.inference_computation_single(state)
         state = np.concatenate([state]*self.axes.n.length, axis=-1)
@@ -186,6 +189,8 @@ class Agent(object):
         states = []
         targets = []
         samples = self.memory.sample(self.batch_size)
+
+        print([sample['state'].shape for sample in samples])
 
         states = np.stack([sample['state'] for sample in samples], axis=-1)
         next_states = np.stack([sample['next_state'] for sample in samples],
