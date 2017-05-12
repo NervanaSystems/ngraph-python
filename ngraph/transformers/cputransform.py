@@ -367,10 +367,6 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
                     op.name, x, y, out)
 
-    @allocate_op.on_type(MklReorderOp)
-    def generate_op(self, op, out, inp):
-        self.append("mkldnn.alloc_reorder('{}', {}, {})", op.name, out, inp)
-
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:

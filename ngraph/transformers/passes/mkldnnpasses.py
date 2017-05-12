@@ -344,27 +344,43 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     def __init__(self, mkldnn):
         self.mkldnn = mkldnn
+        self.reorder_ops = dict()   # Maps op.name to reorder op
 
     def init_mkldnn_reorder(self, op):
+        assert len(op.axes) ==5
         output_shape = op.axes.lengths
-        assert op.axes.find_by_name('__NG_DEPTH').size == 1
-        output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-        self.mkldnn.kernels[op.name] = self.mkldnn.create_mkldnn_netlist_fn()
-        self.mkldnn.create_reorder_kernel_fn(
+        (C, D, H, W, N) = op.axes.lengths
+        assert D == 1
+        output_sizes = (N, C, H, W)
+        output_sizes_arg = ((ct.c_int) * len(output_sizes))(*output_sizes)
+        self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+        self.mkldnn.reorder_kernel(
             self.mkldnn.mkldnn_engine,
-            op.in_layout,
-            len(output_shape),
-            output_shape_arg,
+            len(output_sizes), output_sizes_arg,
+            1, # mkldnn_f32 in mkldnn_types.h. TODO(jbobba): find a better way
+            7, # mkldnn_chwn in mkldnn_types.h
+            op.in_layout, None,
             self.mkldnn.kernels[op.name]
         )
+        self.mkldnn.op_uses_opkernel_api[op.name] = True
+        print
+        print(op.name)
+        self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
+
+    def get_reorder_op(self, op):
+        if op.name in self.reorder_ops:
+            return self.reorder_ops[op.name]
+        else:
+            reorder_op = MklReorderOp(op, in_layout=self.mkldnn.op_layouts[op.name], out_layout=None)
+            self.reorder_ops[op.name] = reorder_op
+            self.init_mkldnn_reorder(reorder_op)
+            return reorder_op
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         for arg in op.args:
             if arg.name in self.mkldnn.op_layouts:
                 pass
-                #reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                #self.init_mkldnn_reorder(reorder_op)
 
     @visit.on_type(Divide)
     def visit(self, op):
@@ -376,16 +392,14 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     def visit(self, op):
         arg = op.args[0]
         if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
+            reorder_op = self.get_reorder_op(arg)
             self.replace_op(op, ReorderAxes(reorder_op, axes=op.axes))
 
     @visit.on_type(ReductionOp)
     def visit(self, op):
         arg = op.args[0]
         if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
+            reorder_op = self.get_reorder_op(arg)
             self.replace_op(op, ReductionOp(reorder_op, axes=op.axes))
 
     @visit.on_type(ReluOp)
@@ -408,8 +422,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             new_args = []
             for arg in op.args:
                 if arg.name in self.mkldnn.op_layouts:
-                    reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                    self.init_mkldnn_reorder(reorder_op)
+                    reorder_op = self.get_reorder_op(arg)
                     new_args.append(reorder_op)
                     replace = True
                 else:
@@ -439,8 +452,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     def visit(self, op):
         arg = op.args[0]
         if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
+            reorder_op = self.get_reorder_op(arg)
             self.replace_op(op, BroadcastOp(reorder_op, axes=op.axes))
 
     @visit.on_type(MapRolesOp)
@@ -460,8 +472,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             new_args = []
             for arg in op.args:
                 if arg.name in self.mkldnn.op_layouts:
-                    reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                    self.init_mkldnn_reorder(reorder_op)
+                    reorder_op = self.get_reorder_op(arg)
                     new_args.append(reorder_op)
                     replace = True
                 else:
@@ -477,8 +488,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         else:
             arg = op.args[0]
             if arg.name in self.mkldnn.op_layouts:
-                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                self.init_mkldnn_reorder(reorder_op)
+                reorder_op = self.get_reorder_op(arg)
                 self.replace_op(op, PoolingOp(op.pool_params, reorder_op, axes=op.axes))
 
     @visit.on_type(BpropPoolOp)
@@ -488,16 +498,14 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         else:
             arg = op.args[0]
             if arg.name in self.mkldnn.op_layouts:
-                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                self.init_mkldnn_reorder(reorder_op)
+                reorder_op = self.get_reorder_op(arg)
                 self.replace_op(op, BpropPoolOp(reorder_op, op.fprop.args[0], op.fprop))
 
     @visit.on_type(Flatten)
     def visit(self, op):
         arg = op.args[0]
         if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
+            reorder_op = self.get_reorder_op(arg)
             self.replace_op(op, Flatten(reorder_op, op.axes))
 
     @visit.on_type(ComputationOp)

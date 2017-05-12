@@ -113,17 +113,6 @@ void create_mkldnn_pool_fprop_kernel(
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-void run_mkldnn_pool_fprop_kernel(
-        void* pool_src, void* pool_dst, void* pool_argmax,
-        mkldnn_opkernel_t opkernel
-        ) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, pool_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, pool_dst));
-    if (pool_argmax) 
-        MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[1].prim, pool_argmax));
-    run_mkldnn_opkernel(opkernel);
-}
-
 void create_mkldnn_pool_bprop_kernel(
             mkldnn_engine_t engine,
             int src_dims, int dst_dims, int stride_dims, int pad_dims,
@@ -219,15 +208,4 @@ void create_mkldnn_pool_bprop_kernel(
     /* create a pooling primitive */
     MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc, pool_srcs, pool_dsts));
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
-}
-
-void run_mkldnn_pool_bprop_kernel(
-        void* pool_src, void* pool_argmax, void* pool_dst,
-        mkldnn_opkernel_t opkernel
-        ) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, pool_src));
-    if (pool_argmax) 
-        MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[1].prim, pool_argmax));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, pool_dst));
-    run_mkldnn_opkernel(opkernel);
 }

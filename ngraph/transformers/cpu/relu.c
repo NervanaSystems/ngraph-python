@@ -68,15 +68,6 @@ void create_mkldnn_relu_fprop_kernel(
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-void run_mkldnn_relu_fprop_kernel(
-        void* relu_src, void* relu_dst,
-        mkldnn_opkernel_t opkernel
-        ) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, relu_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, relu_dst));
-    run_mkldnn_opkernel(opkernel);
-}
-
 void create_mkldnn_relu_bprop_kernel(
         mkldnn_engine_t engine,
         int src_size, double slope,
@@ -198,15 +189,4 @@ void create_mkldnn_relu_bprop_kernel(
     if (opkernel->reorder_i[1])
         opkernel->net[opkernel->net_size++] = opkernel->reorder_i[1];
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
-}
-
-void run_mkldnn_relu_bprop_kernel(
-        void* relu_fprop_src,
-        void* relu_error_src, void* relu_dst,
-        mkldnn_opkernel_t opkernel
-        ) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, relu_fprop_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[1].prim, relu_error_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, relu_dst));
-    run_mkldnn_opkernel(opkernel);
 }

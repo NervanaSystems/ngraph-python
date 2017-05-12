@@ -60,17 +60,6 @@ class Mkldnn(object):
             self.output_layout = self.mkldnn_engine_dll.query_opkernel_layout
             self.output_layout.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.output_layout.restype = ctypes.c_void_p
-            
-            self.create_reorder_kernel_fn = self.mkldnn_engine_dll.create_reorder_kernel
-            self.create_reorder_kernel_fn.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_void_p,
-                 ctypes.c_void_p]
-            
-            self.alloc_reorder_kernel_fn = self.mkldnn_engine_dll.alloc_reorder_kernel
-            self.alloc_reorder_kernel_fn.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
 
             self.set_input_tensor = self.mkldnn_engine_dll.set_input_tensor_data_handle
             self.set_input_tensor.argtypes = \
@@ -81,7 +70,13 @@ class Mkldnn(object):
 
             self.run_opkernel = self.mkldnn_engine_dll.run_mkldnn_opkernel
             self.run_opkernel.argtypes = [ctypes.c_void_p]
-            
+
+            self.reorder_kernel = self.mkldnn_engine_dll.create_mkldnn_reorder_kernel
+            self.reorder_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+
             self.conv_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_conv_fprop_kernel
             self.conv_fprop_kernel.argtypes = \
@@ -427,22 +422,13 @@ class Mkldnn(object):
         else:
             np.add(inputs * np.greater(fpropSrc, 0), inputs * slope * np.less(fpropSrc, 0), out=out)
 
-    def alloc_reorder(self, name, output, input):
-        assert self.mkldnn_enabled
-        self.alloc_reorder_kernel_fn(
-            self.mkldnn_engine,
-            input.ctypes.data,
-            output.ctypes.data,
-            self.kernels[name]
-        )
-        #self.kernels[name] = self.create_mkldnn_netlist_fn()
-        #self.kernels[name] = None
-
     def mkl_reorder(self, name, output, input):
         assert self.mkldnn_enabled
+        assert name in self.kernels
         if name in self.kernels:
-            #output[...] = np.copy(input)
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
+            self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
             output[...] = np.copy(input)
 
