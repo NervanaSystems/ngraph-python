@@ -112,6 +112,7 @@ class Layer(object):
 
     inference_mode = False
     active_scope = None
+    metadata = {}
 
     def __init__(self, name=None):
         self.name = name
