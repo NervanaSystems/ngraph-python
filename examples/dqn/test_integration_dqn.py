@@ -1,7 +1,6 @@
 import gym
 import simple_environments
-import rl_loop
-from ngraph.frontends.neon import dqn
+from ngraph.frontends.neon import dqn, rl_loop
 from ngraph.frontends import neon
 
 
