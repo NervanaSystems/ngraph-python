@@ -55,12 +55,12 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
 
 def neon_layer(cache_key=keys.hashkey):
     """
-    A decorator for the __call__ method of neon layers. Supports cacheing of the output 
+    A decorator for the __call__ method of neon layers. Supports cacheing of the output
     using a specified cacheing function.
-    
+
     Arguments:
-        cache_key (function): A function to use for determining the cache's hashkey. 
-                              See cachetools.keys.hashkey 
+        cache_key (function): A function to use for determining the cache's hashkey.
+                              See cachetools.keys.hashkey
     """
     def create_decorator(f):
         @cached({}, key=cache_key)
@@ -72,8 +72,6 @@ def neon_layer(cache_key=keys.hashkey):
                     if prev_inp.axes.sample_axes() != inp.axes.sample_axes():
                         pass
                         # TODO: Throw a useful error message
-                        #invalid_input_axes(prev_inp.axes, inp.axes)
-
 
             with ng.Op.all_ops() as ops:
                 output = f(self, in_obj, *inputs, **kwargs)
@@ -96,17 +94,19 @@ def neon_layer(cache_key=keys.hashkey):
 
 class Layer(object):
     """
-    Base class from which all other layers should inherit. 
-    
+    Base class from which all other layers should inherit.
+
     Attributes:
         initialized - Whether or not the layer's variables have been created
         variables - All trainable variables defined in the layer
         inputs - Ops that are given as input to the layer
-        side_effects - Ops not required to produce the output of the layer but which must run anyway
-    
+        side_effects - Ops not required to produce the output of the layer but which must run
+                       anyway
+
     Methods:
         inference_mode_on - Context manager for inference mode
-        inference_mode_key - cachetools hashing function that accounts for the value of inference mode
+        inference_mode_key - cachetools hashing function that accounts for the value of
+                             inference mode
         variable_scope - Context manager to set the variable scope of subsequently defined ops
     """
 
@@ -182,13 +182,13 @@ class Layer(object):
     @contextmanager
     def inference_mode_on():
         """
-        Provides a context manager for doing model inference. This puts certain layers into "inference mode",
-        if necessary (e.g. batch normalization and dropout).
-        
+        Provides a context manager for doing model inference. This puts certain layers
+        into "inference mode", if necessary (e.g. batch normalization and dropout).
+
         Examples:
             train_loss = ng.squared_l2(target - model(input))
             with Layer.inference_mode_on():
-                eval_loss = ng.squared_l2(target - model(input))        
+                eval_loss = ng.squared_l2(target - model(input))
         """
         Layer.inference_mode = True
         yield Layer.inference_mode
@@ -312,16 +312,15 @@ class Linear(Layer):
         self.init = init
         self.W = None
 
-
     @neon_layer()
     def __call__(self, in_obj, reuse=True):
 
         if not self.initialized:
-            self.W = ng.variable(
-                    axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
-                    initial_value=self.init, scope=self.scope,
-                    metadata={"label": LABELS["weight"]},
-            ).named('LinW')
+            self.W = ng.variable(axes=(ng.make_axes(self.axes_map.keys()) +
+                                       in_obj.axes.feature_axes()),
+                                 initial_value=self.init, scope=self.scope,
+                                 metadata={"label": LABELS["weight"]},
+                                 ).named('LinW')
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -507,7 +506,6 @@ class Activation(Layer):
     def __init__(self, transform, **kwargs):
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
-
 
     @neon_layer()
     def __call__(self, in_obj):
@@ -1146,23 +1144,24 @@ class LSTM(Recurrent):
                                               axes=self.out_axes).named('c_init')
 
             # params are dictionary for i, f, o, g
+            gates = self.metadata["gates"]
             self.W_input = {k: ng.variable(axes=self.w_in_axes,
                                            initial_value=self.init,
                                            scope=self.scope,
                                            metadata={"label": LABELS["weight"]},
-                                           ).named("W_in_{}".format(k)) for k in self.metadata['gates']}
+                                           ).named("W_in_{}".format(k)) for k in gates}
 
             self.W_recur = {k: ng.variable(axes=self.w_re_axes,
                                            initial_value=self.init_inner,
                                            scope=self.scope,
                                            metadata={"label": LABELS["weight"]},
-                                           ).named("W_re_{}".format(k)) for k in self.metadata['gates']}
+                                           ).named("W_re_{}".format(k)) for k in gates}
 
             self.b = {k: ng.variable(axes=self.out_feature_axes,
                                      initial_value=0,
                                      scope=self.scope,
                                      metadata={"label": LABELS["bias"]},
-                                     ).named("bias_{}".format(k)) for k in self.metadata['gates']}
+                                     ).named("bias_{}".format(k)) for k in gates}
 
         h = self.h_init
         c = self.c_init

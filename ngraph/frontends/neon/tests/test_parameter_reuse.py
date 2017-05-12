@@ -31,10 +31,10 @@ def output_size(request):
 def test_inference_reuse_linear(input_placeholder):
 
     layer = Linear(dummy_init, 10)
-    train_out = layer(input_placeholder)
+    layer(input_placeholder)
     train_params = (layer.W,)
     with Layer.inference_mode_on():
-        inference_out = layer(input_placeholder)
+        layer(input_placeholder)
         inference_params = (layer.W,)
 
     for train_param, inference_param in zip(train_params, inference_params):
@@ -44,10 +44,10 @@ def test_inference_reuse_linear(input_placeholder):
 def test_inference_reuse_batch_norm(input_placeholder):
 
     layer = BatchNorm()
-    train_out = layer(input_placeholder)
+    layer(input_placeholder)
     train_params = (layer.gamma, layer.beta)
     with Layer.inference_mode_on():
-        inference_out = layer(input_placeholder)
+        layer(input_placeholder)
         inference_params = (layer.gamma, layer.beta)
 
     for train_param, inference_param in zip(train_params, inference_params):
@@ -66,10 +66,10 @@ def test_inference_reuse_conv(conv_input_placeholder):
                      strides=strides,
                      padding=padding)
 
-    train_out = layer(conv_input_placeholder)
+    layer(conv_input_placeholder)
     train_params = (layer.W,)
     with Layer.inference_mode_on():
-        inference_out = layer(conv_input_placeholder)
+        layer(conv_input_placeholder)
         inference_params = (layer.W,)
 
     for train_param, inference_param in zip(train_params, inference_params):
@@ -79,10 +79,10 @@ def test_inference_reuse_conv(conv_input_placeholder):
 def test_inference_reuse_recurrent(recurrent_input):
 
     layer = Recurrent(10, dummy_init, activation=lambda x: x)
-    train_out = layer(recurrent_input)
+    layer(recurrent_input)
     train_params = (layer.W_input, layer.W_recur)
     with Layer.inference_mode_on():
-        inference_out = layer(recurrent_input)
+        layer(recurrent_input)
         inference_params = (layer.W_input, layer.W_recur)
 
     for train_param, inference_param in zip(train_params, inference_params):
@@ -92,10 +92,10 @@ def test_inference_reuse_recurrent(recurrent_input):
 def test_inference_reuse_lstm(recurrent_input):
 
     layer = LSTM(10, dummy_init, activation=lambda x: x)
-    train_out = layer(recurrent_input)
+    layer(recurrent_input)
     train_params = (layer.W_input["f"], layer.W_recur["f"])
     with Layer.inference_mode_on():
-        inference_out = layer(recurrent_input)
+        layer(recurrent_input)
         inference_params = (layer.W_input["f"], layer.W_recur["f"])
 
     for train_param, inference_param in zip(train_params, inference_params):
@@ -106,10 +106,10 @@ def test_inference_reuse_lut(recurrent_axis, batch_axis):
 
     seq_input = ng.placeholder(axes=[recurrent_axis, batch_axis])
     layer = LookupTable(20, 10, dummy_init)
-    train_out = layer(seq_input)
+    layer(seq_input)
     train_params = (layer.W, )
     with Layer.inference_mode_on():
-        inference_out = layer(seq_input)
+        layer(seq_input)
         inference_params = (layer.W, )
 
     for train_param, inference_param in zip(train_params, inference_params):

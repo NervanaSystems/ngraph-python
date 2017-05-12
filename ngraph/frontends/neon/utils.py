@@ -15,5 +15,3 @@ def make_convolution_placeholder(shape=None):
         x.axes.set_shape(shape)
 
     return x
-
-

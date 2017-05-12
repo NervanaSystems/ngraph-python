@@ -48,6 +48,7 @@ def spatial_axes(height, width):
 def channel_axis(input_size):
     return ng.make_axis(length=input_size, name="C")
 
+
 @pytest.fixture
 def input_placeholder(input_axis, batch_axis, extra_feature_axes):
     return ng.placeholder(extra_feature_axes + [input_axis, batch_axis])

@@ -13,7 +13,7 @@ class SimpleLayer(Layer):
                                       initial_value=2,
                                       metadata={"label": LABELS["weight"]})
             self.side_effect = ng.persistent_tensor(axes=[w_axis],
-                                               initial_value=0)
+                                                    initial_value=0)
 
         return ng.sequential([ng.assign(self.side_effect, self.weight),
                               self.weight * in_obj])
