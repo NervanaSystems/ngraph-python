@@ -399,36 +399,36 @@ def test_recvop_tensorupdate(transformer_factory):
                                             [8., 8., 8., 8.]])
 
 
-# def test_terminate_op(transformer_factory):
+def test_terminate_op(transformer_factory):
 
-    # class TerminateOp(ng.Op):
+    class TerminateOp(ng.Op):
 
-        # def __init__(self, **kwargs):
-            # super(TerminateOp, self).__init__(**kwargs)
+        def __init__(self, **kwargs):
+            super(TerminateOp, self).__init__(**kwargs)
 
-    # baseline = active_children()
-    # termOp = TerminateOp()
-    # assert len(baseline) == 0
-    # with ExecutorFactory() as ex:
-        # comp = ex.executor(termOp)
-        # assert len(active_children()) == 1
-        # with pytest.raises(RuntimeError):
-            # comp()
-        # assert len(active_children()) == 1
-    # assert len(active_children()) == len(baseline)
+    baseline = active_children()
+    termOp = TerminateOp()
+    assert len(baseline) == 0
+    with ExecutorFactory() as ex:
+        comp = ex.executor(termOp)
+        assert len(active_children()) == 1
+        with pytest.raises(RuntimeError):
+            comp()
+        assert len(active_children()) == 1
+    assert len(active_children()) == len(baseline)
 
 
-# def test_process_leak(transformer_factory):
-    # baseline = active_children()
-    # with ng.metadata(device_id=('2')):
-        # x = ng.constant(2)
-    # assert len(active_children()) == 0
-    # with ExecutorFactory() as ex:
-        # comp = ex.executor(x)
-        # assert len(active_children()) == 1
-        # comp()
-        # assert len(active_children()) == 2
-    # assert len(active_children()) == len(baseline)
+def test_process_leak(transformer_factory):
+    baseline = active_children()
+    with ng.metadata(device_id=('2')):
+        x = ng.constant(2)
+    assert len(active_children()) == 0
+    with ExecutorFactory() as ex:
+        comp = ex.executor(x)
+        assert len(active_children()) == 1
+        comp()
+        assert len(active_children()) == 2
+    assert len(active_children()) == len(baseline)
 
 
 ax_A = ng.make_axis(4)

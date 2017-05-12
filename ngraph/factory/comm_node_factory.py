@@ -285,12 +285,11 @@ def get_comm_pattern(from_node, to_node):
     if isinstance(to_node_transformer, (list, tuple)):
         if to_node.metadata['parallel']:
             # todo check if metadata['device_id'] and 'parallel' co-exists
-            if not to_node.metadata['parallel'] in from_node.axes:
-                # todo use 'broadcast'?
-                return 'direct'
-            else:
+            if to_node.metadata['parallel'] in from_node.axes:
                 from_node.metadata['marker'] = 'scatter'
                 return 'scatter'
+            else:
+                return 'broadcast'
         else:
             return 'broadcast'
 
