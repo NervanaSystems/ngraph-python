@@ -2900,12 +2900,8 @@ def sqrt(x):
 
 class BinaryElementWiseOp(ElementWiseOp):
 
-    _index = 0
-
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
-        self.index = BinaryElementWiseOp._index
-        BinaryElementWiseOp._index += 1
         x, y = as_ops((x, y))
 
         x_axes_bcast = x.axes + (y.axes - x.axes)
@@ -3133,12 +3129,8 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
-    _index = 0
-
     def __init__(self, x, y, axes, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
-        self.index = DotLowDimension._index
-        DotLowDimension._index += 1
 
 
 class SoftmaxOp(ValueOp):
@@ -3517,6 +3509,27 @@ class SigmoidOp(ValueOp):
         self.x.generate_add_delta(adjoints, delta * self.value_tensor * (1.0 - self.value_tensor))
 
 
+class SigmoidAtomicOp(UnaryElementWiseOp):
+    """
+    Computes the sigmoid of x and handles autodiff for sigmoid.
+
+    Arguments:
+        x: The tensor argument.
+        kwargs: Other construction arguments.
+
+    Parameters:
+        x: The tensor argument.
+    """
+
+    def __init__(self, x, **kwargs):
+        super(SigmoidAtomicOp, self).__init__(x, **kwargs)
+        self.x = x
+        self.deriv_handler = self
+
+    def generate_adjoints(self, adjoints, delta):
+        self.x.generate_add_delta(adjoints, delta * self * (1.0 - self))
+
+
 def sigmoid(x):
     """
     Computes the sigmoid of x.
@@ -3528,6 +3541,19 @@ def sigmoid(x):
         The sigmoid computation.
     """
     return SigmoidOp(x).value_tensor
+
+
+def sigmoidAtomic(x):
+    """
+    Computes the sigmoid of x.
+
+    Args:
+        x:
+
+    Returns:
+        The sigmoid computation.
+    """
+    return SigmoidAtomicOp(x)
 
 
 def mean(x, reduction_axes=None, out_axes=None):
@@ -3676,7 +3702,7 @@ class CrossEntropyBinaryInnerOp(ValueOp):
         self.y = y
         self.t = t
         self.value_tensor = -(safelog(y) * t + safelog(1 - y) * (1 - t))
-        if isinstance(y.deriv_handler, SigmoidOp):
+        if isinstance(y.deriv_handler, SigmoidOp) or isinstance(y.deriv_handler, SigmoidAtomicOp):
             self.x = y.deriv_handler.x
             if enable_sig_opt:
                 # Simpler equivalent

@@ -27,6 +27,7 @@ class Mkldnn(object):
         self.mkldnn_enabled = False
         self.mkldnn_engine_initialized = False
         self.mkldnn_verbose = False
+        self.kernels = dict()
         try:
             self.mkldnn_engine_dll = ctypes.CDLL(engine_path)
             self.mkldnn_enabled = True
@@ -64,6 +65,18 @@ class Mkldnn(object):
                  ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_conv_bprop_primitives_fn.restype = ctypes.c_void_p
+            self.create_mkldnn_conv_bprop_weights_primitives_fn = \
+                self.mkldnn_engine_dll.create_mkldnn_conv_bprop_weights_primitives
+            self.create_mkldnn_conv_bprop_weights_primitives_fn.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p]
+            self.create_mkldnn_conv_bprop_weights_primitives_fn.restype = ctypes.c_void_p
             self.create_mkldnn_pool_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_pool_fprop_primitives
             self.create_mkldnn_pool_fprop_primitives_fn.argtypes = \
@@ -121,37 +134,16 @@ class Mkldnn(object):
         if (self.mkldnn_enabled):
             self.mkldnn_engine = self.init_mkldnn_engine_fn()
             self.mkldnn_engine_initialized = True
-            self.mkldnn_conv_fprop_netlist = dict()
-            self.mkldnn_conv_bprop_netlist = dict()
-            self.mkldnn_pool_fprop_netlist = dict()
-            self.mkldnn_pool_bprop_netlist = dict()
-            self.mkldnn_innerproduct_fprop_netlist = dict()
-            self.mkldnn_elementwise_add_netlist = dict()
-            self.mkldnn_relu_fprop_netlist = dict()
-            self.mkldnn_relu_bprop_netlist = dict()
 
     def close(self):
         if (self.mkldnn_engine_initialized):
-            for i in self.mkldnn_conv_fprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_conv_fprop_netlist[i])
-            for i in self.mkldnn_conv_bprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_conv_bprop_netlist[i])
-            for i in self.mkldnn_pool_fprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_pool_fprop_netlist[i])
-            for i in self.mkldnn_pool_bprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_pool_bprop_netlist[i])
-            for i in self.mkldnn_innerproduct_fprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_innerproduct_fprop_netlist[i])
-            for i in self.mkldnn_elementwise_add_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_elementwise_add_netlist[i])
-            for i in self.mkldnn_relu_fprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_relu_fprop_netlist[i])
-            for i in self.mkldnn_relu_bprop_netlist:
-                self.cleanup_mkldnn_fn(self.mkldnn_relu_bprop_netlist[i])
+            for op in self.kernels:
+                if self.kernels[op]:
+                    self.cleanup_mkldnn_fn(self.kernels[op])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
-    def init_conv_fprop(self, index, I, F, O, pad, stride):
+    def init_conv_fprop(self, name, I, F, O, pad, stride):
         if (self.mkldnn_enabled):
             C, D, H, W, N = I.shape
             if (self.mkldnn_verbose):
@@ -182,7 +174,7 @@ class Mkldnn(object):
             output_shape = ((ctypes.c_int) * len(O.shape))(*O.shape)
             pad_data = ((ctypes.c_int) * len(pad))(*pad)
             stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.mkldnn_conv_fprop_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_conv_fprop_primitives_fn(
                     self.mkldnn_engine,
                     len(I.shape), len(F.shape),
@@ -194,9 +186,9 @@ class Mkldnn(object):
                     None, O.ctypes.data,
                     stride_data, pad_data)
 
-    def fprop_conv(self, index, conv_slices, I, F, O):
-        if (self.mkldnn_enabled and index in self.mkldnn_conv_fprop_netlist):
-            self.run_mkldnn_netlist_fn(self.mkldnn_conv_fprop_netlist[index])
+    def fprop_conv(self, name, conv_slices, I, F, O):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = O.shape
@@ -211,11 +203,11 @@ class Mkldnn(object):
                 slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 O[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
-    def init_conv_bprop(self, index, E, F, gI, pad, stride):
+    def init_conv_bprop(self, name, E, F, gI, pad, stride):
         if (self.mkldnn_enabled):
             C, D, H, W, N = E.shape
             if (self.mkldnn_verbose):
-                print("MKL INIT CONV BPROP index: ", index,
+                print("MKL INIT CONV BPROP name: ", name,
                       " E.shape: ", E.shape, " F.shape: ", F.shape,
                       " gI.shape: ", gI.shape, " Stride: ", stride,
                       " Pad: ", pad)
@@ -240,7 +232,7 @@ class Mkldnn(object):
             output_shape = ((ctypes.c_int) * len(gI.shape))(*gI.shape)
             pad_data = ((ctypes.c_int) * len(pad))(*pad)
             stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.mkldnn_conv_bprop_netlist[index] =\
+            self.kernels[name] =\
                 self.create_mkldnn_conv_bprop_primitives_fn(
                     self.mkldnn_engine,
                     len(E.shape), len(F.shape), 1, len(gI.shape), len(stride), len(pad),
@@ -248,9 +240,9 @@ class Mkldnn(object):
                     E.ctypes.data, F.ctypes.data, None, gI.ctypes.data,
                     stride_data, pad_data)
 
-    def bprop_conv(self, index, conv_slices, E, F, gI):
-        if (self.mkldnn_enabled and index in self.mkldnn_conv_bprop_netlist):
-            self.run_mkldnn_netlist_fn(self.mkldnn_conv_bprop_netlist[index])
+    def bprop_conv(self, name, conv_slices, E, F, gI):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             _, _, _, mSlice, pSlice, qSlice = conv_slices
             F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
@@ -266,7 +258,59 @@ class Mkldnn(object):
                 slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
-    def init_pool_fprop(self, pool_type, index, arrI, arrO, kernel, pad, stride):
+    def init_update_conv(self, name, arrI, arrE, arrO, pad, stride):
+        if (self.mkldnn_enabled):
+            C, D, H, W, N = arrE.shape
+            # Only 2D convolution supported in MKLDNN for now
+            if (D != 1):
+                return
+            # Only single precision float supported for now
+            if ((arrE.dtype != np.float32) or (arrI.dtype != np.float32)):
+                return
+            # Sanity check tensor shapes
+            if ((len(arrE.shape) != 5) or (len(arrI.shape) != 5) or
+                    (len(arrO.shape) != 5) or (len(stride) != 3) or
+                    (len(pad) != 3)):
+                return
+            # NumPy Tensors need to be contiguous
+            if (not (arrE.flags['C_CONTIGUOUS'] and
+                     arrI.flags['C_CONTIGUOUS'] and
+                     arrO.flags['C_CONTIGUOUS'])):
+                return
+            error_shape = ((ctypes.c_int) * len(arrE.shape))(*arrE.shape)
+            input_shape = ((ctypes.c_int) * len(arrI.shape))(*arrI.shape)
+            output_shape = ((ctypes.c_int) * len(arrO.shape))(*arrO.shape)
+            pad_data = ((ctypes.c_int) * len(pad))(*pad)
+            stride_data = ((ctypes.c_int) * len(stride))(*stride)
+            self.kernels[name] =\
+                self.create_mkldnn_conv_bprop_weights_primitives_fn(
+                    self.mkldnn_engine,
+                    len(arrE.shape), len(arrI.shape), 1, len(arrO.shape), len(stride), len(pad),
+                    error_shape, input_shape, None, output_shape,
+                    arrE.ctypes.data, arrI.ctypes.data, None, arrO.ctypes.data,
+                    stride_data, pad_data)
+
+    def update_conv(self, name, conv_slices, I, E, U):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
+        else:
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = E.shape
+            C, _, _, _, K = U.shape
+            U.fill(0.0)
+
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, tlen = mS
+                sliceR, sliceH, rlen = pS
+                sliceS, sliceW, slen = qS
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                slicedE = E[:, m, p, q, :]
+                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                U[:, sliceT, sliceR, sliceS, :] += update
+
+    def init_pool_fprop(self, pool_type, name, arrI, arrO, kernel, pad, stride):
         if (self.mkldnn_enabled):
             C, D, H, W, N = arrI.shape
             [J, T, R, S] = kernel
@@ -285,7 +329,7 @@ class Mkldnn(object):
             kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
             pad_data = ((ctypes.c_int) * len(pad))(*pad)
             stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.mkldnn_pool_fprop_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_pool_fprop_primitives_fn(
                     self.mkldnn_engine,
                     len(arrI.shape), len(arrO.shape), len(stride), len(pad),
@@ -293,9 +337,9 @@ class Mkldnn(object):
                     arrI.ctypes.data, arrO.ctypes.data,
                     stride_data, pad_data, pool_type)
 
-    def fprop_pool(self, index, pool_slices, arrI, arrO):
-        if (self.mkldnn_enabled and index in self.mkldnn_pool_fprop_netlist):
-            self.run_mkldnn_netlist_fn(self.mkldnn_pool_fprop_netlist[index])
+    def fprop_pool(self, name, pool_slices, arrI, arrO):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             K, M, P, Q, N = arrO.shape
@@ -317,7 +361,7 @@ class Mkldnn(object):
                 elif op == "l2":
                     arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
 
-    def init_pool_bprop(self, pool_type, index, arrE, arrD, kernel, pad, stride):
+    def init_pool_bprop(self, pool_type, name, fprop_name, arrE, arrD, kernel, pad, stride):
         if (self.mkldnn_enabled):
             C, D, H, W, N = arrE.shape
             [J, T, R, S] = kernel
@@ -332,17 +376,17 @@ class Mkldnn(object):
             kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
             pad_data = ((ctypes.c_int) * len(pad))(*pad)
             stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.mkldnn_pool_bprop_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_pool_bprop_primitives_fn(
                     self.mkldnn_engine,
                     len(arrE.shape), len(arrD.shape), len(stride), len(pad),
                     input_shape, kernel_sizes, output_shape,
                     arrE.ctypes.data, arrD.ctypes.data,
-                    stride_data, pad_data, pool_type, self.mkldnn_pool_fprop_netlist[index])
+                    stride_data, pad_data, pool_type, self.kernels[fprop_name])
 
-    def bprop_pool(self, index, pool_slices, arrE, arrD):
-        if (self.mkldnn_enabled and index in self.mkldnn_pool_bprop_netlist):
-            self.run_mkldnn_netlist_fn(self.mkldnn_pool_bprop_netlist[index])
+    def bprop_pool(self, name, pool_slices, arrE, arrD):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             arrD[:] = 0
@@ -368,7 +412,7 @@ class Mkldnn(object):
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
 
-    def init_innerproduct_fprop(self, index, out, x, y):
+    def init_innerproduct_fprop(self, name, out, x, y):
         if (self.mkldnn_enabled):
             if (self.mkldnn_verbose):
                 print("Inner Product Input: ", len(x.shape), x.shape,
@@ -384,22 +428,22 @@ class Mkldnn(object):
             input_shape = ((ctypes.c_int) * len(x.shape))(*x.shape)
             weights_shape = ((ctypes.c_int) * len(y.shape))(*y.shape)
             output_shape = ((ctypes.c_int) * len(out.shape))(*out.shape)
-            self.mkldnn_innerproduct_fprop_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_innerproduct_fprop_primitives_fn(
                     self.mkldnn_engine,
                     len(x.shape), len(y.shape), 1, len(out.shape), input_shape,
                     weights_shape, None, output_shape, x.ctypes.data,
                     y.ctypes.data, None, out.ctypes.data)
 
-    def innerproduct_fprop(self, index, x, y, out):
-        if (self.mkldnn_enabled and (index in self.mkldnn_innerproduct_fprop_netlist)):
+    def innerproduct_fprop(self, name, x, y, out):
+        if (self.mkldnn_enabled and name in self.kernels):
             assert x.flags['C_CONTIGUOUS']
             assert y.flags['C_CONTIGUOUS']
-            self.run_mkldnn_netlist_fn(self.mkldnn_innerproduct_fprop_netlist[index])
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             np.dot(x, y, out=out)
 
-    def init_elementwise_add(self, index, I_array1, I_array2, O_array):
+    def init_elementwise_add(self, name, I_array1, I_array2, O_array):
         if(self.mkldnn_enabled):
             # Sanity check for tensor shapes
             if (not (I_array1.flags['C_CONTIGUOUS'] and
@@ -408,19 +452,19 @@ class Mkldnn(object):
             input1_shape = I_array1.size
             input2_shape = I_array2.size
             output_shape = O_array.size
-            self.mkldnn_elementwise_add_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_add_primitives_fn(
                     self.mkldnn_engine, I_array1.ctypes.data,
                     I_array2.ctypes.data, O_array.ctypes.data,
                     input1_shape, input2_shape, output_shape, 2)
 
-    def elementwise_add(self, index, I_array1, I_array2, O_array):
-        if (self.mkldnn_enabled and (index in self.mkldnn_elementwise_add_netlist)):
-            self.run_mkldnn_netlist_fn(self.mkldnn_elementwise_add_netlist[index])
+    def elementwise_add(self, name, I_array1, I_array2, O_array):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             np.add(I_array1, I_array2, out=O_array)
 
-    def init_relu_fprop(self, index, inputs, out, slope):
+    def init_relu_fprop(self, name, inputs, out, slope):
         if (self.mkldnn_enabled):
             if (self.mkldnn_verbose):
                 print("Relu Input: ", len(inputs.shape), inputs.shape,
@@ -429,18 +473,18 @@ class Mkldnn(object):
             if ((inputs.dtype != np.float32) or (out.dtype != np.float32)):
                 return
             input_size = np.prod(inputs.shape)
-            self.mkldnn_relu_fprop_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_relu_fprop_primitives_fn(
                     self.mkldnn_engine, inputs.ctypes.data, out.ctypes.data,
                     slope, input_size)
 
-    def fprop_relu(self, index, inputs, out, slope):
-        if (self.mkldnn_enabled and index in self.mkldnn_relu_fprop_netlist):
-            self.run_mkldnn_netlist_fn(self.mkldnn_relu_fprop_netlist[index])
+    def fprop_relu(self, name, inputs, out, slope):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
-    def init_relu_bprop(self, index, arrE, arrD, slope, fprop_input):
+    def init_relu_bprop(self, name, arrE, arrD, slope, inputs):
         if (self.mkldnn_enabled):
             if (self.mkldnn_verbose):
                 print("Relu Input: ", len(arrE.shape), arrE.shape,
@@ -449,35 +493,17 @@ class Mkldnn(object):
             if ((arrE.dtype != np.float32) or (arrD.dtype != np.float32)):
                 return
             input_size = np.prod(arrE.shape)
-            self.mkldnn_relu_bprop_netlist[index] = \
+            self.kernels[name] = \
                 self.create_mkldnn_relu_bprop_primitives_fn(
                     self.mkldnn_engine, arrE.ctypes.data, arrD.ctypes.data,
-                    slope, self.mkldnn_relu_fprop_netlist[index], input_size)
+                    slope, inputs.ctypes.data, input_size)
 
-    def bprop_relu(self, index, inputs, out, slope, fprop_input):
-        if (self.mkldnn_enabled and index in self.mkldnn_relu_bprop_netlist):
-            self.run_mkldnn_netlist_fn(self.mkldnn_relu_bprop_netlist[index])
+    def bprop_relu(self, name, delta, out, slope, inputs):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.run_mkldnn_netlist_fn(self.kernels[name])
         else:
-            np.add(inputs * np.greater(fprop_input, 0),
-                   inputs * slope * np.less(fprop_input, 0), out=out)
-
-
-def update_conv(conv_slices, I, E, U):
-    mSlice, pSlice, qSlice, _, _, _ = conv_slices
-    K, M, P, Q, N = E.shape
-    C, _, _, _, K = U.shape
-    U.fill(0.0)
-
-    for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                 enumerate(pSlice),
-                                                 enumerate(qSlice)):
-        sliceT, sliceD, tlen = mS
-        sliceR, sliceH, rlen = pS
-        sliceS, sliceW, slen = qS
-        slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-        slicedE = E[:, m, p, q, :]
-        update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
-        U[:, sliceT, sliceR, sliceS, :] += update
+            np.add(delta * np.greater(inputs, 0),
+                   delta * slope * np.less(inputs, 0), out=out)
 
 
 def fprop_lut(lut, idx, axis, output):
