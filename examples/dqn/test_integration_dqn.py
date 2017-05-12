@@ -1,7 +1,7 @@
 import gym
 import simple_environments
 import rl_loop
-from ngraph.frontends.neon.dqn import Agent
+from ngraph.frontends.neon import dqn
 from ngraph.frontends import neon
 
 
@@ -24,8 +24,8 @@ def small_model(action_axes):
 
 def test_dependent_environment():
     environment = gym.make('DependentEnv-v0')
-    agent = Agent(
-        environment.observation_space,
+    agent = dqn.Agent(
+        dqn.space_shape(environment.observation_space),
         environment.action_space,
         model=small_model
     )

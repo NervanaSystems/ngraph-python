@@ -123,7 +123,7 @@ def space_shape(space):
 class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
-    def __init__(self, observation_space, action_space, model):
+    def __init__(self, state_axes, action_space, model):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
@@ -136,7 +136,7 @@ class Agent(object):
 
         self.memory = Memory(maxlen=100000)
         self.model_wrapper = ModelWrapper(
-            state_axes=space_shape(observation_space),
+            state_axes=state_axes,
             action_size=action_space.n,
             batch_size=self.batch_size,
             model=model,

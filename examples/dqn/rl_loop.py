@@ -56,13 +56,3 @@ def evaluate_single_episode(environment, agent, render=False):
     agent.end_of_episode()
 
     return total_reward
-
-def main():
-    environment = gym.make('CartPole-v0')
-    agent = Agent(environment.observation_space, environment.action_space)
-
-    rl_loop(environment, agent)
-
-
-if __name__ == "__main__":
-    main()

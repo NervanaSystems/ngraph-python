@@ -1,15 +1,15 @@
 import gym
 import simple_environments
 import rl_loop
-from dqn import Agent
+from ngraph.frontends.neon import dqn
 from ngraph.frontends import neon
 import ngraph
 
-factory = ngraph.transformers.make_transformer_factory('gpu')
-ngraph.transformers.set_transformer_factory(factory)
+# factory = ngraph.transformers.make_transformer_factory('gpu')
+# ngraph.transformers.set_transformer_factory(factory)
 
 
-def small_model(action_axes):
+def model(action_axes):
     print(action_axes.length)
     return neon.Sequential([
         neon.Convolution(
@@ -53,10 +53,10 @@ def small_model(action_axes):
 def main():
     # todo: total_reward isn't always greater than 95 even with a working implementation
     environment = gym.make('SpaceInvaders-v0')
-    agent = Agent(
-        environment.observation_space,
+    agent = dqn.Agent(
+        dqn.space_shape(environment.observation_space),
         environment.action_space,
-        model=small_model
+        model=model
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20)
