@@ -38,4 +38,4 @@ def test_dependent_environment():
 
 
 if __name__ == "__main__":
-    main()
+    test_dependent_environment()
