@@ -55,34 +55,38 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
-def neon_layer(f, cache_key=None):
+def neon_layer(cache_key=keys.hashkey):
 
-    @functools.wraps(f)
-    def layer_wrapper(self, in_obj, *inputs, **kwargs):
-        # TODO: We could do some axes management here - casting or reordering as needed
-        if self.inputs is not None:
-            for prev_inp, inp in zip(self.inputs, [in_obj] + list(inputs)):
-                if prev_inp.axes.sample_axes() != inp.axes.sample_axes():
-                    pass
-                    # TODO: Throw a useful error message
-                    #invalid_input_axes(prev_inp.axes, inp.axes)
+    def create_decorator(f):
+        @cached({}, key=cache_key)
+        @functools.wraps(f)
+        def layer_wrapper(self, in_obj, *inputs, **kwargs):
+            # TODO: We could do some axes management here - casting or reordering as needed
+            if self.inputs is not None:
+                for prev_inp, inp in zip(self.inputs, [in_obj] + list(inputs)):
+                    if prev_inp.axes.sample_axes() != inp.axes.sample_axes():
+                        pass
+                        # TODO: Throw a useful error message
+                        #invalid_input_axes(prev_inp.axes, inp.axes)
 
 
-        with ng.Op.all_ops() as ops:
-            output = f(self, in_obj, *inputs, **kwargs)
+            with ng.Op.all_ops() as ops:
+                output = f(self, in_obj, *inputs, **kwargs)
 
-        if self.ops is None:
-            self.ops = list()
+            if self.ops is None:
+                self.ops = list()
 
-        # TODO: This should create unique names for different instances of the same class
-        # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
-        for op in ops:
-            op.metadata.setdefault("neon_layer", []).insert(0, self.__class__.__name__.lower())
-        self.ops.append(ops)
+            # TODO: This should create unique names for different instances of the same class
+            # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
+            for op in ops:
+                op.metadata.setdefault("neon_layer", []).insert(0, self.__class__.__name__.lower())
+            self.ops.append(ops)
 
-        return output
+            return output
 
-    return layer_wrapper
+        return layer_wrapper
+
+    return create_decorator
 
 
 class Layer(object):
@@ -182,7 +186,7 @@ class Preprocess(Layer):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
-    @cached({})
+    @neon_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, **kwargs):
         return self.functor(in_obj)
 
@@ -273,7 +277,7 @@ class Linear(Layer):
         self.W = None
 
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj, reuse=True):
 
         if not self.initialized:
@@ -329,7 +333,7 @@ class LookupTable(Layer):
             init_w[:, pad_idx] = 0
         return init_w
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         """
         Arguments:
@@ -401,7 +405,7 @@ class ConvBase(Layer):
         self.o_axes = None
         self.W = None
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         cpm = self.convparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
@@ -473,7 +477,7 @@ class Activation(Layer):
         self.transform = transform
 
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         # An activation layer with no transform defaults to identity
         if self.transform:
@@ -510,7 +514,7 @@ class PoolBase(Layer):
 
         self.o_axes = None
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
@@ -573,7 +577,7 @@ class Bias(Layer):
         self.init = init
         self.shared = shared
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         if self.init:
             if not self.initialized:
@@ -605,7 +609,7 @@ class Affine(Layer):
         self.activation_layer = Activation(transform=self.activation)
         self.scope = Layer.active_scope  # only included so all Layers have scope attribute
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
         b_out = self.bias(l_out)
@@ -625,7 +629,7 @@ class Convolution(Layer):
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj):
         l_out = self.conv(in_obj)
         b_out = self.bias(l_out)
@@ -671,9 +675,7 @@ class BatchNorm(Layer):
         self.gvar = None
         self.scope = Layer.active_scope
 
-    # @ng.with_op_metadata
-    # @cached({}, key=Layer.inference_mode_key)
-    @neon_layer
+    @neon_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
 
         in_axes = in_obj.axes
@@ -731,9 +733,7 @@ class Dropout(Layer):
         self.keep = keep
         self.mask = None
 
-    # @ng.with_op_metadata
-    # @cached({}, key=Layer.inference_mode_key)
-    @neon_layer
+    @neon_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return self.keep * in_obj
@@ -845,9 +845,7 @@ class Recurrent(Layer):
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
-    # @ng.with_op_metadata
-    # @cached({}, key=Layer.inference_mode_key)
-    @neon_layer
+    @neon_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -964,7 +962,7 @@ class BiRNN(Layer):
                                  batch_norm=batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence, backward=True)
 
-    @neon_layer
+    @neon_layer()
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1088,9 +1086,7 @@ class LSTM(Recurrent):
         h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
-    # @ng.with_op_metadata
-    # @cached({})
-    @neon_layer
+    @neon_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
