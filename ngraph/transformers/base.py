@@ -336,7 +336,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             graph_pass (): The pass to register
             position (int): insert index in the list of passes, append by default
         """
-        if position:
+        if position is not None:
             self.graph_passes.insert(position, graph_pass)
         else:
             self.graph_passes.append(graph_pass)
