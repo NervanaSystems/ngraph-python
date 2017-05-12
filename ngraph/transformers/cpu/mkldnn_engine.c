@@ -214,6 +214,14 @@ void delete_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
     MKL_CHECK(mkldnn_primitive_destroy(opkernel->op_prim));
 }
 
+void set_input_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int index) {
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[index].prim, buffer));
+}
+
+void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int index) {
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[index].prim, buffer));
+}
+
 void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
@@ -253,7 +261,7 @@ void cleanup_mkldnn(mkldnn_netlist_t mkldnn_net) {
 mkldnn_primitive_desc_t query_opkernel_layout(mkldnn_opkernel_t opkernel, int index) {
     assert (index < opkernel->num_outputs);
     mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
-    if (md.format == mkldnn_x) { 
+    if (md.format == mkldnn_x || md.format == mkldnn_ihwo || md.format == mkldnn_chwn) { // Native formats
         return NULL;
     } else {
         return opkernel->outputs[index].desc;
