@@ -214,6 +214,14 @@ void delete_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
     MKL_CHECK(mkldnn_primitive_destroy(opkernel->op_prim));
 }
 
+void set_input_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int index) {
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[index].prim, buffer));
+}
+
+void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int index) {
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[index].prim, buffer));
+}
+
 void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
