@@ -222,6 +222,29 @@ void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[index].prim, buffer));
 }
 
+void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
+    printf(" INPUTS\n");
+    for (int i = 0; i < opkernel->num_inputs; i++) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->inputs[i].desc);
+        printf("  Input %d md.format: %d", i, md.format);
+        if (opkernel->reorder_i[i]) {
+            mkldnn_memory_desc_t i_md = *mkldnn_primitive_desc_query_memory_d(opkernel->internal_inputs[i].desc);
+            printf(" -> md.format: %d", i_md.format);
+        }
+        printf("\n");
+    }
+    printf(" OUTPUTS\n");
+    for (int i = 0; i < opkernel->num_outputs; i++) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[i].desc);
+        printf("  Output %d md.format: %d", i, md.format);
+        if (opkernel->reorder_o[i]) {
+            mkldnn_memory_desc_t i_md = *mkldnn_primitive_desc_query_memory_d(opkernel->internal_outputs[i].desc);
+            printf(" <- md.format: %d", i_md.format);
+        }
+        printf("\n");
+    }
+}
+
 void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;

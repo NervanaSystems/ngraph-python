@@ -50,6 +50,9 @@ class Mkldnn(object):
             self.create_empty_kernel = self.mkldnn_engine_dll.create_empty_kernel
             self.create_empty_kernel.restype = ctypes.c_void_p
 
+            self.print_kernel = self.mkldnn_engine_dll.print_mkldnn_opkernel
+            self.print_kernel.restype = ctypes.c_void_p
+
             self.query_prim_layout_fn = self.mkldnn_engine_dll.query_prim_layout
             self.query_prim_layout_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.query_prim_layout_fn.restype = ctypes.c_void_p
