@@ -15,8 +15,8 @@
 from __future__ import print_function
 import ngraph.transformers as ngt
 from ngraph.frontends.caffe.cf_importer.ops_bridge import OpsBridge
-import ngraph.frontends.caffe.cf_importer.ops_binary
-import ngraph.frontends.caffe.cf_importer.ops_constant
+import ngraph.frontends.caffe.cf_importer.ops_binary as OpsBinary
+import ngraph.frontends.caffe.cf_importer.ops_constant as OpsConstant
 import argparse
 
 from google.protobuf import text_format
@@ -201,6 +201,10 @@ if __name__ == '__main__':
         model_txt = args['model']
 
     op_map = parse_prototxt(model_txt, solver_txt, caffemodel, verbose=args['verbose'])
+
+    if args['verbose']:
+        OpsBinary.registered()
+        OpsConstant.registered()
 
     if args['mode'] == 'compute':
         layers = args['name'].split(',')

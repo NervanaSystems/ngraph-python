@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import print_function
 import ngraph as ng
 import caffe_pb2
 from ngraph.frontends.caffe.cf_importer.ops_bridge import register_func_with_ops_bridge
@@ -48,7 +49,12 @@ class OpsBinary():
     def __call__(self, func, layer, inputs):
         return getattr(self, func)(layer, inputs)
 
+
 # register all functions in this class with opbridge
 ops_binary = OpsBinary()
 register_func_with_ops_bridge("Eltwise", ops_binary)
+
+
+def registered():
+    print("OpsBinary is rgistered\n")
 # EOF

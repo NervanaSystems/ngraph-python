@@ -13,6 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import print_function
 import ngraph as ng
 from ngraph.frontends.caffe.cf_importer.ops_bridge import register_func_with_ops_bridge
 
@@ -52,6 +53,11 @@ class OpsConstant():
     def __call__(self, func, layer, inputs):
         return getattr(self, func)(layer, inputs)
 
+
 # register all functions in this class with opbridge
 ops_const = OpsConstant()
 register_func_with_ops_bridge("DummyData", ops_const)
+
+
+def registered():
+    print("OpsConstant is registered\n")
