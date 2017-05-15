@@ -82,6 +82,78 @@ class GraphBuildingPass(GraphPass):
         """
         self.replacement_list.append((op, replacement))
 
+# How to use the graph rewrite pass
+#
+# Graph rewrite pass essentially allows pass users to rewrite parts of the
+# input graph in any way they want. Fusion is one example of graph rewrite that
+# fuses multiple ops together. At a high-level users of the pass need to
+# specify 2 things: 1) which ops to fuse, and 2) how to create new op(s) from
+# the existing ops.
+#
+# In order to specify which ops to rewrite, users specify a 'pattern'. A
+# pattern, in very basic terms, is a sub-graph that is to be rewritten. These
+# patterns are constructed using the same ngraph APIs used in constructing
+# actual graphs.  E.g., to construct Add op, use ng.Add(). Since the new op is
+# most likely going to be constructed using some of the rewritten ops, the
+# graph rewrite pass allows users to refer to the parts of the sub-graph by
+# providing 'label' op (This is an op called PatternLabelOp in op_graph.) Label
+# op follows the notion of binding variables to terms from functional
+# languages.
+#
+# To give an example of a label usage, assume that we want to fuse addition of
+# Conv2D and Bias into a single Conv2DWithBias op. Conv2DWithBias op will use
+# same inputs as Conv2D op and Bias op, so we need to refer to the inputs of
+# Conv2D op and Bias op to construct the fused op. In order to refer to the
+# inputs, we would use labels. Essentially, the rule for fusion would
+# conceptually look like: Add(Conv2D(X, Y), Bias(Z)) = Conv2DWithBias(X, Y, Z).
+# Here X, Y, and Z are labels.
+#
+# A complication that often arises in ngraph's pattern matching is the presence
+# of unanticipated ops such as BroadCast.  These ops are not expected by the
+# user, but they are inserted in the graph to for certain operations, such as
+# adjust axes as an example. To accommodate such ops, the graph rewrite pass
+# provides PatternSkipOp, which is an op to specify to the pass that if such
+# unanticipated op is found in the place of a PatternSkipOp, then skip the
+# pattern match for it. The ops to be skipped are specified by the user by
+# defining a predicate that holds true for ops to be skipped.
+#
+# Once the patterns are written, a user registers them with the graph rewrite
+# pass using GraphRewritePass.register_pattern API. register_pattern API takes
+# 2 inputs: a pattern that is to be searched in the graph, and the callback
+# function to be invoked when the pattern matches. The callback function is the
+# place where user would implement logic for rewriting sub-graphs. The callback
+# function aptly gets label map and the matched op as inputs. The label map is
+# simply a map of all the labels used in the pattern and the ops in the
+# sub-graph that they map to. In the above example, if actual graph contained
+# Add(Conv2D({1}, {2}), Bias({3})), then the label map would contain X={1},
+# Y={2}, Z={3}. For examples of using API and label, refer to cpufusion.py that
+# uses rewrite pass to implement fusion for forward and backward ReLU
+# operation.
+#
+# Rewrite pass works as follows: 1) a user creates and registers all
+# required<pattern, callback function> with the rewrite pass in the pass init
+# routine, 2) when do_pass for the rewrite pass is invoked, it goes over the
+# complete graph looking for matches for all the registered patterns, and for
+# the matching patterns invokes their callback functions. This is a standard
+# design borrowed from numerous places such as a specification of yacc rules
+# (grammar rules).
+#
+# The reason for using this design is: since all patterns are known to the
+# rewrite pass beforehand, it can scan whole graph only once, and match all the
+# patterns.  An optimization that we have not yet implemented (we may not
+# implement that for now since the number of patterns is too small) is
+# constructing an FSA (automata) from all the patterns. Automata will ensure
+# the fastest possible match for the patterns.  Even without automata, this
+# design allows us to do such optimizations in the future.
+#
+#
+# A word on ordering of the patterns: The order in which patterns are
+# registered to the rewrite pass is the order in which the pass looks for their
+# match. In other words, if the patterns match same sub-graph then the callback
+# function of the one registered first would be invoked first. Also, it is not
+# necessary that the callback functions must do the replacement -- it can
+# simply be a debug pattern matching rule that prints the matching sub-graphs.
+#
 
 class GraphRewritePass(GraphPass):
     """
