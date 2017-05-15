@@ -1,0 +1,44 @@
+ name: "Tensor Sum"
+
+layer {
+    name: "A"
+    type: "DummyData"
+    top: "A"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: 4.0
+        }
+        shape {
+            dim:2
+            dim:3
+        }
+    }
+}
+
+layer {
+    name: "B"
+    type: "DummyData"
+    top: "B"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: 3.0
+        }
+        shape {
+            dim:2
+            dim:3
+        }
+    }
+}
+
+layer {
+    name: "C"
+    type: "Eltwise"
+    top: "C"
+    bottom: "A"
+    bottom: "B"
+    eltwise_param {
+        operation: SUM
+    }
+}
