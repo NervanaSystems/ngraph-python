@@ -16,7 +16,7 @@ from __future__ import division
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
 from ngraph.op_graph.op_graph import Op, DotOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
-    GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp
+    GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp, BroadcastRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 
@@ -141,10 +141,10 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
         op.metadata['transformer'] = op.metadata['device'] + str(clone_id)
         op.metadata['device_id'] = str(clone_id)
 
-        if isinstance(op, (ScatterRecvOp, GatherSendOp)):
+        if isinstance(op, (ScatterRecvOp, GatherSendOp, BroadcastRecvOp)):
             op._shared_queues = orig_ops[op.uuid]._shared_queues
             op.idx = shared_queues_idx
-            if isinstance(op, ScatterRecvOp):
+            if isinstance(op, (ScatterRecvOp, BroadcastRecvOp)):
                 op._send_node = orig_ops[op.uuid].send_node()
         elif isinstance(op, (CPUQueueRecvOp, GPUQueueRecvOp)):
             # Cloning a recv node means we need a broadcast, so simulate one by adding an
