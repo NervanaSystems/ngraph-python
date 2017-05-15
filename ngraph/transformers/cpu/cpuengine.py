@@ -375,6 +375,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], U.ctypes.data, 0)
             self.run_opkernel(self.kernels[name])
+            pass
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = E.shape

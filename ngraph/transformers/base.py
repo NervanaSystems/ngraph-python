@@ -52,16 +52,14 @@ class Computation(NameableValue):
         self.computation = computation
         self.computation_name = None
         self.executor = None
-        self.pool_params = dict()
-        self.pool_slices = dict()
-        self.conv_params = dict()
-        self.conv_slices = dict()
+
         self.send_nodes = []
         self.recv_nodes = []
         self.scatter_send_nodes = []
         self.scatter_recv_nodes = []
         self.gather_send_nodes = []
         self.gather_recv_nodes = []
+        self.allreduce_nodes = []
 
     def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)
@@ -336,7 +334,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             graph_pass (): The pass to register
             position (int): insert index in the list of passes, append by default
         """
-        if position:
+        if position is not None:
             self.graph_passes.insert(position, graph_pass)
         else:
             self.graph_passes.append(graph_pass)
@@ -522,9 +520,22 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             raise ValueError(
                 'Cannot create computations from a finalized transformer'
             )
-        result = Computation(self, computation)
+        result = self.make_computation(computation)
         self.computations.add(result)
         return result
+
+    def make_computation(self, computation):
+        """
+        Wrap in Computation or a transformer-specific subclass.
+
+        Args:
+            computation:
+
+        Returns:
+            Computation or a subclass.
+
+        """
+        return Computation(self, computation)
 
     def allocate(self):
         """
