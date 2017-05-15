@@ -60,8 +60,10 @@ class ReshapeWrapper(gym.Wrapper):
     def _modify_observation(self, observation):
         # convert color to grayscale
         observation = np.mean(observation, axis=2)
-        # resize image to 84 swype 84
+        # resize image to 84, 84
         observation = cv2.resize(observation, (84, 84))
+        # convert to values between 0 and 1
+        observation = observation / 256.
 
         return observation
 
@@ -78,7 +80,8 @@ class ReshapeWrapper(gym.Wrapper):
 
 def main():
     # todo: total_reward isn't always greater than 95 even with a working implementation
-    environment = gym.make('SpaceInvaders-v0')
+    # environment = gym.make('SpaceInvaders-v0')
+    environment = gym.make('Pong-v0')
     environment = ReshapeWrapper(environment)
 
     print(environment.observation_space)

@@ -96,8 +96,8 @@ class ModelWrapper(object):
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
-        print(state.shape)
-        print(self.axes.state.lengths)
+        # print(state.shape)
+        # print(self.axes.state.lengths)
         state = state.reshape(self.axes.state.lengths + (1, ))
         # return self.inference_computation_single(state)
         state = np.concatenate([state]*self.axes.n.length, axis=-1)
@@ -190,7 +190,7 @@ class Agent(object):
         targets = []
         samples = self.memory.sample(self.batch_size)
 
-        print([sample['state'].shape for sample in samples])
+        # print([sample['state'].shape for sample in samples])
 
         states = np.stack([sample['state'] for sample in samples], axis=-1)
         next_states = np.stack([sample['next_state'] for sample in samples],
