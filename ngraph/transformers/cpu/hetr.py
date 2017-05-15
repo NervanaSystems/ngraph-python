@@ -102,9 +102,12 @@ class HetrLocals(object):
             recv_buf.append(q.get())
 
         # Apply reduce function
-        if allreduce_op.reduce_func is 'sum':
+        if allreduce_op.reduce_func == 'sum':
             result = reduce(lambda x, y: x + y, recv_buf)
-        elif allreduce_op.reduce_func is 'mean':
+        elif allreduce_op.reduce_func == 'mean':
             result = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
+        else:
+            raise RuntimeError(
+                'Reduce function {} is not supported.'.format(allreduce_op.reduce_func))
 
         return result
