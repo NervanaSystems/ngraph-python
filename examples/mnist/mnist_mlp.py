@@ -53,10 +53,12 @@ inputs = train_set.make_placeholders()
 ax.Y.length = 10
 
 ###########
-# FOR FLEX - Sigmoid cannot be divided into smaller ops.
-logistic = Logistic if args.backend != 'flexgpu' else LogisticAtomic
-# FOR FLEX - Simpler equivalent of CE cannot be used.
-sig_opt = True if args.backend != 'flexgpu' else False
+# FOR FLEX
+is_flex = args.backend in ['flexgpu', 'argon']
+# Sigmoid cannot be divided into smaller ops.
+logistic = LogisticAtomic if is_flex else Logistic
+# Simpler equivalent of CE cannot be used.
+sig_opt = not is_flex
 
 
 ######################
