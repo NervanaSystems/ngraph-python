@@ -19,10 +19,11 @@ from future.utils import with_metaclass
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SetItemOp, SequentialOp
+    SetItemOp, SequentialOp, ReorderAxes, Flatten
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.comm_nodes import GPUCudaScatterSendOp, GPUCudaGatherSendOp
 
@@ -374,6 +375,22 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(bprop_lut)
     def op_from_args(self, op, args):
         return bprop_lut(args[0], args[1], op.fprop.args[1], op.fprop)
+
+    @op_from_args.on_type(ReluOp)
+    def op_from_args(self, op, args):
+        return ReluOp(args[0], op.slope)
+
+    @op_from_args.on_type(BpropReluOp)
+    def op_from_args(self, op, args):
+        return BpropReluOp(args[0], args[1], op.fprop)
+
+    @op_from_args.on_type(ReorderAxes)
+    def op_from_args(self, op, args):
+        return ReorderAxes(args[0], axes=op.axes)
+
+    @op_from_args.on_type(Flatten)
+    def op_from_args(self, op, args):
+        return Flatten(args[0], axes=op.axes)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
