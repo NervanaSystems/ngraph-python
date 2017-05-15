@@ -102,7 +102,7 @@ def test_calculate_new_axes_null_parallel_axis():
                       metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
         ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
                             transformer=['cpu1', 'cpu2'])),
-        'direct'
+        'broadcast'
     ),
     (
         ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
