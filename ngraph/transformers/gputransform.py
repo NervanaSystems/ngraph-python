@@ -33,7 +33,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp
+    Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp
@@ -244,6 +244,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
+
+    @add_op.on_type(SigmoidAtomicOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("sig", x=x, out=out)
 
     @add_op.on_type(SinOp)
     def add_op(self, op, out, x):

@@ -96,7 +96,11 @@ class VizPass(GraphPass):
     def get_subgraphs(self, ops):
         clusters = set()
         for op in ops:
-            clusters.add(op.metadata.get(self.subgraph_attr, None))
+            metadata = op.metadata.get(self.subgraph_attr, None)
+            # hack to show hetr graph, a tuple becomes a list after clone_graph
+            if isinstance(metadata, list):
+                metadata = tuple(metadata)
+            clusters.add(metadata)
         return clusters
 
     def random_color(self, alpha=0.2):
@@ -114,7 +118,9 @@ class VizPass(GraphPass):
         self.uuid_lookup_table[op.uuid.bytes] = op
         op_label = op.name
         if hasattr(op, 'axes') and self.show_axes:
-            op_label += "\n{}".format(op.axes)
+            op_label += "\naxes {}".format(op.axes)
+            if hasattr(op, 'reduction_axes'):
+                op_label += "\nreduction_axes {}".format(op.reduction_axes)
         if self.show_all_metadata:
             for k, v in six.iteritems(op.metadata):
                 op_label += "\n{}={}".format(k, v)
@@ -165,6 +171,9 @@ class VizPass(GraphPass):
                     subgraphs[subgraph_name] = sg
             for op in all_ops:
                 subgraph_name = op.metadata.get(self.subgraph_attr, '')
+                # hack to show hetr graph, a tuple becomes a list after clone_graph
+                if isinstance(subgraph_name, list):
+                    subgraph_name = tuple(subgraph_name)
                 if subgraph_name in subgraphs:
                     graph = subgraphs[subgraph_name]
                 else:

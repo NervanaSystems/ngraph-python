@@ -13,16 +13,16 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-# commonly used modules.  Should these still be imported in neon frontend?
-from ngraph import make_axes
-from ngraph.frontends.neon.axis import ax
-from ngraph.frontends.neon.activation import Rectlin, Rectlinclip, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic, LogisticAtomic
-from ngraph.frontends.neon.argparser import NgraphArgparser
-from ngraph.frontends.neon.arrayiterator import *
-from ngraph.frontends.neon.callbacks import *
-# from ngraph.frontends.neon.callbacks2 import *
-from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.model import *
-from ngraph.frontends.neon.optimizer import *
-from ngraph.frontends.neon.initializer import *
+from __future__ import print_function
+import ngraph.transformers as ngt
+from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
+
+model = "sum.prototxt"
+# import graph from the prototxt
+op_map = parse_prototxt(model, verbose=True)
+# get the op handle for any layer
+op = op_map.get("D")
+# execute the op handle
+res = ngt.make_transformer().computation(op)()
+print("Result is:", res)
+# EOF

@@ -18,6 +18,9 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
 
+MINIMUM_FLEX_VALUE = -2 ** 15
+MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
+
 
 def get_executor_result(arg_array1, arg_array2, ng_placeholder1, ng_placeholder2, ng_fun):
     with executor(ng_fun, ng_placeholder1, ng_placeholder2) as m_executor:
@@ -49,35 +52,101 @@ def template_create_placeholders_for_multiplication(n, c, d):
     return X, Y
 
 
+def get_placeholder_from_operand(operand, axes=None):
+    if not isinstance(axes, ng.Axes):
+        if not isinstance(operand, np.ndarray):
+            axes = ()
+        else:
+            if len(operand.shape) > 1:
+                rows, columns = operand.shape
+                N = ng.make_axis(length=rows)
+                M = ng.make_axis(length=columns)
+                axes = ng.make_axes([N, M])
+            else:
+                O = ng.make_axis(length=operand.size)
+                axes = ng.make_axes([O])
+    return ng.placeholder(axes), axes
+
+
 def id_func(param):
+    description = ""
     if isinstance(param, str):
         return param
     elif isinstance(param, FunctionType):
         return param.func_name.title()
+    elif isinstance(param, list):
+        if len(param) > 1:
+            description += "Iterations: ("
+        for i in param:
+            operands, result, explanation = unpack_list(*i)
+            if len(operands) == 1:
+                description += " of {}".format(operands[0])
+            else:
+                description += " {} of {}".format(operands[0], operands[1])
+            description += " equals {} ".format(result)
+            if explanation:
+                description += ", because of {} ".format(explanation)
+            description += "|"
+        if len(param) > 1:
+            description += ")"
+        return description
     return " "
 
 
-def template_one_placeholder(values, ng_fun, ng_placeholder, expected_values, description):
-    with executor(ng_fun, ng_placeholder) as const_executor:
-        print(description)
-        for value, expected_value in zip(values, expected_values):
-            flex = const_executor(value)
-            print("flex_value: ", flex)
-            print("expected_value: ", expected_value)
-            print(flex - expected_value)
-            assert (flex == expected_value).all()
+def unpack_list(a, b, *c):
+    if c:
+        if len(c) > 1:
+            return (a, b), c[0], c[1:]
+        elif isinstance(c[0], str):
+            return (a,), b, c
+        else:
+            return (a, b), c[0], None
+    else:
+        return (a,), b, None
 
 
-def template_two_placeholders(tuple_values, ng_fun, ng_placeholder1, ng_placeholder2,
-                              expected_values, description):
-    with executor(ng_fun, ng_placeholder1, ng_placeholder2) as const_executor:
-        print(description)
-        for values, expected_value in zip(tuple_values, expected_values):
-            flex = const_executor(values[0], values[1])
-            print("flex_value: ", flex)
-            print("expected_value: ", expected_value)
-            print(flex - expected_value)
-            assert flex == expected_value
+def execute_calculation(operands, first_operand, const_executor):
+    iterations = len(operands) != 1
+    for i in operands:
+        _operands, expected_result, description = unpack_list(*i)
+        if description:
+            print("Description: ", description)
+        print("Operands: ", _operands)
+        print("Expected result: ", expected_result)
+        flex_result = const_executor(*_operands)
+        try:
+            print("flex_result: {0:.30}".format(float(flex_result)))
+        except TypeError:
+            # exception for arrays
+            np.set_printoptions(precision=30)
+            print("flex_result: {}".format(flex_result))
+        print("difference: ", flex_result - expected_result)
+        if iterations:
+            assert_allclose(flex_result, expected_result)
+        elif not isinstance(first_operand, np.ndarray):
+            assert flex_result == expected_result
+        else:
+            assert np.array_equal(flex_result, expected_result)
+
+
+def template_one_placeholder(operands, ng_fun):
+    first_operand = operands[0][0]
+    ng_placeholder, _ = get_placeholder_from_operand(first_operand)
+
+    with executor(ng_fun(ng_placeholder), ng_placeholder) as const_executor:
+        execute_calculation(operands, first_operand, const_executor)
+
+
+def template_two_placeholders(operands, ng_fun):
+    first_operand = operands[0][0]
+    second_operand = operands[0][1]
+
+    ng_placeholder1, axes = get_placeholder_from_operand(first_operand)
+    ng_placeholder2, _ = get_placeholder_from_operand(second_operand, axes=axes)
+
+    with executor(ng_fun(ng_placeholder1, ng_placeholder2),
+                  ng_placeholder1, ng_placeholder2) as const_executor:
+        execute_calculation(operands, first_operand, const_executor)
 
 
 def template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters):
