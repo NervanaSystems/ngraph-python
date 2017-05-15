@@ -50,6 +50,7 @@
 
    neon.rst
    tensorflow.rst
+   caffe.rst
 
 .. toctree::
    :hidden:
