@@ -99,7 +99,7 @@ def main():
         model=model
     )
 
-    rl_loop.rl_loop(environment, agent, episodes=20)
+    rl_loop.rl_loop(environment, agent, episodes=20000)
 
     total_reward = rl_loop.evaluate_single_episode(environment, agent)
 
