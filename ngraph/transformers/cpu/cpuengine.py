@@ -50,6 +50,9 @@ class Mkldnn(object):
             self.create_empty_kernel = self.mkldnn_engine_dll.create_empty_kernel
             self.create_empty_kernel.restype = ctypes.c_void_p
 
+            self.print_kernel = self.mkldnn_engine_dll.print_mkldnn_opkernel
+            self.print_kernel.restype = ctypes.c_void_p
+
             self.query_prim_layout_fn = self.mkldnn_engine_dll.query_prim_layout
             self.query_prim_layout_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.query_prim_layout_fn.restype = ctypes.c_void_p
@@ -57,17 +60,6 @@ class Mkldnn(object):
             self.output_layout = self.mkldnn_engine_dll.query_opkernel_layout
             self.output_layout.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.output_layout.restype = ctypes.c_void_p
-            
-            self.create_reorder_kernel_fn = self.mkldnn_engine_dll.create_reorder_kernel
-            self.create_reorder_kernel_fn.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_void_p,
-                 ctypes.c_void_p]
-            
-            self.alloc_reorder_kernel_fn = self.mkldnn_engine_dll.alloc_reorder_kernel
-            self.alloc_reorder_kernel_fn.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
 
             self.batchnorm_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_batchnorm_fprop_primitives
@@ -94,7 +86,13 @@ class Mkldnn(object):
 
             self.run_opkernel = self.mkldnn_engine_dll.run_mkldnn_opkernel
             self.run_opkernel.argtypes = [ctypes.c_void_p]
-            
+
+            self.reorder_kernel = self.mkldnn_engine_dll.create_mkldnn_reorder_kernel
+            self.reorder_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+
             self.conv_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_conv_fprop_kernel
             self.conv_fprop_kernel.argtypes = \
@@ -261,32 +259,6 @@ class Mkldnn(object):
                 slicedI = E[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
                 gI[:, m, p, q, :] = np.dot(slicedF.T, slicedI)
 
-    def init_pool_fprop(self, pool_type, name, arrI, arrO, kernel, pad, stride):
-        if (self.mkldnn_enabled):
-            C, D, H, W, N = arrI.shape
-            [J, T, R, S] = kernel
-            # Only 2D pooling supported in MKLDNN for now
-            if (D != 1 or T != 1 or J != 1):
-                return
-            # Only single precision float supported for now
-            if ((arrI.dtype != np.float32) or (arrO.dtype != np.float32)):
-                return
-            # Sanity check tensor shapes
-            if ((len(arrI.shape) != 5) or (len(arrO.shape) != 5) or
-               (len(stride) != 3) or (len(pad) != 3)):
-                return
-            input_shape = ((ctypes.c_int) * len(arrI.shape))(*arrI.shape)
-            output_shape = ((ctypes.c_int) * len(arrO.shape))(*arrO.shape)
-            kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
-            pad_data = ((ctypes.c_int) * len(pad))(*pad)
-            stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.create_mkldnn_pool_fprop_primitives_fn(
-                self.mkldnn_engine,
-                len(arrI.shape), len(arrO.shape), len(stride), len(pad),
-                input_shape, kernel_sizes, output_shape,
-                arrI.ctypes.data, arrO.ctypes.data,
-                stride_data, pad_data, pool_type, self.kernels[name])
-
     def fprop_pool(self, name, pool_slices, arrI, arrO):
         if (self.mkldnn_enabled and name in self.kernels):
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
@@ -315,29 +287,6 @@ class Mkldnn(object):
                     arrO[k, m, p, q, :] = np.mean(sliceI, axis=0)
                 elif op == "l2":
                     arrO[k, m, p, q, :] = np.sqrt(np.sum(np.square(sliceI), axis=0))
-
-    def init_pool_bprop(self, pool_type, name, fprop_name, arrE, arrD, kernel, pad, stride):
-        if (self.mkldnn_enabled):
-            C, D, H, W, N = arrE.shape
-            [J, T, R, S] = kernel
-            # Only 2D pooling supported in MKLDNN for now
-            if (D != 1 or T != 1 or J != 1):
-                return
-            # Only single precision float supported for now
-            if ((arrE.dtype != np.float32) or (arrD.dtype != np.float32)):
-                return
-            input_shape = ((ctypes.c_int) * len(arrE.shape))(*arrE.shape)
-            output_shape = ((ctypes.c_int) * len(arrD.shape))(*arrD.shape)
-            kernel_sizes = ((ctypes.c_int) * len(kernel))(*kernel)
-            pad_data = ((ctypes.c_int) * len(pad))(*pad)
-            stride_data = ((ctypes.c_int) * len(stride))(*stride)
-            self.kernels[name] = \
-                self.create_mkldnn_pool_bprop_primitives_fn(
-                    self.mkldnn_engine,
-                    len(arrE.shape), len(arrD.shape), len(stride), len(pad),
-                    input_shape, kernel_sizes, output_shape,
-                    arrE.ctypes.data, arrD.ctypes.data,
-                    stride_data, pad_data, pool_type, self.kernels[fprop_name])
 
     def bprop_pool(self, name, pool_slices, arrE, arrD):
         if (self.mkldnn_enabled and name in self.kernels):
@@ -424,20 +373,6 @@ class Mkldnn(object):
         else:
             np.add(I_array1, I_array2, out=O_array)
 
-    def init_relu_fprop(self, name, inputs, out, slope):
-        if (self.mkldnn_enabled):
-            if (self.mkldnn_verbose):
-                print("Relu Input: ", len(inputs.shape), inputs.shape,
-                      " Outputs: ", out.shape, len(out.shape))
-            # Only single precision float supported for now
-            if ((inputs.dtype != np.float32) or (out.dtype != np.float32)):
-                return
-            input_size = np.prod(inputs.shape)
-            self.kernels[name] = \
-                self.create_mkldnn_relu_fprop_primitives_fn(
-                    self.mkldnn_engine, inputs.ctypes.data, out.ctypes.data,
-                    slope, input_size)
-
     def fprop_relu(self, name, inputs, out, slope):
         if (self.mkldnn_enabled and name in self.kernels):
             self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
@@ -455,22 +390,13 @@ class Mkldnn(object):
         else:
             np.add(inputs * np.greater(fpropSrc, 0), inputs * slope * np.less(fpropSrc, 0), out=out)
 
-    def alloc_reorder(self, name, output, input):
-        assert self.mkldnn_enabled
-        self.alloc_reorder_kernel_fn(
-            self.mkldnn_engine,
-            input.ctypes.data,
-            output.ctypes.data,
-            self.kernels[name]
-        )
-        #self.kernels[name] = self.create_mkldnn_netlist_fn()
-        #self.kernels[name] = None
-
     def mkl_reorder(self, name, output, input):
         assert self.mkldnn_enabled
+        assert name in self.kernels
         if name in self.kernels:
-            #output[...] = np.copy(input)
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
+            self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
             output[...] = np.copy(input)
 
@@ -480,6 +406,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], U.ctypes.data, 0)
             self.run_opkernel(self.kernels[name])
+            pass
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = E.shape

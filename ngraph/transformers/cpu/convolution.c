@@ -182,15 +182,6 @@ void create_mkldnn_conv_fprop_kernel(
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-void run_mkldnn_conv_fprop_kernel(
-        void* conv_src, void* conv_weights, void* conv_dst,
-        mkldnn_opkernel_t opkernel) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, conv_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[1].prim, conv_weights));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, conv_dst));
-    run_mkldnn_opkernel(opkernel);
-}
-
 void create_mkldnn_conv_bprop_data_kernel(
     mkldnn_engine_t engine, int src_dims, int weights_dims,
     int dst_dims, int stride_dims, int pad_dims, 
@@ -331,15 +322,6 @@ void create_mkldnn_conv_bprop_data_kernel(
     if (opkernel->reorder_i[1])
         opkernel->net[opkernel->net_size++] = opkernel->reorder_i[1];
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
-}
-
-void run_mkldnn_conv_bprop_data_kernel(
-        void* conv_src, void* conv_weights, void* conv_dst,
-        mkldnn_opkernel_t opkernel) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, conv_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[1].prim, conv_weights));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, conv_dst));
-    run_mkldnn_opkernel(opkernel);
 }
 
 // src - diff_dst
@@ -510,13 +492,3 @@ void create_mkldnn_conv_bprop_weights_kernel(
     if (opkernel->reorder_o[0])
         opkernel->net[opkernel->net_size++] = opkernel->reorder_o[0];
 }
-
-void run_mkldnn_conv_bprop_weights_kernel(
-        void* conv_src, void* conv_weights, void* conv_dst,
-        mkldnn_opkernel_t opkernel) {
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[0].prim, conv_src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->inputs[1].prim, conv_dst));
-    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[0].prim, conv_weights));
-    run_mkldnn_opkernel(opkernel);
-}
-

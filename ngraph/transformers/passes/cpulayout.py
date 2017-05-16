@@ -40,16 +40,20 @@ class CPUTensorLayout(PeepholeGraphPass):
 
     @visit.on_type(update_conv)
     def visit(self, op):
-
+        delta = op.args[0]
         inputs = op.args[1]
 
         replace = False
+        if not isinstance(delta, ContiguousOp):
+            delta = ContiguousOp(delta)
+            replace = True
+
         if not isinstance(inputs, ContiguousOp):
             inputs = ContiguousOp(inputs)
             replace = True
 
         if replace:
-            self.replace_op(op, update_conv(op.args[0], inputs, op.fprop.args[1], op.fprop))
+            self.replace_op(op, update_conv(delta, inputs, op.fprop.args[1], op.fprop))
 
     @visit.on_type(CTCOp)
     def visit(self, op):

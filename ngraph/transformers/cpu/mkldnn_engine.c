@@ -222,6 +222,29 @@ void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->outputs[index].prim, buffer));
 }
 
+void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
+    printf(" INPUTS\n");
+    for (int i = 0; i < opkernel->num_inputs; i++) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->inputs[i].desc);
+        printf("  Input %d md.format: %d", i, md.format);
+        if (opkernel->reorder_i[i]) {
+            mkldnn_memory_desc_t i_md = *mkldnn_primitive_desc_query_memory_d(opkernel->internal_inputs[i].desc);
+            printf(" -> md.format: %d", i_md.format);
+        }
+        printf("\n");
+    }
+    printf(" OUTPUTS\n");
+    for (int i = 0; i < opkernel->num_outputs; i++) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[i].desc);
+        printf("  Output %d md.format: %d", i, md.format);
+        if (opkernel->reorder_o[i]) {
+            mkldnn_memory_desc_t i_md = *mkldnn_primitive_desc_query_memory_d(opkernel->internal_outputs[i].desc);
+            printf(" <- md.format: %d", i_md.format);
+        }
+        printf("\n");
+    }
+}
+
 void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
@@ -279,49 +302,39 @@ int compare_layouts(mkldnn_primitive_desc_t a, mkldnn_primitive_desc_t b) {
     return 0;
 }
 
-void create_reorder_kernel(
-    mkldnn_engine_t engine,
-    const_mkldnn_primitive_desc_t input_pd_const,
-    int ndims, int* sizes,
-    mkldnn_netlist_t mkldnn_net
-  ) {
-  mkldnn_primitive_desc_t reorder_pd;
-  mkldnn_memory_desc_t output_memory_desc;
-  mkldnn_primitive_desc_t output_pd, input_pd;
+void create_mkldnn_reorder_kernel(
+        mkldnn_engine_t engine,
+        int ndims, int* dims, 
+        mkldnn_data_type_t data_type,
+        mkldnn_memory_format_t format,
+        mkldnn_primitive_desc_t input_pd,
+        mkldnn_primitive_desc_t output_pd,
+        mkldnn_opkernel_t opkernel
+        )
+{
+    mkldnn_memory_desc_t input_md, output_md;
+    if (input_pd && output_pd) {
+        input_md = *(mkldnn_primitive_desc_query_memory_d(input_pd));
+        output_md = *(mkldnn_primitive_desc_query_memory_d(output_pd));
+    } else if (input_pd) {
+        input_md = *(mkldnn_primitive_desc_query_memory_d(input_pd));
+        MKL_CHECK(mkldnn_memory_desc_init(&output_md, ndims, dims, data_type, format));
+    } else if (output_pd) {
+        output_md = *(mkldnn_primitive_desc_query_memory_d(output_pd));
+        MKL_CHECK(mkldnn_memory_desc_init(&input_md, ndims, dims, data_type, format));
+    } else {
+        assert(0);
+    }
 
-  int mkl_dims = 4;
-  int mkl_sizes[4];
-  /* Input: C, D, H, W, N -> N, C, H, W */
-  mkl_sizes[0] = sizes[4];
-  mkl_sizes[1] = sizes[0];
-  mkl_sizes[2] = sizes[2];
-  mkl_sizes[3] = sizes[3];
-
-  mkldnn_primitive_desc_clone(&input_pd, input_pd_const);
-  mkldnn_memory_desc_init(&output_memory_desc, mkl_dims, mkl_sizes, mkldnn_f32, mkldnn_chwn);
-  mkldnn_memory_primitive_desc_create(&output_pd, &output_memory_desc, engine);
-  mkldnn_reorder_primitive_desc_create(
-          &reorder_pd, input_pd, output_pd);
-  mkldnn_net->prim_desc_list[mkldnn_net->prim_desc_count++] = reorder_pd;
-  mkldnn_net->prim_desc_list[mkldnn_net->prim_desc_count++] = input_pd;
-  mkldnn_net->prim_desc_list[mkldnn_net->prim_desc_count++] = output_pd;
-}
-
-void alloc_reorder_kernel(
-    mkldnn_engine_t engine,
-    float* src, float* dst,
-    mkldnn_netlist_t mkldnn_net) {
-
-    mkldnn_primitive_t src_prim, dst_prim, reorder;
-    mkldnn_primitive_desc_t reorder_pd = mkldnn_net->prim_desc_list[0];
-    MKL_CHECK(mkldnn_primitive_create(&src_prim, mkldnn_net->prim_desc_list[1], NULL, NULL));
-    MKL_CHECK(mkldnn_primitive_create(&dst_prim, mkldnn_net->prim_desc_list[2], NULL, NULL));
-    MKL_CHECK(mkldnn_memory_set_data_handle(src_prim, src));
-    MKL_CHECK(mkldnn_memory_set_data_handle(dst_prim, dst));
-
-    mkldnn_primitive_at_t inputs = {src_prim};
-    const_mkldnn_primitive_t outputs[] = {dst_prim};
-    MKL_CHECK(mkldnn_primitive_create(&reorder, reorder_pd, &inputs, outputs));
-    mkldnn_net->prim_list[mkldnn_net->prim_count++] = reorder;
-    mkldnn_net->net[mkldnn_net->net_size++] = reorder;
+    create_mkldnn_tensor_from_pd(ndims, dims, &input_md, engine, &(opkernel->inputs[0]));
+    create_mkldnn_tensor_from_pd(ndims, dims, &output_md, engine, &(opkernel->outputs[0]));
+    MKL_CHECK(mkldnn_reorder_primitive_desc_create(&opkernel->op_desc, opkernel->inputs[0].desc, opkernel->outputs[0].desc));
+    mkldnn_primitive_at_t inputs[] = {opkernel->inputs[0].prim};
+    const_mkldnn_primitive_t outputs[] = {opkernel->outputs[0].prim};
+    MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc, inputs, outputs));
+    opkernel->num_inputs = 1;
+    opkernel->num_outputs = 1;
+    opkernel->reorder_i[0] = NULL;
+    opkernel->reorder_o[0] = NULL;
+    opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }

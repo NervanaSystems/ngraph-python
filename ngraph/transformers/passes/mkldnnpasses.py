@@ -21,11 +21,15 @@ from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, \
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.batchnorm import BatchnormOp
+from ngraph.transformers.passes.layout import AddLayoutConversions
+
 
 from ngraph.util.generics import generic_method
 
 import ctypes as ct
 import numpy as np
+import collections
+from orderedset import OrderedSet
 
 
 class MklCreateOpDescriptors(PeepholeGraphPass):
@@ -136,6 +140,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if output_layout:
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(bprop_conv)
     def visit(self, op):
@@ -175,6 +182,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.kernels[op.name])
             self.mkldnn.op_layouts[op.name] = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name, " fprop:", op.fprop.forwarded.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(update_conv)
     def visit(self, op):
@@ -218,6 +228,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(ReluOp)
     def visit(self, op):
@@ -239,6 +252,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(BpropReluOp)
     def visit(self, op):
@@ -262,6 +278,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(PoolingOp)
     def visit(self, op):
@@ -308,6 +327,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(BpropPoolOp)
     def visit(self, op):
@@ -355,6 +377,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(MapRolesOp)
     def visit(self, op):
@@ -376,106 +401,57 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     non-MKL op 
     """
 
-    def __init__(self, mkldnn):
+    def __init__(self, mkldnn, layoutpass):
         self.mkldnn = mkldnn
+        self.layoutpass = layoutpass
+        self.reorder_ops = dict()   # Maps op.name to reorder op
 
     def init_mkldnn_reorder(self, op):
+        assert len(op.axes) ==5
         output_shape = op.axes.lengths
-        assert op.axes.find_by_name('__NG_DEPTH').size == 1
-        output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-        self.mkldnn.kernels[op.name] = self.mkldnn.create_mkldnn_netlist_fn()
-        self.mkldnn.create_reorder_kernel_fn(
+        (C, D, H, W, N) = op.axes.lengths
+        assert D == 1
+        output_sizes = (N, C, H, W)
+        output_sizes_arg = ((ct.c_int) * len(output_sizes))(*output_sizes)
+        self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+        self.mkldnn.reorder_kernel(
             self.mkldnn.mkldnn_engine,
-            op.in_layout,
-            len(output_shape),
-            output_shape_arg,
+            len(output_sizes), output_sizes_arg,
+            1, # mkldnn_f32 in mkldnn_types.h. TODO(jbobba): find a better way
+            7, # mkldnn_chwn in mkldnn_types.h
+            op.in_layout, None,
             self.mkldnn.kernels[op.name]
         )
+        self.mkldnn.op_uses_opkernel_api[op.name] = True
+        print
+        print(op.name)
+        self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
+
+    def get_reorder_op(self, op):
+        if op.name in self.reorder_ops:
+            return self.reorder_ops[op.name]
+        else:
+            reorder_op = MklReorderOp(op, in_layout=self.mkldnn.op_layouts[op.name], out_layout=None)
+            self.reorder_ops[op.name] = reorder_op
+            self.init_mkldnn_reorder(reorder_op)
+            return reorder_op
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
+        if op.name in self.mkldnn.kernels:
+            return
+        replace = False
+        new_args = []
         for arg in op.args:
             if arg.name in self.mkldnn.op_layouts:
-                pass
-                #reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                #self.init_mkldnn_reorder(reorder_op)
-
-    @visit.on_type(Divide)
-    def visit(self, op):
-        for arg in op.args:
-            if arg.name in self.mkldnn.op_layouts:
-                pass
-
-    @visit.on_type(ReorderAxes)
-    def visit(self, op):
-        arg = op.args[0]
-        if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
-            self.replace_op(op, ReorderAxes(reorder_op, axes=op.axes))
-
-    @visit.on_type(ReductionOp)
-    def visit(self, op):
-        arg = op.args[0]
-        if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
-            self.replace_op(op, ReductionOp(reorder_op, axes=op.axes))
-
-    @visit.on_type(ReluOp)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            arg = op.args[0]
-            if arg.name in self.mkldnn.op_layouts:
-                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                self.init_mkldnn_reorder(reorder_op)
-                self.replace_op(op, ReluOp(reorder_op, op.slope))
-
-    @visit.on_type(BpropReluOp)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            replace = False
-            new_args = []
-            for arg in op.args:
-                if arg.name in self.mkldnn.op_layouts:
-                    reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                    self.init_mkldnn_reorder(reorder_op)
-                    new_args.append(reorder_op)
-                    replace = True
-                else:
-                    new_args.append(arg)
-            if replace:
-                self.replace_op(op, BpropReluOp(new_args[0], new_args[1], op.fprop))
-
-    @visit.on_type(ConvolutionOp)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            arg = op.args[0]
-            if arg.name in self.mkldnn.op_layouts:
-                assert(0)
-
-    @visit.on_type(bprop_conv)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            arg = op.args[0]
-            if arg.name in self.mkldnn.op_layouts:
-                assert (0)
-
-    @visit.on_type(BroadcastOp)
-    def visit(self, op):
-        arg = op.args[0]
-        if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
-            self.replace_op(op, BroadcastOp(reorder_op, axes=op.axes))
+                reorder_op = self.get_reorder_op(arg)
+                new_args.append(reorder_op)
+                replace = True
+            else:
+                new_args.append(arg)
+        if replace:
+            new_op = self.layoutpass.op_from_args(op, new_args)
+            self.replace_op(op, new_op)
 
     @visit.on_type(MapRolesOp)
     def visit(self, op):
@@ -485,58 +461,34 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     def visit(self, op):
         pass
 
-    @visit.on_type(update_conv)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            replace = False
-            new_args = []
-            for arg in op.args:
-                if arg.name in self.mkldnn.op_layouts:
-                    reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                    self.init_mkldnn_reorder(reorder_op)
-                    new_args.append(reorder_op)
-                    replace = True
-                else:
-                    new_args.append(arg)
-            if replace:
-                filters = op.fprop.args[1]
-                self.replace_op(op, update_conv(new_args[0], new_args[1], filters, op.fprop))
-
-    @visit.on_type(PoolingOp)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            arg = op.args[0]
-            if arg.name in self.mkldnn.op_layouts:
-                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                self.init_mkldnn_reorder(reorder_op)
-                self.replace_op(op, PoolingOp(op.pool_params, reorder_op, axes=op.axes))
-
-    @visit.on_type(BpropPoolOp)
-    def visit(self, op):
-        if op.name in self.mkldnn.kernels:
-            pass
-        else:
-            arg = op.args[0]
-            if arg.name in self.mkldnn.op_layouts:
-                reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-                self.init_mkldnn_reorder(reorder_op)
-                self.replace_op(op, BpropPoolOp(reorder_op, op.fprop.args[0], op.fprop))
-
-    @visit.on_type(Flatten)
-    def visit(self, op):
-        arg = op.args[0]
-        if arg.name in self.mkldnn.op_layouts:
-            reorder_op = MklReorderOp(arg, in_layout=self.mkldnn.op_layouts[arg.name], out_layout=None)
-            self.init_mkldnn_reorder(reorder_op)
-            self.replace_op(op, Flatten(reorder_op, op.axes))
-
     @visit.on_type(ComputationOp)
     def visit(self, op):
-        for return_op in op.returns:
-            if return_op.name in self.mkldnn.op_layouts:
-                pass
+        if isinstance(op.returns, Op) and op.returns.name in self.mkldnn.op_layouts:
+            reorder_op = self.get_reorder_op(op.returns.forwarded)
+            op.returns = reorder_op
+            op.add_control_dep(reorder_op)
+        elif isinstance(op.returns, (collections.Sequence, OrderedSet)):
+            returns = op.returns
+            op.returns = []
+            for orig_op in returns:
+                if orig_op.forwarded.name in self.mkldnn.op_layouts:
+                    reorder_op = self.get_reorder_op(orig_op.forwarded)
+                    op.returns.append(reorder_op)
+                    op.add_control_dep(reorder_op)
+                else:
+                    op.returns.append(orig_op)
+        elif isinstance(op.returns, collections.Set):
+            # TODO(jbobba): Handle this case
+            assert False
+            returns = op.returns
+            op.returns = []
+            for orig_op in returns:
+                if orig_op.forwarded.name in self.mkldnn.op_layouts:
+                    reorder_op = self.get_reorder_op(orig_op.forwarded)
+                    op.returns.append(reorder_op)
+                    op.add_control_dep(reorder_op)
+                else:
+                    op.returns.append(orig_op)
+        else:
+            pass
 

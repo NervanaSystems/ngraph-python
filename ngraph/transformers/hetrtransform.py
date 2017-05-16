@@ -332,6 +332,9 @@ class HetrTransformer(Transformer):
         return self.child_transformers[tname]
 
     def add_computation(self, computation):
+        return self.make_computation(computation)
+
+    def make_computation(self, computation):
         """
         Build a heterogeneous computation object that implements
         communication and synchronization between subgraphs run
