@@ -81,7 +81,7 @@ class mini_residual_network(Sequential):
         nfms = [2**(stage + 4) for stage in sorted(list(range(3)) * stage_depth)]
         strides = [1 if cur == prev else 2 for cur, prev in zip(nfms[1:], nfms[:-1])]
         layers = []
-        if preprocess and dataset =='cifar10':
+        if preprocess and dataset == 'cifar10':
             layers = Preprocess(functor=cifar_mean_subtract)
         layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
         layers.append(f_module(nfms[0], first=True, batch_norm=batch_norm))
@@ -152,5 +152,6 @@ def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
 
 
 if __name__ == "__main__":
-    for device_id in [('0',),('0','1'),('0','1','2','3'),('0','1','2','3','4','5','6','7')]:
+    device_ids = [[str(device) for device in range(num_devices)] for num_devices in (1, 2, 4, 8)]
+    for device_id in device_ids:
         run_resnet_benchmark(dataset='cifar10', device_id=device_id)
