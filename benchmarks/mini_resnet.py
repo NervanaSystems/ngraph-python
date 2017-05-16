@@ -110,9 +110,9 @@ class mini_residual_network(Sequential):
 
 
 def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False,
-                    activation=True, preprocess=False):
+                    activation=True, preprocess=False, device_id=('1',)):
     model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
-    with ng.metadata(device_id=('1', '2'), parallel=ax.N):
+    with ng.metadata(device_id=device_id, parallel=ax.N):
         model_out = model(inputs['image'])
     return model_out
 
@@ -129,9 +129,9 @@ def get_fake_data(dataset, batch_size, n_iter):
 
 
 def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
-                         transformer_type='hetr', bprop=False):
+                         transformer_type='hetr', bprop=False, device_id=('1',)):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
-    model_out = get_mini_resnet(inputs, dataset)
+    model_out = get_mini_resnet(inputs, dataset, device_id=device_id)
 
     # Running forward propagation
     #model_out = model(inputs['image'])
@@ -153,4 +153,5 @@ def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
 
 
 if __name__ == "__main__":
-    run_resnet_benchmark(dataset='cifar10')
+    for device_id in [('0',),('0','1'),('0','1','2','3'),('0','1','2','3','4','5','6','7')]:
+        run_resnet_benchmark(dataset='cifar10', device_id=device_id)
