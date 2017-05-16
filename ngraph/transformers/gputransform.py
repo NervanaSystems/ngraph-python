@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
 from builtins import range
 import atexit
 import sys
+from six import itervalues
 
 from ngraph.transformers.base import UnsupportedTransformerException
 
@@ -1049,6 +1051,7 @@ class GPUTransformer(Transformer):
         self.finished_transform = False
         self.current_buffer = None
         self.device_id = device_id
+        self.closers = list()
 
     def initialize_runtime(self):
         if GPUTransformer.__runtime is None:
@@ -1057,7 +1060,17 @@ class GPUTransformer(Transformer):
 
         self.runtime = GPUTransformer.__runtime
 
+    def add_closer(self, closer):
+        self.closers.append(closer)
+
     def close(self):
+        for closer in self.closers:
+            closer()
+        self.closers = list()
+        # Free the pool buffers
+        for array in itervalues(self.argmax_tensors):
+            array.gpudata.free()
+        self.argmax_tensors.clear()
         GPUTransformer.close_gpu()
 
     def device_register_storage(self, dtype, name):

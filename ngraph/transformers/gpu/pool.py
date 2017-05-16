@@ -22,14 +22,6 @@ import numpy as np
 
 from pycuda.gpuarray import empty_like
 
-_op_indices = dict()
-def index(op):
-    result = _op_indices.get(op, None)
-    if result is None:
-        result = len(_op_indices)
-        _op_indices[op] = result
-    return result
-
 
 class PoolFpropKernel(GPUKernel):
     """
@@ -54,14 +46,14 @@ class PoolFpropKernel(GPUKernel):
         (self.I, ) = (_ for _ in op.call_info())
         self.O = op.tensor_description()
         self.dtype = self.O.dtype
-        self.index = index(op)
+        self.op = op
 
         if self.dtype.type is np.float16:
             clss = "hpool"
         elif self.dtype.type is np.float32:
             clss = "spool"
         else:
-            raise TypeError("Type not supported {}".format(clss))
+            raise TypeError("Type not supported {}".format(self.dtype))
 
         C, D, H, W, _ = self.I.axes.lengths
         K, M, P, Q, N = self.O.axes.lengths
@@ -90,7 +82,7 @@ class PoolFpropKernel(GPUKernel):
         else:
             self.gaps = 0
 
-        self.op   = pool_op
+        self.pool_op   = pool_op
         self.C    = C
         self.K    = K
         self.M    = M
@@ -204,12 +196,12 @@ class PoolFpropKernel(GPUKernel):
         O_data = self.tensor_view_from_td(self.O).tensor
 
         # Allocate argmax tensor
-        if self.op == "max":
-            if self.index not in self.transformer.argmax_tensors:
+        if self.pool_op == "max":
+            if self.op not in self.transformer.argmax_tensors:
                 argmax = empty_like(self.tensor_view_from_td(self.O).tensor)
-                self.transformer.argmax_tensors[self.index] = argmax
+                self.transformer.argmax_tensors[self.op] = argmax
             else:
-                argmax = self.transformer.argmax_tensors[self.index]
+                argmax = self.transformer.argmax_tensors[self.op]
             A_data = argmax.gpudata
         else:
             A_data = 0
@@ -250,7 +242,7 @@ class PoolBpropKernel(GPUKernel):
         (self.I, ) = (_ for _ in op.call_info())
         self.O = op.tensor_description()
         self.dtype = self.O.dtype
-        self.index = index(op.fprop.forwarded)
+        self.op = op
 
         if self.dtype.type is np.float16:
             clss = "hpool"
@@ -286,7 +278,7 @@ class PoolBpropKernel(GPUKernel):
         else:
             self.gaps = 0
 
-        self.op   = pool_op
+        self.pool_op   = pool_op
         self.C    = C
         self.K    = K
         self.M    = M
@@ -465,9 +457,9 @@ class PoolBpropKernel(GPUKernel):
         O_data = self.tensor_view_from_td(self.O).tensor
 
         # Get argmax tensor
-        if self.op == "max":
-            assert self.index in self.transformer.argmax_tensors
-            argmax = self.transformer.argmax_tensors[self.index]
+        if self.pool_op == "max":
+            assert self.op.fprop.forwarded in self.transformer.argmax_tensors
+            argmax = self.transformer.argmax_tensors[self.op.fprop.forwarded]
             A_data = argmax.gpudata
         else:
             A_data = 0
