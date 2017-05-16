@@ -85,6 +85,16 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
 
+            self.set_input_tensor = self.mkldnn_engine_dll.set_input_tensor_data_handle
+            self.set_input_tensor.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+            self.set_output_tensor = self.mkldnn_engine_dll.set_output_tensor_data_handle
+            self.set_output_tensor.argtypes = \
+                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+
+            self.run_opkernel = self.mkldnn_engine_dll.run_mkldnn_opkernel
+            self.run_opkernel.argtypes = [ctypes.c_void_p]
+            
             self.conv_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_conv_fprop_kernel
             self.conv_fprop_kernel.argtypes = \
@@ -96,12 +106,6 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p
                  ]
-            self.run_conv_fprop = \
-                self.mkldnn_engine_dll.run_mkldnn_conv_fprop_kernel
-            self.run_conv_fprop.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
-            
             self.conv_bprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_conv_bprop_data_kernel
             self.conv_bprop_kernel.argtypes = \
@@ -113,11 +117,17 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p
                  ]
-            self.run_conv_bprop = \
-                self.mkldnn_engine_dll.run_mkldnn_conv_bprop_data_kernel
-            self.run_conv_bprop.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
+            self.update_conv_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_conv_bprop_weights_kernel
+            self.update_conv_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p
+                 ]
 
             self.relu_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_relu_fprop_kernel
@@ -125,21 +135,12 @@ class Mkldnn(object):
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_double,
                  ctypes.c_void_p, ctypes.c_void_p]
-            self.run_relu_fprop = \
-                self.mkldnn_engine_dll.run_mkldnn_relu_fprop_kernel
-            self.run_relu_fprop.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
             self.relu_bprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_relu_bprop_kernel
             self.relu_bprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_double,
                  ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
-            self.run_relu_bprop = \
-                self.mkldnn_engine_dll.run_mkldnn_relu_bprop_kernel
-            self.run_relu_bprop.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p]
 
             self.pool_fprop_kernel = \
@@ -150,12 +151,6 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p]
-            self.run_pool_fprop = \
-                self.mkldnn_engine_dll.run_mkldnn_pool_fprop_kernel
-            self.run_pool_fprop.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
-
             self.pool_bprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_pool_bprop_kernel
             self.pool_bprop_kernel.argtypes = \
@@ -164,11 +159,6 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-            self.run_pool_bprop = \
-                self.mkldnn_engine_dll.run_mkldnn_pool_bprop_kernel
-            self.run_pool_bprop.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p]
 
             self.create_mkldnn_innerproduct_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
@@ -232,7 +222,10 @@ class Mkldnn(object):
 
     def fprop_conv(self, name, conv_slices, I, F, O):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_conv_fprop(I.ctypes.data, F.ctypes.data, O.ctypes.data, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], I.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], F.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], O.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = O.shape
@@ -249,7 +242,10 @@ class Mkldnn(object):
 
     def bprop_conv(self, name, conv_slices, E, F, gI):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_conv_bprop(E.ctypes.data, F.ctypes.data, gI.ctypes.data, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], E.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], F.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], gI.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
             _, _, _, mSlice, pSlice, qSlice = conv_slices
             F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
@@ -294,10 +290,11 @@ class Mkldnn(object):
     def fprop_pool(self, name, pool_slices, arrI, arrO):
         if (self.mkldnn_enabled and name in self.kernels):
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
-            argmax = arrA.ctypes.data
-            if op == 'avg':
-                argmax = None
-            self.run_pool_fprop(arrI.ctypes.data, arrO.ctypes.data, argmax, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], arrI.ctypes.data, 0)
+            self.set_output_tensor(self.kernels[name], arrO.ctypes.data, 0)
+            if op == 'max':
+                self.set_output_tensor(self.kernels[name], arrA.ctypes.data, 1)
+            self.run_opkernel(self.kernels[name])
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             K, M, P, Q, N = arrO.shape
@@ -345,10 +342,11 @@ class Mkldnn(object):
     def bprop_pool(self, name, pool_slices, arrE, arrD):
         if (self.mkldnn_enabled and name in self.kernels):
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
-            argmax = arrA.ctypes.data
-            if op == 'avg':
-                argmax = None
-            self.run_pool_bprop(arrE.ctypes.data, argmax, arrD.ctypes.data, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], arrE.ctypes.data, 0)
+            self.set_output_tensor(self.kernels[name], arrD.ctypes.data, 0)
+            if op == 'max':
+                self.set_input_tensor(self.kernels[name], arrA.ctypes.data, 1)
+            self.run_opkernel(self.kernels[name])
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             arrD[:] = 0
@@ -442,16 +440,20 @@ class Mkldnn(object):
 
     def fprop_relu(self, name, inputs, out, slope):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_relu_fprop(inputs.ctypes.data, out.ctypes.data, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
+            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
     def bprop_relu(self, name, inputs, out, fpropSrc, slope):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_relu_bprop(fpropSrc.ctypes.data, inputs.ctypes.data, 
-                    out.ctypes.data, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], fpropSrc.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
-            np.add(inputs * np.greater(inputs, 0), inputs * slope * np.less(inputs, 0), out=out)
+            np.add(inputs * np.greater(fpropSrc, 0), inputs * slope * np.less(fpropSrc, 0), out=out)
 
     def alloc_reorder(self, name, output, input):
         assert self.mkldnn_enabled
@@ -472,23 +474,28 @@ class Mkldnn(object):
         else:
             output[...] = np.copy(input)
 
+    def update_conv(self, name, conv_slices, I, E, U):
+        if (self.mkldnn_enabled and name in self.kernels):
+            self.set_input_tensor(self.kernels[name], E.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], I.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], U.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
+        else:
+            mSlice, pSlice, qSlice, _, _, _ = conv_slices
+            K, M, P, Q, N = E.shape
+            C, _, _, _, K = U.shape
+            U.fill(0.0)
 
-def update_conv(conv_slices, I, E, U):
-    mSlice, pSlice, qSlice, _, _, _ = conv_slices
-    K, M, P, Q, N = E.shape
-    C, _, _, _, K = U.shape
-    U.fill(0.0)
-
-    for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
-                                                 enumerate(pSlice),
-                                                 enumerate(qSlice)):
-        sliceT, sliceD, tlen = mS
-        sliceR, sliceH, rlen = pS
-        sliceS, sliceW, slen = qS
-        slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
-        slicedE = E[:, m, p, q, :]
-        update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
-        U[:, sliceT, sliceR, sliceS, :] += update
+            for (m, mS), (p, pS), (q, qS) in itt.product(enumerate(mSlice),
+                                                         enumerate(pSlice),
+                                                         enumerate(qSlice)):
+                sliceT, sliceD, tlen = mS
+                sliceR, sliceH, rlen = pS
+                sliceS, sliceW, slen = qS
+                slicedI = I[:, sliceD, sliceH, sliceW, :].reshape((-1, N))
+                slicedE = E[:, m, p, q, :]
+                update = np.dot(slicedI, slicedE.T).reshape((C, tlen, rlen, slen, K))
+                U[:, sliceT, sliceR, sliceS, :] += update
 
 
 def fprop_lut(lut, idx, axis, output):
