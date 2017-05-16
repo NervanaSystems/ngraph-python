@@ -131,7 +131,10 @@ class FusionPass(PeepholeGraphPass):
             return False
 
     def map_ops_to_batch_params(self, key, op, arg_list, op_dict):
-
+        """
+        For a given op, match the op.args to the corrosponding keywords in the arg_list
+        ex: if op = Add, op_dict["in_obj"] = FalttenOp; op_dict["mean"]=Divide
+        """
         if len(arg_list) > 1:
             if isinstance(op, Subtract):
                 if (isinstance(arg_list[0], Flatten)):
@@ -183,6 +186,7 @@ class FusionPass(PeepholeGraphPass):
         # Op dictionary which maps between op and op type
         keys = ["mean", "variance", "gamma", "bias", "in_obj", "epsilon"]
         op_dict = {key: None for key in keys}
+        root_op = op
 
         # queue to maintain the list of op's, op will be remove once it is visited
         next_op = Queue()
@@ -193,56 +197,56 @@ class FusionPass(PeepholeGraphPass):
 
         # BFS to find if the sub graph matches the expected pattren
         while next_op:
-            Op = next_op.popleft()
-            op_args = Op.args
+            op = next_op.popleft()
+            op_args = op.args
 
-            if (isinstance(Op, Add) and (level == 0)):
+            if (isinstance(op, Add) and (level == 0)):
                 if (self.check_for_pattern(op_args[0], op_args[1], Multiply, BroadcastOp)):
                     if isinstance(op_args[0], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["bias"], Op, [op_args[1]], op_dict)
+                        self.map_ops_to_batch_params(["bias"], op, [op_args[1]], op_dict)
                         next_op.append(op_args[0])
                     elif isinstance(op_args[1], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["bias"], Op, [op_args[0]], op_dict)
+                        self.map_ops_to_batch_params(["bias"], op, [op_args[0]], op_dict)
                         next_op.append(op_args[1])
                     level = level + 1
 
-            elif (isinstance(Op, Multiply) and (level == 1)):
+            elif (isinstance(op, Multiply) and (level == 1)):
                 if (self.check_for_pattern(op_args[0], op_args[1], Multiply, BroadcastOp)):
                     if isinstance(op_args[0], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["gamma"], Op, [op_args[1]], op_dict)
+                        self.map_ops_to_batch_params(["gamma"], op, [op_args[1]], op_dict)
                         next_op.append(op_args[0])
                     elif isinstance(op_args[1], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["gamma"], Op, [op_args[0]], op_dict)
+                        self.map_ops_to_batch_params(["gamma"], op, [op_args[0]], op_dict)
                         next_op.append(op_args[1])
                     level = level + 1
 
-            elif ((level == 2) and isinstance(Op, Multiply)):
+            elif ((level == 2) and isinstance(op, Multiply)):
                 if (self.check_for_pattern(op_args[0], op_args[1], Subtract, BroadcastOp)):
                     next_op.append(op_args[0])
                     next_op.append(op_args[1])
                     level = level + 1
 
-            elif ((level == 3) and isinstance(Op, Subtract)):
-                self.map_ops_to_batch_params(["in_obj", "mean"], Op, [op_args[0], op_args[1]], op_dict)
+            elif ((level == 3) and isinstance(op, Subtract)):
+                self.map_ops_to_batch_params(["in_obj", "mean"], op, [op_args[0], op_args[1]], op_dict)
 
-            elif ((level == 3) and isinstance(Op, BroadcastOp)):
+            elif ((level == 3) and isinstance(op, BroadcastOp)):
                 next_op.append(op_args[0])
                 level = level + 1
 
-            elif ((level == 4) and isinstance(Op, ReciprocalOp)):
+            elif ((level == 4) and isinstance(op, ReciprocalOp)):
                 next_op.append(op_args[0])
                 level = level + 1
 
-            elif ((level == 5) and isinstance(Op, SqrtOp)):
+            elif ((level == 5) and isinstance(op, SqrtOp)):
                 next_op.append(op_args[0])
                 level = level + 1
 
-            elif ((level == 6) and isinstance(Op, Add)):
+            elif ((level == 6) and isinstance(op, Add)):
                 if (self.check_for_pattern(op_args[0], op_args[1], Divide, BroadcastOp)):
-                    self.map_ops_to_batch_params(["epsilon", "variance"], Op, [op_args[0], op_args[1]], op_dict)
+                    self.map_ops_to_batch_params(["epsilon", "variance"], op, [op_args[0], op_args[1]], op_dict)
                     level = level + 1
 
         # if we reach the correct depth and all the pattern matches then fuse to form BatchnormOp
         if (level == 7):
-            self.fuse_fprop_batch_norm(op_dict, op)
+            self.fuse_fprop_batch_norm(op_dict, root_op)
 
