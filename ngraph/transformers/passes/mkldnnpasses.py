@@ -88,8 +88,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             variance_layout = None
             if variance.name in self.mkldnn.kernels:
                 variance_layout = self.mkldnn.op_layouts[variance.name]
-
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
 
             self.mkldnn.batchnorm_fprop_kernel(
                 self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
@@ -99,6 +99,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if output_layout:
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            print
+            print(op_id, op.name)
+            self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(ConvolutionOp)
     def visit(self, op):
@@ -128,7 +131,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             pad_arg = ((ct.c_int) * len(pad))(*pad)
             input_layout = self.mkldnn.op_layouts.get(input.name)
             filter_layout = self.mkldnn.op_layouts.get(filter.name)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.conv_fprop_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(input_shape), len(filter_shape), len(output_shape),
@@ -143,7 +147,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name)
+            print(op_id, op.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(bprop_conv)
@@ -174,7 +178,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             pad_arg = ((ct.c_int) * len(pad))(*pad)
             input_layout = self.mkldnn.op_layouts.get(input.name)
             filter_layout = self.mkldnn.op_layouts.get(filter.name)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.conv_bprop_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(input_shape), len(filter_shape), len(output_shape),
@@ -187,7 +192,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.op_layouts[op.name] = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name, " fprop:", op.fprop.forwarded.name)
+            print(op_id, op.name, " fprop:", op.fprop.forwarded.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(update_conv)
@@ -219,7 +224,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             delta_layout = self.mkldnn.op_layouts.get(delta.name)
             filter_layout = None
             inputs_layout = self.mkldnn.op_layouts.get(inputs.name)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.update_conv_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(delta_shape), len(filter_shape), len(inputs_shape),
@@ -229,13 +235,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 delta_layout, filter_layout, inputs_layout,
                 data_type,
                 self.mkldnn.kernels[op.name])
-            # self.mkldnn.op_layouts[op.name] = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name)
+            print(op_id, op.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(ReluOp)
@@ -249,7 +254,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             input = op.args[0]
             input_layout = self.mkldnn.op_layouts.get(input.name)
             input_size = np.prod(input.axes.lengths)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.relu_fprop_kernel(
                 self.mkldnn.mkldnn_engine, 
                 input_size, op.slope,
@@ -261,7 +267,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name)
+            print(op_id, op.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(BpropReluOp)
@@ -277,7 +283,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             delta_layout = self.mkldnn.op_layouts.get(delta.name)
             fprop_src_layout = self.mkldnn.op_layouts.get(fprop_src.name)
             input_size = np.prod(delta.axes.lengths)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.relu_bprop_kernel(
                 self.mkldnn.mkldnn_engine, 
                 input_size, op.fprop.forwarded.slope,
@@ -289,7 +296,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name)
+            print(op_id, op.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(PoolingOp)
@@ -327,7 +334,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
             pad_data = ((ct.c_int) * len(pad))(*pad)
             stride_data = ((ct.c_int) * len(stride))(*stride)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.pool_fprop_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(input_shape), len(output_shape), len(stride), len(pad),
@@ -339,7 +347,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name)
+            print(op_id, op.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(BpropPoolOp)
@@ -377,7 +385,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
             pad_data = ((ct.c_int) * len(pad))(*pad)
             stride_data = ((ct.c_int) * len(stride))(*stride)
-            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.pool_bprop_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(input_shape), len(output_shape), len(stride), len(pad),
@@ -391,7 +400,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             print
-            print(op.name)
+            print(op_id, op.name)
             self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     @visit.on_type(MapRolesOp)
@@ -426,7 +435,8 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         assert D == 1
         output_sizes = (N, C, H, W)
         output_sizes_arg = ((ct.c_int) * len(output_sizes))(*output_sizes)
-        self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel()
+        op_id = len(self.mkldnn.kernels)
+        self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.reorder_kernel(
             self.mkldnn.mkldnn_engine,
             len(output_sizes), output_sizes_arg,
@@ -437,7 +447,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         )
         self.mkldnn.op_uses_opkernel_api[op.name] = True
         print
-        print(op.name)
+        print(op_id, op.name)
         self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
 
     def get_reorder_op(self, op):

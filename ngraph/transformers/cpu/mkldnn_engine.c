@@ -150,9 +150,10 @@ void create_mkldnn_reorder_primitive(
   }
 }
 
-mkldnn_opkernel_t create_empty_kernel(void) {
+mkldnn_opkernel_t create_empty_kernel(int id) {
     mkldnn_opkernel_t op_kernel =
         (mkldnn_opkernel_t) malloc(sizeof(struct mkldnn_opkernel));
+    op_kernel->id = id;
     op_kernel->num_inputs = 0;
     op_kernel->num_outputs = 0;
     op_kernel->net_size = 0;

@@ -35,6 +35,7 @@ typedef struct {
 } mkldnn_tensor;
 
 struct mkldnn_opkernel {
+    int id;   
     int num_inputs;
     int num_outputs;
 

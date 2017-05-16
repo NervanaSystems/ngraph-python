@@ -126,8 +126,8 @@ void create_mkldnn_conv_fprop_kernel(
         mkldnn_primitive_desc_t reorder_pd;
         MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
                     opkernel->outputs[0].desc, kernel_dst_pd));
-        mkldnn_primitive_at_t outputs[] = {opkernel->outputs[0].prim};
-        const_mkldnn_primitive_t inputs[] = {opkernel->internal_outputs[0].prim};
+        mkldnn_primitive_at_t inputs[] = {opkernel->internal_outputs[0].prim};
+        const_mkldnn_primitive_t outputs[] = {opkernel->outputs[0].prim};
         MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_o[0]), reorder_pd, inputs, outputs));
     } else {
         opkernel->reorder_o[0] = NULL;
@@ -432,8 +432,8 @@ void create_mkldnn_conv_bprop_weights_kernel(
         mkldnn_primitive_desc_t reorder_pd;
         MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
                     kernel_weights_pd, opkernel->outputs[0].desc));
-        mkldnn_primitive_at_t outputs[] = {opkernel->outputs[0].prim};
-        const_mkldnn_primitive_t inputs[] = {opkernel->internal_outputs[0].prim};
+        mkldnn_primitive_at_t inputs[] = {opkernel->internal_outputs[0].prim};
+        const_mkldnn_primitive_t outputs[] = {opkernel->outputs[0].prim};
         MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_o[0]), reorder_pd, inputs, outputs));
     } else {
         opkernel->reorder_o[0] = NULL;
