@@ -37,8 +37,6 @@ def set_ipc_handle(op, shared_queue, handle):
 
 
 def open_ipc_handle(shared_queue):
-    print("inside open_ipc_handle(): shared_queue=")
-    print(shared_queue)
     while True:
         try:
             (buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
@@ -227,12 +225,6 @@ class QueueRecvKernel(GPUKernel):
 class CudaScatterSendKernel(GPUKernel):
 
     def __init__(self, transformer, op):
-        print("In class CudaScatterSendKernel init():transformer=")
-        print(transformer)
-        print("In class CudaScatterSendKernel init():op=")
-        print(op)
-        print("In class CudaScatterSendKernel init():op._shared_queues")
-        print(op._shared_queues)
         super(CudaScatterSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
@@ -243,8 +235,6 @@ class CudaScatterSendKernel(GPUKernel):
         super(CudaScatterSendKernel, self).bind_buffers()
         self.send_ready = list()
         for i in range(len(self.op.to_id)):
-            print("In class CudaScatterSendKernel bind_buffers():self.op")
-            print(self.op)
             self.send_ready.append(
                 set_ipc_handle(
                     self.op,
@@ -259,12 +249,6 @@ class CudaScatterSendKernel(GPUKernel):
 class CudaScatterRecvKernel(GPUKernel):
 
     def __init__(self, transformer, op):
-        print("In class CudaScatterRecvKernel init():transformer=")
-        print(transformer)
-        print("In class CudaScatterRecvKernel init():op")
-        print(op)
-        print("In class CudaScatterRecvKernel init():op_shared_queues=")
-        print(op._shared_queues)
         super(CudaScatterRecvKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
@@ -291,12 +275,6 @@ class CudaScatterRecvKernel(GPUKernel):
 class CudaGatherSendKernel(GPUKernel):
 
     def __init__(self, transformer, op):
-        print("In class CudaGatherSendKernel init():transformer=")
-        print(transformer)
-        print("In class CudaGatherSendKernel init():op=")
-        print(op)
-        print("In class CudaGatherSendKernel init():shared_queues=")
-        print(op._shared_queues)
         super(CudaGatherSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
@@ -322,12 +300,6 @@ class CudaGatherSendKernel(GPUKernel):
 class CudaGatherRecvKernel(GPUKernel):
 
     def __init__(self, transformer, op):
-        print("In class CudaGatherRecvKernel init():transformer=")
-        print(transformer)
-        print("In class CudaGatherRecvKernel init():op=")
-        print(op)
-        print("In class CudaGatherRecvKernel init():op._shared_queues=")
-        print(op._shared_queues)
         super(CudaGatherRecvKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()

@@ -81,9 +81,8 @@ class mini_residual_network(Sequential):
         nfms = [2**(stage + 4) for stage in sorted(list(range(3)) * stage_depth)]
         strides = [1 if cur == prev else 2 for cur, prev in zip(nfms[1:], nfms[:-1])]
         layers = []
-        if preprocess:
+        if preprocess and dataset =='cifar10':
             layers = Preprocess(functor=cifar_mean_subtract)
-        parallel_axis = inputs['image'].axes.batch_axes()
         layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
         layers.append(f_module(nfms[0], first=True, batch_norm=batch_norm))
 
@@ -134,12 +133,12 @@ def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
     model_out = get_mini_resnet(inputs, dataset, device_id=device_id)
 
     # Running forward propagation
-    #model_out = model(inputs['image'])
     fprop_computation_op = ng.computation(model_out, 'all')
     benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type)
     Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
                                                            dataset + '_msra_fprop'))
 
+    # Running back propagation
     if bprop:
         optimizer = GradientDescentMomentum(0.01, 0.9)
         train_loss = ng.cross_entropy_multi(model_out,
