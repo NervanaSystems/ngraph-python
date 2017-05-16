@@ -69,6 +69,22 @@ class Mkldnn(object):
             self.output_layout.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.output_layout.restype = ctypes.c_void_p
 
+            self.batchnorm_fprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_batchnorm_fprop_primitives
+            self.batchnorm_fprop_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_double, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+
+            self.run_batchnorm_fprop = \
+                self.mkldnn_engine_dll.run_mkldnn_batchnorm_fprop_kernel
+            self.run_batchnorm_fprop.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+
             self.set_input_tensor = self.mkldnn_engine_dll.set_input_tensor_data_handle
             self.set_input_tensor.argtypes = \
                 [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
@@ -200,6 +216,21 @@ class Mkldnn(object):
                         self.cleanup_mkldnn_fn(self.kernels[op])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
+
+
+
+    def fprop_batchnorm(self, name, inputs, outputs, gamma, bias, mean, variance, epsilon):
+        if (self.mkldnn_enabled and name in self.kernels):
+            weights = np.stack([gamma[:, 0], bias[:,0]])
+            mean_ch = mean[:, 0]
+            variance_ch = variance[:, 0]
+            self.run_batchnorm_fprop(inputs.ctypes.data, weights.ctypes.data, mean_ch.ctypes.data, variance_ch.ctypes.data,
+                                     outputs.ctypes.data, self.kernels[name])
+        else:
+            # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
+            self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+            self.batch_norm_output = gamma * self.xhat + bias
+            np.copyto(outputs, self.batch_norm_output)
 
     def fprop_conv(self, name, conv_slices, I, F, O):
         if (self.mkldnn_enabled and name in self.kernels):

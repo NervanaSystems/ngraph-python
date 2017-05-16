@@ -1,7 +1,11 @@
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Add, Maximum, Multiply, Minimum, Greater, Less
+from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp, AssignableTensorOp, variable, TensorOp
+from ngraph.op_graph.op_graph import Unflatten, ContiguousOp, BroadcastOp, BinaryElementWiseOp, Flatten, Divide
+from ngraph.op_graph.batchnorm import BatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
+from collections import deque as Queue
 
 
 class FusionPass(PeepholeGraphPass):
@@ -106,6 +110,51 @@ class FusionPass(PeepholeGraphPass):
         elif (isinstance(mul_arg2, Greater) and not(mul_arg1.is_scalar)):
             self.pattern_check_bprop_relu(mul_arg2, mul_arg1, mul_arg3, mul_arg4, op)
 
+    def fuse_fprop_batch_norm(self, dict_ops_to_params, op):
+        inputs = dict_ops_to_params["in_obj"]
+        gamma = dict_ops_to_params["gamma"]
+        bias = dict_ops_to_params["bias"]
+        variance = BroadcastOp(dict_ops_to_params["variance"], axes=inputs.axes)
+        epsilon = dict_ops_to_params["epsilon"].args[0].tensor.const
+        mean = BroadcastOp(dict_ops_to_params["mean"], axes=inputs.axes)
+        new_op = BatchnormOp(inputs, gamma, bias, epsilon, mean, variance)
+        self.replace_op(op, new_op)
+
+    def check_for_pattern(self, args1, args2, op_type1, op_type2):
+        """
+        check if the subgraph matches the expected pattren across all the inputs
+        """
+        if (isinstance(args1, op_type1) and isinstance(args2, op_type2)) or \
+                (isinstance(args1, op_type2) and isinstance(args2, op_type1)):
+            return True
+        else:
+            return False
+
+    def map_ops_to_batch_params(self, key, op, arg_list, op_dict):
+        """
+        For a given op, match the op.args to the corrosponding keywords in the arg_list
+        ex: if op = Add, op_dict["in_obj"] = FalttenOp; op_dict["mean"]=Divide
+        """
+        if len(arg_list) > 1:
+            if isinstance(op, Subtract):
+                if (isinstance(arg_list[0], Flatten)):
+                    op_dict[key[0]] = arg_list[0]
+                    op_dict[key[1]] = arg_list[1]
+                else:
+                    op_dict[key[1]] = arg_list[0]
+                    op_dict[key[0]] = arg_list[1]
+
+            elif isinstance(op, Add):
+                if (isinstance(arg_list[0], BinaryElementWiseOp)):
+                    op_dict[key[0]] = arg_list[1]
+                    op_dict[key[1]] = arg_list[0]
+                else:
+                    op_dict[key[0]] = arg_list[0]
+                    op_dict[key[1]] = arg_list[1]
+
+        else:
+            op_dict[key[0]] = arg_list[0]
+
     @visit.on_type(Add)
     def visit(self, op):
         """
@@ -129,3 +178,75 @@ class FusionPass(PeepholeGraphPass):
                   isinstance(mul_arg2, Multiply) and isinstance(mul_arg1, Less)):
                 if (isinstance(mul_arg4, Greater) or isinstance(mul_arg3, Greater)):
                     self.check_arg_ordering_bprop_relu(input2, input1, op)
+
+        """
+        self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta
+        is fused to BatchNorm Op for IA transformer
+        """
+        # Op dictionary which maps between op and op type
+        keys = ["mean", "variance", "gamma", "bias", "in_obj", "epsilon"]
+        op_dict = {key: None for key in keys}
+        root_op = op
+
+        # queue to maintain the list of op's, op will be remove once it is visited
+        next_op = Queue()
+        next_op.append(op)
+
+        # keep track's of tree level
+        level = 0
+
+        # BFS to find if the sub graph matches the expected pattren
+        while next_op:
+            op = next_op.popleft()
+            op_args = op.args
+
+            if (isinstance(op, Add) and (level == 0)):
+                if (self.check_for_pattern(op_args[0], op_args[1], Multiply, BroadcastOp)):
+                    if isinstance(op_args[0], BinaryElementWiseOp):
+                        self.map_ops_to_batch_params(["bias"], op, [op_args[1]], op_dict)
+                        next_op.append(op_args[0])
+                    elif isinstance(op_args[1], BinaryElementWiseOp):
+                        self.map_ops_to_batch_params(["bias"], op, [op_args[0]], op_dict)
+                        next_op.append(op_args[1])
+                    level = level + 1
+
+            elif (isinstance(op, Multiply) and (level == 1)):
+                if (self.check_for_pattern(op_args[0], op_args[1], Multiply, BroadcastOp)):
+                    if isinstance(op_args[0], BinaryElementWiseOp):
+                        self.map_ops_to_batch_params(["gamma"], op, [op_args[1]], op_dict)
+                        next_op.append(op_args[0])
+                    elif isinstance(op_args[1], BinaryElementWiseOp):
+                        self.map_ops_to_batch_params(["gamma"], op, [op_args[0]], op_dict)
+                        next_op.append(op_args[1])
+                    level = level + 1
+
+            elif ((level == 2) and isinstance(op, Multiply)):
+                if (self.check_for_pattern(op_args[0], op_args[1], Subtract, BroadcastOp)):
+                    next_op.append(op_args[0])
+                    next_op.append(op_args[1])
+                    level = level + 1
+
+            elif ((level == 3) and isinstance(op, Subtract)):
+                self.map_ops_to_batch_params(["in_obj", "mean"], op, [op_args[0], op_args[1]], op_dict)
+
+            elif ((level == 3) and isinstance(op, BroadcastOp)):
+                next_op.append(op_args[0])
+                level = level + 1
+
+            elif ((level == 4) and isinstance(op, ReciprocalOp)):
+                next_op.append(op_args[0])
+                level = level + 1
+
+            elif ((level == 5) and isinstance(op, SqrtOp)):
+                next_op.append(op_args[0])
+                level = level + 1
+
+            elif ((level == 6) and isinstance(op, Add)):
+                if (self.check_for_pattern(op_args[0], op_args[1], Divide, BroadcastOp)):
+                    self.map_ops_to_batch_params(["epsilon", "variance"], op, [op_args[0], op_args[1]], op_dict)
+                    level = level + 1
+
+        # if we reach the correct depth and all the pattern matches then fuse to form BatchnormOp
+        if (level == 7):
+            self.fuse_fprop_batch_norm(op_dict, root_op)
+

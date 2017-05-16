@@ -56,7 +56,8 @@ if "MKLDNN_ROOT" in os.environ:
                                    'ngraph/transformers/cpu/innerproduct.c', \
                                    'ngraph/transformers/cpu/mkldnn_engine.c',\
                                    'ngraph/transformers/cpu/relu.c', \
-                                   'ngraph/transformers/cpu/pooling.c']))
+                                   'ngraph/transformers/cpu/pooling.c', \
+                                   'ngraph/transformers/cpu/batchnorm.c']))
 
 setup(
     name="ngraph",
