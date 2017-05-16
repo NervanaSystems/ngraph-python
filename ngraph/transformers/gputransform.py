@@ -894,6 +894,10 @@ class GPUDeviceTensor(DeviceTensor):
         params = params + src_strides + dst_strides
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
 
+    def close(self):
+        self.__tensor.gpudata.free()
+        super(GPUDeviceTensor, self).close()
+
 
 class GPURuntime(object):
 
@@ -1074,6 +1078,8 @@ class GPUTransformer(Transformer):
         # Free the pool buffers
         for array in itervalues(self.argmax_tensors):
             array.gpudata.free()
+        for buffer in self.device_buffers:
+            buffer.close()
         self.argmax_tensors.clear()
         GPUTransformer.close_gpu()
 
