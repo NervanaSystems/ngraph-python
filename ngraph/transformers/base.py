@@ -225,7 +225,7 @@ class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     """
     def __init__(self, transformer, **kwargs):
         super(DeviceBufferReference, self).__init__(self, **kwargs)
-        self.__device_buffer = None
+        self.device_buffer = None
 
 
 class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
@@ -325,9 +325,9 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.initialized = False
         self.graph_passes = None
 
-        self.__device_buffers = None
-        self.__op_tensors = None
-        self.__op_tensor_views = None
+        self.device_buffers = None
+        self.op_tensors = None
+        self.op_tensor_views = None
 
         self.initialize_allocations()
 
@@ -354,9 +354,9 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Inititializes allocation caches.
 
         """
-        self.__op_tensors = dict()
-        self.__op_tensor_views = dict()
-        self.__device_buffers = OrderedSet()
+        self.op_tensors = dict()
+        self.op_tensor_views = dict()
+        self.device_buffers = OrderedSet()
 
     def get_op_tensor(self, op):
         """
@@ -369,7 +369,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             A device tensor (DeviceBuffer).
 
         """
-        return self.__op_tensors[op.forwarded.tensor.forwarded.tensor_description().base]
+        return self.op_tensors[op.forwarded.tensor.forwarded.tensor_description().base]
 
     def has_op_tensor(self, op):
         """
@@ -382,7 +382,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             True if the op has a device tensor.
 
         """
-        return op.forwarded.tensor.forwarded.tensor_description().base in self.__op_tensors
+        return op.forwarded.tensor.forwarded.tensor_description().base in self.op_tensors
 
     def get_op_tensor_view(self, op):
         """
@@ -395,7 +395,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             A device tensor view.
 
         """
-        return self.__op_tensor_views[op.forwarded.tensor.forwarded.tensor_description()]
+        return self.op_tensor_views[op.forwarded.tensor.forwarded.tensor_description()]
 
     def get_tensor_view_value(self, op, host_tensor=None):
         """
@@ -425,7 +425,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
 
         """
-        return self.__op_tensors[tensor_description.base]
+        return self.op_tensors[tensor_description.base]
 
     def has_tensor_description_tensor(self, tensor_description):
         """
@@ -440,7 +440,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             True if the tensor description has a device tensor.
 
         """
-        return tensor_description.base in self.__op_tensors
+        return tensor_description.base in self.op_tensors
 
     def get_tensor_description_tensor_view(self, tensor_description):
         """
@@ -455,7 +455,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             A device tensor view.
 
         """
-        return self.__op_tensor_views[tensor_description]
+        return self.op_tensor_views[tensor_description]
 
     def _transform_computations(self):
         """
@@ -476,17 +476,17 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
             op = op.forwarded
             tensor_description = op.tensor_description()
             base = tensor_description.base
-            tensor = self.__op_tensors.get(base, None)
+            tensor = self.op_tensors.get(base, None)
             if tensor is None:
                 tensor = self.device_buffer_storage(
                     base.tensor_size,
                     base.dtype,
                     base.name
                 )
-                self.__op_tensors[base] = tensor
-                self.__device_buffers.add(tensor)
+                self.op_tensors[base] = tensor
+                self.device_buffers.add(tensor)
             tensor_view = tensor.device_tensor(tensor_description)
-            self.__op_tensor_views[tensor_description] = tensor_view
+            self.op_tensor_views[tensor_description] = tensor_view
 
         self.ops = Op.ordered_ops(all_ops)
         for op in self.ops:
@@ -494,7 +494,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
                 ensure_tensor(op)
 
         self.start_transform_allocate()
-        for device_buffer in self.__device_buffers:
+        for device_buffer in self.device_buffers:
             device_buffer.transform_allocate()
         self.finish_transform_allocate()
 

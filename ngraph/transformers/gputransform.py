@@ -957,9 +957,13 @@ class GPURuntime(object):
         return rng_mrg()
 
     def close(self):
+        if self.ctx is None:
+            return
         try:
+            drv.synchronize()
             self.ctx.pop()
             self.ctx.detach()
+            self.ctc = None
         except drv.Error:
             pass
 
