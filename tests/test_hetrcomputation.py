@@ -21,8 +21,8 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
     CommunicationPass
-from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp
-from multiprocessing import active_children, Process, Manager, Event
+from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
+from multiprocessing import active_children
 import threading
 
 

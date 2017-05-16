@@ -13,8 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
-    CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
-    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp, \
+    CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
+    CPUQueueScatterRecvOp, CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
 
 from ngraph.op_graph.op_graph import BroadcastOp

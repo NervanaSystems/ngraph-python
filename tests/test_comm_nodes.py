@@ -15,9 +15,9 @@
 import numpy as np
 from ngraph.op_graph.op_graph import TensorValueOp
 from ngraph.factory.comm_node_factory import get_comm_pattern
-from ngraph.op_graph.comm_nodes import calculate_scatter_axes, CPUQueueAllReduceOp, \
+from ngraph.op_graph.comm_nodes import calculate_scatter_axes, \
     CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp
-from multiprocessing import Process, Manager, Event
+from multiprocessing import Process, Manager
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
@@ -157,7 +157,7 @@ def test_broadcast_ops(config):
                 try:
                     result = self.results_qs.get(timeout=0.2)
                     return result
-                except Exception as e:
+                except Exception:
                     raise
 
     c = config
@@ -165,7 +165,7 @@ def test_broadcast_ops(config):
     active_processes = list()
     results = list()
     sender_id = c['device_ids'][c['sender_index']]
-    receiver_ids = c['device_ids'][:c['sender_index']] + c['device_ids'][c['sender_index']+1 :]
+    receiver_ids = c['device_ids'][:c['sender_index']] + c['device_ids'][c['sender_index'] + 1:]
 
     ax_a = ng.make_axis(length=c['shape_input'][0], name='A')
     ax_b = ng.make_axis(length=c['shape_input'][1], name='B')
@@ -183,11 +183,11 @@ def test_broadcast_ops(config):
     for i in range(len(c['device_ids'])):
         if i != c['sender_index']:
             sc_op = CPUQueueBroadcastRecvOp(to_node=to_node, send_node=y[c['sender_index']])
-            sc_op.idx = i if i < c['sender_index'] else i-1
+            sc_op.idx = i if i < c['sender_index'] else i - 1
             y[i] = sc_op
 
     for i in range(len(c['device_ids'])):
-        active_processes.append(myProcess(y[i], 'cpu'+str(i)))
+        active_processes.append(myProcess(y[i], 'cpu' + str(i)))
         active_processes[i].start()
 
     for i in range(len(c['device_ids'])):
