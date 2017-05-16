@@ -22,6 +22,7 @@ void create_mkldnn_pool_fprop_kernel(
             int* pool_src_sizes, int* pool_kernel_sizes, int* pool_dst_sizes,
             int* pool_strides, int* pool_padding, int pool_type,
             mkldnn_primitive_desc_t input_src_pd, 
+            mkldnn_data_type_t data_type,
             mkldnn_opkernel_t opkernel) {
     
     int mkl_src_dims = 4;
@@ -45,10 +46,10 @@ void create_mkldnn_pool_fprop_kernel(
         mkldnn_memory_desc_src_md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t) input_src_pd));
     } else {
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                          mkl_src_sizes, mkldnn_f32, mkldnn_chwn));
+                                          mkl_src_sizes, data_type, mkldnn_chwn));
     }
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                       mkl_dst_sizes, mkldnn_f32, mkldnn_any));
+                                       mkl_dst_sizes, data_type, mkldnn_any));
 
     /* create a pooling descriptor  - logical description of pooling */
     mkldnn_pooling_desc_t pool_any_desc;
@@ -78,7 +79,7 @@ void create_mkldnn_pool_fprop_kernel(
         create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
                             engine, &(opkernel->inputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_chwn,
+        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, data_type, mkldnn_chwn,
                             engine, &(opkernel->inputs[0]));
     }
     mkldnn_memory_desc_t dst_md = *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
@@ -119,6 +120,7 @@ void create_mkldnn_pool_bprop_kernel(
             int* pool_src_sizes, int* pool_kernel_sizes, int* pool_dst_sizes,
             int* pool_strides, int* pool_padding, int pool_type,
             mkldnn_primitive_desc_t input_src_pd, 
+            mkldnn_data_type_t data_type,
             mkldnn_opkernel_t fprop_opkernel,
             mkldnn_opkernel_t opkernel) {
     int mkl_src_dims = 4;
@@ -142,10 +144,10 @@ void create_mkldnn_pool_bprop_kernel(
         mkldnn_memory_desc_src_md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t) input_src_pd));
     } else {
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                          mkl_src_sizes, mkldnn_f32, mkldnn_chwn));
+                                          mkl_src_sizes, data_type, mkldnn_chwn));
     }
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                       mkl_dst_sizes, mkldnn_f32, mkldnn_any));
+                                       mkl_dst_sizes, data_type, mkldnn_any));
 
     /* create a pooling descriptor  - logical description of pooling */
     mkldnn_pooling_desc_t pool_any_desc;
@@ -175,7 +177,7 @@ void create_mkldnn_pool_bprop_kernel(
         create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
                             engine, &(opkernel->inputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_chwn,
+        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, data_type, mkldnn_chwn,
                             engine, &(opkernel->inputs[0]));
     }
     mkldnn_memory_desc_t dst_md = *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);

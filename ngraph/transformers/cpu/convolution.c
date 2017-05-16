@@ -23,6 +23,7 @@ void create_mkldnn_conv_fprop_kernel(
     int* conv_src_sizes, int* conv_weights_sizes, int* conv_dst_sizes,
     int* conv_strides, int* conv_padding,
     mkldnn_primitive_desc_t input_src_pd, mkldnn_primitive_desc_t input_weights_pd,
+    mkldnn_data_type_t data_type,
     mkldnn_opkernel_t opkernel) {
   
     // Only 2-D convolution is supported for now 
@@ -47,12 +48,12 @@ void create_mkldnn_conv_fprop_kernel(
     mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_weights_md,
           mkldnn_memory_desc_dst_md;
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                      mkl_src_sizes, mkldnn_f32, mkldnn_any));
+                                      mkl_src_sizes, data_type, mkldnn_any));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
                                       mkl_weights_dims, mkl_weights_sizes,
-                                      mkldnn_f32, mkldnn_any));
+                                      data_type, mkldnn_any));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                      mkl_dst_sizes, mkldnn_f32, mkldnn_any));
+                                      mkl_dst_sizes, data_type, mkldnn_any));
     mkldnn_convolution_desc_t conv_desc;
     MKL_CHECK(mkldnn_convolution_forward_desc_init(
                 &conv_desc, mkldnn_forward, mkldnn_convolution_direct,
@@ -73,7 +74,7 @@ void create_mkldnn_conv_fprop_kernel(
         create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
                             engine, &(opkernel->inputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_chwn,
+        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, data_type, mkldnn_chwn,
                             engine, &(opkernel->inputs[0]));
     }
     if (input_weights_pd) {
@@ -81,13 +82,13 @@ void create_mkldnn_conv_fprop_kernel(
         create_mkldnn_tensor_from_pd(mkl_weights_dims, mkl_weights_sizes, &md,
                             engine, &(opkernel->inputs[1]));
     } else {
-        create_mkldnn_tensor(mkl_weights_dims, mkl_weights_sizes, mkldnn_f32, mkldnn_ihwo,
+        create_mkldnn_tensor(mkl_weights_dims, mkl_weights_sizes, data_type, mkldnn_ihwo,
                             engine, &(opkernel->inputs[1]));
     }
     mkldnn_memory_desc_t dst_md = *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
     create_mkldnn_tensor_from_pd(mkl_dst_dims, mkl_dst_sizes, &dst_md,
                         engine, &(opkernel->outputs[0]));
-    //create_mkldnn_tensor(mkl_dst_dims, mkl_dst_sizes, mkldnn_f32, mkldnn_chwn,
+    //create_mkldnn_tensor(mkl_dst_dims, mkl_dst_sizes, data_type, mkldnn_chwn,
     //                     engine, &(opkernel->outputs[0]));
     opkernel->num_inputs = 2;
     opkernel->num_outputs = 1;
@@ -134,22 +135,19 @@ void create_mkldnn_conv_fprop_kernel(
 
     /* Allocate memory for internal format conversions */
     if (opkernel->reorder_i[0]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_src_sizes, src_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_src_sizes, src_dims), data_type);
         opkernel->internal_inputs[0].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                                 tmp_buf));
     }
     if (opkernel->reorder_i[1]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_weights_sizes, weights_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_weights_sizes, weights_dims), data_type);
         opkernel->internal_inputs[1].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                                 tmp_buf));
     }
     if (opkernel->reorder_o[0]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_dst_sizes, dst_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_dst_sizes, dst_dims), data_type);
         opkernel->internal_outputs[0].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_outputs[0].prim,
                                                 tmp_buf));
@@ -188,6 +186,7 @@ void create_mkldnn_conv_bprop_data_kernel(
     int* conv_src_sizes, int* conv_weights_sizes, int* conv_dst_sizes,
     int* conv_strides, int* conv_padding,
     mkldnn_primitive_desc_t input_src_pd, mkldnn_primitive_desc_t input_weights_pd,
+    mkldnn_data_type_t data_type,
     mkldnn_opkernel_t opkernel) {
   
     int mkl_src_dims = 4;
@@ -209,12 +208,12 @@ void create_mkldnn_conv_bprop_data_kernel(
     mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_weights_md,
        mkldnn_memory_desc_dst_md;
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                      mkl_src_sizes, mkldnn_f32, mkldnn_any));
+                                      mkl_src_sizes, data_type, mkldnn_any));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
                                       mkl_weights_dims, mkl_weights_sizes,
-                                      mkldnn_f32, mkldnn_any));
+                                      data_type, mkldnn_any));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                      mkl_dst_sizes, mkldnn_f32, mkldnn_any));
+                                      mkl_dst_sizes, data_type, mkldnn_any));
     mkldnn_convolution_desc_t conv_desc_data;
     MKL_CHECK(mkldnn_convolution_backward_data_desc_init(
         &conv_desc_data, mkldnn_convolution_direct, &mkldnn_memory_desc_dst_md,
@@ -235,7 +234,7 @@ void create_mkldnn_conv_bprop_data_kernel(
         create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
                             engine, &(opkernel->inputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_chwn,
+        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, data_type, mkldnn_chwn,
                             engine, &(opkernel->inputs[0]));
     }
     if (input_weights_pd) {
@@ -243,7 +242,7 @@ void create_mkldnn_conv_bprop_data_kernel(
         create_mkldnn_tensor_from_pd(mkl_weights_dims, mkl_weights_sizes, &md,
                             engine, &(opkernel->inputs[1]));
     } else {
-        create_mkldnn_tensor(mkl_weights_dims, mkl_weights_sizes, mkldnn_f32, mkldnn_ihwo,
+        create_mkldnn_tensor(mkl_weights_dims, mkl_weights_sizes, data_type, mkldnn_ihwo,
                             engine, &(opkernel->inputs[1]));
     }
     mkldnn_memory_desc_t dst_md = *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
@@ -285,15 +284,13 @@ void create_mkldnn_conv_bprop_data_kernel(
 
     /* Allocate memory for internal format conversions */
     if (opkernel->reorder_i[0]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_src_sizes, src_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_src_sizes, src_dims), data_type);
         opkernel->internal_inputs[0].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                                 tmp_buf));
     }
     if (opkernel->reorder_i[1]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_weights_sizes, weights_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_weights_sizes, weights_dims), data_type);
         opkernel->internal_inputs[1].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                                 tmp_buf));
@@ -333,6 +330,7 @@ void create_mkldnn_conv_bprop_weights_kernel(
     int* conv_src_sizes, int* conv_weights_sizes, int* conv_dst_sizes,
     int* conv_strides, int* conv_padding,
     mkldnn_primitive_desc_t input_src_pd, mkldnn_primitive_desc_t input_weights_pd, mkldnn_primitive_desc_t input_dst_pd,
+    mkldnn_data_type_t data_type,
     mkldnn_opkernel_t opkernel) {
   
     int mkl_src_dims = 4;
@@ -353,12 +351,12 @@ void create_mkldnn_conv_bprop_weights_kernel(
 
     mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_dst_md, mkldnn_memory_desc_weights_md;
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                      mkl_src_sizes, mkldnn_f32, mkldnn_any));
+                                      mkl_src_sizes, data_type, mkldnn_any));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
                                       mkl_weights_dims, mkl_weights_sizes,
-                                      mkldnn_f32, mkldnn_any));
+                                      data_type, mkldnn_any));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, mkl_dst_dims,
-                                      mkl_dst_sizes, mkldnn_f32, mkldnn_any));
+                                      mkl_dst_sizes, data_type, mkldnn_any));
     mkldnn_convolution_desc_t conv_desc_weights;
     MKL_CHECK(mkldnn_convolution_backward_weights_desc_init(
         &conv_desc_weights, mkldnn_convolution_direct, &mkldnn_memory_desc_dst_md,
@@ -379,7 +377,7 @@ void create_mkldnn_conv_bprop_weights_kernel(
         create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
                             engine, &(opkernel->inputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_chwn,
+        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, data_type, mkldnn_chwn,
                             engine, &(opkernel->inputs[0]));
     }
     if (input_dst_pd) {
@@ -387,7 +385,7 @@ void create_mkldnn_conv_bprop_weights_kernel(
         create_mkldnn_tensor_from_pd(mkl_dst_dims, mkl_dst_sizes, &md,
                             engine, &(opkernel->inputs[1]));
     } else {
-        create_mkldnn_tensor(mkl_dst_dims, mkl_dst_sizes, mkldnn_f32, mkldnn_chwn,
+        create_mkldnn_tensor(mkl_dst_dims, mkl_dst_sizes, data_type, mkldnn_chwn,
                             engine, &(opkernel->inputs[1]));
     }
     if (input_weights_pd) {
@@ -395,7 +393,7 @@ void create_mkldnn_conv_bprop_weights_kernel(
         create_mkldnn_tensor_from_pd(mkl_weights_dims, mkl_weights_sizes, &md,
                             engine, &(opkernel->outputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_weights_dims, mkl_weights_sizes, mkldnn_f32, mkldnn_ihwo,
+        create_mkldnn_tensor(mkl_weights_dims, mkl_weights_sizes, data_type, mkldnn_ihwo,
                             engine, &(opkernel->outputs[0]));
     }
     opkernel->num_inputs = 2;
@@ -443,22 +441,19 @@ void create_mkldnn_conv_bprop_weights_kernel(
 
     /* Allocate memory for internal format conversions */
     if (opkernel->reorder_i[0]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_src_sizes, src_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_src_sizes, src_dims), data_type);
         opkernel->internal_inputs[0].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                                 tmp_buf));
     }
     if (opkernel->reorder_i[1]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_dst_sizes, dst_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_dst_sizes, dst_dims), data_type);
         opkernel->internal_inputs[1].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                                 tmp_buf));
     }
     if (opkernel->reorder_o[0]) {
-        float* tmp_buf =
-            (float*)calloc(product(conv_weights_sizes, weights_dims), sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(product(conv_weights_sizes, weights_dims), data_type);
         opkernel->internal_outputs[0].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_outputs[0].prim,
                                                 tmp_buf));

@@ -27,6 +27,14 @@ class Mkldnn(object):
         self.mkldnn_enabled = False
         self.mkldnn_engine_initialized = False
         self.mkldnn_verbose = False
+        # TODO(jbobba): Defines from mkldnn_types.h. 
+        self.datatype = {
+            np.float32 : 1,
+            np.int32   : 2
+        }
+        self.memory_format = {
+            'chwn' : 7,
+        }
         self.kernels = dict()
         self.op_layouts = dict()
         self.op_uses_opkernel_api = dict() # Temporary dictionary to track opkernels
@@ -86,6 +94,7 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int,
                  ctypes.c_void_p
                  ]
             self.conv_bprop_kernel = \
@@ -97,6 +106,7 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int,
                  ctypes.c_void_p
                  ]
             self.update_conv_kernel = \
@@ -108,6 +118,7 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int,
                  ctypes.c_void_p
                  ]
 
@@ -116,13 +127,15 @@ class Mkldnn(object):
             self.relu_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_double,
-                 ctypes.c_void_p, ctypes.c_void_p]
+                 ctypes.c_void_p, ctypes.c_int, 
+                 ctypes.c_void_p]
             self.relu_bprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_relu_bprop_kernel
             self.relu_bprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_double,
                  ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int,
                  ctypes.c_void_p]
 
             self.pool_fprop_kernel = \
@@ -132,7 +145,7 @@ class Mkldnn(object):
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
-                 ctypes.c_void_p, ctypes.c_void_p]
+                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
             self.pool_bprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_pool_bprop_kernel
             self.pool_bprop_kernel.argtypes = \
@@ -140,7 +153,8 @@ class Mkldnn(object):
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, 
+                 ctypes.c_void_p]
 
             self.create_mkldnn_innerproduct_fprop_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
@@ -375,7 +389,6 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], U.ctypes.data, 0)
             self.run_opkernel(self.kernels[name])
-            pass
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = E.shape

@@ -61,6 +61,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             # Only single precision float supported for now
             if (op.dtype.type != np.float32):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             input_shape = input.axes.lengths
             filter_shape = filter.axes.lengths
             output_shape = op.axes.lengths
@@ -79,6 +80,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 input_shape_arg, filter_shape_arg, output_shape_arg,
                 stride_arg, pad_arg,
                 input_layout, filter_layout,
+                data_type,
                 self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if output_layout:
@@ -105,6 +107,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             # Only single precision float supported for now
             if (op.dtype.type != np.float32):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             input_shape = input.axes.lengths
             filter_shape = filter.axes.lengths
             output_shape = op.axes.lengths
@@ -123,6 +126,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 input_shape_arg, filter_shape_arg, output_shape_arg,
                 stride_arg, pad_arg,
                 input_layout, filter_layout,
+                data_type,
                 self.mkldnn.kernels[op.name])
             self.mkldnn.op_layouts[op.name] = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             self.mkldnn.op_uses_opkernel_api[op.name] = True
@@ -147,6 +151,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             # Only single precision float supported for now
             if (op.dtype.type != np.float32):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             delta_shape = delta.axes.lengths
             filter_shape = op.axes.lengths
             inputs_shape = inputs.axes.lengths
@@ -166,6 +171,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 delta_shape_arg, filter_shape_arg, inputs_shape_arg,
                 stride_arg, pad_arg,
                 delta_layout, filter_layout, inputs_layout,
+                data_type,
                 self.mkldnn.kernels[op.name])
             # self.mkldnn.op_layouts[op.name] = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
@@ -183,6 +189,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
             if (len(op.axes) != 5):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             input = op.args[0]
             input_layout = self.mkldnn.op_layouts.get(input.name)
             input_size = np.prod(input.axes.lengths)
@@ -191,6 +198,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.mkldnn_engine, 
                 input_size, op.slope,
                 input_layout,
+                data_type,
                 self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if (output_layout):
@@ -207,6 +215,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
             if (len(op.axes) != 5):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             delta = op.args[0]
             fprop_src = op.args[1]
             delta_layout = self.mkldnn.op_layouts.get(delta.name)
@@ -217,6 +226,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 self.mkldnn.mkldnn_engine, 
                 input_size, op.fprop.forwarded.slope,
                 fprop_src_layout, delta_layout,
+                data_type,
                 self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if (output_layout):
@@ -255,6 +265,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if ((len(op.axes.lengths) != 5) or
                     (len(stride) != 3) or (len(pad) != 3)):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
@@ -266,7 +277,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 len(input_shape), len(output_shape), len(stride), len(pad),
                 input_shape_arg, kernel_sizes, output_shape_arg,
                 stride_data, pad_data, pool_type,
-                input_layout, self.mkldnn.kernels[op.name])
+                input_layout, data_type, self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
@@ -304,6 +315,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if ((len(op.axes.lengths) != 5) or
                     (len(stride) != 3) or (len(pad) != 3)):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
@@ -315,7 +327,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 len(input_shape), len(output_shape), len(stride), len(pad),
                 input_shape_arg, kernel_sizes, output_shape_arg,
                 stride_data, pad_data, pool_type,
-                input_layout, self.mkldnn.kernels[op.fprop.forwarded.name],
+                input_layout, data_type,
+                self.mkldnn.kernels[op.fprop.forwarded.name],
                 self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if (output_layout):
@@ -361,8 +374,8 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         self.mkldnn.reorder_kernel(
             self.mkldnn.mkldnn_engine,
             len(output_sizes), output_sizes_arg,
-            1, # mkldnn_f32 in mkldnn_types.h. TODO(jbobba): find a better way
-            7, # mkldnn_chwn in mkldnn_types.h
+            self.mkldnn.datatype[op.dtype.type],
+            self.mkldnn.memory_format['chwn'],
             op.in_layout, None,
             self.mkldnn.kernels[op.name]
         )

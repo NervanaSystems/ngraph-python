@@ -20,6 +20,7 @@ void create_mkldnn_relu_fprop_kernel(
         mkldnn_engine_t engine,
         int src_size, double slope,
         mkldnn_primitive_desc_t input_src_pd,
+        mkldnn_data_type_t data_type,
         mkldnn_opkernel_t opkernel) {
     
     int mkl_src_dims = 1;
@@ -35,7 +36,7 @@ void create_mkldnn_relu_fprop_kernel(
         mkldnn_memory_desc_src_md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_src_pd));
     } else {
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                          mkl_src_sizes, mkldnn_f32, mkldnn_x));
+                                          mkl_src_sizes, data_type, mkldnn_x));
     }
     mkldnn_relu_desc_t relu_desc;
     MKL_CHECK(mkldnn_relu_forward_desc_init(&relu_desc, mkldnn_forward_training,
@@ -47,7 +48,7 @@ void create_mkldnn_relu_fprop_kernel(
         create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md,
                             engine, &(opkernel->inputs[0]));
     } else {
-        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, mkldnn_f32, mkldnn_x,
+        create_mkldnn_tensor(mkl_src_dims, mkl_src_sizes, data_type, mkldnn_x,
                             engine, &(opkernel->inputs[0]));
     }
     mkldnn_memory_desc_t dst_md = mkldnn_memory_desc_src_md;
@@ -73,6 +74,7 @@ void create_mkldnn_relu_bprop_kernel(
         int src_size, double slope,
         mkldnn_primitive_desc_t input_fprop_src_pd,
         mkldnn_primitive_desc_t input_error_pd, 
+        mkldnn_data_type_t data_type,
         mkldnn_opkernel_t opkernel) {
     int mkl_src_dims = 1;
     int mkl_dst_dims = 1;
@@ -92,20 +94,20 @@ void create_mkldnn_relu_bprop_kernel(
         mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_fprop_src_pd));
         mkldnn_memory_desc_fprop_src_md = md;
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, md.ndims,
-                                          md.dims, mkldnn_f32, mkldnn_chwn));
+                                          md.dims, data_type, mkldnn_chwn));
         prim_md = md;
     } else if (input_error_pd) {
         // fprop_src - 1D, error - 5D MKL, dst - 5D MKL
         mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_error_pd));
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md, md.ndims,
-                                          md.dims, mkldnn_f32, mkldnn_chwn));
+                                          md.dims, data_type, mkldnn_chwn));
         mkldnn_memory_desc_src_md = md;
         prim_md = md;
     } else {
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, mkl_src_dims,
-                                          mkl_src_sizes, mkldnn_f32, mkldnn_x));
+                                          mkl_src_sizes, data_type, mkldnn_x));
         MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md, mkl_src_dims,
-                                          mkl_src_sizes, mkldnn_f32, mkldnn_x));
+                                          mkl_src_sizes, data_type, mkldnn_x));
         prim_md = mkldnn_memory_desc_src_md;
     }
 
@@ -157,13 +159,13 @@ void create_mkldnn_relu_bprop_kernel(
     opkernel->reorder_o[0] = NULL;
 
     if (opkernel->reorder_i[0]) {
-        float* tmp_buf = (float*)calloc(src_size, sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(src_size, data_type);
         opkernel->internal_inputs[0].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                                 tmp_buf));
     }
     if (opkernel->reorder_i[1]) {
-        float* tmp_buf = (float*)calloc(src_size, sizeof(float));
+        float* tmp_buf = (float*) alloc_memory(src_size, data_type);
         opkernel->internal_inputs[1].buffer = tmp_buf;
         MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                                 tmp_buf));

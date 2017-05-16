@@ -338,3 +338,15 @@ void create_mkldnn_reorder_kernel(
     opkernel->reorder_o[0] = NULL;
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
+
+void* alloc_memory(int size, mkldnn_data_type_t data_type) {
+    switch (data_type) {
+        case mkldnn_f32:
+            return calloc(size, 4);
+        case mkldnn_s32:
+            return calloc(size, 4);
+        default:
+            assert(0);
+            ;
+    }
+}
