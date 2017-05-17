@@ -19,7 +19,7 @@ import ngraph as ng
 import itertools as itt
 from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
-from ngraph.frontends.neon.layer import output_dim
+from ngraph.frontends.neon.layer import output_dim, output_dim_deconv
 
 pytestmark = [pytest.mark.transformer_dependent("module"),
               pytest.mark.flex_disabled("module")]
@@ -110,18 +110,95 @@ def reference_conv(dimI, dimF, dimO, conv_params, valI, valF, valE):
     return (cpuO, outB, outU)
 
 
+def reference_deconv_fprop(conv_params, valI, valF):
+    dimI = valI.shape
+    dimF = valF.shape
+    (C, M, P, Q, N) = dimI
+    (K, T, R, S, C) = dimF
+    pad_d, pad_h, pad_w = conv_params['pad_d'], conv_params['pad_h'], conv_params['pad_w']
+    str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
+    # output dimensions
+    H = R + (P + pad_d - 1) * str_h
+    W = S + (Q + pad_w -1) * str_w
+    D = T + (M +  pad_d - 1) * str_d
+    dimO = (K, D, H, W, N)
+    dtype = np.float32
+
+    cpuO = np.zeros(slicable(dimO, 1), dtype=dtype)
+    cpuF = valF.reshape(slicable(dimF))
+    cpuI = valI
+
+    for m, p, q in itt.product(range(M), range(P), range(Q)):
+        mt = m * str_d - pad_d
+        pr = p * str_h - pad_h
+        qs = q * str_w - pad_w
+
+        idx = pixel_indices(T, R, S, D, H, W, K, mt, pr, qs)
+
+        cpuO[idx, :] += np.dot(cpuF, cpuI[:, m, p, q, :])
+
+    cpuO = cpuO[:-1, :].reshape(dimO)
+    return cpuO
+
+def reference_deconv_bprop(conv_params, valE, valI, valF):
+    dimO = valE.shape
+    dimI = valI.shape
+    dimF = valF.shape
+    (C, M, P, Q, N) = dimI
+    (K, D, H, W, N) = dimO
+    (K, T, R, S, C) = dimF
+    pad_d, pad_h, pad_w = conv_params['pad_d'], conv_params['pad_h'], conv_params['pad_w']
+    str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
+    dtype = np.float32
+
+    # make error shaped like cpuO
+    no_pad_E = slicable(dimO)
+    cpuE = np.zeros(slicable(dimO, 1), dtype=dtype)
+    cpuE[:no_pad_E[0], :] = valE.reshape(no_pad_E)
+
+    cpuF = valF.reshape(slicable(dimF))
+
+    # ======numpy===========
+    cpuI = valI
+    cpuB = np.zeros(dimI, dtype=dtype)
+    cpuU = np.zeros(slicable(dimF), dtype=dtype)
+
+    for m, p, q in itt.product(range(M), range(P), range(Q)):
+        mt = m * str_d - pad_d
+        pr = p * str_h - pad_h
+        qs = q * str_w - pad_w
+
+        idx = pixel_indices(T, R, S, D, H, W, K, mt, pr, qs)
+
+        cpuB[:, m, p, q, :] = np.dot(cpuF.T, cpuE[idx, :])
+
+        cpuU += np.dot(cpuE[idx, :], cpuI[:, m, p, q, :].T)
+
+    outB = cpuB
+    outU = cpuU.reshape(dimF)
+    return (outB, outU)
+
+
 class ConvParams(object):
     def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
                  pad_d=0, pad_h=0, pad_w=0,
-                 str_d=1, str_h=1, str_w=1):
+                 str_d=1, str_h=1, str_w=1, deconv=False):
 
-        M = output_dim(D, T, pad_d, str_d)
-        P = output_dim(H, R, pad_h, str_h)
-        Q = output_dim(W, S, pad_w, str_w)
+        if deconv:
+            M = output_dim_deconv(D, T, pad_d, str_d)
+            P = output_dim_deconv(H, R, pad_h, str_h)
+            Q = output_dim_deconv(W, S, pad_w, str_w)
+        else:
+            M = output_dim(D, T, pad_d, str_d)
+            P = output_dim(H, R, pad_h, str_h)
+            Q = output_dim(W, S, pad_w, str_w)
 
         self.dimO = (K, M, P, Q, N)
         self.dimI = (C, D, H, W, N)
-        self.dimF = (C, T, R, S, K)
+        if deconv:
+            self.dimF = (K, T, R, S, C)
+        else:
+            self.dimF = (C, T, R, S, K)
 
         self.conv_params = dict(
             pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
@@ -139,13 +216,22 @@ class ConvParams(object):
             batch_axis
         ])
 
-        self.ax_f = ng.make_axes([
-            ng.make_axis(name='C', length=C),
-            ng.make_axis(name='D', length=T),
-            ng.make_axis(name='H', length=R),
-            ng.make_axis(name='W', length=S),
-            ng.make_axis(name='K', length=K),
-        ])
+        if deconv:
+            self.ax_f = ng.make_axes([
+                ng.make_axis(name='C', length=K),
+                ng.make_axis(name='D', length=T),
+                ng.make_axis(name='H', length=R),
+                ng.make_axis(name='W', length=S),
+                ng.make_axis(name='K', length=C),
+            ])
+        else:
+            self.ax_f = ng.make_axes([
+                ng.make_axis(name='C', length=C),
+                ng.make_axis(name='D', length=T),
+                ng.make_axis(name='H', length=R),
+                ng.make_axis(name='W', length=S),
+                ng.make_axis(name='K', length=K),
+            ])
 
         self.ax_o = ng.make_axes([
             ng.make_axis(name='C', length=K),
@@ -169,6 +255,11 @@ def n128_hw32_c3_2x2():
 @pytest.fixture()
 def n4_hw12_c3_5x5():
     return dict(C=3, N=4, K=8, H=12, W=12, R=5, S=5)
+
+
+@pytest.fixture()
+def deconv_n4_hw4_c1_5x5():
+    return dict(C=1, N=4, K=8, H=4, W=4, R=5, S=5, str_h=2, str_w=2, deconv=True)
 
 
 def test_conv(transformer_factory, n64_hw32_c32_3x3):
@@ -206,6 +297,92 @@ def test_conv(transformer_factory, n64_hw32_c32_3x3):
 
     # Compare update
     assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
+
+
+def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
+    cf = ConvParams(**deconv_n4_hw4_c1_5x5)
+
+    # randomly initialize
+    input_value = rng.uniform(-0.5, 0.5, cf.ax_i)
+    filter_value = rng.uniform(-0.5, 0.5, cf.ax_f)
+    error_value = rng.uniform(-0.5, 0.5, cf.ax_o)
+
+    inputs = ng.placeholder(cf.ax_i)
+    filters = ng.placeholder(cf.ax_f)
+    errors = ng.placeholder(cf.ax_o)
+
+    output = ng.deconvolution(cf.conv_params, inputs, filters, axes=cf.ax_o)
+    bprop_out = ng.deriv(output, inputs, errors)
+    updat_out = ng.deriv(output, filters, errors)
+
+    with executor([output, bprop_out, updat_out], inputs, filters, errors) as conv_executor:
+        result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, error_value)
+
+    # Compute reference with NumPy
+    result_np = reference_deconv_fprop(cf.conv_params, input_value, filter_value)
+    gradI_np, gradF_np = reference_deconv_bprop(cf.conv_params, error_value, input_value, filter_value)
+
+    # Compare fprop
+    assert np.allclose(result_ng, result_np, rtol=0.1, atol=0)
+
+    # Compare bprop
+    assert np.allclose(gradI_ng, gradI_np, rtol=0.1, atol=0)
+
+    # Compare update
+    assert np.allclose(gradF_ng, gradF_np, rtol=0.1, atol=0)
+
+
+def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
+    cf1 = ConvParams(**deconv_n4_hw4_c1_5x5)
+
+    # 2nd layer filter
+    fshape2 = (4, 3, 3)
+    str_h = str_w = 2
+    K, R, S = fshape2
+    C, D, H, W, N = cf1.dimO  # 2nd layer input dimensions
+    cf2 = ConvParams(C=C, D=D, H=H, W=W, N=N, K=K, R=R, S=S, str_h=str_h, str_w=str_w, deconv=True)
+
+    # randomly initialize
+    input_value = rng.uniform(-0.5, 0.5, cf1.ax_i)
+    filter1_value = rng.uniform(-0.5, 0.5, cf1.ax_f)
+    filter2_value = rng.uniform(-0.5, 0.5, cf2.ax_f)
+    error_value = rng.uniform(-0.5, 0.5, cf2.ax_o)
+
+    inputs = ng.placeholder(cf1.ax_i)
+    filters1 = ng.placeholder(cf1.ax_f)
+    filters2 = ng.placeholder(cf2.ax_f)
+    errors = ng.placeholder(cf2.ax_o)
+
+    out1 = ng.deconvolution(cf1.conv_params, inputs, filters1, axes=cf1.ax_o)
+    out2 = ng.deconvolution(cf2.conv_params, out1, filters2, axes=cf2.ax_o)
+
+    bprop_out = ng.deriv(out2, inputs, errors)
+    updat_out2 = ng.deriv(out2, filters2, errors)
+    updat_out1 = ng.deriv(out2, filters1, errors)
+
+    with executor([out1, out2, bprop_out, updat_out1, updat_out2], \
+            inputs, filters1, filters2, errors) as conv_executor:
+        out1_ng, out2_ng, gradI_ng, gradF1_ng, gradF2_ng = \
+            conv_executor(input_value, filter1_value, filter2_value, error_value)
+
+    # Compute reference with NumPy
+    # fprop
+    out1_np = reference_deconv_fprop(cf1.conv_params, input_value, filter1_value)
+    out2_np = reference_deconv_fprop(cf2.conv_params, out1_np, filter2_value)
+    # bprop
+    gradI2_np, gradF2_np = reference_deconv_bprop(cf2.conv_params, error_value, out1_np, filter2_value)
+    gradI1_np, gradF1_np = reference_deconv_bprop(cf1.conv_params, gradI2_np, input_value, filter1_value)
+
+    # Compare fprop
+    assert np.allclose(out1_ng, out1_np, rtol=0.01, atol=0)
+    assert np.allclose(out2_ng, out2_np, rtol=0.01, atol=0)
+
+    # Compare bprop
+    assert np.allclose(gradI_ng, gradI1_np, rtol=0.01, atol=0)
+
+    # Compare update
+    assert np.allclose(gradF1_ng, gradF1_np, rtol=0.01, atol=0)
+    assert np.allclose(gradF2_ng, gradF2_np, rtol=0.01, atol=0)
 
 
 def test_wrong_filters_shape_length():

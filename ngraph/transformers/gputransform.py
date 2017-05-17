@@ -40,7 +40,8 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp
-from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
+from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv, \
+    DeconvolutionOp, fprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
@@ -402,6 +403,14 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(update_conv)
     def add_kernel(self, op):
         self.kernels.append(ConvUpdateKernel(self.transformer, op))
+
+    @add_kernel.on_type(DeconvolutionOp)
+    def add_kernel(self, op):
+        self.kernels.append(ConvBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(fprop_conv)
+    def add_kernel(self, op):
+        self.kernels.append(ConvFpropKernel(self.transformer, op))
 
     @add_kernel.on_type(DotOp)
     def add_kernel(self, op):

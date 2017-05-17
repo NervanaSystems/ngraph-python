@@ -46,6 +46,15 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
+def output_dim_deconv(X, S, padding, strides, dilation=1):
+    S = dilation * (S - 1) + 1
+    max_size = S + (X + padding - 1) * strides
+
+    if max_size < 0:
+        raise ValueError('output_dim {} can not be < 0'.format(max_size))
+    return max_size
+
+
 def inference_mode(*args, **kwargs):
     """
     cachetools.cached key function to ensure that caching takes into account the current value of
