@@ -22,14 +22,15 @@ class FlexDECPass(PeepholeGraphPass):
         # copy flex entry for any op followed by dimshuffle op
         if self.propagate_flex_entry:
             if isinstance(op, DimshuffleOp):
-                op.tensor_description().buffer.flex_entry = self.flex_entry
+                self.transformer.get_op_tensor(op).flex_entry = self.flex_entry
                 self.propagate_flex_entry = False
         if op.tensor_description():
             self.propagate_flex_entry = True
-            self.flex_entry = op.tensor_description().buffer.flex_entry
+            self.flex_entry = self.transformer.get_op_tensor(op).flex_entry
 
 
 class ClearTensorDescriptions(GraphPass):
-    def do_pass(self, ops, inits):
+    def do_pass(self, ops, transformer):
+        transformer.initialize_allocations()
         tdcache.tensor_description_cache.clear()
-        return ops, inits
+        return ops, transformer
