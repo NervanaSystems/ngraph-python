@@ -68,7 +68,9 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0):
         label_config = {"type": "label",
                         "binary": False}
         augmentation = {"type": "image",
-                        "scale": [0.8, 0.8]}
+                        "scale": [0.8, 0.8],
+                        "center": False,
+                        "flip_enable": True}
 
         return {'manifest_filename': manifest_file,
                 'manifest_root': os.path.dirname(manifest_file),
@@ -84,8 +86,6 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0):
     train_config['shuffle_manifest'] = True
     train_config['shuffle_enable'] = True
     train_config['random_seed'] = random_seed
-    train_config['augmentation'][0]["center"] = False
-    train_config['augmentation'][0]["flip_enable"] = True
 
     valid_config = common_config(valid_manifest, batch_size)
     valid_config['iteration_mode'] = "ONCE"
