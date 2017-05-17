@@ -97,7 +97,8 @@ def main():
     agent = dqn.Agent(
         state_axes,
         environment.action_space,
-        model=model
+        model=model,
+        epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000),
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20000)
