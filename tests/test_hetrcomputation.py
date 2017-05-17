@@ -604,6 +604,8 @@ def test_allreduce_gpu_op(config):
             while not self.exit.is_set():
                 time.sleep(0.1)
 
+    pytest.xfail("Multi-GPU testing not enabled yet")
+
     if 'gpu' not in ngt.transformer_choices():
         pytest.skip('GPUTransformer not available!')
 
