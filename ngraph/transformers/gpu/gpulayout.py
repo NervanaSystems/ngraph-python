@@ -906,13 +906,13 @@ def gpu_constraint_factory(op, arg):
     elif isinstance(op, RngOp):
         return GPUBinaryLayoutConstraint(op, arg)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
-        return GPUBinaryLayoutConstraint(op, arg)
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
         axis_least_contig = make_axes(op.metadata['parallel'])
         new_axes = axis_least_contig + (op.axes - axis_least_contig)
         return GPUFixedLayoutConstraint(op, arg, new_axes)
     elif isinstance(op, (GPUCudaAllReduceOp)):
-        return GPUBinaryLayoutConstraint(op, arg)
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, CTCOp):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     else:

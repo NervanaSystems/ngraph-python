@@ -55,13 +55,13 @@ def open_ipc_handle(shared_queue):
                 raise
 
 
-def _mean_reduction_kernel():
-    _float_accum_kernel = SourceModule("""
+def _reduction_kernel(op):
+    kernel_code_template = """
         #define ITEMS_PER_THREAD 32
 
         __global__ void float_accum(float *dest, float *scratch, int max_size,
                                     int num_scratch_arrays, int scratch_array_size)
-        {
+        {{
             float4 dest_regs;
             float4 scratch_regs;
             int offset = (blockIdx.x * ITEMS_PER_THREAD * blockDim.x) + (threadIdx.x * 4);
@@ -69,93 +69,53 @@ def _mean_reduction_kernel():
 
             #pragma unroll
             for(int i = 0; i < ITEMS_PER_THREAD; i+=4)
-            {
+            {{
                 if(offset < max_size)
-                {
+                {{
                     dest_regs = *((float4*)(&(dest[offset])));
-                }
+                }}
 
                 for(int array_id = 0; array_id < num_scratch_arrays; array_id++)
-                {
+                {{
                     int scratch_offset = (array_id * scratch_array_size) + offset;
 
                     if(offset < max_size)
-                    {
+                    {{
                         scratch_regs = *((float4*)(&(scratch[scratch_offset])));
 
                         dest_regs.x += scratch_regs.x;
                         dest_regs.y += scratch_regs.y;
                         dest_regs.z += scratch_regs.z;
                         dest_regs.w += scratch_regs.w;
-                    }
-                }
+                    }}
+                }}
+
+                {mean_code}
 
                 if(offset < max_size)
-                {
-                    dest_regs.x /= ndevs;
-                    dest_regs.y /= ndevs;
-                    dest_regs.z /= ndevs;
-                    dest_regs.w /= ndevs;
-                }
-
-                if(offset < max_size)
-                {
+                {{
                     *((float4*)(&(dest[offset]))) = dest_regs;
-                }
+                }}
 
                 offset += (blockDim.x * 4);
-            }
-        }
-        """)
-
-    kernel = _float_accum_kernel.get_function("float_accum")
-    kernel.prepare("PPiii")
-    return kernel
-
-
-def _sum_reduction_kernel():
-    _float_accum_kernel = SourceModule("""
-        #define ITEMS_PER_THREAD 32
-
-        __global__ void float_accum(float *dest, float *scratch, int max_size,
-                                    int num_scratch_arrays, int scratch_array_size)
-        {
-            float4 dest_regs;
-            float4 scratch_regs;
-            int offset = (blockIdx.x * ITEMS_PER_THREAD * blockDim.x) + (threadIdx.x * 4);
-
-            #pragma unroll
-            for(int i = 0; i < ITEMS_PER_THREAD; i+=4)
-            {
-                if(offset < max_size)
-                {
-                    dest_regs = *((float4*)(&(dest[offset])));
-                }
-
-                for(int array_id = 0; array_id < num_scratch_arrays; array_id++)
-                {
-                    int scratch_offset = (array_id * scratch_array_size) + offset;
-
+            }}
+        }}
+        """
+    if op == "mean":
+        mean_code = """
                     if(offset < max_size)
-                    {
-                        scratch_regs = *((float4*)(&(scratch[scratch_offset])));
+                    {{
+                        dest_regs.x /= ndevs;
+                        dest_regs.y /= ndevs;
+                        dest_regs.z /= ndevs;
+                        dest_regs.w /= ndevs;
+                    }}
+                    """
+    else:
+        mean_code = "(void)ndevs;"
 
-                        dest_regs.x += scratch_regs.x;
-                        dest_regs.y += scratch_regs.y;
-                        dest_regs.z += scratch_regs.z;
-                        dest_regs.w += scratch_regs.w;
-                    }
-                }
-
-                if(offset < max_size)
-                {
-                    *((float4*)(&(dest[offset]))) = dest_regs;
-                }
-
-                offset += (blockDim.x * 4);
-            }
-        }
-        """)
+    kernel_code = kernel_code_template.format(mean_code=mean_code)
+    _float_accum_kernel = SourceModule(kernel_code)
 
     kernel = _float_accum_kernel.get_function("float_accum")
     kernel.prepare("PPiii")
@@ -448,16 +408,15 @@ class CudaAllReduceKernel(GPUKernel):
         self.output_buff_dict = {}
         self.scratch_buff_dict = {}
         self.event_buff_dict = {}
+        self.init_buffers()
 
-    def bind_buffers(self):
-        if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
-        super(CudaAllReduceKernel, self).bind_buffers()
-        self.input_tensor = self.op.args[0].value
+    def init_buffers(self):
+        shape = self.op.args[0].tensor_description().shape
+        dtype = self.op.args[0].tensor_description().dtype
 
         # Allocate output and scratch buffers
-        self.output_buff = gpuarray.zeros(self.input_tensor.shape, self.input_tensor.dtype)
-        self.scratch_buff = gpuarray.zeros(self.input_tensor.shape, self.input_tensor.dtype)
+        self.output_buff = gpuarray.zeros(shape, dtype)
+        self.scratch_buff = gpuarray.zeros(shape, dtype)
 
         self.output_buff_dict[self.device_id] = self.output_buff.gpudata
         self.scratch_buff_dict[self.device_id] = self.scratch_buff.gpudata
@@ -483,6 +442,12 @@ class CudaAllReduceKernel(GPUKernel):
             self.output_buff_dict[peer_id] = output_hdl
             self.scratch_buff_dict[peer_id] = scratch_hdl
             self.event_buff_dict[peer_id] = event_hdl
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor.value
+        super(CudaAllReduceKernel, self).bind_buffers()
+        self.input_tensor = self.op.args[0].value
 
     def execute(self):
         ndevs = len(self.op.device_ids)
@@ -571,13 +536,7 @@ class CudaAllReduceKernel(GPUKernel):
                           this_segment_size, num_arrays, segment_size]
                 grid_dim = (grid_size, 1, 1)
                 block_dim = (block_size, 1, 1)
-                if (self.op.reduce_func == 'mean'):
-                    kernel = _mean_reduction_kernel()
-                elif (self.op.reduce_func == 'sum'):
-                    kernel = _sum_reduction_kernel()
-                else:
-                    raise RuntimeError(
-                        'Reduce function {} is not supported!'.format(self.op.reduce_func))
+                kernel = _reduction_kernel(self.op.reduce_func)
                 kernel.prepared_async_call(grid_dim, block_dim, self.stream, *params)
 
                 # Send other GPUs this GPU's assigned segment
