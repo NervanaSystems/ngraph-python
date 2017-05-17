@@ -16,7 +16,7 @@
 from __future__ import division
 from builtins import range
 
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.op_graph.axes import TensorDescription
@@ -160,9 +160,9 @@ class DimShuffleKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
-        out = TensorDescriptionWrapper(op.tensor_description())
+        out = TensorDescriptionWrapper(self.transformer, op.tensor_description())
         (arg, ) = (_ for _ in op.call_info())
-        in_tensor = TensorDescriptionWrapper(arg, ignore_layout=True)
+        in_tensor = TensorDescriptionWrapper(self.transformer, arg, ignore_layout=True)
 
         # Reshape the tensors in place with dimshuffle views
         in_tensor.shape = tuple(op.in_view.shape)
@@ -186,7 +186,7 @@ class DimShuffleKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = pointer_from_td(self.params[index])
+                self.params[index] = self.pointer_from_td(self.params[index])
 
         super(DimShuffleKernel, self).bind_buffers()
 
@@ -226,7 +226,7 @@ class FillKernel(GPUKernel):
         """
         Get allocated GPU tensor for output
         """
-        self.tensor = self.tensor.value.tensor
+        self.tensor = self.tensor_view_from_td(self.tensor).tensor
         super(FillKernel, self).bind_buffers()
 
     def execute(self):
@@ -246,7 +246,7 @@ class QueueSendKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(QueueSendKernel, self).bind_buffers()
 
     def execute(self):
@@ -278,7 +278,7 @@ class QueueRecvKernel(GPUKernel):
         Get allocated GPU tensor for output and potentially source value
         """
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(QueueRecvKernel, self).bind_buffers()
 
     def execute(self):
@@ -303,7 +303,7 @@ class CudaScatterSendKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaScatterSendKernel, self).bind_buffers()
         self.send_ready = list()
         for i in range(len(self.op.to_id)):
@@ -328,7 +328,7 @@ class CudaScatterRecvKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -354,7 +354,7 @@ class CudaGatherSendKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherSendKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -378,7 +378,7 @@ class CudaGatherRecvKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherRecvKernel, self).bind_buffers()
         self.sender_ready = list()
         for i in range(len(self.op.from_id)):
@@ -624,7 +624,7 @@ class RngFillKernel(GPUKernel):
         """
         Get allocated GPU tensor for output
         """
-        self.out = self.out.value.tensor
+        self.out = self.tensor_view_from_td(self.out).tensor
         super(RngFillKernel, self).bind_buffers()
 
     def execute(self):
@@ -668,9 +668,10 @@ class SetItemKernel(GPUKernel):
             shape = self.tensor.shape
             axes = range(len(self.tensor.shape))
 
-            self.kernel, self.params = get_dimshuffle(dtype, shape, tuple(axes),
-                                                      TensorDescriptionWrapper(self.value),
-                                                      TensorDescriptionWrapper(self.tensor))
+            self.kernel, self.params = \
+                get_dimshuffle(dtype, shape, tuple(axes),
+                               TensorDescriptionWrapper(self.transformer, self.value),
+                               TensorDescriptionWrapper(self.transformer, self.tensor))
         else:
             self.kernel = None
 
@@ -679,14 +680,14 @@ class SetItemKernel(GPUKernel):
         Get allocated GPU tensor for output and potentially source value
         """
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         if isinstance(self.value, TensorDescription):
-            self.value = self.value.value.tensor
+            self.value = self.tensor_view_from_td(self.value).tensor
 
         if self.kernel is not None:
             for index in range(len(self.params)):
                 if isinstance(self.params[index], TensorDescription):
-                    self.params[index] = pointer_from_td(self.params[index])
+                    self.params[index] = self.pointer_from_td(self.params[index])
 
         super(SetItemKernel, self).bind_buffers()
 
@@ -712,7 +713,7 @@ class FlexFillKernel(FillKernel):
     def __init__(self, transformer, tensor, value):
         super(FlexFillKernel, self).__init__(transformer, tensor, value)
 
-        self.flex_entry = self.tensor.value.flex_entry
+        self.flex_entry = self.tensor_view_from_td(self.tensor).flex_entry
         self.output_flex_ids = [self.flex_entry.flex_id]
 
     def execute(self):
@@ -747,7 +748,7 @@ class FlexRngFillKernel(RngFillKernel):
         super(FlexRngFillKernel, self).__init__(transformer, td, distribution, params)
 
         # save flex entry for bind_flex_scales
-        self.flex_entry = td.value.flex_entry
+        self.flex_entry = self.tensor_view_from_td(td).flex_entry
         # output flex ids for autoflex to manage
         self.output_flex_ids = [self.flex_entry.flex_id]
 
