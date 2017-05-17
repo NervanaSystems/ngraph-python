@@ -16,7 +16,9 @@
 from builtins import range
 import atexit
 import sys
+import os
 from six import itervalues
+from weakref import WeakSet
 
 from ngraph.transformers.base import UnsupportedTransformerException
 
@@ -550,6 +552,11 @@ class GPUBufferAllocator():
         """
         self.view_allocators.append(view_alloc)
 
+    def close(self):
+        if self._buffer is not None:
+            self._buffer.free()
+            self._buffer = None
+
 
 class GPUTensorAllocator():
     """
@@ -602,7 +609,6 @@ class GPUTensorAllocator():
                                   dtype,
                                   gpudata=gpudata,
                                   strides=tensor_description.strides)
-
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor
 
@@ -894,10 +900,6 @@ class GPUDeviceTensor(DeviceTensor):
         params = params + src_strides + dst_strides
         kernel.prepared_async_call(kernel.grid, kernel.block, None, *params)
 
-    def close(self):
-        self.__tensor.gpudata.free()
-        super(GPUDeviceTensor, self).close()
-
 
 class GPURuntime(object):
 
@@ -964,10 +966,9 @@ class GPURuntime(object):
         if self.ctx is None:
             return
         try:
-            drv.synchronize()
             self.ctx.pop()
             self.ctx.detach()
-            self.ctc = None
+            self.ctx = None
         except drv.Error:
             pass
 
@@ -1030,20 +1031,26 @@ class GPUTransformer(Transformer):
     Given a list of ops you want to compute the results of, this transformer
     will generate allocators and kernels to execute the graph on a GPU.
     """
-    __runtime = None
 
     transformer_name = "gpu"
     default_rtol = 1e-05
     default_atol = 1e-08
+    gpu_transformers = WeakSet()
+
+    count = 0
 
     @staticmethod
     def close_gpu():
-        if GPUTransformer.__runtime is not None:
-            GPUTransformer.__runtime.close()
-            GPUTransformer.__runtime = None
+        for transformer in GPUTransformer.gpu_transformers:
+            transformer.close()
 
     def __init__(self, device_id=None, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
+        self.count = GPUTransformer.count
+        GPUTransformer.gpu_transformers.add(self)
+        GPUTransformer.count = self.count + 1
+        sys.stderr.write("init {} {} {}\n".format(self, id(self), self.count))
+        GPUTransformer.myself = self
         layout_domain_pass = GenerateLayoutDomains(self)
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
@@ -1059,29 +1066,27 @@ class GPUTransformer(Transformer):
         self.finished_transform = False
         self.current_buffer = None
         self.device_id = device_id
-        self.closers = list()
+        self.runtime = None
 
     def initialize_runtime(self):
-        if GPUTransformer.__runtime is None:
-            GPUTransformer.__runtime = GPURuntime(device_id=self.device_id)
-            atexit.register(GPUTransformer.close_gpu)
-
-        self.runtime = GPUTransformer.__runtime
-
-    def add_closer(self, closer):
-        self.closers.append(closer)
+        if self.runtime is None:
+            self.runtime = GPURuntime(device_id=self.device_id)
 
     def close(self):
-        for closer in self.closers:
-            closer()
-        self.closers = list()
+        if self.runtime is None:
+            return
         # Free the pool buffers
         for array in itervalues(self.argmax_tensors):
             array.gpudata.free()
-        for buffer in self.device_buffers:
+        for buffer in self.buffer_allocators:
             buffer.close()
         self.argmax_tensors.clear()
-        GPUTransformer.close_gpu()
+        self.runtime.close()
+        self.runtime = None
+        sys.stderr.write("close {} {} {}\n".format(self, id(self), self.count))
+        if self is not GPUTransformer.myself:
+            import traceback
+            # traceback.print_stack()
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
