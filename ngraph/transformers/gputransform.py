@@ -16,7 +16,6 @@
 from builtins import range
 import atexit
 import sys
-import os
 from six import itervalues
 from weakref import WeakSet
 
@@ -1035,9 +1034,9 @@ class GPUTransformer(Transformer):
     transformer_name = "gpu"
     default_rtol = 1e-05
     default_atol = 1e-08
-    gpu_transformers = WeakSet()
 
-    count = 0
+    # Transformers that might need to be closed on exit
+    gpu_transformers = WeakSet()
 
     @staticmethod
     def close_gpu():
@@ -1046,11 +1045,7 @@ class GPUTransformer(Transformer):
 
     def __init__(self, device_id=None, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.count = GPUTransformer.count
         GPUTransformer.gpu_transformers.add(self)
-        GPUTransformer.count = self.count + 1
-        sys.stderr.write("init {} {} {}\n".format(self, id(self), self.count))
-        GPUTransformer.myself = self
         layout_domain_pass = GenerateLayoutDomains(self)
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
@@ -1083,10 +1078,6 @@ class GPUTransformer(Transformer):
         self.argmax_tensors.clear()
         self.runtime.close()
         self.runtime = None
-        sys.stderr.write("close {} {} {}\n".format(self, id(self), self.count))
-        if self is not GPUTransformer.myself:
-            import traceback
-            # traceback.print_stack()
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
@@ -1196,3 +1187,6 @@ class GPUTransformer(Transformer):
             An object that can be used to calculate any layout change cost.
         """
         return gpu_constraint_factory(op, arg)
+
+
+atexit.register(GPUTransformer.close_gpu)

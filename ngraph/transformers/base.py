@@ -189,10 +189,6 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
         Returns: A DeviceTensor.
         """
 
-    def close(self):
-        for view in self.views:
-            view.close()
-
 
 class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     """
@@ -282,9 +278,6 @@ class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
         :param key: The index/slice
         :param value: Tensor with same size as index/slice
         """
-
-    def close(self):
-        pass
 
 
 class Transformer_ABC_Meta(abc.ABCMeta):
