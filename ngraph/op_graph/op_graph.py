@@ -2508,7 +2508,7 @@ def concat_along_axis(x_list, axis):
     if len(x_list) < 1:
         return x_list
 
-    return ConcatOp(x_list, [axis for _ in range(len(x_list))])
+    return ConcatOp(x_list, [x.axes[x.axes.index(axis)] for x in x_list])
 
 
 class UnsliceOp(SequentialOp):
