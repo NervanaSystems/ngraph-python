@@ -289,8 +289,9 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False,
+    def __init__(self, transformer, tensor_description, kernel_axes=None, ignore_layout=False,
                  missing_axis=None):
+        self.transformer = transformer
         self.dtype = tensor_description.dtype
         self.td = tensor_description
 
@@ -320,11 +321,19 @@ class TensorDescriptionWrapper:
     def is_trans(self):
         return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
+    @property
+    def tensor(self):
+        return self.transformer.get_tensor_description_tensor(self.td)
+
+    @property
+    def has_tensor(self):
+        return self.transformer.has_tensor_description_tensor(self.td)
+
     def is_flex(self):
-        return hasattr(self.td.buffer, 'flex_entry')
+        return hasattr(self.tensor, 'flex_entry')
 
     def flex_entry(self):
-        return self.td.buffer.flex_entry
+        return self.tensor.flex_entry
 
 
 class GenerationContext:
@@ -374,7 +383,7 @@ def _is_buffer(value):
 
     Returns: True if the input is a buffer in memory
     """
-    if isinstance(value, TensorDescriptionWrapper) and value.td.buffer is not None:
+    if isinstance(value, TensorDescriptionWrapper) and value.has_tensor:
         return True
 
     return False
@@ -630,7 +639,7 @@ def _get_register_type(dtype, memory=False):
         raise TypeError("Unsupported type")
 
 
-def _wrap_tensor_descriptions(ops):
+def _wrap_tensor_descriptions(transformer, ops):
     max_dims = 1
     for op in ops:
         new_op = list(op)
@@ -648,7 +657,8 @@ def _wrap_tensor_descriptions(ops):
             if isinstance(new_op[index], TensorDescription):
                 if op[0] == "take" and (index == 1):
                     missing_axis = 1 if op[4] == 0 else 0
-                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                    new_op[index] = TensorDescriptionWrapper(transformer,
+                                                             new_op[index],
                                                              max_dims,
                                                              missing_axis=missing_axis)
                 else:
@@ -660,7 +670,8 @@ def _wrap_tensor_descriptions(ops):
                         missing_axis = op[4]
                     else:
                         missing_axis = None
-                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                    new_op[index] = TensorDescriptionWrapper(transformer,
+                                                             new_op[index],
                                                              max_dims,
                                                              missing_axis=missing_axis)
 
@@ -1416,7 +1427,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     return (code, kernel_name, arg_desc, params)
 
 
-def _prepare_compound_kernel(ops):
+def _prepare_compound_kernel(transformer, ops):
     """
     Generate and return a kernel given a set of ops.
 
@@ -1424,7 +1435,7 @@ def _prepare_compound_kernel(ops):
         should be of the format (op_name, input0, input1, output, axis)
     """
     # Take care tensor dimensionality
-    ops = _wrap_tensor_descriptions(ops)
+    ops = _wrap_tensor_descriptions(transformer, ops)
 
     # Generate kernel source code and block/grid mapping
     (axes_mapping, dims) = _get_axes_mapping(ops)
@@ -1459,14 +1470,14 @@ def _prepare_compound_kernel(ops):
     return (kernel, params, 128)
 
 
-def _call_compound_kernel(ops):
+def _call_compound_kernel(transformer, ops):
     """
     Generate and call a kernel given a set of ops.
 
     ops (list): List of tuples describing ops to execute in kernel. Each tuple
         should be of the format (op_name, input0, input1, output, axis)
     """
-    kernel, params, shared_size = _prepare_compound_kernel(ops)
+    kernel, params, shared_size = _prepare_compound_kernel(transformer, ops)
     kernel.prepared_async_call(*params, shared_size=shared_size)
 
 
@@ -1537,10 +1548,10 @@ class CudaSourceFile:
         if gen_flex:
             self.buffer.write(_flex_includes_template)
 
-    def add_kernel(self, ops):
+    def add_kernel(self, transformer, ops):
         assert not self.compiled
         # Take care tensor dimensionality
-        ops = _wrap_tensor_descriptions(ops)
+        ops = _wrap_tensor_descriptions(transformer, ops)
 
         # Generate kernel source code and block/grid mapping or find cached equivalent kernel
         (axes_mapping, dims) = _get_axes_mapping(ops)
