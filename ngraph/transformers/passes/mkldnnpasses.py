@@ -62,6 +62,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             # Sanity check tensor shapes
             if (len(unflatten_inputs.axes.lengths) != 5):
                 return
+            data_type = self.mkldnn.datatype[op.dtype.type]
             C, D, H, W, N = unflatten_inputs.axes.lengths
             inputs_shape = (C, H, W, N)
             mean_size = mean.axes.lengths[0]
@@ -94,7 +95,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.batchnorm_fprop_kernel(
                 self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
                 len(outputs_shape), mean_size, variance_size, input_shape_arg, weights_shape_arg, outputs_shape_arg,
-                op.eps, inputs_layout, None, mean_layout, variance_layout, self.mkldnn.kernels[op.name])
+                op.eps, inputs_layout, None, mean_layout, variance_layout, data_type, self.mkldnn.kernels[op.name])
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if output_layout:
                 self.mkldnn.op_layouts[op.name] = output_layout

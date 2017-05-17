@@ -77,14 +77,8 @@ class Mkldnn(object):
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_double, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-
-            self.run_batchnorm_fprop = \
-                self.mkldnn_engine_dll.run_mkldnn_batchnorm_fprop_kernel
-            self.run_batchnorm_fprop.argtypes = \
-                [ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
+                 ctypes.c_int, ctypes.c_void_p]
 
             self.set_input_tensor = self.mkldnn_engine_dll.set_input_tensor_data_handle
             self.set_input_tensor.argtypes = \
@@ -225,8 +219,12 @@ class Mkldnn(object):
             weights = np.stack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
             variance_ch = variance[:, 0]
-            self.run_batchnorm_fprop(inputs.ctypes.data, weights.ctypes.data, mean_ch.ctypes.data, variance_ch.ctypes.data,
-                                     outputs.ctypes.data, self.kernels[name])
+            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], mean_ch.ctypes.data, 1)
+            self.set_input_tensor(self.kernels[name], variance_ch.ctypes.data, 2)
+            self.set_input_tensor(self.kernels[name], weights.ctypes.data, 3)
+            self.set_output_tensor(self.kernels[name], outputs.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name])
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
