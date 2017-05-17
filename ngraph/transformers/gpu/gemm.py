@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, FlexPtrDescription
 from ngraph.transformers.gpu.util import _get_sm_count
 from ngraph.transformers.gpu.kernels import kernel_specs
@@ -62,8 +62,8 @@ class GEMMKernel(GPUKernel):
             size (str): Optional preselected tile size
         """
         # Get inputs to gemm
-        C = TensorDescriptionWrapper(op.tensor_description(), 2)
-        A, B = (TensorDescriptionWrapper(_, 2) for _ in op.call_info())
+        C = TensorDescriptionWrapper(self.transformer, op.tensor_description(), 2)
+        A, B = (TensorDescriptionWrapper(self.transformer, _, 2) for _ in op.call_info())
 
         # If both inputs are 1d, need to transpose one of them
         if min(A.strides) == 0 and min(B.strides) == 0:
@@ -248,7 +248,7 @@ class GEMMKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = pointer_from_td(self.params[index])
+                self.params[index] = self.pointer_from_td(self.params[index])
 
         super(GEMMKernel, self).bind_buffers()
 

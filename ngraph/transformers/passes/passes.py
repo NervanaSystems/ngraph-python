@@ -52,6 +52,7 @@ class GraphBuildingPass(GraphPass):
 
         """
         assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
+        self.transformer = transformer
         has_work = True
         while True:
             if not has_work:

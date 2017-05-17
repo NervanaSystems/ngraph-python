@@ -1586,38 +1586,12 @@ class TensorDescription(NameableValue):
         self.__layout = value
 
     @property
-    def buffer(self):
-        """The description of the underlying storage."""
-        return self.base.__buffer
-
-    @buffer.setter
-    def buffer(self, value):
-        """
-        Sets the backend-specific memory to be used by the tensor.
-
-        Arguments:
-          value: the buffer to use
-
-        Returns:
-        """
-        self.base.__buffer = value
-
-    @property
     def register(self):
         return self.base.__register
 
     @register.setter
     def register(self, value):
         self.base.__register = value
-
-    @property
-    def value(self):
-        """A device handle to the value."""
-        return self.__value
-
-    @value.setter
-    def value(self, value):
-        self.__value = value
 
     def is_base(self):
         """This tensor provides its own storage."""
