@@ -26,7 +26,8 @@ def test_dependent_environment():
     agent = dqn.Agent(
         dqn.space_shape(environment.observation_space),
         environment.action_space,
-        model=small_model
+        model=small_model,
+        epsilon=dqn.decay_generator(start=1.0, decay=0.995, minimum=0.1)
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20)

@@ -123,21 +123,56 @@ def space_shape(space):
         return space.shape
 
 
+def linear_generator(start, end, steps):
+    """
+    linearly interpolate between start and end values.
+    after `steps` have been taken, always returns end.
+    """
+    delta = end - start
+    steps_taken = 0
+
+    while True:
+        if steps_taken < steps:
+            yield start + delta * (
+                steps_taken / float(steps - 1)
+            )
+        else:
+            yield end
+
+        steps_taken += 1
+
+
+def decay_generator(start, decay, minimum):
+    """
+    start by yielding `start` or `minimum` whichever is larger.  the second value
+    will be `start * decay` or `minimum` whichever is larger, etc.
+    """
+    value = start
+    if value < minimum:
+        value = minimum
+
+    while True:
+        yield value
+
+        value *= decay
+        if value < minimum:
+            value = minimum
+
+
+
 class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
-    def __init__(self, state_axes, action_space, model):
+    def __init__(self, state_axes, action_space, model, epsilon):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
-        self.epsilon = 1.0
-        self.epsilon_decay = 0.995
-        self.epsilon_minimum = 0.1
+        self.epsilon = epsilon
         self.gamma = 0.9
         self.batch_size = 32
         self.action_space = action_space
 
-        self.memory = Memory(maxlen=100000)
+        self.memory = Memory(maxlen=1000000)
         self.model_wrapper = ModelWrapper(
             state_axes=state_axes,
             action_size=action_space.n,
@@ -153,10 +188,7 @@ class Agent(object):
         from the action space instead
         """
         if training:
-            if self.epsilon > self.epsilon_minimum:
-                self.epsilon *= self.epsilon_decay
-
-            if np.random.rand() <= self.epsilon:
+            if np.random.rand() <= self.epsilon.next():
                 return self.action_space.sample()
 
         # print(self.model_wrapper.predict(state))
