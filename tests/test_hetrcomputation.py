@@ -604,6 +604,9 @@ def test_allreduce_gpu_op(config):
             while not self.exit.is_set():
                 time.sleep(0.1)
 
+    if 'gpu' not in ngt.transformer_choices():
+        pytest.skip('GPUTransformer not available!')
+
     c = config
     x = list()
     y = list()
