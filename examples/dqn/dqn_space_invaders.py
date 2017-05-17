@@ -79,9 +79,10 @@ class ReshapeWrapper(gym.Wrapper):
 
 
 def main():
+    # deterministic version 4 results in a frame skip of 4 and no repeat action probability
     # todo: total_reward isn't always greater than 95 even with a working implementation
     # environment = gym.make('SpaceInvaders-v0')
-    environment = gym.make('Pong-v0')
+    environment = gym.make('PongDeterministic-v4')
     environment = ReshapeWrapper(environment)
 
     print(environment.observation_space)
