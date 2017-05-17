@@ -35,12 +35,9 @@ from ngraph.frontends.neon import loop_train, ax
 np.seterr(all='raise')
 
 parser = NgraphArgparser(description='Train convnet-alexnet model on random dataset')
-parser.set_defaults()
-args = parser.parse_args()
-
 # Default batch_size for convnet-alexnet is 128.
-args.batch_size = 128
-args.num_iterations = 100
+parser.set_defaults(batch_size=128, num_iterations=100)
+args = parser.parse_args()
 
 # Setup data provider
 image_size = 224
@@ -53,7 +50,7 @@ train_data = {'image': {'data': X_train,
 train_set =  ArrayIterator(train_data,
                            batch_size=args.batch_size,
                            total_iterations=args.num_iterations)
-inputs = train_set.make_placeholders()
+inputs = train_set.make_placeholders(include_iteration=True)
 ax.Y.length = 1000  # number of outputs of last layer.
 
 # Setup model
@@ -78,13 +75,9 @@ seq1 = Sequential([
 # Learning rate change based on schedule from learning_rate_policies.py
 lr_schedule = {'name': 'schedule', 'base_lr': 0.01,
                'gamma': (1 / 250.)**(1 / 3.),
-               #'schedule': [22, 44, 65]}
-               # TODO: actually, we should be using schedule: [22, 44, 65]
-               # but if I use it, then I am getting numpy exception in less_equal.
-               # exception code compares [22, 44, 65] with [nan, nan, nan]
-               # Not sure what is leading to this issue.
-               'schedule': [22]}
-optimizer = GradientDescentMomentum(lr_schedule, 0.0, wdecay=0.0005)
+               'schedule': [22, 44, 65]}
+optimizer = GradientDescentMomentum(lr_schedule, 0.0, wdecay=0.0005,
+                                    iteration=inputs['iteration'])
 train_prob = seq1(inputs['image'])
 train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
