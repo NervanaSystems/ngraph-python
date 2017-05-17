@@ -110,7 +110,7 @@ test_flex: gpu_prepare test_prepare clean
 
 test_mkldnn: export MKL_TEST_ENABLE=1
 test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
-test_mkldnn: test_prepare clean test_cpu test_hetr
+test_mkldnn: test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only" --boxed \
