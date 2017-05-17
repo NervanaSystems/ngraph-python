@@ -165,7 +165,7 @@ class Agent(object):
     def observe_results(self, state, action, reward, next_state, done):
         # print(state, action, reward, next_state)
         if done:
-            reward -= 10
+            reward -= 100
 
         self.memory.append({
             'state': state,
