@@ -289,6 +289,28 @@ def test_concatenate(transformer_factory, concatenate_variables):
 
 @pytest.mark.flex_disabled
 @pytest.mark.transformer_dependent
+def test_concat_different_axis_lengths(transformer_factory):
+    ax1 = ng.make_axis(length=3, name="concat")
+    ax2 = ng.make_axis(length=2, name="concat")
+    ax3 = ng.make_axis(length=10, name="other")
+
+    x = ng.placeholder(axes=[ax1, ax3])
+    y = ng.placeholder(axes=[ax2, ax3])
+
+    np_x = np.zeros(x.axes.lengths)
+    np_y = np.zeros(y.axes.lengths)
+
+    # ax1 and ax2 have same name, so this should work
+    v = ng.concat_along_axis([x, y], ax1)
+    with ExecutorFactory() as ex:
+        f = ex.executor(v, x, y)
+        e_v = f(np_x, np_y)
+        np_v = np.concatenate([np_x, np_y], axis=0)
+        assert ng.testing.allclose(e_v.copy(), np_v)
+
+
+@pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 def test_variable_init(transformer_factory, C):
     w_init = np.random.rand(C.length)
     W = ng.variable(ng.make_axes([C]), initial_value=w_init)
