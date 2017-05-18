@@ -1023,7 +1023,8 @@ class TensorOp(Op):
 
                 deriv_handler = o.deriv_handler
                 if o.metadata.get('device_id'):
-                    with metadata(device_id=o.metadata['device_id'], parallel=o.metadata['parallel']):
+                    with metadata(device_id=o.metadata['device_id'],
+                                  parallel=o.metadata['parallel']):
                         deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
                 else:
                     deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
