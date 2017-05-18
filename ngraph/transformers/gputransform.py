@@ -39,7 +39,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
-    GPUCudaGatherSendOp, GPUCudaGatherRecvOp
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -61,7 +61,7 @@ from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
-    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel
+    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -470,6 +470,10 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(GPUCudaGatherRecvOp)
     def add_kernel(self, op):
         self.kernels.append(CudaGatherRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaAllReduceOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaAllReduceKernel(self.transformer, op))
 
     def compile_all(self):
         """
