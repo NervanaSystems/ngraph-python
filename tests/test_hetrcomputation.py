@@ -507,16 +507,16 @@ def test_gpu_graph(config):
 
 @pytest.mark.parametrize('config', [
     {
-        'device_id': ('1', '2', '3'),
-        'x_input': [6, 3, 9],
+        'device_id': ('0', '1', '2', '3'),
+        'x_input': [6, 3, 9, 10],
         'func': 'mean',
-        'results': [6, 6, 6],
+        'results': [7, 7, 7, 7],
     },
     {
-        'device_id': ('1', '2', '3', '4', '5'),
-        'x_input': [5, 6, 11, 13, 2],
+        'device_id': ('0', '1', '2', '3', '4', '5', '6', '7'),
+        'x_input': [5, 6, 11, 13, 2, 3, 5, 7],
         'func': 'sum',
-        'results': [37, 37, 37, 37, 37],
+        'results': [52, 52, 52, 52, 52, 52, 52, 52],
     },
 ])
 def test_allreduce_cpu_op(config):
