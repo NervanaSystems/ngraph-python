@@ -224,29 +224,36 @@ void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer, int
 }
 
 void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
+    void *buf;
+    printf("ID: %d\n", opkernel->id);
     printf(" INPUTS\n");
     for (int i = 0; i < opkernel->num_inputs; i++) {
         mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->inputs[i].desc);
-        printf("  Input %d md.format: %d", i, md.format);
+        mkldnn_memory_get_data_handle(opkernel->inputs[i].prim, &buf);
+        printf("  Input %d (%p) md.format: %d", i, buf, md.format);
         if (opkernel->reorder_i[i]) {
             mkldnn_memory_desc_t i_md = *mkldnn_primitive_desc_query_memory_d(opkernel->internal_inputs[i].desc);
-            printf(" -> md.format: %d", i_md.format);
+            mkldnn_memory_get_data_handle(opkernel->internal_inputs[i].prim, &buf);
+            printf(" -> (%p) md.format: %d", buf, i_md.format);
         }
         printf("\n");
     }
     printf(" OUTPUTS\n");
     for (int i = 0; i < opkernel->num_outputs; i++) {
         mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[i].desc);
-        printf("  Output %d md.format: %d", i, md.format);
+        mkldnn_memory_get_data_handle(opkernel->outputs[i].prim, &buf);
+        printf("  Output %d (%p) md.format: %d", i, buf, md.format);
         if (opkernel->reorder_o[i]) {
             mkldnn_memory_desc_t i_md = *mkldnn_primitive_desc_query_memory_d(opkernel->internal_outputs[i].desc);
-            printf(" <- md.format: %d", i_md.format);
+            mkldnn_memory_get_data_handle(opkernel->internal_outputs[i].prim, &buf);
+            printf(" <- (%p) md.format: %d", buf, i_md.format);
         }
         printf("\n");
     }
 }
 
 void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
+  //print_mkldnn_opkernel(opkernel);
   MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
   mkldnn_status_t s =
@@ -340,12 +347,17 @@ void create_mkldnn_reorder_kernel(
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-void* alloc_memory(int size, mkldnn_data_type_t data_type) {
+void* alloc_memory(size_t size, mkldnn_data_type_t data_type) {
+    void* buf;
     switch (data_type) {
         case mkldnn_f32:
-            return calloc(size, 4);
         case mkldnn_s32:
-            return calloc(size, 4);
+            buf = malloc(size*4);
+            if (buf == NULL) {
+                printf("Memory allocation failure. Could not allocate %lld bytes\n", size*4);
+                exit(2);
+            }
+            return buf;
         default:
             assert(0);
             ;

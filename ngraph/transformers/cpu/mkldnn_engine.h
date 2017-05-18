@@ -21,6 +21,8 @@
 
 size_t product(int *arr, size_t size);
 
+void* alloc_memory(size_t size, mkldnn_data_type_t data_type);
+
 void set_mkl_dimensions(char *primitive_name, int *primitive_src_sizes,
                         int *primitive_dst_sizes, int *primitive_weights_sizes,
                         int *primitive_strides, int *primitive_padding,

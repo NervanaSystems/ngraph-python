@@ -42,6 +42,13 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def __init__(self, mkldnn):
         self.mkldnn = mkldnn
 
+    def get_mkl_shape(self, axes, mkl_order):
+        mkl_shape = []
+        for axis_name in mkl_order:
+            # TODO(jbobba) Check that axis exists
+            mkl_shape.append(axes.find_by_name(axis_name).size)
+        return mkl_shape
+
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
         pass
@@ -110,22 +117,24 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if self.mkldnn.mkldnn_enabled:
             input = op.args[0]
             filter = op.args[1]
-            pad_d, pad_h, pad_w = itemgetter(
-                *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-            str_d, str_h, str_w = itemgetter(
-                *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-            pad = [pad_d, pad_h, pad_w]
-            stride = [str_d, str_h, str_w]
             # Only 2D convolution supported in MKLDNN for now
             if (op.args[0].axes.find_by_name('__NG_DEPTH').size != 1):
                 return
             # Only single precision float supported for now
             if (op.dtype.type != np.float32):
                 return
+
             data_type = self.mkldnn.datatype[op.dtype.type]
-            input_shape = input.axes.lengths
-            filter_shape = filter.axes.lengths
-            output_shape = op.axes.lengths
+            input_shape = self.get_mkl_shape(input.axes, ('N','C','height','width'))
+            filter_shape = self.get_mkl_shape(filter.axes, ('K__NG_SHADOW','C','R','S'))
+            output_shape = self.get_mkl_shape(op.axes, ('N','C','height','width'))
+            pad_d, pad_h, pad_w = itemgetter(
+                *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+            str_d, str_h, str_w = itemgetter(
+                *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+            pad = [pad_h, pad_w]
+            stride = [str_h, str_w]
+            print ("Input: ", input_shape, " Filter: ", filter_shape, " Output: ", output_shape, " Pad: ", pad, " Stride: ", stride)
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
@@ -133,12 +142,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             pad_arg = ((ct.c_int) * len(pad))(*pad)
             input_layout = self.mkldnn.op_layouts.get(input.name)
             filter_layout = self.mkldnn.op_layouts.get(filter.name)
+
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.conv_fprop_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(input_shape), len(filter_shape), len(output_shape),
-                len(stride), len(pad),
                 input_shape_arg, filter_shape_arg, output_shape_arg,
                 stride_arg, pad_arg,
                 input_layout, filter_layout,
@@ -158,22 +167,24 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if self.mkldnn.mkldnn_enabled:
             input = op.args[0]
             filter = op.args[1]
-            pad_d, pad_h, pad_w = itemgetter(
-                    *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-            str_d, str_h, str_w = itemgetter(
-                    *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-            pad = [pad_d, pad_h, pad_w]
-            stride = [str_d, str_h, str_w]
             # Only 2D convolution supported in MKLDNN for now
             if (op.args[0].axes.find_by_name('__NG_DEPTH').size != 1):
                 return
             # Only single precision float supported for now
             if (op.dtype.type != np.float32):
                 return
+
             data_type = self.mkldnn.datatype[op.dtype.type]
-            input_shape = input.axes.lengths
-            filter_shape = filter.axes.lengths
-            output_shape = op.axes.lengths
+            input_shape = self.get_mkl_shape(input.axes, ('N', 'C', 'height', 'width'))
+            filter_shape = self.get_mkl_shape(filter.axes, ('K__NG_SHADOW', 'C', 'R', 'S'))
+            output_shape = self.get_mkl_shape(op.axes, ('N', 'C', 'height', 'width'))
+            pad_d, pad_h, pad_w = itemgetter(
+                *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+            str_d, str_h, str_w = itemgetter(
+                *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+            pad = [pad_h, pad_w]
+            stride = [str_h, str_w]
+
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
@@ -186,7 +197,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.conv_bprop_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(input_shape), len(filter_shape), len(output_shape),
-                len(stride), len(pad),
                 input_shape_arg, filter_shape_arg, output_shape_arg,
                 stride_arg, pad_arg,
                 input_layout, filter_layout,
@@ -204,22 +214,24 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if self.mkldnn.mkldnn_enabled:
             delta = op.args[0]
             inputs = op.args[1]
-            pad_d, pad_h, pad_w = itemgetter(
-                    *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-            str_d, str_h, str_w = itemgetter(
-                    *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
-            pad = [pad_d, pad_h, pad_w]
-            stride = [str_d, str_h, str_w]
             # Only 2D convolution supported in MKLDNN for now
             if (delta.axes.find_by_name('__NG_DEPTH').size != 1):
                 return
             # Only single precision float supported for now
             if (op.dtype.type != np.float32):
                 return
+
             data_type = self.mkldnn.datatype[op.dtype.type]
-            delta_shape = delta.axes.lengths
-            filter_shape = op.axes.lengths
-            inputs_shape = inputs.axes.lengths
+            delta_shape = self.get_mkl_shape(delta.axes, ('N', 'C', 'height', 'width'))
+            filter_shape = self.get_mkl_shape(op.axes, ('K__NG_SHADOW', 'C', 'R', 'S'))
+            inputs_shape = self.get_mkl_shape(inputs.axes, ('N', 'C', 'height', 'width'))
+            pad_d, pad_h, pad_w = itemgetter(
+                *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+            str_d, str_h, str_w = itemgetter(
+                *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+            pad = [pad_h, pad_w]
+            stride = [str_h, str_w]
+
             inputs_shape_arg = ((ct.c_int) * len(inputs_shape))(*inputs_shape)
             filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
             delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
@@ -233,7 +245,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.update_conv_kernel(
                 self.mkldnn.mkldnn_engine,
                 len(delta_shape), len(filter_shape), len(inputs_shape),
-                len(stride), len(pad),
                 delta_shape_arg, filter_shape_arg, inputs_shape_arg,
                 stride_arg, pad_arg,
                 delta_layout, filter_layout, inputs_layout,
