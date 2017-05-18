@@ -379,10 +379,14 @@ class AllReduceOp(CommunicationOp):
         out_axes: The output axes.
         dtype: The data type.
     """
-    def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
+    def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, func=None, **kwargs):
         reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
         self.reduction_axes = reduction_axes
         super(AllReduceOp, self).__init__(node=x, args=(x,), axes=out_axes, dtype=dtype, **kwargs)
+        self.reduce_func = func
+        if (self.reduce_func == 'mean' or self.reduce_func == 'sum') is False:
+            raise RuntimeError(
+                'Reduce function {} is not supported!'.format(self.reduce_func))
 
 
 class CPUQueueAllReduceOp(AllReduceOp):
@@ -397,10 +401,34 @@ class CPUQueueAllReduceOp(AllReduceOp):
     def __init__(self, input_node, func=None):
         super(CPUQueueAllReduceOp, self).__init__(x=input_node,
                                                   out_axes=input_node.axes,
-                                                  dtype=input_node.dtype)
+                                                  dtype=input_node.dtype,
+                                                  func=func)
         self.idx = 0
-        self.reduce_func = func
         self._shared_queues = [multiprocessing.Queue() for i in input_node.metadata['device_id']]
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
+
+
+class GPUCudaAllReduceOp(AllReduceOp):
+    """
+    Represents GPU implementation for AllReduce op. Sets reduction function and creates
+    shared queues.
+
+    Arguments:
+        x: The input node.
+        func: The reduction function, e.g. 'sum', 'mean'.
+    """
+    def __init__(self, input_node, func=None):
+        super(GPUCudaAllReduceOp, self).__init__(x=input_node,
+                                                 out_axes=input_node.axes,
+                                                 dtype=input_node.dtype,
+                                                 func=func)
+        self.idx = 0
+        self.device_ids = input_node.metadata['device_id']
+        self._shared_queues = \
+            {i: multiprocessing.Queue() for i in input_node.metadata['device_id']}
 
     @property
     def shared_queues(self):
