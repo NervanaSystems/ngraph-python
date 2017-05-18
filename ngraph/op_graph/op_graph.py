@@ -1453,6 +1453,7 @@ class TensorValueOp(ValueOp):
     def states_read(self):
         return OrderedSet([self.tensor])
 
+
 class PatternLabelOp(TensorOp):
     """
     An op to represent label in the pattern to be matched in graph
@@ -1462,10 +1463,10 @@ class PatternLabelOp(TensorOp):
 
     """
     def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
-      dummy = make_axis(length=1)
-      super(PatternLabelOp, self).__init__(axes={}, **kwargs)
-      self.label = label
-      self.constraint_fn = constraint_fn
+        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+        self.label = label
+        self.constraint_fn = constraint_fn
+
 
 class PatternSkipOp(TensorOp):
     """
@@ -1476,9 +1477,9 @@ class PatternSkipOp(TensorOp):
 
     """
     def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
-      dummy = make_axis(length=1)
-      super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
-      self.is_optional_op_fn = is_optional_op_fn
+        super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
+        self.is_optional_op_fn = is_optional_op_fn
+
 
 class ReshapeOp(TensorOp):
 

@@ -156,6 +156,7 @@ class GraphBuildingPass(GraphPass):
 # simply be a debug pattern matching rule that prints the matching sub-graphs.
 #
 
+
 class GraphRewritePass(GraphPass):
     """
     A utility class for rewriting graph, including fusion
@@ -187,19 +188,19 @@ class GraphRewritePass(GraphPass):
         # way we are supporting equality constraints on the labels. A user
         # can say "X" in some subgraph must be same as "X" in other subgraph.
         if pattern.label in label_map:
-          if label_map[pattern.label] == op and pattern.constraint_fn(op):
-            return GraphRewritePass.found
-          else:
-            return GraphRewritePass.not_found
+            if label_map[pattern.label] == op and pattern.constraint_fn(op):
+                return GraphRewritePass.found
+            else:
+                return GraphRewritePass.not_found
 
         elif pattern.constraint_fn(op):
-          # Label is not already bound and constraint is satisfied, so bind
-          # the label now.
-          label_map[pattern.label] = op
-          return GraphRewritePass.found
+            # Label is not already bound and constraint is satisfied, so bind
+            # the label now.
+            label_map[pattern.label] = op
+            return GraphRewritePass.found
 
         else:
-          return GraphRewritePass.not_found
+            return GraphRewritePass.not_found
 
     # Function to iterate over all args and match them
     @staticmethod
@@ -214,10 +215,11 @@ class GraphRewritePass(GraphPass):
 
         """
         for o_arg, p_arg in zip(op_args, pattern_args):
-          # Depth-first graph traversal
-          if GraphRewritePass.match_pattern(o_arg, p_arg, label_map) == \
-                                            GraphRewritePass.not_found:
-            return GraphRewritePass.not_found
+            # Depth-first graph traversal
+            if GraphRewritePass.match_pattern(o_arg,
+                                              p_arg,
+                                              label_map) == GraphRewritePass.not_found:
+                return GraphRewritePass.not_found
         # If pattern for all args match, then we return true.
         return GraphRewritePass.found
 
@@ -236,24 +238,25 @@ class GraphRewritePass(GraphPass):
         """
         # For commutative op, check for all permutations of pattern args.
         if GraphRewritePass.is_commutative_op(op):
-          for pattern_args in itertools.permutations(pattern.args):
-            # We need to make a copy of label_map because if a particular
-            # permutation of arg ordering does not match, we need to throw
-            # away all the updates made to the label_map for the failed ordering.
-            new_label_map = dict(label_map)
-            if GraphRewritePass.iterate_all_args(op.args, pattern_args,
-                                      new_label_map) == GraphRewritePass.found:
-              # If this ordering is successful, then we update label_map.
-              for k, v in new_label_map.items():
-                label_map[k] = v
-              return GraphRewritePass.found
-          return GraphRewritePass.not_found
+            for pattern_args in itertools.permutations(pattern.args):
+                # We need to make a copy of label_map because if a particular
+                # permutation of arg ordering does not match, we need to throw
+                # away all the updates made to the label_map for the failed ordering.
+                new_label_map = dict(label_map)
+                if GraphRewritePass.iterate_all_args(op.args,
+                                                     pattern_args,
+                                                     new_label_map) == GraphRewritePass.found:
+                    # If this ordering is successful, then we update label_map.
+                    for k, v in new_label_map.items():
+                        label_map[k] = v
+                    return GraphRewritePass.found
+            return GraphRewritePass.not_found
         else:
-          # otherwise, just check for default ordering.
-          # Since we only have 1 option for default ordering, we do not
-          # need to make a copy of label_map.
-          return GraphRewritePass.iterate_all_args(op.args, pattern.args,
-                                                   label_map)
+            # otherwise, just check for default ordering.
+            # Since we only have 1 option for default ordering, we do not
+            # need to make a copy of label_map.
+            return GraphRewritePass.iterate_all_args(op.args, pattern.args,
+                                                     label_map)
 
     @staticmethod
     def match_pattern(op, pattern, label_map):
@@ -274,30 +277,33 @@ class GraphRewritePass(GraphPass):
         """
 
         if isinstance(pattern, PatternLabelOp):
-          return GraphRewritePass.match_pattern_label_op(op, pattern, label_map)
+            return GraphRewritePass.match_pattern_label_op(op, pattern, label_map)
 
-        elif isinstance(pattern, PatternSkipOp) and \
-             not pattern.is_optional_op_fn(op):
-          # If pattern contains SkipOp, but 'op' is not optional, then we
-          # check if children of SkipOp satisfies 'op'. E.g., pattern contains
-          # PatternSkipOp and BroadCast is optional, but 'op' is TensorValueOp.
-          assert len(pattern.args) == 1, "PatternSkipOp only allows 1 input"
-          return GraphRewritePass.match_pattern(op, pattern.args[0], label_map)
-
-        elif (type(op) == type(pattern) or \
-              (isinstance(pattern, PatternSkipOp) and \
-                pattern.is_optional_op_fn(op))) and \
-             len(op.args) == len(pattern.args):
-          # We explore children of 'op' in 2 cases:
-          #  1) if type of op is same as type of pattern (strict instance check)
-          #  2) if type of pattern is SkipOp and 'op' is optional
-          #     E.g., pattern contains PatternSkipOp and BroadCastOp is optional,
-          #     and 'op' is BroadCastOp.
-          return GraphRewritePass.match_op_args(op, pattern, label_map)
+        elif isinstance(pattern, PatternSkipOp) and not pattern.is_optional_op_fn(op):
+            # If pattern contains SkipOp, but 'op' is not optional, then we
+            # check if children of SkipOp satisfies 'op'. E.g., pattern contains
+            # PatternSkipOp and BroadCast is optional, but 'op' is TensorValueOp.
+            assert len(pattern.args) == 1, "PatternSkipOp only allows 1 input"
+            return GraphRewritePass.match_pattern(op, pattern.args[0], label_map)
 
         else:
-          # If matching of ops failed, we return not_found.
-          return GraphRewritePass.not_found
+            do_lengths_match = (len(op.args) == len(pattern.args))
+            is_same_type = (type(op) == type(pattern))
+            is_skip_op = (isinstance(pattern, PatternSkipOp) and
+                          pattern.is_optional_op_fn(op))
+
+            do_explore_children = (is_same_type or is_skip_op) and do_lengths_match
+            if do_explore_children:
+                # We explore children of 'op' in 2 cases:
+                #  1) if type of op is same as type of pattern (strict instance check)
+                #  2) if type of pattern is SkipOp and 'op' is optional
+                #     E.g., pattern contains PatternSkipOp and BroadCastOp is optional,
+                #     and 'op' is BroadCastOp.
+                return GraphRewritePass.match_op_args(op, pattern, label_map)
+
+            else:
+                # If matching of ops failed, we return not_found.
+                return GraphRewritePass.not_found
 
     @staticmethod
     def is_commutative_op(op):
@@ -315,9 +321,9 @@ class GraphRewritePass(GraphPass):
         if isinstance(op, Add) or isinstance(op, Multiply) or    \
            isinstance(op, Maximum) or isinstance(op, Minimum) or \
            isinstance(op, Equal) or isinstance(op, NotEqual):
-          return True
+            return True
         else:
-          return False
+            return False
 
     @staticmethod
     def print_pattern(pattern, spaces=0):
@@ -327,11 +333,11 @@ class GraphRewritePass(GraphPass):
         """
         str = ""
         for t in range(0, spaces):
-          str += ' '
+            str += ' '
         str += pattern.__str__()
         for arg in pattern.args:
-          str += '\n'
-          str += GraphRewritePass.print_pattern(arg, spaces+1)
+            str += '\n'
+            str += GraphRewritePass.print_pattern(arg, spaces + 1)
         return str
 
     def register_pattern(self, pattern, callback_fn):
@@ -353,40 +359,40 @@ class GraphRewritePass(GraphPass):
         assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while has_work:
-          self.replacement_list = []
+            self.replacement_list = []
 
-          # For performing pattern match, we have 2 options:
-          # 1) for every graph node, check if any pattern match
-          # 2) for every pattern, check if any graph node match
-          # We choose 1st option. But we can also choose 2nd.
-          # TODO(nhasabni) Two issues that complicate above choice is:
-          #  1) A pattern may match multiple graph nodes
-          #  2) Multiple patterns may match single graph node
-          # These issues need to be discussed.
+            # For performing pattern match, we have 2 options:
+            # 1) for every graph node, check if any pattern match
+            # 2) for every pattern, check if any graph node match
+            # We choose 1st option. But we can also choose 2nd.
+            # TODO(nhasabni) Two issues that complicate above choice is:
+            #  1) A pattern may match multiple graph nodes
+            #  2) Multiple patterns may match single graph node
+            # These issues need to be discussed.
 
-          # pass through the ops in an execution order collecting things to do
-          ordered_ops = Op.ordered_ops(op.forwarded for op in ops)
-          for op in ordered_ops:
-              op.update_forwards()
-              # Iterate over all registered patterns and check for pattern match
-              for pattern, callback_fn in self.registered_patterns:
-                # list of (label_map, op) tuples that match pattern
-                # Given pattern may match multiple times in the graph. For every
-                # such match, we have label_map and the op that matches the
-                # pattern. So we use list of tuples as return type.
-                label_map_op_list = []
-                label_map = dict()
+            # pass through the ops in an execution order collecting things to do
+            ordered_ops = Op.ordered_ops(op.forwarded for op in ops)
+            for op in ordered_ops:
+                op.update_forwards()
+                # Iterate over all registered patterns and check for pattern match
+                for pattern, callback_fn in self.registered_patterns:
+                    # list of (label_map, op) tuples that match pattern
+                    # Given pattern may match multiple times in the graph. For every
+                    # such match, we have label_map and the op that matches the
+                    # pattern. So we use list of tuples as return type.
+                    label_map_op_list = []
+                    label_map = dict()
 
-                if GraphRewritePass.match_pattern(op, pattern,
-                                                  label_map) == True:
-                  label_map_op_list.append((label_map, op))
-                  callback_fn(op, label_map_op_list)
+                    if GraphRewritePass.match_pattern(op, pattern,
+                                                      label_map):
+                        label_map_op_list.append((label_map, op))
+                        callback_fn(op, label_map_op_list)
 
-          # Perform the gathered replacements
-          for old, rep in self.replacement_list:
-              old.forwarded.replace_self(rep.forwarded)
-          has_work = len(self.replacement_list) > 0
-          ops = list(_.forwarded for _ in ops)
+            # Perform the gathered replacements
+            for old, rep in self.replacement_list:
+                old.forwarded.replace_self(rep.forwarded)
+            has_work = len(self.replacement_list) > 0
+            ops = list(_.forwarded for _ in ops)
 
     def replace_op(self, op, replacement):
         """
