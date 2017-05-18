@@ -27,7 +27,7 @@ import ngraph.transformers as ngt
 from contextlib import closing
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator, GaussianInit
-from ngraph.frontends.neon import Layer, Affine, Convolution, Pool2D, Sequential
+from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import loop_train, ax
@@ -47,30 +47,32 @@ train_data = {'image': {'data': X_train,
                         'axes': ('batch', 'C', 'height', 'width')},
               'label': {'data': y_train,
                         'axes': ('batch',)}}
-train_set =  ArrayIterator(train_data,
-                           batch_size=args.batch_size,
-                           total_iterations=args.num_iterations)
+train_set = ArrayIterator(train_data,
+                          batch_size=args.batch_size,
+                          total_iterations=args.num_iterations)
 inputs = train_set.make_placeholders(include_iteration=True)
 ax.Y.length = 1000  # number of outputs of last layer.
 
 # Setup model
-seq1 = Sequential([
-          Convolution((11, 11, 96), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=0, strides=4),
-          Pool2D(2, strides=2),
-          Convolution((5, 5, 256), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=0),
-          Pool2D(2, strides=2),
-          Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=1),
-          Convolution((3, 3, 1024), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=1),
-          Convolution((3, 3, 1024), filter_init=GaussianInit(var=0.01),
-                   activation=Rectlin(), padding=1),
-          Pool2D(2, strides=2),
-          Affine(nout=3072, weight_init=GaussianInit(var=0.01), activation=Rectlin()),
-          Affine(nout=4096, weight_init=GaussianInit(var=0.01), activation=Rectlin()),
-          Affine(nout=1000, weight_init=GaussianInit(var=0.01), activation=Softmax())])
+seq1 = Sequential([Convolution((11, 11, 96), filter_init=GaussianInit(var=0.01),
+                               activation=Rectlin(), padding=0, strides=4),
+                   Pool2D(2, strides=2),
+                   Convolution((5, 5, 256), filter_init=GaussianInit(var=0.01),
+                               activation=Rectlin(), padding=0),
+                   Pool2D(2, strides=2),
+                   Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
+                               activation=Rectlin(), padding=1),
+                   Convolution((3, 3, 1024), filter_init=GaussianInit(var=0.01),
+                               activation=Rectlin(), padding=1),
+                   Convolution((3, 3, 1024), filter_init=GaussianInit(var=0.01),
+                               activation=Rectlin(), padding=1),
+                   Pool2D(2, strides=2),
+                   Affine(nout=3072, weight_init=GaussianInit(var=0.01),
+                          activation=Rectlin()),
+                   Affine(nout=4096, weight_init=GaussianInit(var=0.01),
+                          activation=Rectlin()),
+                   Affine(nout=1000, weight_init=GaussianInit(var=0.01),
+                          activation=Softmax())])
 
 # Learning rate change based on schedule from learning_rate_policies.py
 lr_schedule = {'name': 'schedule', 'base_lr': 0.01,
@@ -92,4 +94,3 @@ with closing(ngt.make_transformer()) as transformer:
                                  total_iterations=args.num_iterations)
 
     loop_train(train_set, train_computation, cbs)
-
