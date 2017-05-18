@@ -14,8 +14,9 @@
 # ----------------------------------------------------------------------------
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
-    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, GPUCudaGatherSendOp, \
-    GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
+    CPUQueueScatterSendOp, CPUQueueScatterRecvOp, \
+    CPUQueueAllReduceOp, \
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
 
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
@@ -95,6 +96,14 @@ class CommNodePair(object):
                 from_node=from_node,
                 to_node=to_node,
                 send_node=self.send_node)
+        elif node_type == 'allreduce':
+            self.send_node = None
+            # send_node_factory is used here since for allreduce,
+            # the hint is gotten from the from_node
+            self.recv_node = send_node_factory.build(
+                node_type=node_type,
+                comm_type=comm_type,
+                from_node=from_node)
         elif node_type == 'direct':
             self.send_node = send_node_factory.build(
                 node_type='send',
@@ -236,6 +245,11 @@ class CPUCommNodeFactory(CommNodeFactory):
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
+        elif node_type == 'allreduce':
+            if comm_type == 'queue':
+                return CPUQueueAllReduceOp(
+                    input_node=from_node,
+                    func=from_node.metadata['reduce_func'])
         else:
             assert False, "Not supported!!!"
 
@@ -258,7 +272,13 @@ def get_comm_pattern(from_node, to_node):
     to_node_transformer = to_node.metadata['transformer']
 
     if from_node_transformer == to_node_transformer:
-        return None
+        if isinstance(from_node_transformer, (list, tuple)):
+            if 'reduce_func' in from_node.metadata and 'reduce_func' not in to_node.metadata:
+                return 'allreduce'
+            else:
+                return None
+        else:
+            return None
 
     if isinstance(to_node_transformer, (list, tuple)) and to_node.metadata['parallel']:
         # todo check if metadata['device_id'] and 'parallel' co-exists

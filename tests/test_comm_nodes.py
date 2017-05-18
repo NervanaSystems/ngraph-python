@@ -15,8 +15,12 @@
 from ngraph.op_graph.op_graph import TensorValueOp
 from ngraph.factory.comm_node_factory import get_comm_pattern
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
+from ngraph.frontends.neon import UniformInit
+from contextlib import closing
 import ngraph as ng
+import ngraph.transformers as ngt
 import pytest
+import numpy as np
 
 
 ax_A = ng.make_axis(length=10, name='A')
@@ -105,6 +109,52 @@ def test_calculate_new_axes_null_parallel_axis():
         ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
         'gather'
     ),
+    (
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
+                            transformer=['cpu1', 'cpu2'], reduce_func='mean')),
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
+                            transformer=['cpu1', 'cpu2'])),
+        'allreduce'
+    ),
 ])
 def test_get_node_type(from_node, to_node, expected_type):
     assert expected_type == get_comm_pattern(from_node, to_node)
+
+
+@pytest.mark.hetr_gpu_only
+@pytest.mark.parametrize('config', [
+    {
+        'input': 1,
+        'func': 'mean',
+        'device_id': ('1', '2'),
+        'expected_result': [[-17.0, -17.0, -17.0, -17.0]],
+    },
+    {
+        'input': 1,
+        'func': 'sum',
+        'device_id': ('1', '2'),
+        'expected_result': [[-35.0, -35.0, -35.0, -35.0]],
+    }
+])
+def test_allreduce_hint(config):
+    c = config
+
+    H_axis = ng.make_axis(length=4, name='height')
+    W_axis = ng.make_axis(length=6, name='width')
+    with ng.metadata(step='input'):
+        X = ng.placeholder(axes=[H_axis, W_axis])
+        target = ng.constant(1, axes=[W_axis])
+    with ng.metadata(device_id=('1', '2'), parallel=W_axis):
+        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1))
+        dot = ng.dot(W, X)
+        L = ng.squared_L2(target - dot, out_axes=())
+    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
+        grad = ng.deriv(L, W)
+        grad.metadata['reduce_func'] = c['func']
+        update = (W - grad)
+
+    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+        out_comp = hetr.computation([update], X)
+        result = out_comp(c['input'])
+
+    np.testing.assert_array_equal(result, c['expected_result'])
