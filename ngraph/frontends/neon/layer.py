@@ -19,6 +19,7 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
+from ngraph.util.names import NameableValue
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from orderedset import OrderedSet
 
@@ -66,14 +67,13 @@ def wrap_layer(cache_key=keys.hashkey):
         @cached({}, key=cache_key)
         @functools.wraps(f)
         def layer_wrapper(self, in_obj, *inputs, **kwargs):
-
             with ng.Op.all_ops() as ops:
                 output = f(self, in_obj, *inputs, **kwargs)
 
             # TODO: This should create unique names for different instances of the same class
             # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
             for op in ops:
-                op.metadata.setdefault("neon_layer", []).insert(0, self.__class__.__name__.lower())
+                op.metadata.setdefault("neon_layer", []).insert(0, self.name)
             self.ops.append(ops)
 
             return output
@@ -151,7 +151,8 @@ class SubGraph(object):
         else:
             return None
 
-class Layer(object):
+
+class Layer(NameableValue):
     """
     Base class from which all other layers should inherit.
 
@@ -174,7 +175,7 @@ class Layer(object):
     metadata = {}
 
     def __init__(self, name=None):
-        self.name = name
+        super(Layer, self).__init__(name=name, graph_label_type="neon_layer")
         self.scope = Layer.active_scope
         self._subgraph = SubGraph()
 
@@ -648,14 +649,14 @@ class Affine(Layer):
     TODO: Document, bias should not be used when batch norm is
     """
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
-                 batch_norm=False, **kwargs):
+                 batch_norm=False, axes=None, **kwargs):
         super(Affine, self).__init__(**kwargs)
         self.weight_init = weight_init
         self.nout = nout
         self.bias_init = bias_init
         self.activation = activation
         self.batch_norm = batch_norm
-        self.linear = Linear(init=weight_init, nout=nout, **kwargs)
+        self.linear = Linear(init=weight_init, nout=nout, axes=axes, **kwargs)
         self.bias = Bias(init=bias_init)
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
