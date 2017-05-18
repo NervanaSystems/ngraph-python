@@ -143,41 +143,41 @@ def bn_params(request):
                 init_gamma=request.param[0],
                 init_beta=request.param[1])
 
-
-def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
-    """This checks that that we are doing batch norm across a feature make_axis
-    and properly tracking the side effect variables
-    """
-
-    layer = BatchNorm(**bn_params)
-    fprop = layer(input_placeholder)
-
-    with ExecutorFactory() as ex:
-        # Compute executors
-        fprop_function = ex.executor(fprop, input_placeholder)
-        stats_function = ex.executor([ng.value_of(layer.gmean),
-                                      ng.value_of(layer.gvar)])
-
-        # Initial conditions for tracked variables
-        bn_params['gmean'] = 0.0
-        bn_params['gvar'] = 1.0
-
-        # Test over 2 iterations to make sure values update properly
-        for i in range(2):
-            # Generate data
-            x = rng.uniform(0, 1, input_placeholder.axes)
-
-            # Compute reference fprop and stats
-            batch_norm_reference = BatchNormReference(x, **bn_params)
-            out_ref, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
-
-            # Compute ngraph fprop and stats
-            out = fprop_function(x)
-            gm, gv = stats_function()
-
-            assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
+#
+# def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
+#     """This checks that that we are doing batch norm across a feature make_axis
+#     and properly tracking the side effect variables
+#     """
+#
+#     layer = BatchNorm(**bn_params)
+#     fprop = layer(input_placeholder)
+#
+#     with ExecutorFactory() as ex:
+#         # Compute executors
+#         fprop_function = ex.executor(fprop, input_placeholder)
+#         stats_function = ex.executor([ng.value_of(layer.gmean),
+#                                       ng.value_of(layer.gvar)])
+#
+#         # Initial conditions for tracked variables
+#         bn_params['gmean'] = 0.0
+#         bn_params['gvar'] = 1.0
+#
+#         # Test over 2 iterations to make sure values update properly
+#         for i in range(2):
+#             # Generate data
+#             x = rng.uniform(0, 1, input_placeholder.axes)
+#
+#             # Compute reference fprop and stats
+#             batch_norm_reference = BatchNormReference(x, **bn_params)
+#             out_ref, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
+#
+#             # Compute ngraph fprop and stats
+#             out = fprop_function(x)
+#             gm, gv = stats_function()
+#
+#             assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
+#             assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
+#             assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
@@ -210,133 +210,133 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
         assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=atol)
 
 
-@pytest.mark.parametrize("input_size", [4])
-@pytest.mark.parametrize("sequence_length", [2])
-@pytest.mark.parametrize("RNN", [Recurrent, LSTM])
-def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
-                                   bn_params, transformer_factory):
-    """Compare fprop RNN with batch norm to numpy batch norm followed by rnn without"""
-
-    helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
-
-    # Get batch norm rnn graph
-    fprop = helper.rnn(recurrent_input)
-
-    # Get batch norm side effects
-    stats = [ng.value_of(helper.gmean), ng.value_of(helper.gvar)]
-
-    # Get reference graph
-    reference_fprop = helper.reference_rnn(helper.reference_input)
-
-    with ExecutorFactory() as ex:
-        # Compute executors
-        fprop_function = ex.executor(fprop, recurrent_input)
-        stats_function = ex.executor(stats)
-        reference_function = ex.executor(reference_fprop, helper.reference_input)
-
-        # Initial conditions for tracked variables
-        bn_params['gmean'] = 0.0
-        bn_params['gvar'] = 1.0
-
-        # Need to reduce over two positional axes in reference
-        bn_params['axis'] = (1, 2)
-
-        # Test over 2 iterations to make sure values update properly
-        for _ in range(2):
-            # Get network input values
-            input_value = rng.uniform(-1, 1, recurrent_input.axes)
-
-            # Compute reference values
-            # First compute the weighted input
-            weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
-
-            # Compute reference batch norm
-            batch_norm_reference = BatchNormReference(weighted_input, **bn_params)
-            normed_input, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
-
-            # Finally, get reference RNN output
-            ref = reference_function(normed_input)
-
-            # Get ngraph batch norm RNN output
-            out = fprop_function(input_value)
-            gmean, gvar = stats_function()
-
-            assert ng.testing.allclose(out, ref, rtol=rtol, atol=recurrent_atol)
-            assert ng.testing.allclose(gmean, bn_params['gmean'], rtol=rtol, atol=recurrent_atol)
-            assert ng.testing.allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
-
-
-@pytest.mark.parametrize("input_size", [4])
-@pytest.mark.parametrize("sequence_length", [2])
-@pytest.mark.parametrize("RNN", [Recurrent, LSTM])
-def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size,
-                                   bn_params, transformer_factory):
-    """Compare bprop gated RNN with batch norm to numpy batch norm followed by rnn without"""
-
-    helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
-
-    # Get rnn + batch norm bprop graph
-    fprop = helper.rnn(recurrent_input)
-    bprop_vars = [recurrent_input, helper.gamma, helper.beta]
-
-    # Get bprop graph
-    delta_placeholder = ng.placeholder(fprop.axes)
-    bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
-
-    # Get reference graphs
-    reference_fprop = helper.reference_rnn(helper.reference_input)
-
-    # Handle the case where we have gates in the RNN object
-    bprop_vars = [helper.reference_input]
-    if helper.has_gates:
-        bprop_vars.append(helper.get_ancestor_op(reference_fprop))
-
-    reference_delta_placeholder = ng.placeholder(reference_fprop.axes)
-    reference_bprop = [ng.deriv(reference_fprop, var,
-                                reference_delta_placeholder) for var in bprop_vars]
-
-    # Begin execution
-    with ExecutorFactory() as ex:
-        bprop_function = ex.executor(bprops, recurrent_input, delta_placeholder)
-        reference_function = ex.executor(reference_bprop, helper.reference_input,
-                                         reference_delta_placeholder)
-
-        # Create data
-        input_value = rng.uniform(0, 1, recurrent_input.axes)
-        delta = rng.uniform(-.1, .1, fprop.axes)
-
-        # Compute reference weighted input
-        weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
-
-        # Set the reduction axes used for reference
-        bn_params['axis'] = (1, 2)
-
-        # Get reference batch normed input
-        batch_norm_reference = BatchNormReference(weighted_input, **bn_params)
-        normed_input = batch_norm_reference.fprop[0]
-
-        # Reference backprop through RNN
-        reference_result = reference_function(normed_input, delta)
-        # This is because of a HETR bug where return collections aren't handled properly
-        if isinstance(reference_result, tuple):
-            rnn_delta = reference_result[0]
-        else:
-            rnn_delta = reference_result
-
-        # Reference backprop through BN
-        dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference.bprop(rnn_delta)
-
-        # Backprop through reference batch norm for a single gate
-        if helper.has_gates:
-            rnn_gate_delta = reference_result[1]
-            _, dgamma_ref, dbeta_ref = batch_norm_reference.bprop(rnn_gate_delta)
-
-        # Backprop through weighted input
-        dx_ref = np.dot(helper.W_in.T, dx_ref.swapaxes(0, 1))
-
-        # Compute ngraph bprop
-        dx, dgamma, dbeta = bprop_function(input_value, delta)
-
-        assert ng.testing.allclose(dx, dx_ref, rtol=rtol, atol=recurrent_atol)
-        assert ng.testing.allclose(dgamma, dgamma_ref, rtol=rtol, atol=recurrent_atol)
-        assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=recurrent_atol)
+# @pytest.mark.parametrize("input_size", [4])
+# @pytest.mark.parametrize("sequence_length", [2])
+# @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
+# def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
+#                                    bn_params, transformer_factory):
+#     """Compare fprop RNN with batch norm to numpy batch norm followed by rnn without"""
+#
+#     helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
+#
+#     # Get batch norm rnn graph
+#     fprop = helper.rnn(recurrent_input)
+#
+#     # Get batch norm side effects
+#     stats = [ng.value_of(helper.gmean), ng.value_of(helper.gvar)]
+#
+#     # Get reference graph
+#     reference_fprop = helper.reference_rnn(helper.reference_input)
+#
+#     with ExecutorFactory() as ex:
+#         # Compute executors
+#         fprop_function = ex.executor(fprop, recurrent_input)
+#         stats_function = ex.executor(stats)
+#         reference_function = ex.executor(reference_fprop, helper.reference_input)
+#
+#         # Initial conditions for tracked variables
+#         bn_params['gmean'] = 0.0
+#         bn_params['gvar'] = 1.0
+#
+#         # Need to reduce over two positional axes in reference
+#         bn_params['axis'] = (1, 2)
+#
+#         # Test over 2 iterations to make sure values update properly
+#         for _ in range(2):
+#             # Get network input values
+#             input_value = rng.uniform(-1, 1, recurrent_input.axes)
+#
+#             # Compute reference values
+#             # First compute the weighted input
+#             weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
+#
+#             # Compute reference batch norm
+#             batch_norm_reference = BatchNormReference(weighted_input, **bn_params)
+#             normed_input, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
+#
+#             # Finally, get reference RNN output
+#             ref = reference_function(normed_input)
+#
+#             # Get ngraph batch norm RNN output
+#             out = fprop_function(input_value)
+#             gmean, gvar = stats_function()
+#
+#             assert ng.testing.allclose(out, ref, rtol=rtol, atol=recurrent_atol)
+#             assert ng.testing.allclose(gmean, bn_params['gmean'], rtol=rtol, atol=recurrent_atol)
+#             assert ng.testing.allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
+#
+#
+# @pytest.mark.parametrize("input_size", [4])
+# @pytest.mark.parametrize("sequence_length", [2])
+# @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
+# def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size,
+#                                    bn_params, transformer_factory):
+#     """Compare bprop gated RNN with batch norm to numpy batch norm followed by rnn without"""
+#
+#     helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
+#
+#     # Get rnn + batch norm bprop graph
+#     fprop = helper.rnn(recurrent_input)
+#     bprop_vars = [recurrent_input, helper.gamma, helper.beta]
+#
+#     # Get bprop graph
+#     delta_placeholder = ng.placeholder(fprop.axes)
+#     bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
+#
+#     # Get reference graphs
+#     reference_fprop = helper.reference_rnn(helper.reference_input)
+#
+#     # Handle the case where we have gates in the RNN object
+#     bprop_vars = [helper.reference_input]
+#     if helper.has_gates:
+#         bprop_vars.append(helper.get_ancestor_op(reference_fprop))
+#
+#     reference_delta_placeholder = ng.placeholder(reference_fprop.axes)
+#     reference_bprop = [ng.deriv(reference_fprop, var,
+#                                 reference_delta_placeholder) for var in bprop_vars]
+#
+#     # Begin execution
+#     with ExecutorFactory() as ex:
+#         bprop_function = ex.executor(bprops, recurrent_input, delta_placeholder)
+#         reference_function = ex.executor(reference_bprop, helper.reference_input,
+#                                          reference_delta_placeholder)
+#
+#         # Create data
+#         input_value = rng.uniform(0, 1, recurrent_input.axes)
+#         delta = rng.uniform(-.1, .1, fprop.axes)
+#
+#         # Compute reference weighted input
+#         weighted_input = np.dot(helper.W_in, input_value.swapaxes(0, 1))
+#
+#         # Set the reduction axes used for reference
+#         bn_params['axis'] = (1, 2)
+#
+#         # Get reference batch normed input
+#         batch_norm_reference = BatchNormReference(weighted_input, **bn_params)
+#         normed_input = batch_norm_reference.fprop[0]
+#
+#         # Reference backprop through RNN
+#         reference_result = reference_function(normed_input, delta)
+#         # This is because of a HETR bug where return collections aren't handled properly
+#         if isinstance(reference_result, tuple):
+#             rnn_delta = reference_result[0]
+#         else:
+#             rnn_delta = reference_result
+#
+#         # Reference backprop through BN
+#         dx_ref, dgamma_ref, dbeta_ref = batch_norm_reference.bprop(rnn_delta)
+#
+#         # Backprop through reference batch norm for a single gate
+#         if helper.has_gates:
+#             rnn_gate_delta = reference_result[1]
+#             _, dgamma_ref, dbeta_ref = batch_norm_reference.bprop(rnn_gate_delta)
+#
+#         # Backprop through weighted input
+#         dx_ref = np.dot(helper.W_in.T, dx_ref.swapaxes(0, 1))
+#
+#         # Compute ngraph bprop
+#         dx, dgamma, dbeta = bprop_function(input_value, delta)
+#
+#         assert ng.testing.allclose(dx, dx_ref, rtol=rtol, atol=recurrent_atol)
+#         assert ng.testing.allclose(dgamma, dgamma_ref, rtol=rtol, atol=recurrent_atol)
+#         assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=recurrent_atol)

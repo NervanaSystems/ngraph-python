@@ -825,7 +825,7 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         # pid = os.getpid()
         # with open("code_{}{}.py".format(self.name, pid), "w") as f:
         #    f.write(self.code.code)
-        # print(self.code.code)
+        #print(self.code.code)
         self.globals = self.code.compile()
 
         for computation in self.computations:
