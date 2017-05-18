@@ -43,12 +43,12 @@ class CTCKernel(GPUKernel):
         self.utt_lens = np.zeros(self.bsz, dtype=np.int32)
 
     def bind_buffers(self):
-        self.activs = self.activs.value.tensor
-        self.lbls = self.lbls.value.tensor
-        self.uttlens_pct = self.uttlens_pct.value.tensor
-        self.lbl_lens = self.lbl_lens.value.tensor
-        self.grads = self.grads.value.tensor
-        self.costs = self.costs.value.tensor
+        self.activs = self.tensor_view_from_td(self.activs).tensor
+        self.lbls = self.tensor_view_from_td(self.lbls).tensor
+        self.uttlens_pct = self.tensor_view_from_td(self.uttlens_pct).tensor
+        self.lbl_lens = self.tensor_view_from_td(self.lbl_lens).tensor
+        self.grads = self.tensor_view_from_td(self.grads).tensor
+        self.costs = self.tensor_view_from_td(self.costs).tensor
         super(CTCKernel, self).bind_buffers()
 
     def execute(self):
