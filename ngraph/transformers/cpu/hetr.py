@@ -102,16 +102,14 @@ class HetrLocals(object):
 
         return result
 
-    def queue_broadcast_send(self, broadcast_send_id):
+    def queue_broadcast_send(self, broadcast_send_id, x_nparr):
         broadcast_send_op = self.broadcast_send_nodes[broadcast_send_id]
-        x_devicetensor = broadcast_send_op.args[0].value
-        x_nparr = x_devicetensor.get(None)
         for i in range(len(broadcast_send_op.to_id)):
             q = broadcast_send_op.shared_queues[i]
             q.put(x_nparr)
 
-    def broadcast_recv_from_queue_broadcast_send(self, broadcast_recv_id):
+    def broadcast_recv_from_queue_broadcast_send(self, broadcast_recv_id, out):
         broadcast_recv_op = self.broadcast_recv_nodes[broadcast_recv_id]
         q = broadcast_recv_op.shared_queues[broadcast_recv_op.idx]
-        x = q.get()
-        return x
+        out[...] = q.get()
+        return out

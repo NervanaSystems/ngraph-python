@@ -730,17 +730,17 @@ class CPUCodeGenerator(PyGen):
         self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
 
     @generate_op.on_type(CPUQueueBroadcastSendOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out, arg):
         broadcast_send_id = len(self.broadcast_send_nodes)
         self.broadcast_send_nodes.append(op)
-        self.append("self.queue_broadcast_send({})", broadcast_send_id)
+        self.append("self.queue_broadcast_send({}, {})", broadcast_send_id, arg)
 
     @generate_op.on_type(CPUQueueBroadcastRecvOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out):
         broadcast_recv_id = len(self.broadcast_recv_nodes)
         self.broadcast_recv_nodes.append(op)
-        self.append("{}[...] = self.broadcast_recv_from_queue_broadcast_send({})",
-                    out, broadcast_recv_id)
+        self.append("self.broadcast_recv_from_queue_broadcast_send({}, out={})",
+                    broadcast_recv_id, out)
 
 
 class CPUTransformer(Transformer):
