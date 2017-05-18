@@ -1,11 +1,11 @@
 import pytest
 import ngraph as ng
-from ngraph.frontends.neon import neon_layer, LABELS, Layer
+from ngraph.frontends.neon import wrap_layer, LABELS, Layer
 
 
 class SimpleLayer(Layer):
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         if not self.initialized:
             w_axis = ng.make_axis()
@@ -25,7 +25,7 @@ class NestedLayer(Layer):
         super(NestedLayer, self).__init__()
         self.inner_layer = SimpleLayer()
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
 
         return self.inner_layer(in_obj)

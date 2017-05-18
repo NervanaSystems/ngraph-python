@@ -16,12 +16,12 @@
 Test generic Layer properties
 '''
 import ngraph as ng
-from ngraph.frontends.neon import Layer, neon_layer
+from ngraph.frontends.neon import Layer, wrap_layer
 
 
 class SimpleLayer(Layer):
 
-    @neon_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return in_obj

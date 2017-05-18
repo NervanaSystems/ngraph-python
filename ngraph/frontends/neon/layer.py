@@ -53,10 +53,10 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
-def neon_layer(cache_key=keys.hashkey):
+def wrap_layer(cache_key=keys.hashkey):
     """
-    A decorator for the __call__ method of neon layers. Supports cacheing of the output
-    using a specified cacheing function.
+    A decorator for the __call__ method of neon layers. Supports caching of the output
+    using a specified caching function.
 
     Arguments:
         cache_key (function): A function to use for determining the cache's hashkey.
@@ -66,18 +66,9 @@ def neon_layer(cache_key=keys.hashkey):
         @cached({}, key=cache_key)
         @functools.wraps(f)
         def layer_wrapper(self, in_obj, *inputs, **kwargs):
-            # TODO: We could do some axes management here - casting or reordering as needed
-            if self.inputs is not None:
-                for prev_inp, inp in zip(self.inputs, [in_obj] + list(inputs)):
-                    if prev_inp.axes.sample_axes() != inp.axes.sample_axes():
-                        pass
-                        # TODO: Throw a useful error message
 
             with ng.Op.all_ops() as ops:
                 output = f(self, in_obj, *inputs, **kwargs)
-
-            if self.ops is None:
-                self.ops = list()
 
             # TODO: This should create unique names for different instances of the same class
             # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
@@ -91,6 +82,74 @@ def neon_layer(cache_key=keys.hashkey):
 
     return create_decorator
 
+
+def _cache_if_initialized(subgraph):
+    # TODO: Should subgraph.ops be mutable?
+    return keys.hashkey(subgraph, len(subgraph.ops) > 0)
+
+
+class SubGraph(object):
+
+    def __init__(self, ops=None):
+        """
+        A connected subset of all ops in the computational graph
+        
+        Arguments:
+            ops (list): A list of ops
+        """
+        self.ops = list()
+        if ops is not None:
+            self.ops.append(ops)
+
+    @property
+    @cached({}, key=_cache_if_initialized)
+    def variables(self):
+        """
+        An OrderedSet of all trainable variables created in this layer
+        """
+        if len(self.ops):
+            return OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable)
+        else:
+            return None
+
+    @property
+    @cached({}, key=_cache_if_initialized)
+    def inputs(self):
+        """
+        An OrderedSet of input ops to this layer
+        """
+        if len(self.ops):
+            inputs = OrderedSet()
+            for op in self.ops[0]:
+                if op.tensor.is_trainable:
+                    continue
+                if op.tensor.is_placeholder:
+                    inputs.add(op.tensor)
+                else:
+                    for arg in op.args:
+                        if arg not in self.ops[0]:
+                            inputs.add(arg)
+
+            return inputs
+        else:
+            return None
+
+    @property
+    @cached({}, key=_cache_if_initialized)
+    def side_effects(self):
+        """
+        An OrderedSet of side-effect ops in this layer
+        """
+        if len(self.ops):
+            side_effects = OrderedSet()
+            for op in self.ops[0]:
+                for dep in op.control_deps:
+                    if dep is not op.tensor:
+                        side_effects.add(dep)
+
+            return side_effects
+        else:
+            return None
 
 class Layer(object):
     """
@@ -117,7 +176,7 @@ class Layer(object):
     def __init__(self, name=None):
         self.name = name
         self.scope = Layer.active_scope
-        self.ops = None
+        self._subgraph = SubGraph()
 
     def __call__(self, in_obj, reuse=True):
         raise NotImplementedError()
@@ -127,57 +186,23 @@ class Layer(object):
         """
         True if the layer's __call__ method has been successfully executed
         """
-        return self.ops is not None
+        return len(self._subgraph.ops) > 0
 
     @property
-    @cached({}, key=lambda self: keys.hashkey(self, self.ops is None))
-    def variables(self):
-        """
-        An OrderedSet of all trainable variables created in this layer
-        """
-        if self.ops is None:
-            return None
-        else:
-            return OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable)
+    def ops(self):
+        return self._subgraph.ops
 
     @property
-    @cached({}, key=lambda self: keys.hashkey(self, self.ops is None))
     def inputs(self):
-        """
-        An OrderedSet of input ops to this layer
-        """
-        if self.ops is None:
-            return None
-        else:
-            inputs = OrderedSet()
-            for op in self.ops[0]:
-                if op.tensor.is_trainable:
-                    continue
-                if op.tensor.is_placeholder:
-                    inputs.add(op.tensor)
-                else:
-                    for arg in op.args:
-                        if arg not in self.ops[0]:
-                            inputs.add(arg)
-
-            return inputs
+        return self._subgraph.inputs
 
     @property
-    @cached({}, key=lambda self: keys.hashkey(self, self.ops is None))
-    def side_effects(self):
-        """
-        An OrderedSet of side-effect ops in this layer
-        """
-        if self.ops is None:
-            return None
-        else:
-            side_effects = OrderedSet()
-            for op in self.ops[0]:
-                for dep in op.control_deps:
-                    if dep is not op.tensor:
-                        side_effects.add(dep)
+    def variables(self):
+        return self._subgraph.variables
 
-            return side_effects
+    @property
+    def side_effects(self):
+        return self._subgraph.side_effects
 
     @staticmethod
     @contextmanager
@@ -223,7 +248,7 @@ class Preprocess(Layer):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
-    @neon_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, **kwargs):
         return self.functor(in_obj)
 
@@ -313,7 +338,7 @@ class Linear(Layer):
         self.init = init
         self.W = None
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj, reuse=True):
 
         if not self.initialized:
@@ -368,7 +393,7 @@ class LookupTable(Layer):
             init_w[:, pad_idx] = 0
         return init_w
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         """
         Arguments:
@@ -439,7 +464,7 @@ class ConvBase(Layer):
         self.o_axes = None
         self.W = None
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         cpm = self.convparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
@@ -502,13 +527,13 @@ class Conv2D(ConvBase):
 
 class Activation(Layer):
     """
-    TODO: Document. Why should we pass through this instead of just defining functions? Cacheing?
+    TODO: Document. Why should we pass through this instead of just defining functions? Caching?
     """
     def __init__(self, transform, **kwargs):
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         # An activation layer with no transform defaults to identity
         if self.transform:
@@ -543,7 +568,7 @@ class PoolBase(Layer):
 
         self.o_axes = None
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
@@ -604,7 +629,7 @@ class Bias(Layer):
         self.init = init
         self.shared = shared
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         if self.init:
             if not self.initialized:
@@ -636,7 +661,7 @@ class Affine(Layer):
         self.activation_layer = Activation(transform=self.activation)
         self.scope = Layer.active_scope  # only included so all Layers have scope attribute
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
         b_out = self.bias(l_out)
@@ -656,7 +681,7 @@ class Convolution(Layer):
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj):
         l_out = self.conv(in_obj)
         b_out = self.bias(l_out)
@@ -700,7 +725,7 @@ class BatchNorm(Layer):
         self.gvar = None
         self.scope = Layer.active_scope
 
-    @neon_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
 
         in_axes = in_obj.axes
@@ -755,7 +780,7 @@ class Dropout(Layer):
         self.keep = keep
         self.mask = None
 
-    @neon_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return self.keep * in_obj
@@ -865,7 +890,7 @@ class Recurrent(Layer):
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
-    @neon_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -980,7 +1005,7 @@ class BiRNN(Layer):
                                  batch_norm=batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence, backward=True)
 
-    @neon_layer()
+    @wrap_layer()
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1103,7 +1128,7 @@ class LSTM(Recurrent):
         h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
-    @neon_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
