@@ -29,52 +29,9 @@ size_t product(int *arr, size_t size) {
   return prod;
 }
 
-void set_mkl_dimensions(char *primitive_name, int *primitive_src_sizes,
-                        int *primitive_dst_sizes, int *primitive_weights_sizes,
-                        int *primitive_strides, int *primitive_padding,
-                        int *mkl_src_sizes, int *mkl_dst_sizes,
-                        int *mkl_weights_sizes, int *mkl_strides,
-                        int *mkl_padding) {
-  /* Flatten out the depth (D, M) dimension and reorder logical dimensions to
-   * match MKLDNN */
-
-  /* Input: C, D, H, W, N -> N, C, H, W */
-  mkl_src_sizes[0] = primitive_src_sizes[4];
-  mkl_src_sizes[1] = primitive_src_sizes[0];
-  mkl_src_sizes[2] = primitive_src_sizes[2];
-  mkl_src_sizes[3] = primitive_src_sizes[3];
-
-  /* Output: K, M, P, Q, N -> N, K, P, Q */
-  mkl_dst_sizes[0] = primitive_dst_sizes[4];
-  mkl_dst_sizes[1] = primitive_dst_sizes[0];
-  mkl_dst_sizes[2] = primitive_dst_sizes[2];
-  mkl_dst_sizes[3] = primitive_dst_sizes[3];
-
-  if (!strcmp(primitive_name, "convolution")) {
-    /* Weights: C, T, R, S, K ->  O, I, H, W */
-    mkl_weights_sizes[0] = primitive_weights_sizes[4];
-    mkl_weights_sizes[1] = primitive_weights_sizes[0];
-    mkl_weights_sizes[2] = primitive_weights_sizes[2];
-    mkl_weights_sizes[3] = primitive_weights_sizes[3];
-  }
-
-  if (!strcmp(primitive_name, "pooling")){
-     /* Kernel: J, T, R, S -> R, S */
-    mkl_weights_sizes[0] = primitive_weights_sizes[2];
-    mkl_weights_sizes[1] = primitive_weights_sizes[3];
-  }
-
-  mkl_strides[0] = primitive_strides[1];
-  mkl_strides[1] = primitive_strides[2];
-
-  mkl_padding[0] = primitive_padding[1];
-  mkl_padding[1] = primitive_padding[2];
-}
-
 void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
-
 
 void create_mkldnn_tensor(int ndims, const int* dim_sizes,
                           mkldnn_data_type_t data_type,

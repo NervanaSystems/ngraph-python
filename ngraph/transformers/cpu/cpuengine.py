@@ -150,7 +150,7 @@ class Mkldnn(object):
                 self.mkldnn_engine_dll.create_mkldnn_pool_fprop_kernel
             self.pool_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
@@ -158,7 +158,7 @@ class Mkldnn(object):
                 self.mkldnn_engine_dll.create_mkldnn_pool_bprop_kernel
             self.pool_bprop_kernel.argtypes = \
                 [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, 
