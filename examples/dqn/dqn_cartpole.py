@@ -2,7 +2,8 @@ import gym
 import ngraph as ng
 from ngraph.frontends.neon import dqn, rl_loop
 from ngraph.frontends import neon
-    
+
+
 def model(action_axes):
     return neon.Sequential([
         neon.Affine(
@@ -33,7 +34,8 @@ def model(action_axes):
             activation=neon.Rectlin(),
             batch_norm=True,
         ),
-        ])
+    ])
+
 
 def main():
     # initialize gym environment 
@@ -43,18 +45,16 @@ def main():
     print environment.observation_space
 
     state_axes = ng.make_axes([
-	ng.make_axis(environment.observation_space.shape[0], name='width')
+        ng.make_axis(environment.observation_space.shape[0], name='width')
     ])
 
-    agent = dqn.Agent(
-        state_axes,
-        environment.action_space,
-        model=model
-    )
+    agent = dqn.Agent(state_axes, environment.action_space, model=model)
 
     rl_loop.rl_loop(environment, agent, episodes=1000)
 
     total_reward = rl_loop.evaluate_single_episode(environment, agent)
     print total_reward
-if __name__=="__main__":
+
+
+if __name__ == "__main__":
     main()
