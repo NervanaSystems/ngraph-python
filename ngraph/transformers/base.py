@@ -702,6 +702,11 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         self.close()
 
 
+class ComputationGraphTransformer(Transformer):
+    def __init__(self, **kwargs):
+        super(ComputationGraphTransformer, self).__init__(**kwargs)
+
+
 __transformer_factory = None
 
 

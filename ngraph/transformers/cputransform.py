@@ -43,7 +43,7 @@ from ngraph.transformers.passes.passes import RequiredTensorShaping, \
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.cpufusion import FusionPass
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
+from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
@@ -721,7 +721,7 @@ class CPUCodeGenerator(PyGen):
         self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
 
 
-class CPUTransformer(Transformer):
+class CPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
