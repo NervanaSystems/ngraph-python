@@ -128,14 +128,14 @@ def test_get_node_type(from_node, to_node, expected_type):
         'device_ids': ['0', '1', '2'],
         'x_input': [1., 2., 3., 4., 5., 6.],
         'shape_input': [1, 6],
-        'results': [[1., 2., 3., 4., 5., 6.], [1., 2., 3., 4., 5., 6.]],
+        'expected_results': [[1., 2., 3., 4., 5., 6.], [1., 2., 3., 4., 5., 6.]],
     },
     {
         'sender_index': 0,
         'device_ids': ['0', '1', '2', '3', '4', '5'],
         'x_input': [5., 9.],
         'shape_input': [1, 2],
-        'results': [[5., 9.], [5., 9.], [5., 9.], [5., 9.], [5., 9.]],
+        'expected_results': [[5., 9.], [5., 9.], [5., 9.], [5., 9.], [5., 9.]],
     },
 ])
 def test_broadcast_ops(config):
@@ -194,4 +194,4 @@ def test_broadcast_ops(config):
         if i != c['sender_index']:
             results.append(active_processes[i].get_result().tolist())
 
-    np.testing.assert_array_equal(results, c['results'])
+    np.testing.assert_array_equal(results, c['expected_results'])
