@@ -279,7 +279,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
 
 if __name__ == '__main__':
-    seq_len, input_size, hidden_size, batch_size = (8, 5, 16, 1)
+    seq_len, input_size, hidden_size, batch_size, reset_cells = (8, 5, 16, 1, True)
     init = GaussianInit(0.0, 1)
-    check_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=False)
-    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=False)
+    check_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=reset_cells)
+    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=reset_cells)
