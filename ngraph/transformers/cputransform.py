@@ -41,7 +41,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
-from ngraph.transformers.passes.cpufusion import FusionPass
+from ngraph.transformers.passes.cpufusion import CPUFusion
 
 from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -769,7 +769,7 @@ class CPUTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [FusionPass(),
+        self.graph_passes = [CPUFusion(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
