@@ -121,7 +121,6 @@ def test_get_node_type(from_node, to_node, expected_type):
     assert expected_type == get_comm_pattern(from_node, to_node)
 
 
-@pytest.mark.hetr_gpu_only
 @pytest.mark.parametrize('config', [
     {
         'input': 1,
@@ -144,7 +143,7 @@ def test_allreduce_hint(config):
     with ng.metadata(step='input'):
         X = ng.placeholder(axes=[H_axis, W_axis])
         target = ng.constant(1, axes=[W_axis])
-    with ng.metadata(device_id=('1', '2'), parallel=W_axis):
+    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
         W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1))
         dot = ng.dot(W, X)
         L = ng.squared_L2(target - dot, out_axes=())
