@@ -144,8 +144,8 @@ class CPUPoolEngine(object):
 
 
 class CPUComputation(Computation):
-    def __init__(self, transformer, computation, **kwargs):
-        super(CPUComputation, self).__init__(transformer, computation, **kwargs)
+    def __init__(self, transformer, computation_op, **kwargs):
+        super(CPUComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
         self.pool_slices = dict()
         self.conv_params = dict()

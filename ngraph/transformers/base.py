@@ -46,10 +46,10 @@ class Computation(NameableValue):
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, transformer, computation, **kwargs):
+    def __init__(self, transformer, computation_op, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
-        self.computation = computation
+        self.computation_op = computation_op
         self.computation_name = None
         self.executor = None
 
@@ -70,14 +70,14 @@ class Computation(NameableValue):
                     'to Computation'
                 ))
 
-            args = tuple(feed_dict[param.tensor] for param in self.computation.parameters)
+            args = tuple(feed_dict[param.tensor] for param in self.computation_op.parameters)
 
-        if len(args) != len(self.computation.parameters):
+        if len(args) != len(self.computation_op.parameters):
             raise ValueError((
                 'Computation was expecting {expected} arguments, but was '
                 'called with {called}.'
             ).format(
-                expected=len(self.computation.parameters),
+                expected=len(self.computation_op.parameters),
                 called=len(args),
             ))
         return args
@@ -92,7 +92,7 @@ class Computation(NameableValue):
         self.transformer.initialize()
 
         # Get the parameters to the device
-        for param, arg in zip(self.computation.parameters, args):
+        for param, arg in zip(self.computation_op.parameters, args):
             self.transformer.get_op_tensor_view(param)[...] = arg
 
         self.executor()
@@ -111,13 +111,13 @@ class Computation(NameableValue):
             else:
                 return None
 
-        if isinstance(self.computation.returns, Op):
-            return value(self.computation.returns)
-        elif isinstance(self.computation.returns, (collections.Sequence, OrderedSet)):
-            return tuple(value(op) for op in self.computation.returns)
-        elif isinstance(self.computation.returns, collections.Set):
+        if isinstance(self.computation_op.returns, Op):
+            return value(self.computation_op.returns)
+        elif isinstance(self.computation_op.returns, (collections.Sequence, OrderedSet)):
+            return tuple(value(op) for op in self.computation_op.returns)
+        elif isinstance(self.computation_op.returns, collections.Set):
             result = dict()
-            for op in self.computation.returns:
+            for op in self.computation_op.returns:
                 result[op] = value(op)
             return result
         else:
@@ -465,7 +465,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # Run passes on the computation graphs
         all_results = []
         for comp in self.computations:
-            all_results.append(comp.computation)
+            all_results.append(comp.computation_op)
 
         all_ops = self.run_registered_graph_passes(all_results)
 
@@ -502,7 +502,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         for comp in self.computations:
             comp.computation_name = \
                 self.transform_ordered_ops(comp,
-                                           Op.ordered_ops([comp.computation]),
+                                           Op.ordered_ops([comp.computation_op]),
                                            name=comp.name)
         self.finish_transform()
         self.finalized = True
