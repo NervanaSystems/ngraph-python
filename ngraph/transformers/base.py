@@ -319,17 +319,20 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
-        self.computations = OrderedSet()
+        self.device_buffers = None
         self.finalized = False
         self.allocated = False
         self.initialized = False
         self.graph_passes = None
 
-        self.device_buffers = None
-        self.op_tensors = None
-        self.op_tensor_views = None
+    @abc.abstractproperty
+    def use_exop(self):
+        """
 
-        self.initialize_allocations()
+        Returns: True if this transformer uses the execution graph.
+
+        """
+        pass
 
     def register_graph_pass(self, graph_pass, position=None):
         """
@@ -348,6 +351,144 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         for graph_pass in self.graph_passes:
             graph_pass.do_pass(ops, self)
         return ops
+
+    @abc.abstractmethod
+    def initialize_allocations(self):
+        """
+        Inititializes allocation caches.
+
+        """
+
+    @abc.abstractmethod
+    def get_tensor_view_value(self, op, host_tensor=None):
+        """
+        Returns the contents of the tensor view for op.
+
+        Args:
+            op: The computation graph op.
+            host_tensor: Optional tensor to copy value into.
+
+        Returns:
+            A NumPy tensor with the elements associated with op.
+
+        """
+
+    @abc.abstractmethod
+    def device_buffer_storage(self, bytes, dtype, name):
+        """
+        Make a DeviceBuffer.
+
+        Arguments:
+            bytes: Size of buffer.
+            dtype: dtype of buffer.
+            name: Name of the storage variable
+
+        returns: A DeviceBuffer.
+        """
+
+    @abc.abstractmethod
+    def device_buffer_reference(self):
+        """
+        Make a DeviceBufferReference.
+
+        Returns: A DeviceBufferReference.
+        """
+
+    def get_layouts(self, op):
+        """
+        Returns a list of possible axis layouts for the op. The default layout must
+        be the first item in the returned list.
+
+        Arguments:
+            op: graph op to get possible layouts for
+
+        Returns:
+            A list of objects that inherit from LayoutAssignment. The first item in the
+            list must be the default layout for this op.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    def get_layout_cost_function(self, op):
+        """
+        Returns a UnaryLayoutConstraint which computes the cost of an op given an
+        assigned data layout for that op.
+
+        Arguments:
+            op: graph op to get cost function for
+
+        Returns:
+            An object that inherits from UnaryLayoutConstraint and can be used to
+            calculate the layout assignment cost.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    def get_layout_change_cost_function(self, op, arg):
+        """
+        Returns a BinaryLayoutConstraint which computes the cost of a layout change
+        between the specified op and its specified arg (if any cost).
+
+        Arguments:
+            op: graph op to get cost function for
+            arg: argument to the op to generate cost function for
+
+        Returns:
+            An object that inherits from BinaryLayoutConstraint and can be used to
+            calculate any layout change cost.
+        """
+        raise NotImplementedError("Layout methods not implemented in this transformer")
+
+    # Old interface
+    def computation(self, results, *parameters):
+        """
+        Adds a computation to the transformer. In the case of not providing parameters
+        explicitly, the computation will keep using the old values for the parameters.
+
+        Arguments:
+            results: Values to be computed
+            *parameters: Values to be set as arguments to evaluate
+
+        Returns:
+            Callable.
+        """
+
+        return self.add_computation(computation(results, *parameters))
+
+    def add_computation(self, computation):
+        return self.make_computation(computation)
+
+    def make_computation(self, computation):
+        """
+        Wrap in Computation or a transformer-specific subclass.
+
+        Args:
+            computation:
+
+        Returns:
+            Computation or a subclass.
+
+        """
+        return Computation(self, computation)
+
+    def initialize(self):
+        """
+        Initialize storage.  Will allocate if not already performed.
+        """
+        pass
+
+    def close(self):
+        pass
+
+    def __del__(self):
+        self.close()
+
+
+class ComputationGraphTransformer(Transformer):
+    def __init__(self, **kwargs):
+        super(ComputationGraphTransformer, self).__init__(**kwargs)
+        self.computations = OrderedSet()
+        self.op_tensors = None
+        self.op_tensor_views = None
+        self.initialize_allocations()
 
     def initialize_allocations(self):
         """
@@ -457,6 +598,109 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         return self.op_tensor_views[tensor_description]
 
+    def use_exop(self):
+        """
+
+        Returns: True if this transformer uses the execution graph.
+
+        """
+        return False
+
+    @abc.abstractmethod
+    def start_transform_allocate(self):
+        """
+        Called just before allocation code is transformed.
+        """
+
+    @abc.abstractmethod
+    def finish_transform_allocate(self):
+        """
+        Called after last allocation is transformed.
+        """
+
+    @abc.abstractmethod
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        """
+        Generate code to compute ordered_ops.
+
+        Arguments:
+            computation: The computation being compiled.
+            ordered_ops: Ops to compute
+            name: The name of the computation.
+
+        Returns: Handle for generated code
+        """
+
+    @abc.abstractmethod
+    def finish_transform(self):
+        """
+        Finish generating the model.
+        """
+
+    @abc.abstractmethod
+    def allocate_storage(self):
+        """
+        Allocate storage on the device.
+        """
+
+    def allocate(self):
+        """
+        Allocate storage and then initializes constants.
+
+        Will finalize if not already done.
+        """
+        if self.allocated:
+            return
+
+        if not self.finalized:
+            self._transform_computations()
+
+        self.allocate_storage()
+
+        init_states = OrderedSet()
+        for op in OrderedSet(self.ops):
+            op = op.forwarded
+            states = op.states_read | op.states_written
+            for state in states:
+                state = state.forwarded
+                if state.initial_value is not None:
+                    init_states.add(state)
+        for state in init_states:
+            tensor_description = state.tensor.tensor_description()
+            self.get_tensor_description_tensor_view(tensor_description)[...] = state.initial_value
+
+        self.allocated = True
+
+    def add_computation(self, computation):
+        """
+        Adds a computation to the transformer.
+
+        Arguments:
+            computation: A computation Op.
+
+        Returns:
+            Callable.
+        """
+        if self.finalized:
+            raise ValueError(
+                'Cannot create computations from a finalized transformer'
+            )
+        computation = super(ComputationGraphTransformer, self).add_computation(computation)
+        self.computations.add(computation)
+        return computation
+
+    def initialize(self):
+        """
+        Initialize storage.  Will allocate if not already performed.
+        """
+        if self.initialized:
+            return
+        self.allocate()
+
+        # Need to set initialized before we are done because the init computation will
+        # try to initialize.
+        self.initialized = True
+
     def _transform_computations(self):
         """
         Transform computation graphs to a form that can be run.
@@ -506,205 +750,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
                                            name=comp.name)
         self.finish_transform()
         self.finalized = True
-
-    @abc.abstractmethod
-    def start_transform_allocate(self):
-        """
-        Called just before allocation code is transformed.
-        """
-
-    @abc.abstractmethod
-    def finish_transform_allocate(self):
-        """
-        Called after last allocation is transformed.
-        """
-
-    @abc.abstractmethod
-    def transform_ordered_ops(self, computation, ordered_ops, name):
-        """
-        Generate code to compute ordered_ops.
-
-        Arguments:
-            computation: The computation being compiled.
-            ordered_ops: Ops to compute
-            name: The name of the computation.
-
-        Returns: Handle for generated code
-        """
-
-    @abc.abstractmethod
-    def finish_transform(self):
-        """
-        Finish generating the model.
-        """
-
-    @abc.abstractmethod
-    def allocate_storage(self):
-        """
-        Allocate storage on the device.
-        """
-
-    @abc.abstractmethod
-    def device_buffer_storage(self, bytes, dtype, name):
-        """
-        Make a DeviceBuffer.
-
-        Arguments:
-            bytes: Size of buffer.
-            dtype: dtype of buffer.
-            name: Name of the storage variable
-
-        returns: A DeviceBuffer.
-        """
-
-    @abc.abstractmethod
-    def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
-        """
-
-    def get_layouts(self, op):
-        """
-        Returns a list of possible axis layouts for the op. The default layout must
-        be the first item in the returned list.
-
-        Arguments:
-            op: graph op to get possible layouts for
-
-        Returns:
-            A list of objects that inherit from LayoutAssignment. The first item in the
-            list must be the default layout for this op.
-        """
-        raise NotImplementedError("Layout methods not implemented in this transformer")
-
-    def get_layout_cost_function(self, op):
-        """
-        Returns a UnaryLayoutConstraint which computes the cost of an op given an
-        assigned data layout for that op.
-
-        Arguments:
-            op: graph op to get cost function for
-
-        Returns:
-            An object that inherits from UnaryLayoutConstraint and can be used to
-            calculate the layout assignment cost.
-        """
-        raise NotImplementedError("Layout methods not implemented in this transformer")
-
-    def get_layout_change_cost_function(self, op, arg):
-        """
-        Returns a BinaryLayoutConstraint which computes the cost of a layout change
-        between the specified op and its specified arg (if any cost).
-
-        Arguments:
-            op: graph op to get cost function for
-            arg: argument to the op to generate cost function for
-
-        Returns:
-            An object that inherits from BinaryLayoutConstraint and can be used to
-            calculate any layout change cost.
-        """
-        raise NotImplementedError("Layout methods not implemented in this transformer")
-
-    # Old interface
-    def computation(self, results, *parameters):
-        """
-        Adds a computation to the transformer. In the case of not providing parameters
-        explicitly, the computation will keep using the old values for the parameters.
-
-        Arguments:
-            results: Values to be computed
-            *parameters: Values to be set as arguments to evaluate
-
-        Returns:
-            Callable.
-        """
-
-        return self.add_computation(computation(results, *parameters))
-
-    def add_computation(self, computation):
-        """
-        Adds a computation to the transformer.
-
-        Arguments:
-            computation: A computation Op.
-
-        Returns:
-            Callable.
-        """
-        if self.finalized:
-            raise ValueError(
-                'Cannot create computations from a finalized transformer'
-            )
-        result = self.make_computation(computation)
-        self.computations.add(result)
-        return result
-
-    def make_computation(self, computation):
-        """
-        Wrap in Computation or a transformer-specific subclass.
-
-        Args:
-            computation:
-
-        Returns:
-            Computation or a subclass.
-
-        """
-        return Computation(self, computation)
-
-    def allocate(self):
-        """
-        Allocate storage and then initializes constants.
-
-        Will finalize if not already done.
-        """
-        if self.allocated:
-            return
-
-        if not self.finalized:
-            self._transform_computations()
-
-        self.allocate_storage()
-
-        init_states = OrderedSet()
-        for op in OrderedSet(self.ops):
-            op = op.forwarded
-            states = op.states_read | op.states_written
-            for state in states:
-                state = state.forwarded
-                if state.initial_value is not None:
-                    init_states.add(state)
-        for state in init_states:
-            tensor_description = state.tensor.tensor_description()
-            self.get_tensor_description_tensor_view(tensor_description)[...] = state.initial_value
-
-        self.allocated = True
-
-    def initialize(self):
-        """
-        Initialize storage.  Will allocate if not already performed.
-        """
-        if self.initialized:
-            return
-        self.allocate()
-
-        # Need to set initialized before we are done because the init computation will
-        # try to initialize.
-        self.initialized = True
-
-    def close(self):
-        pass
-
-    def __del__(self):
-        self.close()
-
-
-class ComputationGraphTransformer(Transformer):
-    def __init__(self, **kwargs):
-        super(ComputationGraphTransformer, self).__init__(**kwargs)
 
 
 __transformer_factory = None
