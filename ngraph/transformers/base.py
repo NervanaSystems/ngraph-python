@@ -598,6 +598,7 @@ class ComputationGraphTransformer(Transformer):
         """
         return self.op_tensor_views[tensor_description]
 
+    @property
     def use_exop(self):
         """
 
