@@ -615,7 +615,7 @@ class ComputationGraphTransformer(Transformer):
         Copy args to parameters in computation.
 
         Args:
-            computation: The computation. 
+            computation: The computation.
             parameters: Parameters of the computation.
             args: Values for the parameters.
 
