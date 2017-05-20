@@ -317,8 +317,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
-        self.device_buffers = None
-        self.graph_passes = None
 
     @abc.abstractproperty
     def use_exop(self):
@@ -328,24 +326,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         """
         pass
-
-    def register_graph_pass(self, graph_pass, position=None):
-        """
-        Register a graph pass to be run.
-
-        Arguments:
-            graph_pass (): The pass to register
-            position (int): insert index in the list of passes, append by default
-        """
-        if position is not None:
-            self.graph_passes.insert(position, graph_pass)
-        else:
-            self.graph_passes.append(graph_pass)
-
-    def run_registered_graph_passes(self, ops):
-        for graph_pass in self.graph_passes:
-            graph_pass.do_pass(ops, self)
-        return ops
 
     @abc.abstractmethod
     def initialize_allocations(self):
@@ -366,19 +346,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns:
             A NumPy tensor with the elements associated with op.
 
-        """
-
-    @abc.abstractmethod
-    def device_buffer_storage(self, bytes, dtype, name):
-        """
-        Make a DeviceBuffer.
-
-        Arguments:
-            bytes: Size of buffer.
-            dtype: dtype of buffer.
-            name: Name of the storage variable
-
-        returns: A DeviceBuffer.
         """
 
     @abc.abstractmethod
@@ -508,12 +475,32 @@ class ComputationGraphTransformer(Transformer):
     def __init__(self, **kwargs):
         super(ComputationGraphTransformer, self).__init__(**kwargs)
         self.computations = OrderedSet()
+        self.device_buffers = None
         self.op_tensors = None
         self.op_tensor_views = None
         self.initialize_allocations()
         self.finalized = False
         self.allocated = False
         self.initialized = False
+        self.graph_passes = None
+
+    def register_graph_pass(self, graph_pass, position=None):
+        """
+        Register a graph pass to be run.
+
+        Arguments:
+            graph_pass (): The pass to register
+            position (int): insert index in the list of passes, append by default
+        """
+        if position is not None:
+            self.graph_passes.insert(position, graph_pass)
+        else:
+            self.graph_passes.append(graph_pass)
+
+    def run_registered_graph_passes(self, ops):
+        for graph_pass in self.graph_passes:
+            graph_pass.do_pass(ops, self)
+        return ops
 
     def initialize_allocations(self):
         """
@@ -696,6 +683,19 @@ class ComputationGraphTransformer(Transformer):
     def allocate_storage(self):
         """
         Allocate storage on the device.
+        """
+
+    @abc.abstractmethod
+    def device_buffer_storage(self, bytes, dtype, name):
+        """
+        Make a DeviceBuffer.
+
+        Arguments:
+            bytes: Size of buffer.
+            dtype: dtype of buffer.
+            name: Name of the storage variable
+
+        returns: A DeviceBuffer.
         """
 
     def allocate(self):
