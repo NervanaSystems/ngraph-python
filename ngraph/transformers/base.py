@@ -92,8 +92,7 @@ class Computation(NameableValue):
         self.transformer.initialize()
 
         # Get the parameters to the device
-        for param, arg in zip(self.computation_op.parameters, args):
-            self.transformer.get_op_tensor_view(param)[...] = arg
+        self.transformer.host_to_device(self, self.computation_op.parameters, args)
 
         self.executor()
 
@@ -106,8 +105,7 @@ class Computation(NameableValue):
             :return: Return value for op.
             """
             if op.is_tensor_op:
-                if self.transformer.has_op_tensor(op):
-                    return self.transformer.get_op_tensor_view(op).get(None)
+                return self.transformer.device_to_host(self, op)
             else:
                 return None
 
@@ -320,9 +318,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self.device_buffers = None
-        self.finalized = False
-        self.allocated = False
-        self.initialized = False
         self.graph_passes = None
 
     @abc.abstractproperty
@@ -392,6 +387,33 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Make a DeviceBufferReference.
 
         Returns: A DeviceBufferReference.
+        """
+
+    @abc.abstractmethod
+    def host_to_device(self, computation, parameters, args):
+        """
+        Copy args to parameters in computation.
+
+        Args:
+            computation: The computation.
+            parameters: Parameters of the computation.
+            args: Values for the parameters.
+
+        """
+
+    @abc.abstractmethod
+    def device_to_host(self, computation, op, tensor=None):
+        """
+        Copy a computation result from the device back to the host.
+
+        Args:
+            computation: The computation.
+            op: The op associated with the value.
+            tensor: Optional tensor for returned value.
+
+        Returns:
+            The value of op.
+
         """
 
     def get_layouts(self, op):
@@ -489,6 +511,9 @@ class ComputationGraphTransformer(Transformer):
         self.op_tensors = None
         self.op_tensor_views = None
         self.initialize_allocations()
+        self.finalized = False
+        self.allocated = False
+        self.initialized = False
 
     def initialize_allocations(self):
         """
@@ -597,6 +622,35 @@ class ComputationGraphTransformer(Transformer):
 
         """
         return self.op_tensor_views[tensor_description]
+
+    def host_to_device(self, computation, parameters, args):
+        """
+        Copy args to parameters in computation.
+
+        Args:
+            computation: The computation. 
+            parameters: Parameters of the computation.
+            args: Values for the parameters.
+
+        """
+        for param, arg in zip(parameters, args):
+            self.get_op_tensor_view(param)[...] = arg
+
+    def device_to_host(self, computation, op, tensor=None):
+        """
+        Copy a computation result from the device back to the host.
+
+        Args:
+            computation: The computation.
+            op: The op associated with the value.
+            tensor: Optional tensor for returned value.
+
+        Returns:
+            The value of op.
+
+        """
+        if self.has_op_tensor(op):
+            return self.get_op_tensor_view(op).get(tensor)
 
     @property
     def use_exop(self):
