@@ -124,16 +124,16 @@ def check_lstm(seq_len, input_size, hidden_size,
             if reset_cells is False:
                 # look at the last hidden states
                 assert ng.testing.allclose(fprop_neon[:, -1].reshape(-1, 1),
-                                           lstm_ng.h_init.value.get(None),
+                                           ex.get_tensor_view_value(lstm_ng.h_init),
                                            rtol=rtol, atol=atol)
 
         # after the rnn graph has been executed, can get the W values. Get copies so
         # shared values don't confuse derivatives
         # concatenate weights to i, f, o, g together (in this order)
         gates = ['i', 'f', 'o', 'g']
-        Wxh_neon = [lstm_ng.W_input[k].value.get(None).copy().T for k in gates]
-        Whh_neon = [lstm_ng.W_recur[k].value.get(None).copy().T for k in gates]
-        bh_neon = [lstm_ng.b[k].value.get(None).copy() for k in gates]
+        Wxh_neon = [ex.get_tensor_view_value(lstm_ng.W_input[k]).copy().T for k in gates]
+        Whh_neon = [ex.get_tensor_view_value(lstm_ng.W_recur[k]).copy().T for k in gates]
+        bh_neon = [ex.get_tensor_view_value(lstm_ng.b[k]).copy() for k in gates]
 
         # reference numpy LSTM
         lstm_ref = RefLSTM()
@@ -210,7 +210,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
             if reset_cells is False:
                 # look at the last hidden states
                 assert ng.testing.allclose(fprop_neon_2[:, -1].reshape(-1, 1),
-                                           lstm_ng_2.h_init.value.get(None),
+                                           ex.get_tensor_view_value(lstm_ng_2.h_init),
                                            rtol=rtol, atol=atol)
 
         # after the rnn graph has been executed, can get the W values. Get copies so
@@ -218,17 +218,23 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
         # concatenate weights to i, f, o, g together (in this order)
         gates = ['i', 'f', 'o', 'g']
         Wxh_neon_1 = \
-            np.concatenate([lstm_ng_1.W_input[k].value.get(None).copy().T for k in gates], 1)
+            np.concatenate([ex.get_tensor_view_value(lstm_ng_1.W_input[k]).copy().T
+                            for k in gates], 1)
         Whh_neon_1 = \
-            np.concatenate([lstm_ng_1.W_recur[k].value.get(None).copy().T for k in gates], 1)
+            np.concatenate([ex.get_tensor_view_value(lstm_ng_1.W_recur[k]).copy().T
+                            for k in gates], 1)
         bh_neon_1 =  \
-            np.concatenate([lstm_ng_1.b[k].value.get(None).copy() for k in gates])
+            np.concatenate([ex.get_tensor_view_value(lstm_ng_1.b[k]).copy()
+                            for k in gates])
         Wxh_neon_2 = \
-            np.concatenate([lstm_ng_2.W_input[k].value.get(None).copy().T for k in gates], 1)
+            np.concatenate([ex.get_tensor_view_value(lstm_ng_2.W_input[k]).copy().T
+                            for k in gates], 1)
         Whh_neon_2 = \
-            np.concatenate([lstm_ng_2.W_recur[k].value.get(None).copy().T for k in gates], 1)
+            np.concatenate([ex.get_tensor_view_value(lstm_ng_2.W_recur[k]).copy().T
+                            for k in gates], 1)
         bh_neon_2 = \
-            np.concatenate([lstm_ng_2.b[k].value.get(None).copy() for k in gates])
+            np.concatenate([ex.get_tensor_view_value(lstm_ng_2.b[k]).copy()
+                            for k in gates])
 
         # reference numpy LSTM
         lstm_ref_1 = RefLSTM()
@@ -273,7 +279,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
 
 if __name__ == '__main__':
-    seq_len, input_size, hidden_size, batch_size = (8, 5, 16, 1)
+    seq_len, input_size, hidden_size, batch_size, reset_cells = (8, 5, 16, 1, True)
     init = GaussianInit(0.0, 1)
-    check_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=False)
-    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=False)
+    check_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=reset_cells)
+    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=reset_cells)

@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.op_graph.axes import TensorDescription
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.kernels.cuda import lookuptable
 
 from pycuda.gpuarray import empty
@@ -100,7 +100,7 @@ class LUTBpropKernel(GPUKernel):
         for k in self.kernels:
             for index in range(len(k[1])):
                 if isinstance(k[1][index], TensorDescription):
-                    k[1][index] = pointer_from_td(k[1][index])
+                    k[1][index] = self.pointer_from_td(k[1][index])
 
         super(LUTBpropKernel, self).bind_buffers()
 
@@ -108,7 +108,7 @@ class LUTBpropKernel(GPUKernel):
         """
         Executes the pooling kernel.
         """
-        self.O.value.tensor.fill(0)
+        self.tensor_view_from_td(self.O).tensor.fill(0)
         self.word_counts.fill(0)
         for k in self.kernels:
             kernel, params = k
