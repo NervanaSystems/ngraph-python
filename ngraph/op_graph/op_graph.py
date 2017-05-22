@@ -2304,6 +2304,8 @@ def temporary(axes, dtype=None, initial_value=None):
     Returns:
         AssignableTensorOp: The placeholder.
     """
+    if initial_value is not None:
+        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)
