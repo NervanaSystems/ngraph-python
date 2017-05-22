@@ -142,7 +142,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
             pad = [pad_h, pad_w]
             stride = [str_h, str_w]
-            print ("Input: ", input_shape, " Filter: ", filter_shape, " Output: ", output_shape, " Pad: ", pad, " Stride: ", stride)
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)

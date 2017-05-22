@@ -209,7 +209,11 @@ void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
     }
 }
 
-void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
+void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel, int verbose) {
+  struct timespec start, end;
+  if (verbose) {
+      clock_gettime(CLOCK_REALTIME, &start);
+  }
   //print_mkldnn_opkernel(opkernel);
   MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
@@ -224,9 +228,18 @@ void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   }
   MKL_CHECK(mkldnn_stream_wait(opkernel->stream, opkernel->net_size, NULL));
   MKL_CHECK(mkldnn_stream_destroy(opkernel->stream));
+  if (verbose) {
+      clock_gettime(CLOCK_REALTIME, &end);
+      printf("\nOpkernel%d Exec start: %lld.%lld s end: %lld.%lld s time_taken: %.2f ms", opkernel->id,
+     			start.tv_sec, start.tv_nsec, end.tv_sec,end.tv_nsec, (end.tv_sec - start.tv_sec) * 1000 + ((double)(end.tv_nsec - start.tv_nsec)) / 1000000);
+  }
 }
 
-void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net) {
+void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net, int verbose) {
+  struct timespec start, end;
+  if (verbose) {
+      clock_gettime(CLOCK_REALTIME, &start);
+  }
   MKL_CHECK(mkldnn_stream_create(&mkldnn_net->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
   mkldnn_status_t s =
@@ -240,6 +253,11 @@ void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net) {
   }
   MKL_CHECK(mkldnn_stream_wait(mkldnn_net->stream, mkldnn_net->net_size, NULL));
   MKL_CHECK(mkldnn_stream_destroy(mkldnn_net->stream));
+  if (verbose) {
+      clock_gettime(CLOCK_REALTIME, &end);
+      printf("\nNetlist         start: %lld.%lld s end: %lld.%lld s time_taken: %.2f ms",
+     			start.tv_sec, start.tv_nsec, end.tv_sec,end.tv_nsec, (end.tv_sec - start.tv_sec) * 1000 + ((double)(end.tv_nsec - start.tv_nsec)) / 1000000);
+  }
 }
 
 void cleanup_mkldnn(mkldnn_netlist_t mkldnn_net) {
