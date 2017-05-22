@@ -163,12 +163,12 @@ def decay_generator(start, decay, minimum):
 class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
-    def __init__(self, state_axes, action_space, model, epsilon):
+    def __init__(self, state_axes, action_space, model, epsilon, gamma=0.99):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
         self.epsilon = epsilon
-        self.gamma = 0.9
+        self.gamma = gamma
         self.batch_size = 32
         self.action_space = action_space
 
