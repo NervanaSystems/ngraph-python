@@ -16,7 +16,8 @@ from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueS
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
     CPUQueueScatterSendOp, CPUQueueScatterRecvOp, \
     CPUQueueAllReduceOp, \
-    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, GPUCudaScatterRecvOp
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, \
+    GPUCudaScatterRecvOp, GPUCudaAllReduceOp
 
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
@@ -191,6 +192,11 @@ class GPUCommNodeFactory(CommNodeFactory):
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
+        elif node_type == 'allreduce':
+            if comm_type == 'cuda':
+                return GPUCudaAllReduceOp(
+                    input_node=from_node,
+                    func=from_node.metadata['reduce_func'])
         else:
             assert False, "Not supported!!!"
 
