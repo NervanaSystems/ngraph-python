@@ -345,8 +345,12 @@ def test_idempotent_axes_a():
         grad_comp = ex.executor(grad)
         cost_comp = ex.executor(cost)
 
-        assert cost_comp() == 6.0
-        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+        cost_comp_val = cost_comp()
+        grad_comp_val = grad_comp()
+        grad_comp_np = np.ones((3, 1)) * 2.
+
+        assert cost_comp_val == 6.0
+        assert np.array_equal(grad_comp_val, grad_comp_np)
 
 
 def test_idempotent_axes_b():

@@ -42,12 +42,20 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def __init__(self, mkldnn):
         self.mkldnn = mkldnn
 
-    def get_mkl_shape(self, axes, mkl_order):
-        mkl_shape = []
-        for axis_name in mkl_order:
-            # TODO(jbobba) Check that axis exists
-            mkl_shape.append(axes.find_by_name(axis_name).size)
-        return mkl_shape
+    def get_data_shape(self, axes):
+        [C, D, H, W, N] = axes.lengths
+        return [N, C, H, W]
+        #N = axes.batch_axis().length
+        #C = axes.channel_axis().length
+        #spatial_sizes = [axis.length for axis in axes.spatial_axes()]
+        #if len(spatial_sizes) == 3:
+        #    return [N, C, spatial_sizes[1], spatial_sizes[2]]
+        #else:
+        #    return [N, C, spatial_sizes[0], spatial_sizes[1]]
+
+    def get_filter_shape(self, axes):
+        [I, D, H, W, O] = axes.lengths
+        return [O, I, H, W]
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
@@ -125,16 +133,15 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
 
             data_type = self.mkldnn.datatype[op.dtype.type]
-            input_shape = self.get_mkl_shape(input.axes, ('N','C','height','width'))
-            filter_shape = self.get_mkl_shape(filter.axes, ('K__NG_SHADOW','C','R','S'))
-            output_shape = self.get_mkl_shape(op.axes, ('N','C','height','width'))
+            input_shape = self.get_data_shape(input.axes)
+            filter_shape = self.get_filter_shape(filter.axes)
+            output_shape = self.get_data_shape(op.axes)
             pad_d, pad_h, pad_w = itemgetter(
                 *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
             str_d, str_h, str_w = itemgetter(
                 *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
             pad = [pad_h, pad_w]
             stride = [str_h, str_w]
-            print ("Input: ", input_shape, " Filter: ", filter_shape, " Output: ", output_shape, " Pad: ", pad, " Stride: ", stride)
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
@@ -175,9 +182,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
 
             data_type = self.mkldnn.datatype[op.dtype.type]
-            input_shape = self.get_mkl_shape(input.axes, ('N', 'C', 'height', 'width'))
-            filter_shape = self.get_mkl_shape(filter.axes, ('K__NG_SHADOW', 'C', 'R', 'S'))
-            output_shape = self.get_mkl_shape(op.axes, ('N', 'C', 'height', 'width'))
+            input_shape = self.get_data_shape(input.axes)
+            filter_shape = self.get_filter_shape(filter.axes)
+            output_shape = self.get_data_shape(op.axes)
             pad_d, pad_h, pad_w = itemgetter(
                 *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
             str_d, str_h, str_w = itemgetter(
@@ -222,9 +229,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
 
             data_type = self.mkldnn.datatype[op.dtype.type]
-            delta_shape = self.get_mkl_shape(delta.axes, ('N', 'C', 'height', 'width'))
-            filter_shape = self.get_mkl_shape(op.axes, ('K__NG_SHADOW', 'C', 'R', 'S'))
-            inputs_shape = self.get_mkl_shape(inputs.axes, ('N', 'C', 'height', 'width'))
+            delta_shape = self.get_data_shape(delta.axes)
+            filter_shape = self.get_filter_shape(op.axes)
+            inputs_shape = self.get_data_shape(inputs.axes)
             pad_d, pad_h, pad_w = itemgetter(
                 *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
             str_d, str_h, str_w = itemgetter(
@@ -320,43 +327,43 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(PoolingOp)
     def visit(self, op):
         if (self.mkldnn.mkldnn_enabled):
-            arg = op.args[0]
-            input_layout = self.mkldnn.op_layouts.get(arg.name)
-            C, D, H, W, N = op.axes.lengths
-            input_shape = op.args[0].axes.lengths
-            output_shape = op.axes.lengths
-            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-            pad = [pad_d, pad_h, pad_w]
-            stride = [str_d, str_h, str_w]
-            kernel = [op.pool_params['J'], op.pool_params['T'],
-                      op.pool_params['R'], op.pool_params['S']]
-            op_type = op.pool_params
-            pool_type = 0
-            if op_type['op'] == 'avg':
-                pool_type = 1
-            [J, T, R, S] = kernel
+            input = op.args[0]
             # Only 2D pooling supported in MKLDNN for now
-            if (D != 1 or T != 1 or J != 1):
+            if (input.axes.find_by_name('__NG_DEPTH').size != 1):
+                return
+            if (op.pool_params['J'] != 1 or op.pool_params['T'] != 1):
                 return
             # Only single precision float supported for now
             if op.dtype != np.float32:
                 return
             # Sanity check tensor shapes
-            if ((len(op.axes.lengths) != 5) or
-                    (len(stride) != 3) or (len(pad) != 3)):
+            if (len(op.axes.lengths) != 5):
                 return
+            
             data_type = self.mkldnn.datatype[op.dtype.type]
+            input_shape = self.get_data_shape(input.axes)
+            output_shape = self.get_data_shape(op.axes)
+            kernel = [op.pool_params['R'], op.pool_params['S']]
+            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            pad = [pad_h, pad_w]
+            stride = [str_h, str_w]
+            op_type = op.pool_params
+            pool_type = 0
+            if op_type['op'] == 'avg':
+                pool_type = 1
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
             pad_data = ((ct.c_int) * len(pad))(*pad)
             stride_data = ((ct.c_int) * len(stride))(*stride)
+            input_layout = self.mkldnn.op_layouts.get(input.name)
+            
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.pool_fprop_kernel(
                 self.mkldnn.mkldnn_engine,
-                len(input_shape), len(output_shape), len(stride), len(pad),
+                len(input_shape), len(output_shape),
                 input_shape_arg, kernel_sizes, output_shape_arg,
                 stride_data, pad_data, pool_type,
                 input_layout, data_type, self.mkldnn.kernels[op.name])
@@ -372,43 +379,43 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(BpropPoolOp)
     def visit(self, op):
         if (self.mkldnn.mkldnn_enabled):
-            arg = op.args[0]
-            input_layout = self.mkldnn.op_layouts.get(arg.name)
-            C, D, H, W, N = op.axes.lengths
-            input_shape = op.args[0].axes.lengths
-            output_shape = op.axes.lengths
-            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
-            pad = [pad_d, pad_h, pad_w]
-            stride = [str_d, str_h, str_w]
-            kernel = [op.pool_params['J'], op.pool_params['T'],
-                      op.pool_params['R'], op.pool_params['S']]
-            op_type = op.pool_params
-            pool_type = 0
-            if op_type['op'] == 'avg':
-                pool_type = 1
-            [J, T, R, S] = kernel
+            input = op.args[0]
             # Only 2D pooling supported in MKLDNN for now
-            if (D != 1 or T != 1 or J != 1):
+            if (input.axes.find_by_name('__NG_DEPTH').size != 1):
+                return
+            if (op.pool_params['J'] != 1 or op.pool_params['T'] != 1):
                 return
             # Only single precision float supported for now
             if op.dtype != np.float32:
                 return
             # Sanity check tensor shapes
-            if ((len(op.axes.lengths) != 5) or
-                    (len(stride) != 3) or (len(pad) != 3)):
+            if (len(op.axes.lengths) != 5):
                 return
+            
             data_type = self.mkldnn.datatype[op.dtype.type]
+            input_shape = self.get_data_shape(input.axes)
+            output_shape = self.get_data_shape(op.axes)
+            kernel = [op.pool_params['R'], op.pool_params['S']]
+            pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.pool_params)
+            pad = [pad_h, pad_w]
+            stride = [str_h, str_w]
+            op_type = op.pool_params
+            pool_type = 0
+            if op_type['op'] == 'avg':
+                pool_type = 1
             input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
             output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
             pad_data = ((ct.c_int) * len(pad))(*pad)
             stride_data = ((ct.c_int) * len(stride))(*stride)
+            input_layout = self.mkldnn.op_layouts.get(input.name)
+            
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.pool_bprop_kernel(
                 self.mkldnn.mkldnn_engine,
-                len(input_shape), len(output_shape), len(stride), len(pad),
+                len(input_shape), len(output_shape),
                 input_shape_arg, kernel_sizes, output_shape_arg,
                 stride_data, pad_data, pool_type,
                 input_layout, data_type,

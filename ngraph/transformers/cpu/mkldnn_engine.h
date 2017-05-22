@@ -54,7 +54,7 @@ void destroy_mkldnn_netlist(mkldnn_netlist_t mkldnn_net);
 
 void destroy_mkldnn_engine(mkldnn_engine_t engine);
 
-void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net);
+void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net, int verbose);
 
 void cleanup_mkldnn(mkldnn_netlist_t mkldnn_net);
 

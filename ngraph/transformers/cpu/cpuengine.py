@@ -26,7 +26,7 @@ class Mkldnn(object):
     def __init__(self, engine_path):
         self.mkldnn_enabled = False
         self.mkldnn_engine_initialized = False
-        self.mkldnn_verbose = True
+        self.mkldnn_verbose = False
         # TODO(jbobba): Defines from mkldnn_types.h. 
         self.datatype = {
             np.float32 : 1,
@@ -88,7 +88,7 @@ class Mkldnn(object):
                 [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
 
             self.run_opkernel = self.mkldnn_engine_dll.run_mkldnn_opkernel
-            self.run_opkernel.argtypes = [ctypes.c_void_p]
+            self.run_opkernel.argtypes = [ctypes.c_void_p, ctypes.c_int]
 
             self.reorder_kernel = self.mkldnn_engine_dll.create_mkldnn_reorder_kernel
             self.reorder_kernel.argtypes = \
@@ -150,7 +150,7 @@ class Mkldnn(object):
                 self.mkldnn_engine_dll.create_mkldnn_pool_fprop_kernel
             self.pool_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
@@ -158,7 +158,7 @@ class Mkldnn(object):
                 self.mkldnn_engine_dll.create_mkldnn_pool_bprop_kernel
             self.pool_bprop_kernel.argtypes = \
                 [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, 
@@ -182,7 +182,7 @@ class Mkldnn(object):
             self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
             
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
-            self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p]
+            self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
             
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
             self.cleanup_mkldnn_fn.argtypes = [ctypes.c_void_p]
@@ -221,7 +221,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], variance_ch.ctypes.data, 2)
             self.set_input_tensor(self.kernels[name], weights.ctypes.data, 3)
             self.set_output_tensor(self.kernels[name], outputs.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
@@ -233,7 +233,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], F.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], O.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = O.shape
@@ -253,7 +253,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], E.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], F.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], gI.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             _, _, _, mSlice, pSlice, qSlice = conv_slices
             F = np.transpose(F[:, ::-1, ::-1, ::-1, :], (4, 1, 2, 3, 0)).copy()
@@ -276,7 +276,7 @@ class Mkldnn(object):
             self.set_output_tensor(self.kernels[name], arrO.ctypes.data, 0)
             if op == 'max':
                 self.set_output_tensor(self.kernels[name], arrA.ctypes.data, 1)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             K, M, P, Q, N = arrO.shape
@@ -305,7 +305,7 @@ class Mkldnn(object):
             self.set_output_tensor(self.kernels[name], arrD.ctypes.data, 0)
             if op == 'max':
                 self.set_input_tensor(self.kernels[name], arrA.ctypes.data, 1)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             kSlice, mSlice, pSlice, qSlice, op, arrA = pool_slices
             arrD[:] = 0
@@ -358,7 +358,7 @@ class Mkldnn(object):
         if (self.mkldnn_enabled and name in self.kernels):
             assert x.flags['C_CONTIGUOUS']
             assert y.flags['C_CONTIGUOUS']
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.run_mkldnn_netlist_fn(self.kernels[name], self.mkldnn_verbose)
         else:
             np.dot(x, y, out=out)
 
@@ -379,7 +379,7 @@ class Mkldnn(object):
 
     def elementwise_add(self, name, I_array1, I_array2, O_array):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name])
+            self.run_mkldnn_netlist_fn(self.kernels[name], self.mkldnn_verbose)
         else:
             np.add(I_array1, I_array2, out=O_array)
 
@@ -387,7 +387,7 @@ class Mkldnn(object):
         if (self.mkldnn_enabled and name in self.kernels):
             self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
@@ -396,7 +396,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], fpropSrc.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             np.add(inputs * np.greater(fpropSrc, 0), inputs * slope * np.less(fpropSrc, 0), out=out)
 
@@ -406,7 +406,7 @@ class Mkldnn(object):
         if name in self.kernels:
             self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
             self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             output[...] = np.copy(input)
 
@@ -415,7 +415,7 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], E.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], U.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name])
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
             K, M, P, Q, N = E.shape
