@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
 from builtins import range
 import atexit
 import sys
+from six import itervalues
+from weakref import WeakSet
 
 from ngraph.transformers.base import UnsupportedTransformerException
 
@@ -36,7 +39,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
-    GPUCudaGatherSendOp, GPUCudaGatherRecvOp
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -50,7 +53,7 @@ from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLay
 # from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
@@ -58,7 +61,7 @@ from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
-    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel
+    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -297,7 +300,7 @@ class ElementWiseKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = pointer_from_td(self.params[index])
+                self.params[index] = self.pointer_from_td(self.params[index])
 
         super(ElementWiseKernel, self).bind_buffers()
 
@@ -318,7 +321,7 @@ class ElementWiseKernel(GPUKernel):
         if sourcefile is not None:
             # Code generation and compilation are only separate when a sourcefile is
             # provided
-            self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
+            self.name, self.params = sourcefile.add_kernel(self.transformer, self.ops_buffer)
 
         return True
 
@@ -468,6 +471,10 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(CudaGatherRecvKernel(self.transformer, op))
 
+    @add_kernel.on_type(GPUCudaAllReduceOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaAllReduceKernel(self.transformer, op))
+
     def compile_all(self):
         """
         Compiles all CUDA C kernels in this group's source file and updates the
@@ -548,6 +555,11 @@ class GPUBufferAllocator():
         """
         self.view_allocators.append(view_alloc)
 
+    def close(self):
+        if self._buffer is not None:
+            self._buffer.free()
+            self._buffer = None
+
 
 class GPUTensorAllocator():
     """
@@ -600,7 +612,6 @@ class GPUTensorAllocator():
                                   dtype,
                                   gpudata=gpudata,
                                   strides=tensor_description.strides)
-
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor
 
@@ -955,9 +966,12 @@ class GPURuntime(object):
         return rng_mrg()
 
     def close(self):
+        if self.ctx is None:
+            return
         try:
             self.ctx.pop()
             self.ctx.detach()
+            self.ctx = None
         except drv.Error:
             pass
 
@@ -1020,20 +1034,22 @@ class GPUTransformer(Transformer):
     Given a list of ops you want to compute the results of, this transformer
     will generate allocators and kernels to execute the graph on a GPU.
     """
-    __runtime = None
 
     transformer_name = "gpu"
     default_rtol = 1e-05
     default_atol = 1e-08
 
+    # Transformers that might need to be closed on exit
+    gpu_transformers = WeakSet()
+
     @staticmethod
     def close_gpu():
-        if GPUTransformer.__runtime is not None:
-            GPUTransformer.__runtime.close()
-            GPUTransformer.__runtime = None
+        for transformer in GPUTransformer.gpu_transformers:
+            transformer.close()
 
     def __init__(self, device_id=None, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
+        GPUTransformer.gpu_transformers.add(self)
         layout_domain_pass = GenerateLayoutDomains(self)
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
@@ -1049,16 +1065,23 @@ class GPUTransformer(Transformer):
         self.finished_transform = False
         self.current_buffer = None
         self.device_id = device_id
+        self.runtime = None
 
     def initialize_runtime(self):
-        if GPUTransformer.__runtime is None:
-            GPUTransformer.__runtime = GPURuntime(device_id=self.device_id)
-            atexit.register(GPUTransformer.close_gpu)
-
-        self.runtime = GPUTransformer.__runtime
+        if self.runtime is None:
+            self.runtime = GPURuntime(device_id=self.device_id)
 
     def close(self):
-        GPUTransformer.close_gpu()
+        if self.runtime is None:
+            return
+        # Free the pool buffers
+        for array in itervalues(self.argmax_tensors):
+            array.gpudata.free()
+        for buffer in self.buffer_allocators:
+            buffer.close()
+        self.argmax_tensors.clear()
+        self.runtime.close()
+        self.runtime = None
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
@@ -1168,3 +1191,6 @@ class GPUTransformer(Transformer):
             An object that can be used to calculate any layout change cost.
         """
         return gpu_constraint_factory(op, arg)
+
+
+atexit.register(GPUTransformer.close_gpu)

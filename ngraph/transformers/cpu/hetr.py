@@ -30,64 +30,54 @@ class HetrLocals(object):
         self.gather_recv_nodes = gather_recv_nodes
         self.allreduce_nodes = allreduce_nodes
 
-    def queue_send(self, send_id):
+    def queue_send(self, send_id, x_nparr):
         send_op = self.send_nodes[send_id]
         q = send_op.queue
 
         # TODO
         # below converts DeviceTensor to numpy array
         # should we instead serialize DeviceTensor?
-        x_devicetensor = send_op.args[0].value
-        x_nparr = x_devicetensor.get(None)
         q.put(x_nparr)
 
-    def recv_from_queue_send(self, recv_id):
+    def recv_from_queue_send(self, recv_id, out):
         recv_op = self.recv_nodes[recv_id]
         q = recv_op.queue
-        x = q.get()
-        return x
+        out[...] = q.get()
+        return out
 
-    def queue_gather_send(self, gather_send_id):
+    def queue_gather_send(self, gather_send_id, x_nparr):
         gather_send_op = self.gather_send_nodes[gather_send_id]
         q = gather_send_op.shared_queues[gather_send_op.idx]
         # TODO
         # below converts DeviceTensor to numpy array
         # should we instead serialize DeviceTensor?
-        x_devicetensor = gather_send_op.args[0].value
-        x_nparr = x_devicetensor.get(None)
         q.put(x_nparr)
 
-    def gather_recv_from_queue_gather_send(self, gather_recv_id):
+    def gather_recv_from_queue_gather_send(self, gather_recv_id, out):
         gather_recv_op = self.gather_recv_nodes[gather_recv_id]
-        x_devicetensor = gather_recv_op.value
-        x_nparr = x_devicetensor.get(None)
         for i in range(len(gather_recv_op.from_id)):
             q = gather_recv_op.shared_queues[i]
             x = q.get()
-            x_nparr[gather_recv_op.slices[i]] = x
-        return x_nparr
+            out[gather_recv_op.slices[i]] = x
+        return out
 
-    def queue_scatter_send(self, scatter_send_id):
+    def queue_scatter_send(self, scatter_send_id, x_nparr):
         scatter_send_op = self.scatter_send_nodes[scatter_send_id]
         # TODO
         # below converts DeviceTensor to numpy array
         # should we instead serialize DeviceTensor?
-        x_devicetensor = scatter_send_op.args[0].value
-        x_nparr = x_devicetensor.get(None)
         for i in range(len(scatter_send_op.to_id)):
             q = scatter_send_op.shared_queues[i]
             q.put(x_nparr[scatter_send_op.slices[i]])
 
-    def scatter_recv_from_queue_scatter_send(self, scatter_recv_id):
+    def scatter_recv_from_queue_scatter_send(self, scatter_recv_id, out):
         scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
         q = scatter_recv_op.shared_queues[scatter_recv_op.idx]
-        x = q.get()
-        return x
+        out[...] = q.get()
+        return out
 
-    def queue_allreduce(self, allreduce_id):
+    def queue_allreduce(self, allreduce_id, x_nparr):
         allreduce_op = self.allreduce_nodes[allreduce_id]
-        x_devicetensor = allreduce_op.args[0].value
-        x_nparr = x_devicetensor.get(None)
         recv_buf = list()
 
         # Send to all devices
@@ -102,9 +92,12 @@ class HetrLocals(object):
             recv_buf.append(q.get())
 
         # Apply reduce function
-        if allreduce_op.reduce_func is 'sum':
+        if allreduce_op.reduce_func == 'sum':
             result = reduce(lambda x, y: x + y, recv_buf)
-        elif allreduce_op.reduce_func is 'mean':
+        elif allreduce_op.reduce_func == 'mean':
             result = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
+        else:
+            raise RuntimeError(
+                'Reduce function {} is not supported.'.format(allreduce_op.reduce_func))
 
         return result

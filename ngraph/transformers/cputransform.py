@@ -42,7 +42,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
-from ngraph.transformers.passes.cpufusion import FusionPass
+from ngraph.transformers.passes.cpufusion import CPUFusion, FusionPass
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
@@ -631,47 +631,47 @@ class CPUCodeGenerator(PyGen):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
     @generate_op.on_type(CPUQueueSendOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out, arg):
         send_id = len(self.send_nodes)
         self.send_nodes.append(op)
-        self.append("self.queue_send({})", send_id)
+        self.append("self.queue_send({}, {})", send_id, arg)
 
     @generate_op.on_type(CPUQueueRecvOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out):
         recv_id = len(self.recv_nodes)
         self.recv_nodes.append(op)
-        self.append("{}[...] = self.recv_from_queue_send({})", out, recv_id)
+        self.append("self.recv_from_queue_send({}, out={})", recv_id, out)
 
     @generate_op.on_type(CPUQueueGatherSendOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out, arg):
         gather_send_id = len(self.gather_send_nodes)
         self.gather_send_nodes.append(op)
-        self.append("self.queue_gather_send({})", gather_send_id)
+        self.append("self.queue_gather_send({}, {})", gather_send_id, arg)
 
     @generate_op.on_type(CPUQueueGatherRecvOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out):
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes.append(op)
-        self.append("{}[...] = self.gather_recv_from_queue_gather_send({})", out, gather_recv_id)
+        self.append("self.gather_recv_from_queue_gather_send({}, out={})", gather_recv_id, out)
 
     @generate_op.on_type(CPUQueueScatterSendOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out, arg):
         scatter_send_id = len(self.scatter_send_nodes)
         self.scatter_send_nodes.append(op)
-        self.append("self.queue_scatter_send({})", scatter_send_id)
+        self.append("self.queue_scatter_send({}, {})", scatter_send_id, arg)
 
     @generate_op.on_type(CPUQueueScatterRecvOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out):
         scatter_recv_id = len(self.scatter_recv_nodes)
         self.scatter_recv_nodes.append(op)
-        self.append("{}[...] = self.scatter_recv_from_queue_scatter_send({})",
-                    out, scatter_recv_id)
+        self.append("self.scatter_recv_from_queue_scatter_send({}, out={})",
+                    scatter_recv_id, out)
 
     @generate_op.on_type(CPUQueueAllReduceOp)
-    def generate_op(self, op, out, *args):
+    def generate_op(self, op, out, arg):
         allreduce_id = len(self.allreduce_nodes)
         self.allreduce_nodes.append(op)
-        self.append("{}[...] = self.queue_allreduce({})", out, allreduce_id)
+        self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
     
     @generate_op.on_type(ReductionOp)
     def generate_op(self, op, out, *args):
@@ -708,7 +708,8 @@ class CPUTransformer(Transformer):
         self.rng_seed = None
         self.initialize_mkldnn()
         add_layout_conversion = AddLayoutConversions(None)
-        self.graph_passes = [FusionPass(),
+        self.graph_passes = [CPUFusion(),
+                             FusionPass(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
@@ -765,11 +766,11 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
             if isinstance(x, TensorDescription):
-                return x.value
+                return self.get_tensor_description_tensor_view(x)
             return x
 
         for op in all_ops:
-            out = tensor_description_value(op.tensor_description())
+            out = tensor_description_value(op.forwarded.tensor_description())
             call_info = (tensor_description_value(_) for _ in op.call_info())
             self.compute_code.allocate_op(op, out, *call_info)
 
@@ -795,12 +796,12 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
 
             def tensor_description_value(x):
                 if isinstance(x, TensorDescription):
-                    return x.value
+                    return self.get_tensor_description_tensor_view(x)
                 return x
 
             with indenting(self.compute_code):
                 for op in ordered_ops:
-                    out = tensor_description_value(op.tensor_description())
+                    out = tensor_description_value(op.forwarded.tensor_description())
                     call_info = (tensor_description_value(_) for _ in op.call_info())
                     self.compute_code.generate_op(op, out, *call_info)
                 if code_length == self.compute_code.code_length:
