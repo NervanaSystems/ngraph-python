@@ -191,7 +191,6 @@ class Agent(object):
             if np.random.rand() <= self.epsilon.next():
                 return self.action_space.sample()
 
-        # print(self.model_wrapper.predict(state))
         return np.argmax(self.model_wrapper.predict_single(state))
 
     def observe_results(self, state, action, reward, next_state, done):
@@ -224,6 +223,7 @@ class Agent(object):
 
         # print([sample['state'].shape for sample in samples])
 
+        # batch axis is the last axis
         states = np.stack([sample['state'] for sample in samples], axis=-1)
         next_states = np.stack([sample['next_state'] for sample in samples],
                                axis=-1)
@@ -235,6 +235,7 @@ class Agent(object):
             target = sample['reward']
 
             if not sample['done']:
+                # next_values[action=:, sample=i]
                 target += self.gamma * np.amax(next_values[:, i])
 
             targets[sample['action'], i] = target
