@@ -33,6 +33,31 @@ void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
 
+mkldnn_primitive_desc_t create_mkldnn_layout_descriptor(mkldnn_engine_t engine, 
+                                                        int ndims, const int* dim_sizes,
+                                                        const int* dim_strides,
+                                                        mkldnn_data_type_t data_type) {
+    // Create a custom data descriptor based on input size and strides
+    // Assumes non-blocked layout
+    mkldnn_memory_desc_t md;
+    mkldnn_primitive_desc_t pd;
+    md.primitive_kind = mkldnn_memory;
+    md.ndims = ndims;
+    for (size_t i = 0; i < ndims; i++) {
+        md.layout_desc.blocking.block_dims[i] = 1;
+        md.layout_desc.blocking.strides[1][i]    = 1;
+        md.layout_desc.blocking.strides[0][i]    = dim_strides[i];
+        md.layout_desc.blocking.padding_dims[i]  = dim_sizes[i];
+        md.layout_desc.blocking.offset_padding_to_data[i] = 0;
+        md.dims[i] = dim_sizes[i];
+    }
+    md.layout_desc.blocking.offset_padding = 0;
+    md.data_type = data_type;
+    md.format = mkldnn_blocked;
+    MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd, &md, engine));
+    return pd;
+}
+
 void create_mkldnn_tensor(int ndims, const int* dim_sizes,
                           mkldnn_data_type_t data_type,
                           mkldnn_memory_format_t fmt,

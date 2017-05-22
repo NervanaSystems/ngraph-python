@@ -62,6 +62,12 @@ class Mkldnn(object):
             self.print_kernel = self.mkldnn_engine_dll.print_mkldnn_opkernel
             self.print_kernel.argtypes = [ctypes.c_void_p]
 
+            self.create_layout_pd = self.mkldnn_engine_dll.create_mkldnn_layout_descriptor
+            self.create_layout_pd.argtypes = [
+                                ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, 
+                                ctypes.c_int]
+            self.create_layout_pd.restype = ctypes.c_void_p
+
             self.query_prim_layout_fn = self.mkldnn_engine_dll.query_prim_layout
             self.query_prim_layout_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.query_prim_layout_fn.restype = ctypes.c_void_p
