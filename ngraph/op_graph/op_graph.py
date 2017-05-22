@@ -1022,15 +1022,13 @@ class TensorOp(Op):
                     adjoint = adjoint * o.scale
 
                 deriv_handler = o.deriv_handler
-                if o.metadata.get('device_id'):
-                    # find hetr distribution metadata, pass other data if exists
-                    # todo add reduce func metadata key when fixed #1436
-                    hetr_meta_key = ['device', 'device_id', 'parallel']
-                    hetr_metadata = {k:o.metadata[k] for k in hetr_meta_key
-                                     if o.metadata.get(k) is not None}
-                    with metadata(**hetr_metadata):
-                        deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
-                else:
+
+                # find hetr distribution metadata, pass other data if exists
+                # todo add reduce func metadata key when fixed #1436
+                hetr_meta_key = ['device', 'device_id', 'parallel', 'reduce_func']
+                hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
+                                 if o.metadata.get(k) is not None}
+                with metadata(**hetr_metadata):
                     deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
 
                 processed.add(o.tensor)
