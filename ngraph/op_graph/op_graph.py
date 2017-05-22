@@ -1022,7 +1022,15 @@ class TensorOp(Op):
                     adjoint = adjoint * o.scale
 
                 deriv_handler = o.deriv_handler
-                deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
+                # find hetr distribution metadata, pass other data if exists
+                # todo add reduce func metadata key when fixed #1436
+                hetr_meta_key = ['device', 'device_id', 'parallel']
+                hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
+                                 if o.metadata.get(k) is not None}
+                with metadata(**hetr_metadata):
+                    deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
                 processed.add(o.tensor)
 
         return adjoints
@@ -2304,6 +2312,8 @@ def temporary(axes, dtype=None, initial_value=None):
     Returns:
         AssignableTensorOp: The placeholder.
     """
+    if initial_value is not None:
+        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
                               initial_value=initial_value)

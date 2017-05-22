@@ -43,7 +43,7 @@ from ngraph.transformers.passes.passes import RequiredTensorShaping, \
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.cpufusion import CPUFusion
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
+from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
@@ -145,8 +145,8 @@ class CPUPoolEngine(object):
 
 
 class CPUComputation(Computation):
-    def __init__(self, transformer, computation, **kwargs):
-        super(CPUComputation, self).__init__(transformer, computation, **kwargs)
+    def __init__(self, transformer, computation_op, **kwargs):
+        super(CPUComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
         self.pool_slices = dict()
         self.conv_params = dict()
@@ -743,7 +743,7 @@ class CPUCodeGenerator(PyGen):
                     broadcast_recv_id, out)
 
 
-class CPUTransformer(Transformer):
+class CPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
