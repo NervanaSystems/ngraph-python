@@ -22,6 +22,13 @@ from operator import itemgetter
 import numpy as np
 import os
 
+try:
+    import mlsl
+except ImportError:
+    use_mlsl = False
+else:
+    use_mlsl = True
+
 from ngraph.util.pygen import PyGen, indenting
 from ngraph.util.generics import generic_method
 
@@ -779,7 +786,10 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
-import mlsl
+try:
+    import mlsl
+except ImportError:
+    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -792,8 +802,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
         self.code.execute("mkldnn.open()")
-        self.code.execute("mlsl_obj = mlsl.MLSL()")
-        self.code.execute("mlsl_obj.init()")
+        if use_mlsl:
+            self.code.execute("mlsl_obj = mlsl.MLSL()")
+            self.code.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
