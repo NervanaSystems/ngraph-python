@@ -39,14 +39,14 @@ def make_axes(lengths, name=None):
 class ModelWrapper(object):
     """the ModelWrapper is responsible for interacting with neon and ngraph"""
 
-    def __init__(self, state_axes, action_size, batch_size, model):
+    def __init__(self, state_axes, action_size, batch_size, model,
+                 learning_rate=0.0001):
         """
         for now, model must be a function which takes action_axes, and
         returns a neon container
         """
         super(ModelWrapper, self).__init__()
 
-        print(state_axes, action_size, batch_size)
         self.axes = Namespace()
         # todo: standardize axis pattern
         # todo: how to specify which of the axes are which?
@@ -71,7 +71,7 @@ class ModelWrapper(object):
             inference, self.state
         )
 
-        # construct inference computation
+        # construct inference computation for evaluating a single observation
         with neon.Layer.inference_mode_on():
             inference_single = self.model(self.state_single)
 
@@ -84,7 +84,7 @@ class ModelWrapper(object):
             ng.squared_L2(self.model(self.state) - self.target), out_axes=()
         )
 
-        optimizer = neon.RMSProp(learning_rate=0.0001)
+        optimizer = neon.RMSProp(learning_rate=learning_rate)
         train_output = ng.sequential([
             optimizer(loss),
             loss,
@@ -159,7 +159,7 @@ class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
     def __init__(self, state_axes, action_space, model, epsilon, gamma=0.99,
-                 batch_size=32, memory=None):
+                 batch_size=32, memory=None, learning_rate=0.0001):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
@@ -178,6 +178,7 @@ class Agent(object):
             action_size=action_space.n,
             batch_size=self.batch_size,
             model=model,
+            learning_rate=learning_rate,
         )
 
     def act(self, state, training=True):
