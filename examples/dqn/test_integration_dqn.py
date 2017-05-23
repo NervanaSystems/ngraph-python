@@ -4,7 +4,7 @@ from ngraph.frontends.neon import dqn, rl_loop
 from ngraph.frontends import neon
 
 
-def small_model(action_axes):
+def model(action_axes):
     return neon.Sequential([
         neon.Affine(
             nout=20,
@@ -26,7 +26,7 @@ def test_dependent_environment():
     agent = dqn.Agent(
         dqn.space_shape(environment.observation_space),
         environment.action_space,
-        model=small_model,
+        model=model,
         epsilon=dqn.decay_generator(start=1.0, decay=0.995, minimum=0.1)
     )
 

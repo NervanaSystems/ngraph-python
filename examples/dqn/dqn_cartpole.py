@@ -28,7 +28,7 @@ def model(action_axes):
             batch_norm=True,
         ),
         neon.Affine(
-            nout=action_axes[0].length,
+            axes=action_axes,
             weight_init=neon.XavierInit(),
             bias_init=neon.ConstantInit(),
             activation=neon.Rectlin(),
@@ -45,7 +45,12 @@ def main():
         ng.make_axis(environment.observation_space.shape[0], name='width')
     ])
 
-    agent = dqn.Agent(state_axes, environment.action_space, model=model)
+    agent = dqn.Agent(
+        state_axes,
+        environment.action_space,
+        model=model,
+        epsilon=dqn.decay_generator(start=1.0, decay=0.995, minimum=0.1)
+    )
 
     rl_loop.rl_loop(environment, agent, episodes=1000)
 

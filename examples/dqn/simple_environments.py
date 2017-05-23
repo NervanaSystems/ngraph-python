@@ -37,7 +37,10 @@ class ConstantEnv(gym.Env):
 
 
 class RandomInputConstantGoalEnv(gym.Env):
-    """docstring for RandomInputConstantGoalEnv."""
+    """
+    Environment were a single discrete action is always the best, even though
+    the observation space is random.
+    """
 
     def __init__(self):
         super(RandomInputConstantGoalEnv, self).__init__()
@@ -71,7 +74,10 @@ class RandomInputConstantGoalEnv(gym.Env):
 
 
 class DependentEnv(gym.Env):
-    """docstring for DependentEnv."""
+    """
+    An environment where the correct action is always purely a function of the
+    current observation space
+    """
 
     def __init__(self):
         super(DependentEnv, self).__init__()
