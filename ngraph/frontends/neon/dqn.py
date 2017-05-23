@@ -106,7 +106,7 @@ class ModelWrapper(object):
     def predict(self, state):
         if state.shape != self.state.axes.lengths:
             raise ValueError((
-                'predict received stage with wrong shape. found {}, expected {} '
+                'predict received state with wrong shape. found {}, expected {} '
             ).format(state.shape, self.state.axes.lengths))
         return self.inference_computation(state)
 
@@ -164,7 +164,7 @@ class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
     def __init__(self, state_axes, action_space, model, epsilon, gamma=0.99,
-                 batch_size=32):
+                 batch_size=32, memory=None):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
@@ -173,7 +173,11 @@ class Agent(object):
         self.batch_size = batch_size
         self.action_space = action_space
 
-        self.memory = Memory(maxlen=1000000)
+        if memory == None:
+            self.memory = Memory(maxlen=1000000)
+        else:
+            self.memory = memory
+
         self.model_wrapper = ModelWrapper(
             state_axes=state_axes,
             action_size=action_space.n,
@@ -265,28 +269,13 @@ class RepeatMemory(deque):
     where a RepeatWrapper is wrapping the environment and storing all of
     the observations would be wasteful since a large portion of the observation
     has already been stored in memory.
+
+    warning: this memory can only be written to from a single episode at a time
     """
     def __init__(self, frames_per_observation, **kwargs):
         super(RepeatMemory, self).__init__(**kwargs)
 
         self.frames_per_observation = frames_per_observation
-
-    def _last_episode_minimum_length(self, length):
-        """
-        Returns True if the len(the most recent episode) is greater than or
-        equal to `length`.
-        """
-        length_so_far = 0
-        position = len(self)-1
-        while position >= 0:
-            if self[position]['done']:
-                return length_so_far >= length
-
-            length_so_far += 1
-            position -= 1
-
-            if length_so_far >= length:
-                return True
 
     def append(self, record):
         # assume for now that the batch axis is at the end
@@ -312,18 +301,21 @@ class RepeatMemory(deque):
 
         sample = []
         while len(sample) < batch_size:
-            i = random.randint(self.frames_per_observation, len(self))
+            i = random.randint(0, len(self) - self.frames_per_observation - 1)
 
             # check to see if this is a valid sample. it is invalid if there is
             # a terminal frame in the middle of the observation
-            records = [self[i] for i in range(i-self.frames_per_observation, i)]
+            records = [self[i] for i in range(i, i + self.frames_per_observation + 1)]
             if any(record['done'] for record in records[:-1]):
                 continue
 
             # build observation
-            record = records[-1].copy()
-            record['state'] = np.stack([record['frame'] for record in records[:-1]], axis=-1)
-            record['next_state'] = np.stack([record['frame'] for record in records[1:]], axis=-1)
-            del record['frame']
+            record = {
+                'done': records[-1]['done'],
+                'state': np.stack([record['frame'] for record in records[:-1]], axis=-1),
+                'next_state': np.stack([record['frame'] for record in records[1:]], axis=-1),
+            }
 
             sample.append(record)
+
+        return sample
