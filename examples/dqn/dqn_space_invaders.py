@@ -12,7 +12,10 @@ import ngraph as ng
 
 
 def model(action_axes):
-    print(action_axes.length)
+    """
+    Given the expected action axes, return a model mapping from observation to
+    action axes for use by the dqn agent.
+    """
     return neon.Sequential([
         neon.Convolution(
             (8, 8, 32),
@@ -53,7 +56,10 @@ def model(action_axes):
 
 
 class ReshapeWrapper(gym.Wrapper):
-    """docstring for ReshapeWrapper."""
+    """
+    Reshape the observation provided by open ai gym atari environment to match
+    the deepmind dqn paper.
+    """
 
     def __init__(self, environment):
         super(ReshapeWrapper, self).__init__(environment)
@@ -102,13 +108,15 @@ class ClipRewardWrapper(gym.Wrapper):
 
 def RepeatWrapper(frames=4):
     """
-    generate an wrapper class. I am not sure why open ai gym think this
-    is a good pattern to use.  as opposed to passing frames and as a value to
+    Generate an wrapper class. I am not sure why open ai gym thinks this
+    is a good pattern to use instead of passing frames as a argument to
     the constructor.
     """
 
     class RepeatWrapper(gym.Wrapper):
-        """send multiple steps of observations to agent at each step"""
+        """
+        Send multiple steps of observations to agent at each step
+        """
 
         def __init__(self, env):
             super(RepeatWrapper, self).__init__(env)

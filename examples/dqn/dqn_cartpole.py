@@ -28,7 +28,7 @@ def model(action_axes):
             batch_norm=True,
         ),
         neon.Affine(
-            nout=2,
+            nout=action_axes[0].length,
             weight_init=neon.XavierInit(),
             bias_init=neon.ConstantInit(),
             activation=neon.Rectlin(),
@@ -38,11 +38,8 @@ def model(action_axes):
 
 
 def main():
-    # initialize gym environment 
-    #environment = gym.make('Pong-v0')
-    #print environment.observation_space
+    # initialize gym environment
     environment = gym.make('CartPole-v0')
-    print environment.observation_space
 
     state_axes = ng.make_axes([
         ng.make_axis(environment.observation_space.shape[0], name='width')
