@@ -168,6 +168,7 @@ def main():
         model=model,
         epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000 / 32),
         gamma=0.99,
+        learning_rate=0.00025,
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20000)
