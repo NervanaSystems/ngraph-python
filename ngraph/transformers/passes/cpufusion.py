@@ -3,7 +3,7 @@ from ngraph.transformers.passes.passes import GraphRewritePass, PeepholeGraphPas
 from ngraph.util.generics import generic_method
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
-from ngraph.op_graph.op_graph import Maximum, Minimum, BroadcastOp
+from ngraph.op_graph.op_graph import Maximum, Minimum, BroadcastOp, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp, AssignableTensorOp, variable, TensorOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import Unflatten, ContiguousOp, BroadcastOp, BinaryElementWiseOp, Flatten, Divide
@@ -110,6 +110,123 @@ class CPUFusion(GraphRewritePass):
             delta = label_map[self.relu_bwd_delta_label]
             relu_fprop = self.tensor_to_op_dict[x]
             self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
+
+    def construct_batchnorm_bprop_pattern(self):
+        """
+           Generate graph op that represents a pattern for batchnorm backprop operation.
+           
+           #step9
+          dbeta = np.sum(dout, axis=0)
+          dgammax = dout #not necessary, but more understandable
+        
+          #step8 
+          dgamma = np.sum(dgammax*xhat, axis=0)
+          dxhat = dout * gamma (mul_7)
+        
+          #step7
+          divar = np.sum(dxhat*xmu, axis=0)  (dxhat*xmu = mul_9, sum_4 = divar)
+          dxmu1 = dxhat * ivar (mul_8)
+        
+          #step6
+          dsqrtvar = -1. /(sqrtvar**2) * divar (mul_11)
+        
+          #step5
+          dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar (Divide_3) 
+        
+          #step4
+          dsq = 1. /N * np.ones((N,D)) * dvar (Divide_4)
+        
+          #step3
+          dxmu2 = 2 * xmu * dsq (mul_16)
+        
+          #step2
+          dx1 = (dxmu1 + dxmu2)
+          dmu = -1 * np.sum(dxmu1+dxmu2, axis=0) 
+        
+          #step1
+          dx2 = 1. /N * np.ones((N,D)) * dmu (Divide_6)
+        
+          #step0
+          dx = dx1 + dx2
+        
+
+           Returns:
+               Single pattern that matches batchnorm bprop op
+    """
+
+        self.batchnorm_bprop_xhat_label = "dxhat"
+        self.batchnorm_bprop_var_label = "var"
+        self.batchnorm_bprop_ivar_label = "ivar"
+        self.batchnorm_bprop_xmu_label = "xmu"
+        self.batchnorm_bprop_negative_inverse_sqrtvar = "negative_inverse_sqrtvar"
+        self.batchnorm_bprop_inverse_sqrtvar = "inverse_sqrtvar"
+        self.batchnorm_bprop_sqrtvar_label = "sqrtvar"
+        self.batchnorm_bprop_N = "N"
+        self.batchnorm_bprop_mean = "mean"
+        self.batchnorm_bprop_input_sum = "input_sum"
+
+        #bind the op
+        var = PatternLabelOp(self.batchnorm_bprop_var_label,
+                        (lambda op: isinstance(op, Divide)))
+        dxhat = PatternLabelOp(self.batchnorm_bprop_xhat_label,
+                        (lambda op: isinstance(op, Multiply)))
+        xmu = PatternLabelOp(self.batchnorm_bprop_xmu_label,
+                        (lambda op: isinstance(op, Subtract)))
+        ivar = PatternLabelOp(self.batchnorm_bprop_ivar_label,
+                        (lambda op: isinstance(op, Divide)))
+        negative_inverse_sqrtvar = PatternLabelOp(self.batchnorm_bprop_negative_inverse_sqrtvar,
+                        (lambda op: isinstance(op, NegativeOp)))
+        inverse_sqrtvar = PatternLabelOp(self.batchnorm_bprop_inverse_sqrtvar,
+                        (lambda op: isinstance(op, ReciprocalOp)))
+        sqrtvar = PatternLabelOp(self.batchnorm_bprop_sqrtvar_label,
+                        (lambda op: isinstance(op, SqrtOp)))
+        N = PatternLabelOp(self.batchnorm_bprop_N,
+                                (lambda op: isinstance(op, Sum)))
+        mean = PatternLabelOp(self.batchnorm_bprop_mean,
+                         (lambda op: isinstance(op, Divide)))
+        input_sum = PatternLabelOp(self.batchnorm_bprop_input_sum,
+                         (lambda op: isinstance(op, Sum)))
+
+        constant_point_5 = ng.constant(0.5)
+        constant_point_5_w_broadcast = ng.PatternSkipOp(constant_point_5,
+                        lambda op:isinstance(op, BroadcastOp))
+        constant_two = ng.constant(2)
+        constant_two_w_broadcast = ng.PatternSkipOp(constant_two,
+                                                        lambda op: isinstance(op, BroadcastOp))
+
+
+        #construct the pattern
+
+        #divar = np.sum(dxhat*xmu, axis=0)
+        divar = ng.sum(ng.multiply(dxhat, xmu))
+
+        #dxmu1 = dxhat * ivar
+        dxmu1 = ng.multiply(dxhat, ivar)
+
+        #dsqrtvar = -1. /(sqrtvar**2) * divar
+        dsqrtvar = ng.multiply(ng.multiply(inverse_sqrtvar, negative_inverse_sqrtvar), divar)
+
+        #dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar
+        dvar = ng.Divide(ng.sqrt(sqrtvar), ng.multiply(dsqrtvar, constant_point_5_w_broadcast))
+
+        #dsq = 1. / N * np.ones((N, D)) * dvar
+        dsq = ng.Divide(N, ng.multiply(dvar, var))
+
+        #dxmu2 = 2 * xmu * dsq
+        dxmu2 = ng.multiply(xmu, ng.multiply(constant_two_w_broadcast, dsq))
+
+        # dx1 = (dxmu1 + dxmu2)
+        # dmu = -1 * np.sum(dxmu1 + dxmu2, axis=0)
+        dxmu2_mul = ng.multiply(ng.sum(ng.negative(dxmu2)), mean)
+        dxmu2_div = ng.divide(dxmu2_mul, input_sum)
+        dxmu2_div_w_broadcast = ng.PatternSkipOp(dxmu2_div,
+                                (lambda op: isinstance(op, BroadcastOp)))
+        dxmu2_div_plus_dxmu2 = ng.add(dxmu2_div_w_broadcast, dxmu2)
+
+        dxmu2_div_plus_dxmu1 = ng.add(dxmu1, dxmu2_div_plus_dxmu2)
+
+        # TODO - repeat the sequence for dxmu1 and finally arrive at the input gradients
+        # TODO - change the variable names , verify the functionality, add comments for furture reference 
 
     def __init__(self):
         self.tensor_to_op_dict = dict()
