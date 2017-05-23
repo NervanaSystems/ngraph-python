@@ -21,3 +21,20 @@ class BatchnormOp(TensorOp):
         super(BatchnormOp, self).__init__(args=(inputs, gamma, bias, epsilon, mean, variance), axes=inputs.axes, **kwargs)
         self.eps = epsilon
 
+    def generate_adjoints(self, adjoints, delta, inputs):
+        bprop_batchnorm_op = BpropBatchnormOp(delta, inputs, self)
+        inputs.generate_add_delta(adjoints, bprop_batchnorm_op)
+
+
+class BpropBatchnormOp(TensorOp):
+    """
+    Maintains index and conv_params through forwarding of the original relu.
+    
+    Arguments:
+    fprop: corrosponding batchnormOp.
+    delta: global gradients from the previous layer
+    inputs: actual input to the batchnormOp
+    """
+    def __init__(self, inputs, delta, fprop, **kwargs):
+        super(BpropBatchnormOp, self).__init__(args=(inputs, delta), axes=delta.axes, **kwargs)
+        self.fprop = fprop

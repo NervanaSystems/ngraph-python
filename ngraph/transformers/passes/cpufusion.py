@@ -7,9 +7,11 @@ from ngraph.op_graph.op_graph import Maximum, Minimum, BroadcastOp, NegativeOp, 
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp, AssignableTensorOp, variable, TensorOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import Unflatten, ContiguousOp, BroadcastOp, BinaryElementWiseOp, Flatten, Divide
-from ngraph.op_graph.batchnorm import BatchnormOp
+from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
 from collections import deque as Queue
 
+# TODO remove this once fprop batchnorm is replaced with fusion pass
+fprop_batchnorm_dict = {}
 
 class CPUFusion(GraphRewritePass):
 
@@ -111,6 +113,17 @@ class CPUFusion(GraphRewritePass):
             relu_fprop = self.tensor_to_op_dict[x]
             self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
+    def fuse_batchnom_bprop_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for batchnorm bprop pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            # Matched bprop batchnorm pattern, do the replacement here.
+            input_tensor = label_map[self.batchnorm_bprop_input_tensor]
+            delta = label_map[self.batchnorm_bprop_delta]
+            batchnorm_fprop = fprop_batchnorm_dict[input_tensor]
+            self.replace_op(op, BpropBatchnormOp(input_tensor, delta, batchnorm_fprop))
+
     def construct_batchnorm_bprop_pattern(self):
         """
            Generate graph op that represents a pattern for batchnorm backprop operation.
@@ -153,23 +166,28 @@ class CPUFusion(GraphRewritePass):
            Returns:
                Single pattern that matches batchnorm bprop op
     """
-
-        self.batchnorm_bprop_xhat_label = "dxhat"
+        self.batchnorm_bprop_input_tensor = "input_tensor"
+        self.batchnorm_bprop_delta = "delta"
+        self.batchnorm_bprop_gamma_label = "gamma"
         self.batchnorm_bprop_var_label = "var"
         self.batchnorm_bprop_ivar_label = "ivar"
         self.batchnorm_bprop_xmu_label = "xmu"
         self.batchnorm_bprop_negative_inverse_sqrtvar = "negative_inverse_sqrtvar"
         self.batchnorm_bprop_inverse_sqrtvar = "inverse_sqrtvar"
         self.batchnorm_bprop_sqrtvar_label = "sqrtvar"
-        self.batchnorm_bprop_N = "N"
+        self.batchnorm_bprop_sqrsum = "sqrsum"
         self.batchnorm_bprop_mean = "mean"
         self.batchnorm_bprop_input_sum = "input_sum"
 
         #bind the op
+        input_tensor = PatternLabelOp(self.batchnorm_bprop_input_tensor,
+                        (lambda op: isinstance(op, Flatten)))
         var = PatternLabelOp(self.batchnorm_bprop_var_label,
                         (lambda op: isinstance(op, Divide)))
-        dxhat = PatternLabelOp(self.batchnorm_bprop_xhat_label,
-                        (lambda op: isinstance(op, Multiply)))
+        gamma = PatternLabelOp(self.batchnorm_bprop_gamma_label,
+                        (lambda op: isinstance(op, BroadcastOp)))
+        delta = PatternLabelOp(self.batchnorm_bprop_delta,
+                        (lambda op: isinstance(op, Flatten)))
         xmu = PatternLabelOp(self.batchnorm_bprop_xmu_label,
                         (lambda op: isinstance(op, Subtract)))
         ivar = PatternLabelOp(self.batchnorm_bprop_ivar_label,
@@ -180,7 +198,7 @@ class CPUFusion(GraphRewritePass):
                         (lambda op: isinstance(op, ReciprocalOp)))
         sqrtvar = PatternLabelOp(self.batchnorm_bprop_sqrtvar_label,
                         (lambda op: isinstance(op, SqrtOp)))
-        N = PatternLabelOp(self.batchnorm_bprop_N,
+        sqrsum = PatternLabelOp(self.batchnorm_bprop_sqrsum,
                                 (lambda op: isinstance(op, Sum)))
         mean = PatternLabelOp(self.batchnorm_bprop_mean,
                          (lambda op: isinstance(op, Divide)))
@@ -196,6 +214,7 @@ class CPUFusion(GraphRewritePass):
 
 
         #construct the pattern
+        dxhat = ng.multiply(gamma, delta)
 
         #divar = np.sum(dxhat*xmu, axis=0)
         divar = ng.sum(ng.multiply(dxhat, xmu))
@@ -210,23 +229,31 @@ class CPUFusion(GraphRewritePass):
         dvar = ng.Divide(ng.sqrt(sqrtvar), ng.multiply(dsqrtvar, constant_point_5_w_broadcast))
 
         #dsq = 1. / N * np.ones((N, D)) * dvar
-        dsq = ng.Divide(N, ng.multiply(dvar, var))
+        dsq = ng.Divide(sqrsum, ng.multiply(dvar, var))
 
         #dxmu2 = 2 * xmu * dsq
         dxmu2 = ng.multiply(xmu, ng.multiply(constant_two_w_broadcast, dsq))
 
         # dx1 = (dxmu1 + dxmu2)
         # dmu = -1 * np.sum(dxmu1 + dxmu2, axis=0)
+        # dx2 = 1. /N * np.ones((N,D)) * dmu (Divide_6)
+        # dx = dx1 + dx2
         dxmu2_mul = ng.multiply(ng.sum(ng.negative(dxmu2)), mean)
         dxmu2_div = ng.divide(dxmu2_mul, input_sum)
         dxmu2_div_w_broadcast = ng.PatternSkipOp(dxmu2_div,
                                 (lambda op: isinstance(op, BroadcastOp)))
-        dxmu2_div_plus_dxmu2 = ng.add(dxmu2_div_w_broadcast, dxmu2)
+        dxmu2_div_plus_dxmu2 = ng.add(dxmu2_div_w_broadcast, dxmu2)  # Add_4
 
-        dxmu2_div_plus_dxmu1 = ng.add(dxmu1, dxmu2_div_plus_dxmu2)
+        dx1 = ng.add(dxmu1, dxmu2_div_plus_dxmu2)  # Add_5
 
-        # TODO - repeat the sequence for dxmu1 and finally arrive at the input gradients
-        # TODO - change the variable names , verify the functionality, add comments for furture reference 
+
+        dxmu1_mul = ng.multiply(ng.sum(ng.negative(dxmu1)), mean)
+        dxmu1_div = ng.divide(dxmu1_mul, ng.sum(input_tensor))
+        dxmu1_div_w_broadcast = ng.PatternSkipOp(dxmu1_div,
+                                                 (lambda op: isinstance(op, BroadcastOp)))
+        dx = dxmu1_div_w_broadcast + dx1
+        return dx
+
 
     def __init__(self):
         self.tensor_to_op_dict = dict()
@@ -238,6 +265,10 @@ class CPUFusion(GraphRewritePass):
         # Register Relu bprop pattern
         pattern_relu_bprop = self.construct_relu_bprop_pattern()
         self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)
+
+        # Register batchnorm bprop pattern
+        pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
+        self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
 
 
 # Delete after moving Batchnorm to CPUFusion
@@ -259,6 +290,7 @@ class FusionPass(PeepholeGraphPass):
         epsilon = dict_ops_to_params["epsilon"].args[0].tensor.const
         mean = BroadcastOp(dict_ops_to_params["mean"], axes=inputs.axes)
         new_op = BatchnormOp(inputs, gamma, bias, epsilon, mean, variance)
+        fprop_batchnorm_dict[inputs] = new_op
         self.replace_op(op, new_op)
 
     def check_for_pattern(self, args1, args2, op_type1, op_type2):
@@ -368,3 +400,4 @@ class FusionPass(PeepholeGraphPass):
         # if we reach the correct depth and all the pattern matches then fuse to form BatchnormOp
         if (level == 7):
             self.fuse_fprop_batch_norm(op_dict, root_op)
+
