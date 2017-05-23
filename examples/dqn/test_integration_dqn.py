@@ -38,7 +38,9 @@ def test_dependent_environment():
 
         rl_loop.rl_loop(environment, agent, episodes=10)
 
-        total_rewards.append(rl_loop.evaluate_single_episode(environment, agent))
+        total_rewards.append(
+            rl_loop.evaluate_single_episode(environment, agent)
+        )
 
     # most of these 10 agents will be able to converge to the perfect policy
     assert np.mean(np.array(total_rewards) == 100) >= 0.5
