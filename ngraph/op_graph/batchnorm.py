@@ -27,9 +27,7 @@ class BatchnormOp(TensorOp):
 
 
 class BpropBatchnormOp(TensorOp):
-    """
-    Maintains index and conv_params through forwarding of the original relu.
-    
+    """ 
     Arguments:
     fprop: corrosponding batchnormOp.
     delta: global gradients from the previous layer

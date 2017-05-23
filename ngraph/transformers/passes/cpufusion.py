@@ -111,9 +111,9 @@ class CPUFusion(GraphRewritePass):
             x = label_map[self.relu_bwd_x_label]
             delta = label_map[self.relu_bwd_delta_label]
             relu_fprop = self.tensor_to_op_dict[x]
-            self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
+        self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
-    def fuse_batchnom_bprop_callback(self, op, label_map_op_list):
+    def fuse_batchnorm_bprop_callback(self, op, label_map_op_list):
         """
         Callback function that handles fusion for batchnorm bprop pattern
         """
@@ -179,7 +179,7 @@ class CPUFusion(GraphRewritePass):
         self.batchnorm_bprop_mean = "mean"
         self.batchnorm_bprop_input_sum = "input_sum"
 
-        #bind the op
+        #bind the op's to the label
         input_tensor = PatternLabelOp(self.batchnorm_bprop_input_tensor,
                         (lambda op: isinstance(op, Flatten)))
         var = PatternLabelOp(self.batchnorm_bprop_var_label,
@@ -214,44 +214,44 @@ class CPUFusion(GraphRewritePass):
 
 
         #construct the pattern
-        dxhat = ng.multiply(gamma, delta)
+        dxhat = Multiply(gamma, delta)
 
         #divar = np.sum(dxhat*xmu, axis=0)
-        divar = ng.sum(ng.multiply(dxhat, xmu))
+        divar = Sum(Multiply(dxhat, xmu))
 
         #dxmu1 = dxhat * ivar
-        dxmu1 = ng.multiply(dxhat, ivar)
+        dxmu1 = Multiply(dxhat, ivar)
 
         #dsqrtvar = -1. /(sqrtvar**2) * divar
-        dsqrtvar = ng.multiply(ng.multiply(inverse_sqrtvar, negative_inverse_sqrtvar), divar)
+        dsqrtvar = Multiply(Multiply(inverse_sqrtvar, negative_inverse_sqrtvar), divar)
 
         #dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar
-        dvar = ng.Divide(ng.sqrt(sqrtvar), ng.multiply(dsqrtvar, constant_point_5_w_broadcast))
+        dvar = Divide(sqrtvar, Multiply(dsqrtvar, constant_point_5_w_broadcast))
 
         #dsq = 1. / N * np.ones((N, D)) * dvar
-        dsq = ng.Divide(sqrsum, ng.multiply(dvar, var))
+        dsq = Divide(sqrsum, Multiply(dvar, var))
 
         #dxmu2 = 2 * xmu * dsq
-        dxmu2 = ng.multiply(xmu, ng.multiply(constant_two_w_broadcast, dsq))
+        dxmu2 = Multiply(xmu, Multiply(constant_two_w_broadcast, dsq))
 
         # dx1 = (dxmu1 + dxmu2)
         # dmu = -1 * np.sum(dxmu1 + dxmu2, axis=0)
         # dx2 = 1. /N * np.ones((N,D)) * dmu (Divide_6)
         # dx = dx1 + dx2
-        dxmu2_mul = ng.multiply(ng.sum(ng.negative(dxmu2)), mean)
-        dxmu2_div = ng.divide(dxmu2_mul, input_sum)
+        dxmu2_mul = Multiply(Sum(NegativeOp(dxmu2)), mean)
+        dxmu2_div = Divide(dxmu2_mul, input_sum)
         dxmu2_div_w_broadcast = ng.PatternSkipOp(dxmu2_div,
                                 (lambda op: isinstance(op, BroadcastOp)))
-        dxmu2_div_plus_dxmu2 = ng.add(dxmu2_div_w_broadcast, dxmu2)  # Add_4
+        dxmu2_div_plus_dxmu2 = Add(dxmu2_div_w_broadcast, dxmu2)  # Add_4
 
-        dx1 = ng.add(dxmu1, dxmu2_div_plus_dxmu2)  # Add_5
+        dx1 = Add(dxmu1, dxmu2_div_plus_dxmu2)  # Add_5
 
 
-        dxmu1_mul = ng.multiply(ng.sum(ng.negative(dxmu1)), mean)
-        dxmu1_div = ng.divide(dxmu1_mul, ng.sum(input_tensor))
+        dxmu1_mul = Multiply(Sum(ng.negative(dxmu1)), mean)
+        dxmu1_div = Divide(dxmu1_mul, Sum(input_tensor))
         dxmu1_div_w_broadcast = ng.PatternSkipOp(dxmu1_div,
                                                  (lambda op: isinstance(op, BroadcastOp)))
-        dx = dxmu1_div_w_broadcast + dx1
+        dx = Add(dxmu1_div_w_broadcast, dx1)
         return dx
 
 
@@ -269,6 +269,7 @@ class CPUFusion(GraphRewritePass):
         # Register batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
         self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
+        print(GraphRewritePass.print_pattern(pattern_batchnorm_bprop))
 
 
 # Delete after moving Batchnorm to CPUFusion
