@@ -19,8 +19,7 @@ import ngraph as ng
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.testing import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent("module")]
 
 
 delta = 1e-3
@@ -95,6 +94,7 @@ def test_expand_dims(transformer_factory):
                     )
 
 
+@pytest.mark.flex_disabled
 def test_slice(transformer_factory):
     """TODO."""
 
@@ -185,6 +185,7 @@ def test_slice(transformer_factory):
             )
 
 
+@pytest.mark.flex_disabled
 def test_multiple_slices(transformer_factory):
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
@@ -228,6 +229,7 @@ def test_multiple_slices(transformer_factory):
         )
 
 
+@pytest.mark.flex_disabled
 def test_padding(transformer_factory):
     """TODO."""
     C = ng.make_axis()
@@ -295,6 +297,7 @@ def test_padding(transformer_factory):
             )
 
 
+@pytest.mark.flex_disabled
 def test_cast_axes(transformer_factory):
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)

@@ -22,8 +22,7 @@ import collections
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent("module")]
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -103,6 +102,7 @@ def test_tensor_constant(transformer_factory):
     ng.testing.assert_allclose(cval, aval)
 
 
+@pytest.mark.flex_disabled
 def test_placeholder(transformer_factory):
     W = ng.make_axis(length=10)
     H = ng.make_axis(length=20)
@@ -178,6 +178,7 @@ def test_reduction(transformer_factory, reduction, sub_axes):
             red=reduction, axes=reduction_axes)
 
 
+@pytest.mark.flex_disabled
 def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     if reduction in ('max', 'min'):
         pytest.skip("max/min needed to be tested differently")
@@ -200,6 +201,7 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
+@pytest.mark.flex_disabled
 def test_prod_constant(transformer_factory):
     """
     Test reduce product of constants
@@ -244,6 +246,7 @@ def test_prod_constant(transformer_factory):
     np.testing.assert_allclose(res_0_1_2_np, res_0_1_2_ng)
 
 
+@pytest.mark.flex_disabled
 def test_prod_deriv(transformer_factory):
     """
     Test reduce product's gradient
@@ -308,6 +311,7 @@ def test_prod_deriv(transformer_factory):
             check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
 
 
+@pytest.mark.flex_disabled
 def test_reciprocal(transformer_factory, input_tensor):
     """TODO."""
     p_u = input_tensor
@@ -321,6 +325,7 @@ def test_reciprocal(transformer_factory, input_tensor):
     ng.testing.assert_allclose(rec_u_np, rec_u_graph)
 
 
+@pytest.mark.flex_disabled
 def test_reciprocal_derivative(transformer_factory, input_tensor):
     """TODO."""
     p_u = input_tensor
@@ -403,6 +408,7 @@ def test_elementwise_binary_ops_matched_args(
     )
 
 
+@pytest.mark.flex_disabled
 def test_elementwise_binary_ops_matched_args_deriv_lhs(
     transformer_factory,
     elementwise_binary_op,
@@ -424,6 +430,7 @@ def test_elementwise_binary_ops_matched_args_deriv_lhs(
     )
 
 
+@pytest.mark.flex_disabled
 def test_elementwise_binary_ops_matched_args_deriv_rhs(
     transformer_factory,
     elementwise_binary_op,
@@ -445,6 +452,7 @@ def test_elementwise_binary_ops_matched_args_deriv_rhs(
     )
 
 
+@pytest.mark.flex_disabled
 def test_elementwise_unary_ops_matched_args(
     transformer_factory,
     elementwise_unary_op,
@@ -472,6 +480,7 @@ def test_elementwise_unary_ops_matched_args(
         ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
+@pytest.mark.flex_disabled
 def test_elementwise_ops_unmatched_args(
     transformer_factory,
     elementwise_binary_op,
@@ -608,6 +617,7 @@ def test_cross_entropy_binary_logistic_shortcut(
     ng.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
+@pytest.mark.flex_disabled
 def test_cross_entropy_binary(
     transformer_factory,
     input_tensor
@@ -844,6 +854,7 @@ def test_cross_entropy_softmax_rec_deriv(transformer_factory, recurrent_input_te
     )
 
 
+@pytest.mark.flex_disabled
 def test_sigmoid_deriv(transformer_factory, input_tensor):
     """TODO."""
     p_u = input_tensor
@@ -854,6 +865,7 @@ def test_sigmoid_deriv(transformer_factory, input_tensor):
     check_derivative(val_u, p_u, 0.001, u, atol=1e-2, rtol=1e-2)
 
 
+@pytest.mark.flex_disabled
 def test_log_sigmoid_deriv(transformer_factory, input_tensor):
     """TODO."""
     p_u = input_tensor

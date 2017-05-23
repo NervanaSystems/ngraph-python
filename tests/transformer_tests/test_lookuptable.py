@@ -23,7 +23,7 @@ from ngraph.frontends.neon import ax
 import pytest
 
 pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+              pytest.mark.flex_disabled]
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -66,6 +66,7 @@ def lut_update_ref(error, lut, idx, pad_idx):
     return dw_ref
 
 
+@pytest.mark.transformer_dependent
 def test_lut(transformer_factory, lut_args):
     """
     test lut fprop and bprop

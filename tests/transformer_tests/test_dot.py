@@ -22,8 +22,7 @@ from ngraph.testing import ExecutorFactory, executor
 from ngraph.testing import raise_all_numpy_errors
 import pytest
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent("module")]
 
 
 """
@@ -163,6 +162,7 @@ def test_dot_sum_backprop(transformer_factory):
         ng.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
 
 
+@pytest.mark.flex_disabled
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""

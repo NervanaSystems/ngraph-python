@@ -21,7 +21,7 @@ def test_if_mlp_network_is_trainable(script_path, description, misclass_threshol
     """
 
     print("Description of test case: ", description)
-    mlp_path = os.path.dirname(__file__) + "/../" + script_path
+    mlp_path = os.path.dirname(__file__) + "/../../" + script_path
 
     # start MLP training for flexgpu with 200 iterations and random number generator seed equals 1
     cmd = "python " + mlp_path + " -b flexgpu -t 200 -r 1"
