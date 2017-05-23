@@ -241,7 +241,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
         gates = ['i', 'f', 'o', 'g']
         Wxh_neon_1 = np.concatenate(Wxh_neon_1_fun(), 1)
         Whh_neon_1 = np.concatenate(Whh_neon_1_fun(), 1)
-        bh_neon_1 =  np.concatenate(bh_neon_1_fun())
+        bh_neon_1 = np.concatenate(bh_neon_1_fun())
         Wxh_neon_2 = np.concatenate(Wxh_neon_2_fun(), 1)
         Whh_neon_2 = np.concatenate(Whh_neon_2_fun(), 1)
         bh_neon_2 = np.concatenate(bh_neon_2_fun())
