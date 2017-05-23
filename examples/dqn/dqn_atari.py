@@ -153,8 +153,7 @@ def main():
     environment = gym.make('PongDeterministic-v4')
     environment = ReshapeWrapper(environment)
     environment = ClipRewardWrapper(environment)
-
-    print(environment.observation_space)
+    environment = RepeatWrapper(frames=4)(environment)
 
     # todo: perhaps these should be defined in the environment itself
     state_axes = ng.make_axes([
