@@ -69,12 +69,14 @@ def wrap_layer(cache_key=keys.hashkey):
         def layer_wrapper(self, in_obj, *inputs, **kwargs):
             with ng.Op.all_ops() as ops:
                 output = f(self, in_obj, *inputs, **kwargs)
-
             # TODO: This should create unique names for different instances of the same class
             # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
             for op in ops:
-                op.metadata.setdefault("neon_layer", []).insert(0, self.name)
-            self.ops.append(ops)
+                if "neon_layer" not in op.metadata:
+                    op.metadata["neon_layer"] = self.name
+                else:
+                    op.metadata["neon_layer"] = self.name + "/" + op.metadata["neon_layer"]
+            self._subgraph.ops.append(ops)
 
             return output
 
