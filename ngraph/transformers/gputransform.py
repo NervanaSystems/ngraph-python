@@ -28,8 +28,9 @@ try:
 except ImportError:
     raise UnsupportedTransformerException("No GPU")
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
+from ngraph.transformers.base import ComputationGraphTransformer, \
+    DeviceBufferStorage, DeviceBufferReference, DeviceTensor, \
+    PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
@@ -39,7 +40,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
-    GPUCudaGatherSendOp, GPUCudaGatherRecvOp
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv, \
     DeconvolutionOp, fprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -62,7 +63,7 @@ from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
     RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
-    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel
+    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
@@ -479,6 +480,10 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(GPUCudaGatherRecvOp)
     def add_kernel(self, op):
         self.kernels.append(CudaGatherRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaAllReduceOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaAllReduceKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -1032,7 +1037,7 @@ class GPURuntime(object):
             self.scratch_size = total_size
 
 
-class GPUTransformer(Transformer):
+class GPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a GPU, backed by pycuda and NervanaGPU.
 

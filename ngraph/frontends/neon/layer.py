@@ -1057,10 +1057,10 @@ class LSTM(Recurrent):
             self.c_init = init_state[1]
         else:
             if self.reset_cells:
-                self.h_init = ng.temporary(initial_value=0,
-                                           axes=self.out_axes).named('h_init')
-                self.c_init = ng.temporary(initial_value=0,
-                                           axes=self.out_axes).named('c_init')
+                self.h_init = ng.constant(const=0,
+                                          axes=self.out_axes).named('h_init')
+                self.c_init = ng.constant(const=0,
+                                          axes=self.out_axes).named('c_init')
             else:
                 self.h_init = ng.variable(initial_value=0,
                                           axes=self.out_axes).named('h_init')

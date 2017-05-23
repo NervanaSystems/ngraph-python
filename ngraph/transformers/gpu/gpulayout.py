@@ -24,7 +24,7 @@ from ngraph.op_graph.axes import Axes, make_axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherSendOp, \
-    GPUCudaGatherRecvOp
+    GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.ctc import CTCOp
 
 from ngraph.transformers.passes.layout import UnaryLayoutConstraint
@@ -859,6 +859,8 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, (GPUCudaGatherSendOp, GPUCudaGatherRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, (GPUCudaAllReduceOp)):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, CTCOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     else:
@@ -913,11 +915,13 @@ def gpu_constraint_factory(op, arg):
     elif isinstance(op, RngOp):
         return GPUBinaryLayoutConstraint(op, arg)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
-        return GPUBinaryLayoutConstraint(op, arg)
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
         axis_least_contig = make_axes(op.metadata['parallel'])
         new_axes = axis_least_contig + (op.axes - axis_least_contig)
         return GPUFixedLayoutConstraint(op, arg, new_axes)
+    elif isinstance(op, (GPUCudaAllReduceOp)):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, CTCOp):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     else:
