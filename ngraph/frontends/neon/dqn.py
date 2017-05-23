@@ -58,7 +58,7 @@ class ModelWrapper(object):
         self.axes.n1 = ng.make_axis(name='N', length=1)
 
         self.state = ng.placeholder(self.axes.state + [self.axes.n])
-        self.state_single = ng.placeholder(self.axes.state)
+        self.state_single = ng.placeholder(self.axes.state + [self.axes.n1])
         self.target = ng.placeholder([self.axes.action, self.axes.n])
 
         # todo: except model as input parameter to constructor
@@ -98,7 +98,7 @@ class ModelWrapper(object):
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
-        return self.inference_computation_single(state)
+        return self.inference_computation_single(state[...,np.newaxis])[...,0]
 
     def predict(self, state):
         if state.shape != self.state.axes.lengths:

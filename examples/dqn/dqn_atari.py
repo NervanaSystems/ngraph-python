@@ -123,6 +123,12 @@ def RepeatWrapper(frames=4):
             self.frames = frames
             self.history = []
 
+            self.observation_space = gym.spaces.Box(
+                low=0,
+                high=1,
+                shape=(frames, ) + self.observation_space.shape,
+            )
+
         def _reset(self):
             self.history = deque([super(RepeatWrapper, self)._reset()],
                                  maxlen=self.frames)
@@ -157,9 +163,9 @@ def main():
 
     # todo: perhaps these should be defined in the environment itself
     state_axes = ng.make_axes([
-        # ng.make_axis(environment.observation_space.shape[2], name='feature'),
-        ng.make_axis(environment.observation_space.shape[0], name='width'),
-        ng.make_axis(environment.observation_space.shape[1], name='height'),
+        ng.make_axis(environment.observation_space.shape[0], name='feature'),
+        ng.make_axis(environment.observation_space.shape[1], name='width'),
+        ng.make_axis(environment.observation_space.shape[2], name='height'),
     ])
 
     agent = dqn.Agent(
