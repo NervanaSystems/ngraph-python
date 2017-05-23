@@ -39,8 +39,10 @@ def make_axes(lengths, name=None):
 class ModelWrapper(object):
     """the ModelWrapper is responsible for interacting with neon and ngraph"""
 
-    def __init__(self, state_axes, action_size, batch_size, model,
-                 learning_rate=0.0001):
+    def __init__(
+            self, state_axes, action_size, batch_size, model,
+            learning_rate=0.0001
+    ):
         """
         for now, model must be a function which takes action_axes, and
         returns a neon container
@@ -128,9 +130,7 @@ def linear_generator(start, end, steps):
 
     while True:
         if steps_taken < steps:
-            yield start + delta * (
-                steps_taken / float(steps - 1)
-            )
+            yield start + delta * (steps_taken / float(steps - 1))
         else:
             yield end
 
@@ -154,12 +154,20 @@ def decay_generator(start, decay, minimum):
             value = minimum
 
 
-
 class Agent(object):
     """the Agent is responsible for interacting with the environment."""
 
-    def __init__(self, state_axes, action_space, model, epsilon, gamma=0.99,
-                 batch_size=32, memory=None, learning_rate=0.0001):
+    def __init__(
+            self,
+            state_axes,
+            action_space,
+            model,
+            epsilon,
+            gamma=0.99,
+            batch_size=32,
+            memory=None,
+            learning_rate=0.0001
+    ):
         super(Agent, self).__init__()
 
         self.update_after_episode = False
@@ -268,6 +276,7 @@ class RepeatMemory(deque):
 
     warning: this memory can only be written to from a single episode at a time
     """
+
     def __init__(self, frames_per_observation, **kwargs):
         super(RepeatMemory, self).__init__(**kwargs)
 
@@ -301,15 +310,25 @@ class RepeatMemory(deque):
 
             # check to see if this is a valid sample. it is invalid if there is
             # a terminal frame in the middle of the observation
-            records = [self[i] for i in range(i, i + self.frames_per_observation + 1)]
+            records = [
+                self[i] for i in range(i, i + self.frames_per_observation + 1)
+            ]
             if any(record['done'] for record in records[:-1]):
                 continue
 
             # build observation
+            state = np.stack(
+                [record['frame'] for record in records[:-1]],
+                axis=-1,
+            )
+            next_state = np.stack(
+                [record['frame'] for record in records[1:]],
+                axis=-1,
+            )
             record = {
                 'done': records[-1]['done'],
-                'state': np.stack([record['frame'] for record in records[:-1]], axis=-1),
-                'next_state': np.stack([record['frame'] for record in records[1:]], axis=-1),
+                'state': state,
+                'next_state': next_state,
             }
 
             sample.append(record)
