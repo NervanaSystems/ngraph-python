@@ -32,22 +32,29 @@ SLEEP_S = 0.1
 ITEMS_PER_THREAD = 32
 
 
-def set_ipc_handle(op, shared_queue, handle):
+def set_ipc_handle(op, shared_queue, handle, local=False):
     lock = drv.mem_alloc(1)
     drv.memset_d8(lock, 0, 1)
-    buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
-    lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
-    shared_queue.put((buf_ipc_hdl, lock_ipc_hdl))
+    if local:
+        buf_ipc_hdl = int(handle)
+        lock_ipc_hdl = int(lock)
+    else:
+        buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
+        lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
+    shared_queue.put((local, buf_ipc_hdl, lock_ipc_hdl))
     return (lock)
 
 
 def open_ipc_handle(shared_queue):
     while True:
         try:
-            (buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
-            buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
-            lock = drv.IPCMemoryHandle(lock_ipc_hdl)
-            return (buf_hdl, lock)
+            (is_local, buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
+            if is_local:
+                return buf_ipc_hdl, lock_ipc_hdl
+            else:
+                buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
+                lock = drv.IPCMemoryHandle(lock_ipc_hdl)
+                return (buf_hdl, lock)
         except Exception as e:
             if isinstance(e, Empty):
                 pass
@@ -306,12 +313,14 @@ class CudaScatterSendKernel(GPUKernel):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaScatterSendKernel, self).bind_buffers()
         self.send_ready = list()
-        for i in range(len(self.op.to_id)):
+        for i, to_id in enumerate(self.op.to_id):
             self.send_ready.append(
                 set_ipc_handle(
                     self.op,
                     self.op._shared_queues[i],
-                    self.tensor.tensor.gpudata))
+                    self.tensor.tensor.gpudata,
+                    local=self.op.metadata['device_id'] == int(to_id)))
+
 
     def execute(self):
         for i in range(len(self.op.to_id)):
@@ -324,11 +333,11 @@ class CudaScatterRecvKernel(GPUKernel):
         super(CudaScatterRecvKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
-        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(op._shared_queues[op.idx])
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
+        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues[self.op.idx])
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -350,11 +359,14 @@ class CudaGatherSendKernel(GPUKernel):
         super(CudaGatherSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
-        (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(op._shared_queues[op.idx])
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
+        # here, or inside open_ipc_handle, 
+        # check if self.op device_id == self.op.recv_node device_id
+        # if so, use direct (local) pointer, rather than opening an IPC handle
+        (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues[self.op.idx])
         super(CudaGatherSendKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -381,12 +393,15 @@ class CudaGatherRecvKernel(GPUKernel):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherRecvKernel, self).bind_buffers()
         self.sender_ready = list()
-        for i in range(len(self.op.from_id)):
+        for i, from_id in enumerate(self.op.from_id):
+            
+            print("In GR",i,from_id,self.op.metadata['device_id'])
             self.sender_ready.append(
                 set_ipc_handle(
                     self.op,
                     self.op._shared_queues[i],
-                    self.tensor.tensor.gpudata))
+                    self.tensor.tensor.gpudata,
+                    local=from_id == self.op.metadata['device_id']))
 
     def execute(self):
         for i in range(len(self.op.from_id)):

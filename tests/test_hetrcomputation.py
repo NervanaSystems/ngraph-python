@@ -438,6 +438,30 @@ ax_B = ng.make_axis(6)
 ax_C = ng.make_axis(12)
 ax_D = ng.make_axis(24)
 
+@pytest.mark.hetr_gpu_only
+@pytest.mark.parametrize('config', [
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0','1'),
+        'parallel_axis': ax_A,
+    },    
+    ])
+def test_debug_gpu_graph(config):
+    t = config
+    #with ng.metadata(device='gpu'):
+    #import ipdb; ipdb.set_trace()
+    x = ng.placeholder(axes=t['axes'])
+ 
+    with ng.metadata(device='gpu', device_id=t['device_id'], parallel=t['parallel_axis']):
+        x_plus_one = x + 1
+  
+    #np_x = np.random.randint(100, size=t['axes'].full_lengths)
+    with closing(ngt.make_transformer_factory('hetr')()) as transformer:
+        computation = transformer.computation(x_plus_one, x)
+        for i in range(1):
+            print(computation(i))
+        #res = computation(np_x)
+        #np.testing.assert_array_equal(res, np_x + 1)
 
 @pytest.mark.hetr_gpu_only
 @pytest.mark.parametrize('config', [
@@ -499,8 +523,8 @@ def test_gpu_graph(config):
         x_plus_two = x_plus_one + 1
 
     np_x = np.random.randint(100, size=t['axes'].full_lengths)
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_two, x)
+    with closing(ngt.make_transformer_factory('hetr')()) as transformer:
+        computation = transformer.computation(x_plus_two, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 2)
 
