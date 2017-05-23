@@ -28,7 +28,7 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
-TEST_OPTS := --timeout=600 --cov=ngraph
+TEST_OPTS := --timeout=600 --cov=ngraph --timeout_method=thread
 TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests/
 TEST_DIRS_FLEX := flex_tests/ tests/
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
@@ -103,7 +103,7 @@ test_flex: gpu_prepare test_prepare clean
 	@echo "     make autoflex_prepare"
 	@echo
 	@echo Running flex unit tests...
-	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
+	py.test --boxed -n auto --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
 	--junit-xml=testout_test_flex_$(PY).xml \
 	--timeout=1200 --cov=ngraph $(TEST_DIRS_FLEX)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
@@ -133,9 +133,11 @@ test_cpu: test_prepare clean
 test_gpu: gpu_prepare test_prepare clean
 	echo Running unit tests for gpu dependent transformer tests...
 	py.test --transformer hetr -m "hetr_gpu_only" \
+	--boxed -n auto \
 	--junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
-	py.test --transformer gpu -m "transformer_dependent" --boxed \
+	py.test --transformer gpu -m "transformer_dependent" \
+	--boxed -n auto \
 	--junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
