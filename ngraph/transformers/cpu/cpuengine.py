@@ -181,13 +181,15 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
             self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
             
-            self.create_mkldnn_add_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_add_primitives
-            self.create_mkldnn_add_primitives_fn.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_int,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int]
-            self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
+            self.add_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_add_kernel
+            self.add_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+            self.add_kernel.restype = ctypes.c_void_p
             
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
@@ -370,24 +372,12 @@ class Mkldnn(object):
         else:
             np.dot(x, y, out=out)
 
-    def init_elementwise_add(self, name, I_array1, I_array2, O_array):
-        if(self.mkldnn_enabled):
-            # Sanity check for tensor shapes
-            if (not (I_array1.flags['C_CONTIGUOUS'] and
-                     I_array2.flags['C_CONTIGUOUS'])):
-                return
-            input1_shape = I_array1.size
-            input2_shape = I_array2.size
-            output_shape = O_array.size
-            self.kernels[name] = \
-                self.create_mkldnn_add_primitives_fn(
-                    self.mkldnn_engine, I_array1.ctypes.data,
-                    I_array2.ctypes.data, O_array.ctypes.data,
-                    input1_shape, input2_shape, output_shape, 2)
-
     def elementwise_add(self, name, I_array1, I_array2, O_array):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name], self.mkldnn_verbose)
+            self.set_input_tensor(self.kernels[name], I_array1.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], I_array2.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], O_array.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             np.add(I_array1, I_array2, out=O_array)
 

@@ -377,11 +377,6 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_innerproduct_fprop('{}', out={}, x={}, y={})",
                     op.name, out, x, y)
 
-    @allocate_op.on_type(Add)
-    def allocate_op(self, op, out, x, y):
-        self.append("mkldnn.init_elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
-                    op.name, x, y, out)
-
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
