@@ -173,7 +173,6 @@ def test_tensor_dot_tensor(transformer_factory):
 
     tests = [
         {
-            'id': 0,
             'tensor1': [[1, 2], [4, 5], [3, 4]],
             'tensor1_axes': (C, D),
             'tensor2': [2, 5],
@@ -182,7 +181,6 @@ def test_tensor_dot_tensor(transformer_factory):
             'axes_lengths': {C: 3, D: 2}
         },
         {
-            'id': 1,
             'tensor1': [[1, 4, 3], [2, 5, 4]],
             'tensor1_axes': (D, C),
             'tensor2': [2, 5],
@@ -191,7 +189,6 @@ def test_tensor_dot_tensor(transformer_factory):
             'axes_lengths': {C: 3, D: 2}
         },
         {
-            'id': 2,
             'tensor1': [[[1, 4], [2, 5]], [[7, 12], [13, 2]]],
             'tensor1_axes': (N, D, C),
             'tensor2': [[[3, 6], [7, 2]], [[9, 8], [10, 4]]],
@@ -200,7 +197,6 @@ def test_tensor_dot_tensor(transformer_factory):
             'axes_lengths': {N: 2, D: 2, C: 2, H: 2}
         },
         {
-            'id': 3,
             'tensor1': [1, 2],
             'tensor1_axes': (C,),
             'tensor2': [7, 11, 13],
@@ -209,7 +205,6 @@ def test_tensor_dot_tensor(transformer_factory):
             'axes_lengths': {C: 2, D: 3}
         },
         {
-            'id': 4,
             'tensor1': [[1, 4], [6, 2]],
             'tensor1_axes': (C, D),
             'tensor2': [[1, 4], [6, 2]],
