@@ -171,12 +171,14 @@ class CPUFusion(GraphRewritePass):
         self.batchnorm_bprop_gamma_label = "gamma"
         self.batchnorm_bprop_var_label = "var"
         self.batchnorm_bprop_ivar_label = "ivar"
-        self.batchnorm_bprop_xmu_label = "xmu"
+        self.batchnorm_bprop_xmu1_label = "xmu1"
+        self.batchnorm_bprop_xmu2_label = "xmu2"
         self.batchnorm_bprop_negative_inverse_sqrtvar = "negative_inverse_sqrtvar"
         self.batchnorm_bprop_inverse_sqrtvar = "inverse_sqrtvar"
         self.batchnorm_bprop_sqrtvar_label = "sqrtvar"
         self.batchnorm_bprop_sqrsum = "sqrsum"
-        self.batchnorm_bprop_mean = "mean"
+        self.batchnorm_bprop_mean_1 = "mean_1"
+        self.batchnorm_bprop_mean_2 = "mean_2"
         self.batchnorm_bprop_input_sum = "input_sum"
 
         #bind the op's to the label
@@ -188,10 +190,12 @@ class CPUFusion(GraphRewritePass):
                         (lambda op: isinstance(op, BroadcastOp)))
         delta = PatternLabelOp(self.batchnorm_bprop_delta,
                         (lambda op: isinstance(op, Flatten)))
-        xmu = PatternLabelOp(self.batchnorm_bprop_xmu_label,
+        xmu1 = PatternLabelOp(self.batchnorm_bprop_xmu1_label,
                         (lambda op: isinstance(op, Subtract)))
+        xmu2 = PatternLabelOp(self.batchnorm_bprop_xmu2_label,
+                              (lambda op: isinstance(op, Subtract)))
         ivar = PatternLabelOp(self.batchnorm_bprop_ivar_label,
-                        (lambda op: isinstance(op, Divide)))
+                        (lambda op: isinstance(op, BroadcastOp)))
         negative_inverse_sqrtvar = PatternLabelOp(self.batchnorm_bprop_negative_inverse_sqrtvar,
                         (lambda op: isinstance(op, NegativeOp)))
         inverse_sqrtvar = PatternLabelOp(self.batchnorm_bprop_inverse_sqrtvar,
@@ -200,7 +204,9 @@ class CPUFusion(GraphRewritePass):
                         (lambda op: isinstance(op, SqrtOp)))
         sqrsum = PatternLabelOp(self.batchnorm_bprop_sqrsum,
                                 (lambda op: isinstance(op, Sum)))
-        mean = PatternLabelOp(self.batchnorm_bprop_mean,
+        mean_1 = PatternLabelOp(self.batchnorm_bprop_mean_1,
+                         (lambda op: isinstance(op, Divide)))
+        mean_2 = PatternLabelOp(self.batchnorm_bprop_mean_2,
                          (lambda op: isinstance(op, Divide)))
         input_sum = PatternLabelOp(self.batchnorm_bprop_input_sum,
                          (lambda op: isinstance(op, Sum)))
@@ -217,7 +223,7 @@ class CPUFusion(GraphRewritePass):
         dxhat = Multiply(gamma, delta)
 
         #divar = np.sum(dxhat*xmu, axis=0)
-        divar = Sum(Multiply(dxhat, xmu))
+        divar = Sum(Multiply(dxhat, xmu1))
 
         #dxmu1 = dxhat * ivar
         dxmu1 = Multiply(dxhat, ivar)
@@ -226,19 +232,22 @@ class CPUFusion(GraphRewritePass):
         dsqrtvar = Multiply(Multiply(inverse_sqrtvar, negative_inverse_sqrtvar), divar)
 
         #dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar
-        dvar = Divide(sqrtvar, Multiply(dsqrtvar, constant_point_5_w_broadcast))
+        dvar = Divide(Multiply(dsqrtvar, constant_point_5_w_broadcast), sqrtvar)
 
         #dsq = 1. / N * np.ones((N, D)) * dvar
-        dsq = Divide(sqrsum, Multiply(dvar, var))
+        dsq = Divide(Multiply(dvar, var), sqrsum)
+
+        dsq_w_broadcast = ng.PatternSkipOp(dsq,
+                                (lambda op: isinstance(op, BroadcastOp)))
 
         #dxmu2 = 2 * xmu * dsq
-        dxmu2 = Multiply(xmu, Multiply(constant_two_w_broadcast, dsq))
+        dxmu2 = Multiply(xmu2, Multiply(constant_two_w_broadcast, dsq_w_broadcast))
 
         # dx1 = (dxmu1 + dxmu2)
         # dmu = -1 * np.sum(dxmu1 + dxmu2, axis=0)
         # dx2 = 1. /N * np.ones((N,D)) * dmu (Divide_6)
         # dx = dx1 + dx2
-        dxmu2_mul = Multiply(Sum(NegativeOp(dxmu2)), mean)
+        dxmu2_mul = Multiply(Sum(ng.negative(dxmu2)), mean_2)
         dxmu2_div = Divide(dxmu2_mul, input_sum)
         dxmu2_div_w_broadcast = ng.PatternSkipOp(dxmu2_div,
                                 (lambda op: isinstance(op, BroadcastOp)))
@@ -247,7 +256,7 @@ class CPUFusion(GraphRewritePass):
         dx1 = Add(dxmu1, dxmu2_div_plus_dxmu2)  # Add_5
 
 
-        dxmu1_mul = Multiply(Sum(ng.negative(dxmu1)), mean)
+        dxmu1_mul = Multiply(Sum(ng.negative(dxmu1)), mean_1)
         dxmu1_div = Divide(dxmu1_mul, Sum(input_tensor))
         dxmu1_div_w_broadcast = ng.PatternSkipOp(dxmu1_div,
                                                  (lambda op: isinstance(op, BroadcastOp)))
@@ -258,13 +267,13 @@ class CPUFusion(GraphRewritePass):
     def __init__(self):
         self.tensor_to_op_dict = dict()
 
-        # Register Relu fprop pattern
-        pattern_relu_fprop = self.construct_relu_fprop_pattern()
-        self.register_pattern(pattern_relu_fprop, self.fuse_relu_fprop_callback)
-
-        # Register Relu bprop pattern
-        pattern_relu_bprop = self.construct_relu_bprop_pattern()
-        self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)
+        # # Register Relu fprop pattern
+        # pattern_relu_fprop = self.construct_relu_fprop_pattern()
+        # self.register_pattern(pattern_relu_fprop, self.fuse_relu_fprop_callback)
+        #
+        # # Register Relu bprop pattern
+        # pattern_relu_bprop = self.construct_relu_bprop_pattern()
+        # self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)
 
         # Register batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
