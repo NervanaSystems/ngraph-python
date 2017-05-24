@@ -474,7 +474,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.op_uses_opkernel_api[op.name] = True
             self.mkldnn.innerproduct_fprop_kernel(
                     self.mkldnn.mkldnn_engine,
-                    len(x.shape), len(y.shape), 1, len(out_shape),
+                    len(x.shape), len(y.shape), 1, len(output_shape),
                     input_shape, weights_shape, None, output_shape,
                     x_layout, y_layout, None,
                     data_type, self.mkldnn.kernels[op.name])
