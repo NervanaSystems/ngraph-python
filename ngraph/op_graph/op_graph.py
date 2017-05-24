@@ -1022,7 +1022,15 @@ class TensorOp(Op):
                     adjoint = adjoint * o.scale
 
                 deriv_handler = o.deriv_handler
-                deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
+                # find hetr distribution metadata, pass other data if exists
+                # todo add reduce func metadata key when fixed #1436
+                hetr_meta_key = ['device', 'device_id', 'parallel']
+                hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
+                                 if o.metadata.get(k) is not None}
+                with metadata(**hetr_metadata):
+                    deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
                 processed.add(o.tensor)
 
         return adjoints
@@ -1251,17 +1259,6 @@ class TensorOp(Op):
         """
         return mean(self, reduction_axes=reduction_axes, out_axes=out_axes)
 
-    @property
-    def value(self):
-        """
-        Returns a handle to the device tensor.
-
-        The transformer must have been initialized.
-
-        :return: A handle to the device tensor.
-        """
-        return self.forwarded.tensor_description().value
-
 
 class ValueOp(TensorOp, ControlBlockOp):
     """
@@ -1319,10 +1316,6 @@ class ValueOp(TensorOp, ControlBlockOp):
     @property
     def is_tensor_op(self):
         return self.tensor.is_tensor_op
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):
@@ -1467,6 +1460,33 @@ class TensorValueOp(ValueOp):
     @property
     def states_read(self):
         return OrderedSet([self.tensor])
+
+
+class PatternLabelOp(TensorOp):
+    """
+    An op to represent label in the pattern to be matched in graph
+
+    constraint_fn is a predicate that must hold in order to bind the
+    label to its matching op. By default, constraint_fn is always true.
+
+    """
+    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
+        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+        self.label = label
+        self.constraint_fn = constraint_fn
+
+
+class PatternSkipOp(TensorOp):
+    """
+    An op to allow user of pattern matching to skip match for certain ops
+
+    is_optional_op_fn is a predicate that must be defined to specify
+    optional ops. By default, is_optional_op_fn is false.
+
+    """
+    def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
+        super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
+        self.is_optional_op_fn = is_optional_op_fn
 
 
 class ReshapeOp(TensorOp):
@@ -2294,6 +2314,8 @@ def temporary(axes, dtype=None, initial_value=None, **kwargs):
     Returns:
         AssignableTensorOp: The placeholder.
     """
+    if initial_value is not None:
+        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
@@ -2513,7 +2535,7 @@ def concat_along_axis(x_list, axis):
     if len(x_list) < 1:
         return x_list
 
-    return ConcatOp(x_list, [axis for _ in range(len(x_list))])
+    return ConcatOp(x_list, [x.axes[x.axes.index(axis)] for x in x_list])
 
 
 class UnsliceOp(SequentialOp):
@@ -2629,10 +2651,6 @@ class StopGradient(UnaryElementWiseOp):
     @property
     def is_tensor_op(self):
         return False
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):

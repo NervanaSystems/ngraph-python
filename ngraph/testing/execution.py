@@ -37,6 +37,9 @@ class ExecutorFactory(object):
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
 
+    def get_tensor_view_value(self, op, host_tensor=None):
+        return self.transformer.get_tensor_view_value(op, host_tensor)
+
     def numeric_derivative(self, f, p_x, dx, *params):
         comp = self.transformer.computation(f, p_x, *params)
 

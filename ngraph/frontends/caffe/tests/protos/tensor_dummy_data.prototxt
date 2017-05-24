@@ -1,0 +1,17 @@
+ name: "Tensor Sum"
+
+layer {
+    name: "A"
+    type: "DummyData"
+    top: "A"
+    dummy_data_param {
+        data_filler {
+            type: "constant"
+            value: 4.0
+        }
+        shape {
+            dim:2
+            dim:3
+        }
+    }
+}
