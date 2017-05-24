@@ -219,7 +219,7 @@ def test_tensor_dot_tensor(transformer_factory):
         }
     ]
 
-    for test in sorted(tests):
+    for test in tests:
         # set up axis
         for axis, length in test['axes_lengths'].items():
             axis.length = length
