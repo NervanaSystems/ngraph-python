@@ -23,8 +23,6 @@ else
 	PYLINT3K_ARGS :=
 endif
 
-SEED := $(shell date +%s)
-
 # style checking related
 STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples benchmarks
