@@ -47,7 +47,6 @@ def test_evaluation_twice(transformer_factory):
     with executor(hidden1) as comp:
         result_1 = comp()
         result_2 = comp()
-        print (result_1, result_2)
     assert np.array_equal(result_1, result_2)
 
 
