@@ -359,19 +359,22 @@ class CudaGatherSendKernel(GPUKernel):
         super(CudaGatherSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
+        self.recvr_buf = None
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        # here, or inside open_ipc_handle, 
-        # check if self.op device_id == self.op.recv_node device_id
-        # if so, use direct (local) pointer, rather than opening an IPC handle
-        (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues[self.op.idx])
         super(CudaGatherSendKernel, self).bind_buffers()
-        chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-        self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
     def execute(self):
+        if self.recvr_buf is None:
+            # here, or inside open_ipc_handle,
+            # check if self.op device_id == self.op.recv_node device_id
+            # if so, use direct (local) pointer, rather than opening an IPC handle
+            (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues[self.op.idx])
+            chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+            self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+
         # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
         # is least contiguous.
         drv.memcpy_dtod(
@@ -389,19 +392,18 @@ class CudaGatherRecvKernel(GPUKernel):
         self.tensor = op.tensor_description()
 
     def bind_buffers(self):
+        super(CudaGatherRecvKernel, self).bind_buffers()
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        super(CudaGatherRecvKernel, self).bind_buffers()
         self.sender_ready = list()
         for i, from_id in enumerate(self.op.from_id):
             
-            print("In GR",i,from_id,self.op.metadata['device_id'])
             self.sender_ready.append(
                 set_ipc_handle(
                     self.op,
                     self.op._shared_queues[i],
                     self.tensor.tensor.gpudata,
-                    local=from_id == self.op.metadata['device_id']))
+                    local=int(from_id) == self.op.metadata['device_id']))
 
     def execute(self):
         for i in range(len(self.op.from_id)):
