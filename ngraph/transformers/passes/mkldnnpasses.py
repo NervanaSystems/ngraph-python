@@ -66,13 +66,21 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             data_type = self.mkldnn.datatype[op.dtype.type]
             elem_size = op.dtype.itemsize
             (C, D, H, W, N) = op.tensor_description().full_strides
+            # TODO(jbobba) - Handle views for tensors that are not fully materialized
             mkl_strides = [N/elem_size, C/elem_size, H/elem_size, W/elem_size]
             mkl_shape_arg = ((ct.c_int) * len(mkl_shape))(*mkl_shape)
             mkl_strides_arg = ((ct.c_int) * len(mkl_strides))(*mkl_strides)
+            stride_order = sorted([N, C, H, W], reverse=True)
+            if (stride_order == [C, H, W, N]):
+                memory_format = self.mkldnn.memory_format['chwn']
+            elif (stride_order == [N, C, H, W]):
+                memory_format = self.mkldnn.memory_format['nchw']
+            else:
+                memory_format = self.mkldnn.memory_format['blocked']
             native_layout = self.mkldnn.create_layout_pd(
                         self.mkldnn.mkldnn_engine,
                         len(mkl_shape), mkl_shape_arg,
-                        mkl_strides_arg, data_type)
+                        mkl_strides_arg, data_type, memory_format)
             # TODO(jbobba): Figure out where to destroy the mkl layout object created here
             return native_layout
 
@@ -324,7 +332,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             delta = op.args[0]
             fprop_src = op.args[1]
             delta_layout = self.get_data_layout(delta)
-            #delta_layout = self.mkldnn.op_layouts.get(delta.name)
             fprop_src_layout = self.get_data_layout(fprop_src)
             input_size = np.prod(delta.axes.lengths)
             op_id = len(self.mkldnn.kernels)
@@ -377,10 +384,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
             pad_data = ((ct.c_int) * len(pad))(*pad)
             stride_data = ((ct.c_int) * len(stride))(*stride)
-            # input_layout = self.get_data_layout(input)
-            # MKL doesn't have an implementation for a generic format
-            # So stick to MKL or CHWN
-            input_layout = self.mkldnn.op_layouts.get(input.name)
+            input_layout = self.get_data_layout(input)
 
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
@@ -432,11 +436,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
             pad_data = ((ct.c_int) * len(pad))(*pad)
             stride_data = ((ct.c_int) * len(stride))(*stride)
-            # input_layout = self.get_data_layout(input)
-            # MKL doesn't have an implementation for a generic format
-            # So stick to MKL or CHWN
-            input_layout = self.mkldnn.op_layouts.get(input.name)
-            
+            input_layout = self.get_data_layout(input)
+
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.pool_bprop_kernel(
@@ -555,17 +556,16 @@ class MklAddLayoutConversions(PeepholeGraphPass):
                 else:
                     op.returns.append(orig_op)
         elif isinstance(op.returns, collections.Set):
-            # TODO(jbobba): Handle this case
-            assert False
+            # TODO(jbobba): Verify this case
             returns = op.returns
-            op.returns = []
+            op.returns = OrderedSet()
             for orig_op in returns:
                 if orig_op.forwarded.name in self.mkldnn.op_layouts:
                     reorder_op = self.get_reorder_op(orig_op.forwarded)
-                    op.returns.append(reorder_op)
+                    op.returns.add(reorder_op)
                     op.add_control_dep(reorder_op)
                 else:
-                    op.returns.append(orig_op)
+                    op.returns.add(orig_op)
         else:
             pass
 

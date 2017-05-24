@@ -33,6 +33,8 @@ class Mkldnn(object):
             np.int32   : 2
         }
         self.memory_format = {
+            'blocked' : 2,
+            'nchw' : 5,    
             'chwn' : 7,
         }
         self.kernels = dict()
