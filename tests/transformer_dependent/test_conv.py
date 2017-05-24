@@ -21,7 +21,7 @@ from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim
 
-pytestmark = [pytest.mark.transformer_dependent("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
 rng = RandomTensorGenerator(0, np.float32)

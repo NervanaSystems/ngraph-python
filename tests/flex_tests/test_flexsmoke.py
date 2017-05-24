@@ -4,7 +4,8 @@ import os
 import subprocess
 import re
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_only]
 
 
 @pytest.mark.parametrize("script_path, description, misclass_threshold", (

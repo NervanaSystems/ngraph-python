@@ -19,6 +19,9 @@ from ngraph.testing.flexutil import template_one_placeholder, template_two_place
     MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, id_func
 
 
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_only]
+
 bug_1424 = pytest.mark.xfail(strict=True, reason="GitHub issue #1424, for ng.argmax and ng.argmin,"
                                                  "the values outside of the flex range "
                                                  "are computed")
