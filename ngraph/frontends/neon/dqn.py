@@ -284,11 +284,19 @@ class RepeatMemory(deque):
 
     def append(self, record):
         # assume for now that the batch axis is at the end
-        assert (record['state'][..., 1:] == record['next_state'][..., :-1]).all()
-        assert record['state'].shape[-1] == self.frames_per_observation
-        assert record['next_state'].shape[-1] == self.frames_per_observation
+        if not (record['state'][1:, ...] == record['next_state'][:-1, ...]).all():
+            raise ValueError((
+                'expected state and next_state to differ by first frame and'
+                'last frame respectively.  found: state: {} next_state: {}'
+            ).format(
+                record['state'][1:, ...],
+                record['next_state'][:-1, ...],
+            ))
 
-        record['frame'] = record['next_state'][..., -1]
+        assert record['state'].shape[0] == self.frames_per_observation
+        assert record['next_state'].shape[0] == self.frames_per_observation
+
+        record['frame'] = record['next_state'][-1, ...]
         del record['state']
         del record['next_state']
 
@@ -319,17 +327,15 @@ class RepeatMemory(deque):
             # build observation
             state = np.stack(
                 [record['frame'] for record in records[:-1]],
-                axis=-1,
+                axis=0,
             )
             next_state = np.stack(
                 [record['frame'] for record in records[1:]],
-                axis=-1,
+                axis=0,
             )
-            record = {
-                'done': records[-1]['done'],
-                'state': state,
-                'next_state': next_state,
-            }
+            record = records[-1].copy()
+            record['state'] = state
+            record['next_state'] = next_state
 
             sample.append(record)
 

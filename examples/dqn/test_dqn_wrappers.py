@@ -1,6 +1,6 @@
 import gym
 
-import dqn_space_invaders
+import dqn_atari
 
 
 class MockEnvironment(object):
@@ -33,5 +33,5 @@ def test_repeat_wrapper_step():
     environment = dqn_space_invaders.RepeatWrapper(frames=2)(environment)
     environment.reset()
 
-    assert list(environment.step(1)[0]) == [1, 2]
-    assert list(environment.step(1)[0]) == [2, 3]
+    assert (environment.step(1)[0] == np.array([1, 2])).all()
+    assert (environment.step(1)[0] == np.array([2, 3])).all()

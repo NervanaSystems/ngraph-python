@@ -140,14 +140,14 @@ def RepeatWrapper(frames=4):
                 self.history.append(observation)
                 assert done != True
 
-            return self.history
+            return np.stack(self.history, axis=0)
 
         def _step(self, action):
             observation, reward, done, info = self.env._step(action)
 
             self.history.append(observation)
 
-            return self.history, reward, done, info
+            return np.stack(self.history, axis=0), reward, done, info
 
     return RepeatWrapper
 
@@ -175,6 +175,7 @@ def main():
         epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000 / 32),
         gamma=0.99,
         learning_rate=0.00025,
+        memory=dqn.RepeatMemory(frames_per_observation=4),
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20000)
