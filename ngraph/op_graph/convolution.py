@@ -146,6 +146,7 @@ class DeconvolutionOp(TensorOp):
         filters.generate_add_delta(adjoints, update_conv_op)
         inputs.generate_add_delta(adjoints, fprop_conv_op)
 
+
 class ConvDerivOp(TensorOp):
     """
     Maintains index and conv_params through forwarding of the original convolution.

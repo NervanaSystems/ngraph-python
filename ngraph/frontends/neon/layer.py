@@ -324,7 +324,7 @@ class ConvBase(Layer):
         self.deconv = deconv
         self.deconv_out_shape = deconv_out_shape
 
-    def interpret_axes(self, in_obj, cpm): 
+    def interpret_axes(self, in_obj, cpm):
         """
         Infers axes and also creates filter weights
         """

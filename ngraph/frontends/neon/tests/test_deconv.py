@@ -8,7 +8,7 @@ from ngraph.frontends.neon import Conv2D, ConstantInit
 # TODO: add other configurations?
 def test_deconv(transformer_factory):
     """
-    basic test of deconv fprop. 
+    basic test of deconv fprop.
     ngraph/tests/test_conv.py tests ng.deconvolution bprop
     """
 
@@ -29,7 +29,8 @@ def test_deconv(transformer_factory):
 
     N = ng.make_axis(name='N', length=1)  # batch
     image_shape = (1, 1, 8, 8)  # CDHW
-    image_axes = ng.make_axes([ng.make_axis(name=nm, length=l) for nm, l in zip('CDHW', image_shape)])
+    image_axes = ng.make_axes([ng.make_axis(name=nm, length=l)
+                               for nm, l in zip('CDHW', image_shape)])
     image_axes |= N
     image = ng.placeholder(axes=image_axes)
 

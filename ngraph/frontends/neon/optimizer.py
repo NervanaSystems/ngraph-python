@@ -319,6 +319,7 @@ class Adam(LearningRateOptimizer):
         updates = ng.sequential([
             ng.assign(m, m * self.beta_1 + (1 - self.beta_1) * grad),
             ng.assign(v, v * self.beta_2 + (1 - self.beta_2) * grad * grad),
-            ng.assign(variable, variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
+            ng.assign(variable,
+                      variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
         ])
         return updates

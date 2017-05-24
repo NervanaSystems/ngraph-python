@@ -390,9 +390,9 @@ class CPUCodeGenerator(PyGen):
     @allocate_op.on_type(DeconvolutionOp)
     def allocate_op(self, op, outputs, inputs, filters):
         self.conv_params[op.name] = op.conv_params
-        # test flipping of slices
+        # get_slices args: swap outputs and inputs
         self.conv_slices[op.name] = \
-            CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)  # swap outputs and inputs
+            CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_d, pad_h, pad_w]

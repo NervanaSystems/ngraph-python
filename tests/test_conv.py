@@ -119,8 +119,8 @@ def reference_deconv_fprop(conv_params, valI, valF):
     str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
     # output dimensions
     H = R + (P + pad_d - 1) * str_h
-    W = S + (Q + pad_w -1) * str_w
-    D = T + (M +  pad_d - 1) * str_d
+    W = S + (Q + pad_w - 1) * str_w
+    D = T + (M + pad_d - 1) * str_d
     dimO = (K, D, H, W, N)
     dtype = np.float32
 
@@ -139,6 +139,7 @@ def reference_deconv_fprop(conv_params, valI, valF):
 
     cpuO = cpuO[:-1, :].reshape(dimO)
     return cpuO
+
 
 def reference_deconv_bprop(conv_params, valE, valI, valF):
     dimO = valE.shape
@@ -319,8 +320,13 @@ def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
         result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, error_value)
 
     # Compute reference with NumPy
-    result_np = reference_deconv_fprop(cf.conv_params, input_value, filter_value)
-    gradI_np, gradF_np = reference_deconv_bprop(cf.conv_params, error_value, input_value, filter_value)
+    result_np = reference_deconv_fprop(cf.conv_params,
+                                       input_value,
+                                       filter_value)
+    gradI_np, gradF_np = reference_deconv_bprop(cf.conv_params,
+                                                error_value,
+                                                input_value,
+                                                filter_value)
 
     # Compare fprop
     assert np.allclose(result_ng, result_np, rtol=0.1, atol=0)
@@ -360,8 +366,8 @@ def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     updat_out2 = ng.deriv(out2, filters2, errors)
     updat_out1 = ng.deriv(out2, filters1, errors)
 
-    with executor([out1, out2, bprop_out, updat_out1, updat_out2], \
-            inputs, filters1, filters2, errors) as conv_executor:
+    with executor([out1, out2, bprop_out, updat_out1, updat_out2],
+                  inputs, filters1, filters2, errors) as conv_executor:
         out1_ng, out2_ng, gradI_ng, gradF1_ng, gradF2_ng = \
             conv_executor(input_value, filter1_value, filter2_value, error_value)
 
@@ -370,8 +376,14 @@ def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     out1_np = reference_deconv_fprop(cf1.conv_params, input_value, filter1_value)
     out2_np = reference_deconv_fprop(cf2.conv_params, out1_np, filter2_value)
     # bprop
-    gradI2_np, gradF2_np = reference_deconv_bprop(cf2.conv_params, error_value, out1_np, filter2_value)
-    gradI1_np, gradF1_np = reference_deconv_bprop(cf1.conv_params, gradI2_np, input_value, filter1_value)
+    gradI2_np, gradF2_np = reference_deconv_bprop(cf2.conv_params,
+                                                  error_value,
+                                                  out1_np,
+                                                  filter2_value)
+    gradI1_np, gradF1_np = reference_deconv_bprop(cf1.conv_params,
+                                                  gradI2_np,
+                                                  input_value,
+                                                  filter1_value)
 
     # Compare fprop
     assert np.allclose(out1_ng, out1_np, rtol=0.01, atol=0)
