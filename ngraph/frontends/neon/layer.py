@@ -296,14 +296,10 @@ class ConvBase(Layer):
         strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
         dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
-        deconv (bool, optional): if True, this is a deconvolutional layer
-        deconv_out_shape (tuple, optional): only applicable if deconv is True. If given,
-            specifies shape of output (trims output)
     """
     metadata = {'layer_type': 'convolution'}
 
-    def __init__(self, fshape, init, strides, padding, dilation,
-                 deconv=False, deconv_out_shape=None, **kwargs):
+    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
         self.convparams = dict(T=None, R=None, S=None, K=None,
                                pad_h=None, pad_w=None, pad_d=None,
@@ -321,27 +317,17 @@ class ConvBase(Layer):
         self.f_axes = None
         self.o_axes = None
         self.W = None
-        self.deconv = deconv
-        self.deconv_out_shape = deconv_out_shape
+        self.W_name = 'convwt'
 
     def interpret_axes(self, in_obj, cpm):
         """
-        Infers axes and also creates filter weights
+        Infers axes and creates filter weights
         """
         in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
         if self.f_axes is None:
-            if not self.deconv:
-                self.f_axes = ng.make_axes([in_axes[0]])
-                for nm in 'TRSK':
-                    self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
-            else:
-                # swap lengths of C and K
-                self.f_axes = ng.make_axes(ng.make_axis(length=cpm['K'], name='C'))
-                for nm in 'TRS':
-                    self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
-                self.f_axes |= ng.make_axis(length=in_axes[0].length, name='K')
+            self._filter_axes(in_axes, cpm)
 
             # mark 'K' as a shadow axis for the initializers.
             self.axes_map = shadow_axes_map(self.f_axes.find_by_name('K'))
@@ -351,84 +337,126 @@ class ConvBase(Layer):
             ])
 
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init,
-                                 scope=self.scope).named('convwt')
+                                 scope=self.scope).named(self.W_name)
 
         if self.o_axes is None:
             self.o_axes = ng.make_axes([
                 ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
             # set lengths
-            if not self.deconv:
-                out_shape = [
-                    self.f_axes[-1].length,
-                    output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
-                               cpm['dil_d']),
-                    output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
-                               cpm['dil_h']),
-                    output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
-                               cpm['dil_w'])
-                ]
-            else:
-                # axes for deconv output shape without any trimming
-                out_max_shape = [
-                    output_dim_deconv(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], cpm['dil_d']),
-                    output_dim_deconv(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], cpm['dil_h']),
-                    output_dim_deconv(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], cpm['dil_w'])
-                ]
-                # output slice indices when output shape is specified
-                if self.deconv_out_shape is not None:
-                    # slices to get center of image
-                    for nm, l, lmax in zip('TRS', self.deconv_out_shape, out_max_shape):
-                        if l > lmax:
-                            raise ValueError('specified {} output dimension {} is greater than {}'.format(nm, l, lmax))
-                        if l < lmax:
-                            extra = lmax - l
-                            i1 = int(extra) // 2
-                            # arbitrarily take off more from end when odd number
-                            i2 = int(lmax - (i1 + 1)) if extra % 2 == 1 else int(lmax - i1)
-                            setattr(self, nm + '_slice', slice(i1, i2))
-                        else:
-                            setattr(self, nm + '_slice', slice(None))
-                out_shape = [self.f_axes[0].length] + out_max_shape
-
-            self.o_axes.set_shape(out_shape)
+            self.o_axes.set_shape(self._out_shape(in_axes, cpm))
             self.o_axes |= in_axes.batch_axis()
+
+    def _filter_axes(self, in_axes, cpm):
+        self.f_axes = ng.make_axes([in_axes[0]])
+        for nm in 'TRSK':
+            self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
+
+    def _out_shape(self, in_axes, cpm):
+        out_shape = [
+            self.f_axes[-1].length,
+            output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
+                       cpm['dil_d']),
+            output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
+                       cpm['dil_h']),
+            output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
+                       cpm['dil_w'])
+        ]
+        return out_shape
 
     @ng.with_op_metadata
     @cached({})
     def __call__(self, in_obj):
-        cpm = self.convparams.copy()  # RP: what is the reason for copying convparams??
+        cpm = self.convparams.copy()  # RP: copy is unnecessary?
         self.interpret_axes(in_obj, cpm)
 
-        if self.deconv:
-            conv_op = ng.deconvolution(cpm, in_obj, self.W, axes=self.o_axes)
-            if self.deconv_out_shape:
-                conv_op = conv_op[:, self.T_slice, self.R_slice, self.S_slice, :]
-                self.o_axes = conv_op.axes
-        else:
-            conv_op = ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
+        conv_op = ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
         return ng.map_roles(conv_op, self.axes_map)
 
 
-class Conv2D(ConvBase):
+class DeconvBase(ConvBase):
+    """
+    Deconvolutional layer that requires explicit binding of all spatial roles
 
-    def __init__(self, fshape, init, strides, padding, dilation,
-                 deconv=False, deconv_out_shape=None, **kwargs):
-        if isinstance(fshape, tuple) or isinstance(fshape, list):
-            if len(fshape) == 2:
-                fshape = (1, fshape[0], fshape[0], fshape[1])
-            elif len(fshape) == 3:
-                fshape = (1, fshape[0], fshape[1], fshape[2])
-            fshape = {k: x for k, x in zip('TRSK', fshape)}
-        if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
-        if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
-        if isinstance(dilation, int):
-            dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
+    Args:
+        fshape (dict): filter shape -- must contain keys 'T', 'R', 'S', 'K'
+        init (function): function for later initializing filters
+        strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
+        padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
+        dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
+        deconv_out_shape (tuple, optional): only applicable if deconv is True. If given,
+            specifies shape of output (trims output)
+    """
+    metadata = {'layer_type': 'deconvolution'}
 
-        super(Conv2D, self).__init__(fshape, init, strides, padding, dilation,
-                                     deconv=deconv, deconv_out_shape=deconv_out_shape, **kwargs)
+    def __init__(self, fshape, init, strides, padding, dilation, deconv_out_shape=None, **kwargs):
+        super(DeconvBase, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
+
+        self.W_name = 'deconvwt'
+        self.deconv_out_shape = deconv_out_shape
+
+    def _filter_axes(self, in_axes, cpm):
+        # swap lengths of C and K
+        self.f_axes = ng.make_axes(ng.make_axis(length=cpm['K'], name='C'))
+        for nm in 'TRS':
+            self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
+        self.f_axes |= ng.make_axis(length=in_axes[0].length, name='K')
+
+    def _out_shape(self, in_axes, cpm):
+        # axes for deconv output shape without any trimming
+        out_max_shape = [
+            output_dim_deconv(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], cpm['dil_d']),
+            output_dim_deconv(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], cpm['dil_h']),
+            output_dim_deconv(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], cpm['dil_w'])
+        ]
+        # output slice indices when output shape is specified
+        if self.deconv_out_shape is not None:
+            # slices to get center of image
+            for nm, l, lmax in zip('TRS', self.deconv_out_shape, out_max_shape):
+                if l > lmax:
+                    raise ValueError('specified {} output dimension {} is greater than {}'.format(nm, l, lmax))
+                if l < lmax:
+                    extra = lmax - l
+                    i1 = int(extra) // 2
+                    # arbitrarily take off more from end when odd number
+                    i2 = int(lmax - (i1 + 1)) if extra % 2 == 1 else int(lmax - i1)
+                    setattr(self, nm + '_slice', slice(i1, i2))
+                else:
+                    setattr(self, nm + '_slice', slice(None))
+        out_shape = [self.f_axes[0].length] + out_max_shape
+        return out_shape
+
+    @ng.with_op_metadata
+    @cached({})
+    def __call__(self, in_obj):
+        cpm = self.convparams.copy()  # RP: copy is unnecessary?
+        self.interpret_axes(in_obj, cpm)
+
+        conv_op = ng.deconvolution(cpm, in_obj, self.W, axes=self.o_axes)
+        if self.deconv_out_shape:
+            conv_op = conv_op[:, self.T_slice, self.R_slice, self.S_slice, :]
+            self.o_axes = conv_op.axes
+        return ng.map_roles(conv_op, self.axes_map)
+
+
+def make_conv2d(fshape, init, strides, padding, dilation, deconv=False, deconv_out_shape=None, **kwargs):
+    if isinstance(fshape, tuple) or isinstance(fshape, list):
+        if len(fshape) == 2:
+            fshape = (1, fshape[0], fshape[0], fshape[1])
+        elif len(fshape) == 3:
+            fshape = (1, fshape[0], fshape[1], fshape[2])
+        fshape = {k: x for k, x in zip('TRSK', fshape)}
+    if isinstance(strides, int):
+        strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
+    if isinstance(padding, int):
+        padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
+    if isinstance(dilation, int):
+        dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
+
+    if deconv:
+        return DeconvBase(fshape, init, strides, padding, dilation, deconv_out_shape=deconv_out_shape, **kwargs)
+    else:
+        return ConvBase(fshape, init, strides, padding, dilation, **kwargs)
 
 
 class Activation(Layer):
@@ -575,18 +603,36 @@ class Affine(Layer):
 class Convolution(Layer):
 
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
-                 activation=None, batch_norm=False, deconv=False, deconv_out_shape=None, **kwargs):
-        self.conv = Conv2D(fshape, filter_init, strides, padding, dilation,
-                           deconv=deconv, deconv_out_shape=deconv_out_shape, **kwargs)
+                 activation=None, batch_norm=False, **kwargs):
+        super(Convolution, self).__init__(**kwargs)
+
+        self.make_conv_layer(fshape, filter_init, strides, padding, dilation, **kwargs)
         self.bias = Bias(init=bias_init)
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
+
+    def make_conv_layer(self, fshape, filter_init, strides, padding, dilation, **kwargs):
+        self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
+                                deconv=False, **kwargs)
 
     def __call__(self, in_obj):
         l_out = self.conv(in_obj)
         b_out = self.bias(l_out)
         bn_out = self.batch_norm(b_out) if self.batch_norm else b_out
         return self.activation(bn_out)
+
+
+class Deconvolution(Convolution):
+
+    def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
+                 activation=None, batch_norm=False, deconv_out_shape=None, **kwargs):
+
+        self.deconv_out_shape = deconv_out_shape
+        super(Deconvolution, self).__init__(**kwargs)
+
+    def make_conv_layer(fshape, filter_init_strides, padding, dilation, **kwargs):
+        self.conv = make_conv2d(fshape, filiter_init, strides, padding, dilation,
+                                deconv=True, deconv_out_shape=self.deconv_out_shape, **kwargs)
 
 
 class BatchNorm(Layer):
