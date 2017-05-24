@@ -121,7 +121,7 @@ test_mkldnn:
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_SERIAL)
 	@echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \ 
+	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
