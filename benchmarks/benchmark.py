@@ -70,7 +70,7 @@ class Benchmark(object):
 
         return wrapper
 
-    def time(self, n_iterations, n_skip, computation_name):
+    def time(self, n_iterations, n_skip, computation_name, visualize):
         """
         This runs _any_ computation repeatedly with data from feed_dict, and times it
 
@@ -81,9 +81,10 @@ class Benchmark(object):
         start = Benchmark.marker.init_mark()
         end = Benchmark.marker.init_mark()
         with closing(ngt.make_transformer_factory(self.transformer)()) as transformer:
-            nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
-                                                           show_all_metadata=True)
-            transformer.register_graph_pass(nviz)
+            if visualize:
+                nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
+                                                               show_all_metadata=True)
+                transformer.register_graph_pass(nviz)
             model_out_computation = transformer.add_computation(self.computation)
             for i in range(n_skip):
                 model_out_computation(feed_dict=feed_dict)

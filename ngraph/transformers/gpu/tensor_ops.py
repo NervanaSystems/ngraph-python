@@ -311,6 +311,9 @@ class CudaScatterSendKernel(GPUKernel):
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
+        # if input buffer changes we need to make sure to set new ipc handle and
+        # signal the recv kernel to get the new ipc handle.
+        # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
         self.send_ready = list()
         for i, to_id in enumerate(self.op.to_id):
@@ -320,7 +323,6 @@ class CudaScatterSendKernel(GPUKernel):
                     self.op._shared_queues[i],
                     self.tensor.tensor.gpudata,
                     local=self.op.metadata['device_id'] == int(to_id)))
-
 
     def execute(self):
         for i in range(len(self.op.to_id)):
@@ -337,7 +339,8 @@ class CudaScatterRecvKernel(GPUKernel):
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues[self.op.idx])
+        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues
+                                                                 [self.op.idx])
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -368,10 +371,8 @@ class CudaGatherSendKernel(GPUKernel):
 
     def execute(self):
         if self.recvr_buf is None:
-            # here, or inside open_ipc_handle,
-            # check if self.op device_id == self.op.recv_node device_id
-            # if so, use direct (local) pointer, rather than opening an IPC handle
-            (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues[self.op.idx])
+            (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues
+                                                                   [self.op.idx])
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
             self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
@@ -397,7 +398,6 @@ class CudaGatherRecvKernel(GPUKernel):
             self.tensor = self.tensor_view_from_td(self.tensor)
         self.sender_ready = list()
         for i, from_id in enumerate(self.op.from_id):
-            
             self.sender_ready.append(
                 set_ipc_handle(
                     self.op,

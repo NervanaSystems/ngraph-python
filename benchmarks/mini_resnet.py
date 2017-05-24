@@ -23,6 +23,7 @@ from ngraph.frontends.neon import ax
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
 import numpy as np
+import argparse
 
 
 # TODO: Need to refactor and make it shareable with Alex's tests
@@ -108,8 +109,8 @@ class mini_residual_network(Sequential):
         self.layers = layers
 
 
-def get_mini_resnet(inputs, dataset, stage_depth=1, batch_norm=False,
-                    activation=True, preprocess=False, device_id=('1',)):
+def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
+                    activation=True, preprocess=False):
     model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
     with ng.metadata(device_id=device_id, parallel=ax.N):
         model_out = model(inputs['image'])
@@ -127,8 +128,8 @@ def get_fake_data(dataset, batch_size, n_iter):
     return inputs, train_data, train_set
 
 
-def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
-                         transformer_type='hetr', bprop=False, device_id=('1',)):
+def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
+                         transformer_type, bprop=False, visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
     model_out = get_mini_resnet(inputs, dataset, device_id=device_id)
 
@@ -136,7 +137,7 @@ def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
     fprop_computation_op = ng.computation(model_out, 'all')
     benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type)
     Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
-                                                           dataset + '_msra_fprop'))
+                                                           dataset + '_msra_fprop', visualize))
 
     # Running back propagation
     if bprop:
@@ -147,11 +148,34 @@ def run_resnet_benchmark(dataset='cifar10', n_iter=10, n_skip=3, batch_size=128,
         batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
         batch_cost_computation_op = ng.computation(batch_cost, "all")
 
-        benchmark = Benchmark(batch_cost_computation_op, train_set, inputs, transformer_type)
-        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip, dataset + '_msra_bprop'))
+        benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
+                              transformer_type, visualize)
+        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
+                                          dataset + '_msra_bprop', visualize))
 
 
 if __name__ == "__main__":
-    device_ids = [[str(device) for device in range(num_devices)] for num_devices in (1, 2, 4, 8)]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-data', '--data_set', default='cifar10',
+                        choices=['cifar10', 'i1k'], help="data set name")
+    parser.add_argument('-v', '--visualize', action="store_true",
+                        help="enable graph visualization")
+    parser.add_argument('-bs', '--batch_size', type=int, default=128, help="batch size")
+    parser.add_argument('-i', '--max_iter', type=int, default=10, help="max number of iterations")
+    parser.add_argument('-s', '--skip_iter', type=int, default=1,
+                        help="number of iterations to skip")
+    parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
+                        help="number of devices to run the benchmark on")
+    parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
+    args = parser.parse_args()
+
+    device_ids = [[str(device) for device in range(num_devices)]
+                  for num_devices in args.num_devices]
     for device_id in device_ids:
-        run_resnet_benchmark(dataset='cifar10', device_id=device_id)
+        run_resnet_benchmark(dataset=args.data_set,
+                             n_iter=args.max_iter,
+                             n_skip=args.skip_iter,
+                             batch_size=args.batch_size,
+                             device_id=device_id,
+                             transformer_type=args.transformer,
+                             visualize=args.visualize)

@@ -305,7 +305,7 @@ class HetrTransformer(ComputationGraphTransformer):
         self.child_transformers = dict()
         self.send_nodes = OrderedSet()
         self.graph_passes = [DeviceAssignPass(hetr=self,
-                                              default_device='cpu',
+                                              default_device='gpu',
                                               default_device_id=0),
                              CommunicationPass(self.send_nodes),
                              DistributedPass(self.send_nodes)]
