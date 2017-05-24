@@ -17,7 +17,8 @@ from operator import itemgetter
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, \
-    ComputationOp, Flatten, unflatten, ReorderAxes, ReductionOp, Divide
+    ComputationOp, Flatten, unflatten, ReorderAxes, ReductionOp, Divide, \
+    DotLowDimension
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.batchnorm import BatchnormOp
@@ -425,6 +426,61 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
             self.mkldnn.op_uses_opkernel_api[op.name] = True
+            if self.mkldnn.mkldnn_verbose:
+                print
+                print(op_id, op.name)
+                self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
+
+    @visit.on_type(DotLowDimension)
+    def visit(self, op):
+        if (self.mkldnn.mkldnn_enabled):
+            x = op.args[0]
+            y = op.args[1]
+
+            # Sanity check tensor shapes
+            if (len(x.axes.lengths) != 2) or (len(y.axes.lengths) != 2):
+                return
+
+            if (self.mkldnn.mkldnn_verbose):
+                print("Inner Product Input: ", len(x.shape), x.shape,
+                      "..", x.axes,
+                      " Weights: ", y.shape, len(y.shape))
+
+            y_d1, y_d2 = y.axes.lengths
+            x_shape = x.axes.lengths
+            y_shape = (y_d1, y_d2)
+            y_reordered_shape = (y_d2, y_d1)
+            o_shape = op.axes.lengths
+
+            input_shape = ((ct.c_int) * len(x_shape))(*x_shape)
+            weights_shape = ((ct.c_int) * len(y_reordered_shape))(*y_reordered_shape)
+            output_shape = ((ct.c_int) * len(o_shape))(*o_shape)
+
+            if (self.mkldnn.mkldnn_verbose):
+                print("Inner Product Input: ", len(x.shape), x.shape,
+                      " Weights: ", y.shape, len(y.shape),
+                      " Outputs: ", output_shape, len(output_shape))
+
+            # Only single precision float supported for now
+            if op.dtype != np.float32:
+                return
+
+            x_layout = self.mkldnn.op_layouts.get(x.name)
+            y_layout = self.mkldnn.op_layouts.get(y.name)
+            data_type = self.mkldnn.datatype[op.dtype.type]
+
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
+            self.mkldnn.op_uses_opkernel_api[op.name] = True
+            self.mkldnn.innerproduct_fprop_kernel(
+                    self.mkldnn.mkldnn_engine,
+                    len(x.shape), len(y.shape), 1, len(out_shape),
+                    input_shape, weights_shape, None, output_shape,
+                    x_layout, y_layout, None,
+                    data_type, self.mkldnn.kernels[op.name])
+            output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            if (output_layout):
+                self.mkldnn.op_layouts[op.name] = output_layout
             if self.mkldnn.mkldnn_verbose:
                 print
                 print(op_id, op.name)
