@@ -118,6 +118,7 @@ def test_decay_generator_simple():
     assert generator.next() == 0.125
     assert generator.next() == 0.125
 
+
 def test_repeat_memory_append_unable_to_sample():
     memory = dqn.RepeatMemory(3)
     memory.append({
@@ -128,6 +129,7 @@ def test_repeat_memory_append_unable_to_sample():
 
     with pytest.raises(ValueError):
         memory.sample(1)
+
 
 def test_repeat_memory_append():
     frames_per_observation = 3

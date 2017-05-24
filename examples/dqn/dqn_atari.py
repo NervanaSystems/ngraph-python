@@ -172,10 +172,10 @@ def main():
         state_axes,
         environment.action_space,
         model=model,
-        epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000 / 32),
+        epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000),
         gamma=0.99,
         learning_rate=0.00025,
-        memory=dqn.RepeatMemory(frames_per_observation=4),
+        memory=dqn.RepeatMemory(frames_per_observation=4, maxlen=1000000),
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20000)
