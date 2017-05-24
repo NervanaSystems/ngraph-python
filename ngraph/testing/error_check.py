@@ -68,7 +68,6 @@ def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
     """
     if transformer_overwrite:
         rtol, atol = __overwrite_rtol_atol(rtol, atol)
-
     np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol,
                                equal_nan=equal_nan, err_msg=err_msg,
                                verbose=verbose)
