@@ -68,48 +68,59 @@ class ModelWrapper(object):
         with neon.Layer.inference_mode_on():
             inference = self.model(self.state)
 
-        self.transformer = ng.transformers.make_transformer()
-        self.inference_computation = self.transformer.computation(
-            inference, self.state
-        )
+        inference_computation = ng.computation(inference, self.state)
 
         # construct inference computation for evaluating a single observation
         with neon.Layer.inference_mode_on():
             inference_single = self.model(self.state_single)
 
-        self.inference_computation_single = self.transformer.computation(
+        inference_computation_single = ng.computation(
             inference_single, self.state_single
         )
 
         # construct training computation
-        loss = ng.mean(
-            ng.squared_L2(self.model(self.state) - self.target), out_axes=()
+        loss = ng.squared_L2(self.model(self.state) - self.target)
+
+        optimizer = neon.RMSProp(
+            learning_rate=learning_rate,
+            gradient_clip_value=1,
         )
 
-        optimizer = neon.RMSProp(learning_rate=learning_rate)
         train_output = ng.sequential([
             optimizer(loss),
             loss,
         ])
 
-        self.train_computation = self.transformer.computation(
+        train_computation = ng.computation(
             train_output, self.state, self.target
+        )
+
+        # now bind computations we are interested in
+        self.transformer = ng.transformers.make_transformer()
+        self.inference_function = self.transformer.add_computation(
+            inference_computation
+        )
+        self.inference_single_function = self.transformer.add_computation(
+            inference_computation_single
+        )
+        self.train_function = self.transformer.add_computation(
+            train_computation
         )
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
-        return self.inference_computation_single(state[...,np.newaxis])[...,0]
+        return self.inference_function_single(state[..., np.newaxis])[..., 0]
 
     def predict(self, state):
         if state.shape != self.state.axes.lengths:
             raise ValueError((
                 'predict received state with wrong shape. found {}, expected {} '
             ).format(state.shape, self.state.axes.lengths))
-        return self.inference_computation(state)
+        return self.inference_function(state)
 
     def train(self, states, targets):
         # todo: check shape
-        self.train_computation(states, targets)
+        self.train_function(states, targets)
 
 
 def space_shape(space):
@@ -256,8 +267,11 @@ class Agent(object):
 
 class Memory(deque):
     """
-    the Memory is used to keep track of what is happened in the past so that
-    we can sample from it and learn
+    Memory is used to keep track of what is happened in the past so that
+    we can sample from it and learn.
+
+    Arguments:
+        maxlen (integer): the maximum number of memories to record
     """
 
     def __init__(self, **kwargs):
@@ -274,7 +288,9 @@ class RepeatMemory(deque):
     the observations would be wasteful since a large portion of the observation
     has already been stored in memory.
 
-    warning: this memory can only be written to from a single episode at a time
+    Warning: this memory can only be written to from a single episode at a time
+
+    Note: repeated frames are expected to be in axis 0
     """
 
     def __init__(self, frames_per_observation, **kwargs):
@@ -284,7 +300,8 @@ class RepeatMemory(deque):
 
     def append(self, record):
         # assume for now that the batch axis is at the end
-        if not (record['state'][1:, ...] == record['next_state'][:-1, ...]).all():
+        if not (record['state'][1:, ...] == record['next_state'][:-1, ...]
+                ).all():
             raise ValueError((
                 'expected state and next_state to differ by first frame and'
                 'last frame respectively.  found: state: {} next_state: {}'
@@ -299,6 +316,8 @@ class RepeatMemory(deque):
         record['frame'] = record['next_state'][-1, ...]
         del record['state']
         del record['next_state']
+        print(record)
+        print(record['frame'].shape)
 
         super(RepeatMemory, self).append(record)
 
