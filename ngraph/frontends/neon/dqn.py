@@ -298,7 +298,7 @@ class RepeatMemory(deque):
 
         self.frames_per_observation = frames_per_observation
 
-    def append(self, record):
+    def _check_record(self, record):
         # assume for now that the batch axis is at the end
         if not (record['state'][1:, ...] == record['next_state'][:-1, ...]
                 ).all():
@@ -312,6 +312,9 @@ class RepeatMemory(deque):
 
         assert record['state'].shape[0] == self.frames_per_observation
         assert record['next_state'].shape[0] == self.frames_per_observation
+
+    def append(self, record):
+        self._check_record(record)
 
         record['frame'] = record['next_state'][-1, ...]
         del record['state']
