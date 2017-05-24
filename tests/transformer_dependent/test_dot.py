@@ -22,7 +22,7 @@ from ngraph.testing import ExecutorFactory, executor
 from ngraph.testing import raise_all_numpy_errors
 import pytest
 
-pytestmark = [pytest.mark.transformer_dependent("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
 """
