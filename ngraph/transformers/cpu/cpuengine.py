@@ -164,14 +164,14 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, 
                  ctypes.c_void_p]
 
-            self.create_mkldnn_innerproduct_fprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
-            self.create_mkldnn_innerproduct_fprop_primitives_fn.argtypes = \
+            self.innerproduct_fprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_kernel
+            self.innerproduct_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-            self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_void_p]
             
             self.create_mkldnn_add_primitives_fn = \
                 self.mkldnn_engine_dll.create_mkldnn_add_primitives
@@ -330,29 +330,6 @@ class Mkldnn(object):
                 else:
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
-
-    def init_innerproduct_fprop(self, name, out, x, y):
-        if (self.mkldnn_enabled):
-            if (self.mkldnn_verbose):
-                print("Inner Product Input: ", len(x.shape), x.shape,
-                      " Weights: ", y.shape, len(y.shape),
-                      " Outputs: ", out.shape, len(out.shape))
-            # Only single precision float supported for now
-            if ((x.dtype != np.float32) or (y.dtype != np.float32)):
-                return
-            # Sanity check tensor shapes
-            if ((len(x.shape) != 2) or (len(y.shape) != 2) or
-                    (len(out.shape) != 2)):
-                return
-            input_shape = ((ctypes.c_int) * len(x.shape))(*x.shape)
-            weights_shape = ((ctypes.c_int) * len(y.shape))(*y.shape)
-            output_shape = ((ctypes.c_int) * len(out.shape))(*out.shape)
-            self.kernels[name] = \
-                self.create_mkldnn_innerproduct_fprop_primitives_fn(
-                    self.mkldnn_engine,
-                    len(x.shape), len(y.shape), 1, len(out.shape), input_shape,
-                    weights_shape, None, output_shape, x.ctypes.data,
-                    y.ctypes.data, None, out.ctypes.data)
 
     def innerproduct_fprop(self, name, x, y, out):
         if (self.mkldnn_enabled and name in self.kernels):

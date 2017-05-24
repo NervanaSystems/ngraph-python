@@ -372,11 +372,6 @@ class CPUCodeGenerator(PyGen):
         self.pool_params[op.name] = op.pool_params
         self.pool_slices[op.name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
 
-    @allocate_op.on_type(DotLowDimension)
-    def allocate_op(self, op, out, x, y):
-        self.append("mkldnn.init_innerproduct_fprop('{}', out={}, x={}, y={})",
-                    op.name, out, x, y)
-
     @allocate_op.on_type(Add)
     def allocate_op(self, op, out, x, y):
         self.append("mkldnn.init_elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
