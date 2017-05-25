@@ -15,7 +15,17 @@
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, Fill, AssignOp
+from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, set_item, \
+    Fill, AssignOp, TensorSliceOp
+
+
+class CPUAssignOp(AssignOp):
+    """
+    Executes tensor[...] = val on the CPU. For use when GPU cannot execute the assignment.
+    """
+    def __init__(self, tensor, val, **kwargs):
+        super(CPUAssignOp, self).__init__(tensor, val, **kwargs)
+
 
 
 class GPUSubstitution(PeepholeGraphPass):
@@ -26,6 +36,33 @@ class GPUSubstitution(PeepholeGraphPass):
         Base case.
         """
         pass
+
+    @visit.on_type(AssignOp)
+    def visit(self, op):
+        tensor = op.args[0]
+        value = op.args[1]
+        if not isinstance(tensor, TensorSliceOp):
+            return
+        slices = tensor.slices
+        tensor = tensor.args[0]
+        new_slices = []
+        copy_slices = []
+        flip = False
+        for s in slices:
+            if isinstance(s, slice) and s.step is not None and s.step < 0:
+                new_slices.append(slice(s.start, s.stop, -s.step))
+                copy_slices.append(slice(None, None, -1))
+                flip = True
+            elif isinstance(s, slice):
+                copy_slices.append(slice(None))
+                new_slices.append(s)
+            else:
+                new_slices.append(s)
+        if flip:
+            new_value = tensor_slice(value, copy_slices)
+            dest = tensor_slice(tensor, new_slices, axes=new_value.axes)
+            new_op = CPUAssignOp(dest, new_value)
+            self.replace_op(op, new_op)
 
     @visit.on_type(SetItemOp)
     def visit(self, op):
