@@ -779,7 +779,7 @@ def assign(lvalue, rvalue):
 
 
 def set_item(tensor, item, value):
-    return SetItemOp(tensor, item, value)
+    return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
 
 class SetItemOp(Op):
