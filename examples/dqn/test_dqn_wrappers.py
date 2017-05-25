@@ -1,3 +1,4 @@
+import numpy as np
 import gym
 
 import dqn_atari
@@ -11,7 +12,7 @@ class MockEnvironment(object):
         self.observations = iter(observations)
         self.metadata = {}
         self.action_space = gym.spaces.Discrete(2)
-        self.observation_space = None
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1, 2))
         self.reward_range = None
 
     def reset(self):
@@ -23,14 +24,14 @@ class MockEnvironment(object):
 
 def test_repeat_wrapper_reset():
     environment = MockEnvironment(range(10))
-    environment = dqn_space_invaders.RepeatWrapper(frames=2)(environment)
+    environment = dqn_atari.RepeatWrapper(frames=2)(environment)
 
     assert list(environment._reset()) == [0, 1]
 
 
 def test_repeat_wrapper_step():
     environment = MockEnvironment(range(10))
-    environment = dqn_space_invaders.RepeatWrapper(frames=2)(environment)
+    environment = dqn_atari.RepeatWrapper(frames=2)(environment)
     environment.reset()
 
     assert (environment.step(1)[0] == np.array([1, 2])).all()

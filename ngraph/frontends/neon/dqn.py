@@ -100,7 +100,7 @@ class ModelWrapper(object):
         self.inference_function = self.transformer.add_computation(
             inference_computation
         )
-        self.inference_single_function = self.transformer.add_computation(
+        self.inference_function_single = self.transformer.add_computation(
             inference_computation_single
         )
         self.train_function = self.transformer.add_computation(
@@ -271,7 +271,7 @@ class Memory(deque):
     we can sample from it and learn.
 
     Arguments:
-        maxlen (integer): the maximum number of memories to record
+        maxlen (integer): the maximum number of memories to record.
     """
 
     def __init__(self, **kwargs):
@@ -281,22 +281,34 @@ class Memory(deque):
         return random.sample(self, batch_size)
 
 
-class RepeatMemory(deque):
+class RepeatMemory(object):
     """
     RepeatMemory is used to efficiently remember the history in an environment
     where a RepeatWrapper is wrapping the environment and storing all of
     the observations would be wasteful since a large portion of the observation
     has already been stored in memory.
 
+    Arguments:
+        frames_per_observation (integer): the number of frames per observation
+            that are repeated on every observation.
+        maxlen (integer): the maximum number of memories to record.
+
     Warning: this memory can only be written to from a single episode at a time
 
     Note: repeated frames are expected to be in axis 0
     """
 
-    def __init__(self, frames_per_observation, **kwargs):
-        super(RepeatMemory, self).__init__(**kwargs)
-
+    def __init__(self, frames_per_observation, maxlen, observation_shape, dtype=np.float32):
         self.frames_per_observation = frames_per_observation
+        self.maxlen = maxlen
+
+        self.records = [None] * maxlen
+        self.observations = np.zeros((maxlen,) + observation_shape, dtype=dtype)
+        self.count = 0
+        self.write_position = 0
+
+    def __len__(self):
+        return self.count
 
     def _check_record(self, record):
         # assume for now that the batch axis is at the end
@@ -316,13 +328,48 @@ class RepeatMemory(deque):
     def append(self, record):
         self._check_record(record)
 
-        record['frame'] = record['next_state'][-1, ...]
+        observation = record['next_state'][-1, ...]
         del record['state']
         del record['next_state']
-        print(record)
-        print(record['frame'].shape)
 
-        super(RepeatMemory, self).append(record)
+        self.records[self.write_position] = record
+        self.observations[self.write_position, :] = observation
+
+        # increment counter and write_position
+        if self.count < self.maxlen:
+            self.count += 1
+
+        self.write_position += 1
+        if self.write_position == self.maxlen:
+            self.write_position = 0
+
+    def _sample_single(self):
+        while True:
+            i = random.randint(0, len(self) - self.frames_per_observation - 1)
+            i_end = i + self.frames_per_observation + 1
+
+            # don't sample from positions which have been partially overwritten
+            if i < self.write_position and i_end > self.write_position:
+                continue
+
+            # check to see if this is a valid sample. it is invalid if there is
+            # a terminal frame in the middle of the observation
+            records = [
+                self.records[j] for j in range(i, i_end)
+            ]
+            if not any(record['done'] for record in records[:-1]):
+                # we can stop looking if this is a valid set of records
+                break
+
+        # build observation
+        state = self.observations[i:i_end - 1, ...]
+        next_state = self.observations[i + 1:i_end, ...]
+
+        record = records[-1].copy()
+        record['state'] = state
+        record['next_state'] = next_state
+
+        return record
 
     def sample(self, batch_size):
         if len(self) < self.frames_per_observation:
@@ -334,31 +381,4 @@ class RepeatMemory(deque):
                 self.frames_per_observation,
             ))
 
-        sample = []
-        while len(sample) < batch_size:
-            i = random.randint(0, len(self) - self.frames_per_observation - 1)
-
-            # check to see if this is a valid sample. it is invalid if there is
-            # a terminal frame in the middle of the observation
-            records = [
-                self[i] for i in range(i, i + self.frames_per_observation + 1)
-            ]
-            if any(record['done'] for record in records[:-1]):
-                continue
-
-            # build observation
-            state = np.stack(
-                [record['frame'] for record in records[:-1]],
-                axis=0,
-            )
-            next_state = np.stack(
-                [record['frame'] for record in records[1:]],
-                axis=0,
-            )
-            record = records[-1].copy()
-            record['state'] = state
-            record['next_state'] = next_state
-
-            sample.append(record)
-
-        return sample
+        return [self._sample_single() for _ in range(batch_size)]
