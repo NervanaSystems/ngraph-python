@@ -77,8 +77,7 @@ def test_layer_metadata(input_placeholder):
 
     for op in layer.ops[0]:
         assert "neon_layer" in op.metadata
-        assert len(op.metadata["neon_layer"]) == 1
-        assert op.metadata["neon_layer"] == ["simplelayer"]
+        assert op.metadata["neon_layer"].lower().startswith("simplelayer")
 
     assert "label" in layer.variables[0].metadata
     assert layer.variables[0].metadata["label"] == LABELS["weight"]
@@ -90,5 +89,8 @@ def test_nested_layer_metadata(input_placeholder):
 
     for op in layer.ops[0]:
         assert "neon_layer" in op.metadata
-        assert len(op.metadata["neon_layer"]) == 2
-        assert op.metadata["neon_layer"] == ["nestedlayer", "simplelayer"]
+        assert len(op.metadata["neon_layer"].split("/")) == 2
+        for metadata_name, layer_name in zip(op.metadata["neon_layer"].split("/"),
+                                             ["nestedlayer", "simplelayer"]):
+            assert metadata_name.lower().startswith(layer_name)
+

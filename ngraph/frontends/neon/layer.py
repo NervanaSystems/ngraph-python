@@ -413,7 +413,7 @@ class LookupTable(Layer):
         # initializers.
         self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
         self.axes_map = shadow_axes_map([self.lut_v_axis])
-        self.lut_v_axis = self.axes_map.values()[0]
+        self.lut_v_axis = list(self.axes_map.values())[0]
 
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
