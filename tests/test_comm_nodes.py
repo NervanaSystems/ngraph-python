@@ -126,13 +126,13 @@ def test_get_node_type(from_node, to_node, expected_type):
         'input': 36,
         'func': 'mean',
         'device_id': (1, 2),
-        'expected_result': [[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]],
+        'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
-        'input': 1,
+        'input': 36,
         'func': 'sum',
-        'device_id': ('1', '2'),
-        'expected_result': [[-35.0, -35.0, -35.0, -35.0]],
+        'device_id': (1, 2),
+        'expected_result': [[[-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0]]],
     }
 ])
 def test_allreduce_hint(config):

@@ -35,7 +35,7 @@ class DeviceAssignPass(GraphBuildingPass):
         op.metadata['host_transformer'] = socket.gethostname()
         if isinstance(op.metadata['device_id'], (list, tuple)):
             op.metadata['transformer'] = \
-                [op.metadata['device'] + i for i in op.metadata['device_id']]
+                [op.metadata['device'] + str(i) for i in op.metadata['device_id']]
             [self.hetr.register_transformer(tname) for tname in op.metadata['transformer']]
         else:
             op.metadata['transformer'] = transformer
