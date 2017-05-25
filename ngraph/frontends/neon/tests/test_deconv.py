@@ -2,7 +2,7 @@ import numpy as np
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import make_conv2d, ConstantInit
+from ngraph.frontends.neon import Deconvolution, ConstantInit
 
 
 # TODO: add other configurations?
@@ -20,12 +20,11 @@ def test_deconv(transformer_factory):
     filter_val = np.zeros(fshape)
     filter_val[0, :, :, 0] = filter_val_nz
 
-    deconv = make_conv2d(fshape,
-                         init=ConstantInit(filter_val),
-                         strides=strides,
-                         padding=0,
-                         dilation=1,
-                         deconv=True)
+    deconv = Deconvolution(fshape,
+                           filter_init=ConstantInit(filter_val),
+                           strides=strides,
+                           padding=0,
+                           dilation=1)
 
     N = ng.make_axis(name='N', length=1)  # batch
     image_shape = (1, 1, 8, 8)  # CDHW

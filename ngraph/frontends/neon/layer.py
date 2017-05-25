@@ -405,16 +405,20 @@ class DeconvBase(ConvBase):
     def _out_shape(self, in_axes, cpm):
         # axes for deconv output shape without any trimming
         out_max_shape = [
-            output_dim_deconv(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], cpm['dil_d']),
-            output_dim_deconv(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], cpm['dil_h']),
-            output_dim_deconv(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], cpm['dil_w'])
+            output_dim_deconv(in_axes[1].length, cpm['T'], cpm['pad_d'],
+                              cpm['str_d'], cpm['dil_d']),
+            output_dim_deconv(in_axes[2].length, cpm['R'], cpm['pad_h'],
+                              cpm['str_h'], cpm['dil_h']),
+            output_dim_deconv(in_axes[3].length, cpm['S'], cpm['pad_w'],
+                              cpm['str_w'], cpm['dil_w'])
         ]
         # output slice indices when output shape is specified
         if self.deconv_out_shape is not None:
             # slices to get center of image
             for nm, l, lmax in zip('TRS', self.deconv_out_shape, out_max_shape):
                 if l > lmax:
-                    raise ValueError('specified {} output dimension {} is greater than {}'.format(nm, l, lmax))
+                    raise ValueError('specified {} output dimension {} is greater than {}'
+                                     .format(nm, l, lmax))
                 if l < lmax:
                     extra = lmax - l
                     i1 = int(extra) // 2
@@ -439,7 +443,8 @@ class DeconvBase(ConvBase):
         return ng.map_roles(conv_op, self.axes_map)
 
 
-def make_conv2d(fshape, init, strides, padding, dilation, deconv=False, deconv_out_shape=None, **kwargs):
+def make_conv2d(fshape, init, strides, padding, dilation, deconv=False,
+                deconv_out_shape=None, **kwargs):
     if isinstance(fshape, tuple) or isinstance(fshape, list):
         if len(fshape) == 2:
             fshape = (1, fshape[0], fshape[0], fshape[1])
@@ -454,7 +459,8 @@ def make_conv2d(fshape, init, strides, padding, dilation, deconv=False, deconv_o
         dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
 
     if deconv:
-        return DeconvBase(fshape, init, strides, padding, dilation, deconv_out_shape=deconv_out_shape, **kwargs)
+        return DeconvBase(fshape, init, strides, padding, dilation,
+                          deconv_out_shape=deconv_out_shape, **kwargs)
     else:
         return ConvBase(fshape, init, strides, padding, dilation, **kwargs)
 
@@ -628,10 +634,13 @@ class Deconvolution(Convolution):
                  activation=None, batch_norm=False, deconv_out_shape=None, **kwargs):
 
         self.deconv_out_shape = deconv_out_shape
-        super(Deconvolution, self).__init__(**kwargs)
+        super(Deconvolution, self).__init__(fshape, filter_init,
+                                            strides=strides, padding=padding, dilation=dilation,
+                                            bias_init=bias_init, activation=activation,
+                                            batch_norm=batch_norm, **kwargs)
 
-    def make_conv_layer(fshape, filter_init_strides, padding, dilation, **kwargs):
-        self.conv = make_conv2d(fshape, filiter_init, strides, padding, dilation,
+    def make_conv_layer(self, fshape, filter_init, strides, padding, dilation, **kwargs):
+        self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
                                 deconv=True, deconv_out_shape=self.deconv_out_shape, **kwargs)
 
 
