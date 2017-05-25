@@ -113,4 +113,3 @@ def test_tensor_slice():
     assert x[:5].axes.full_lengths == (5, 20, 5)
     assert x[:, 2:7].axes.full_lengths == (10, 5, 5)
     assert x[:5, :, :-1].axes.full_lengths == (5, 20, 4)
-
