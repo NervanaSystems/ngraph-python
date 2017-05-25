@@ -15,7 +15,8 @@
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, Fill, AssignOp
+from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, set_item, \
+    Fill, AssignOp, TensorSliceOp
 
 
 class GPUSubstitution(PeepholeGraphPass):
@@ -26,6 +27,31 @@ class GPUSubstitution(PeepholeGraphPass):
         Base case.
         """
         pass
+
+    @visit.on_type(AssignOp)
+    def visit(self, op):
+        tensor = op.args[0]
+        value = op.args[1]
+        if not isinstance(tensor, TensorSliceOp):
+            return
+        slices = tensor.slices
+        tensor = tensor.args[0]
+        new_slices = []
+        copy_slices = []
+        flip = False
+        for s in slices:
+            if isinstance(s, slice) and s.step is not None and s.step < 0:
+                new_slices.append(slice(s.start, s.stop, -s.step))
+                copy_slices.append(slice(None, None, -1))
+                flip = True
+            elif isinstance(s, slice):
+                copy_slices.append(slice(None))
+                new_slices.append(s)
+            else:
+                new_slices.append(s)
+        if flip:
+            self.replace_op(op, set_item(tensor, new_slices,
+                                          tensor_slice(value, copy_slices)))
 
     @visit.on_type(SetItemOp)
     def visit(self, op):
