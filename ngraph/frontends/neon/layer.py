@@ -95,7 +95,7 @@ class SubGraph(object):
     def __init__(self, ops=None):
         """
         A connected subset of all ops in the computational graph
-        
+
         Arguments:
             ops (list): A list of ops
         """

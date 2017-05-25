@@ -93,4 +93,3 @@ def test_nested_layer_metadata(input_placeholder):
         for metadata_name, layer_name in zip(op.metadata["neon_layer"].split("/"),
                                              ["nestedlayer", "simplelayer"]):
             assert metadata_name.lower().startswith(layer_name)
-
