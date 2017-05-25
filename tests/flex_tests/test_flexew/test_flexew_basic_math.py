@@ -60,8 +60,10 @@ test_data_single_operand = (
      "Negate function of positive boundary value inside of flex range"),
     # test_sqrt
     (ng.sqrt, [(0, 0)], "Square root of zero equals zero"),
-    (ng.sqrt, [(MAXIMUM_FLEX_VALUE, 181.015625, "High precision check")], "Square root of positive boundary value"),
-    (ng.sqrt, [(MINIMUM_FLEX_VALUE, 0, "sqrt is implemented as LUT so input out of range saturates")],
+    (ng.sqrt, [(MAXIMUM_FLEX_VALUE, 181.015625, "High precision check")],
+     "Square root of positive boundary value"),
+    (ng.sqrt, [(MINIMUM_FLEX_VALUE, 0,
+                "sqrt is implemented as LUT so input out of range saturates")],
      "Square root of negative boundary value"),
     (ng.sqrt, [(1, 1),
                (124, 1.4141, "Overflow of operand to 1.9999"),
