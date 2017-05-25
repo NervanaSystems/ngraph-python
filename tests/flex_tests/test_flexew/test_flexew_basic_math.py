@@ -25,8 +25,6 @@ pytestmark = [pytest.mark.transformer_dependent("module"),
               pytest.mark.flex_only]
 
 # Known issues
-bug_1062 = pytest.mark.xfail(strict=True, reason="GitHub issue #1062, problem with ng.sqrt "
-                                                 "corner cases")
 bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues:"
                                                  "modulus and ZeroDivisionError clarification")
 bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
@@ -61,11 +59,10 @@ test_data_single_operand = (
     (ng.negative, [(MAXIMUM_FLEX_VALUE, MINIMUM_FLEX_VALUE + 1)],
      "Negate function of positive boundary value inside of flex range"),
     # test_sqrt
-    bug_1062((ng.sqrt, [(0, np.NaN)], "Square root of zero and zero")),
-    (ng.sqrt, [(MAXIMUM_FLEX_VALUE, 181.015625, "High precision check")],
-     "Square root of positive boundary value"),
-    bug_1062((ng.sqrt, [(MINIMUM_FLEX_VALUE, np.nan)],
-              "Square root of negative boundary value - NaN expected")),
+    (ng.sqrt, [(0, 0)], "Square root of zero equals zero"),
+    (ng.sqrt, [(MAXIMUM_FLEX_VALUE, 181.015625, "High precision check")], "Square root of positive boundary value"),
+    (ng.sqrt, [(MINIMUM_FLEX_VALUE, 0, "sqrt is implemented as LUT so input out of range saturates")],
+     "Square root of negative boundary value"),
     (ng.sqrt, [(1, 1),
                (124, 1.4141, "Overflow of operand to 1.9999"),
                (10000, 2.8283, "Overflow of operand to 7.9997"),
