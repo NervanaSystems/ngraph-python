@@ -10,8 +10,6 @@ from ngraph.op_graph.op_graph import Unflatten, ContiguousOp, BroadcastOp, Binar
 from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
 from collections import deque as Queue
 
-# TODO remove this once fprop batchnorm is replaced with fusion pass
-fprop_batchnorm_dict = {}
 
 class CPUFusion(GraphRewritePass):
 
@@ -121,8 +119,8 @@ class CPUFusion(GraphRewritePass):
             # Matched bprop batchnorm pattern, do the replacement here.
             input_tensor = label_map[self.batchnorm_bprop_input_tensor]
             delta = label_map[self.batchnorm_bprop_delta]
-            if input_tensor in fprop_batchnorm_dict:
-                batchnorm_fprop = fprop_batchnorm_dict[input_tensor]
+            if input_tensor in FusionPass.fprop_batchnorm_dict:
+                batchnorm_fprop = FusionPass.fprop_batchnorm_dict[input_tensor]
             else:
                 batchnorm_fprop = None
             self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
@@ -286,6 +284,7 @@ class CPUFusion(GraphRewritePass):
 # Delete after moving Batchnorm to CPUFusion
 class FusionPass(PeepholeGraphPass):
 
+    fprop_batchnorm_dict = {}
 
     @generic_method()
     def visit(self, op):
@@ -302,7 +301,7 @@ class FusionPass(PeepholeGraphPass):
         epsilon = dict_ops_to_params["epsilon"].args[0].tensor.const
         mean = BroadcastOp(dict_ops_to_params["mean"], axes=inputs.axes)
         new_op = BatchnormOp(inputs, gamma, bias, epsilon, mean, variance)
-        fprop_batchnorm_dict[inputs] = new_op
+        self.fprop_batchnorm_dict[inputs] = new_op
         self.replace_op(op, new_op)
 
     def check_for_pattern(self, args1, args2, op_type1, op_type2):

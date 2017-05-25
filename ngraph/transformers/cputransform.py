@@ -491,13 +491,12 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.fprop_batchnorm('{}', inputs={}, outputs={}, gamma={},\
                      bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
                      output, gamma, bias, mean, variance, epsilon)
-
+    # self, name, outputs, delta, inputs, gamma, bias, mean, variance, epsilon
     @generate_op.on_type(BpropBatchnormOp)
-    def generate_op(self, op, output, delta, inputs):
+    def generate_op(self, op, output, delta, inputs, gamma, bias, mean, variance):
         self.append("mkldnn.bprop_batchnorm('{}', outputs={}, delta={}, inputs={}, \
-                    gamma={}, bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
-                    output, delta, op.fprop.gamma, op.fprop.bias, op.fprop.mean, op.fprop.variance,
-                    op.fprop.eps)
+                    gamma={}, bias={}, mean={}, variance={}, epsilon={})", op.name, output,
+                    delta, inputs, gamma, bias, mean, variance, op.fprop.eps)
 
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):
@@ -715,8 +714,8 @@ class CPUTransformer(Transformer):
         self.rng_seed = None
         self.initialize_mkldnn()
         add_layout_conversion = AddLayoutConversions(None)
-        self.graph_passes = [CPUFusion(),
-                             FusionPass(),
+        self.graph_passes = [FusionPass(),
+                             CPUFusion(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
@@ -829,10 +828,10 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         self.code.append(self.compute_code.code)
         self.code.endl()
 
-        # import os
-        # pid = os.getpid()
-        # with open("code_{}{}.py".format(self.name, pid), "w") as f:
-        #    f.write(self.code.code)
+        import os
+        pid = os.getpid()
+        with open("code_{}{}.py".format(self.name, pid), "w") as f:
+           f.write(self.code.code)
         #print(self.code.code)
         self.globals = self.code.compile()
 

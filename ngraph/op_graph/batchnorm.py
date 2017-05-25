@@ -19,10 +19,10 @@ class BatchnormOp(TensorOp):
 
     def __init__(self, inputs, gamma, bias, epsilon, mean, variance, **kwargs):
         super(BatchnormOp, self).__init__(args=(inputs, gamma, bias, epsilon, mean, variance), axes=inputs.axes, **kwargs)
-        self.gamma = gamma
-        self.mean = mean
-        self.variance = variance
-        self.bias = bias
+        # self.gamma = gamma
+        # self.mean = mean
+        # self.variance = variance
+        # self.bias = bias
         self.eps = epsilon
 
     def generate_adjoints(self, adjoints, delta, inputs):
@@ -39,5 +39,9 @@ class BpropBatchnormOp(TensorOp):
     inputs: actual input to the batchnormOp
     """
     def __init__(self, delta, inputs,  fprop, **kwargs):
-        super(BpropBatchnormOp, self).__init__(args=(delta, inputs), axes=delta.axes, **kwargs)
+        gamma = fprop.args[1]
+        bias =  fprop.args[2]
+        mean =  fprop.args[4]
+        variance = fprop.args[5]
+        super(BpropBatchnormOp, self).__init__(args=(delta, inputs, gamma, bias, mean, variance), axes=delta.axes, **kwargs)
         self.fprop = fprop

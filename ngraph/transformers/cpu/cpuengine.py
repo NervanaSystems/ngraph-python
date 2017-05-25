@@ -252,13 +252,14 @@ class Mkldnn(object):
         else:
             # compute intermediate fprop op's outputs required for batchnorm bprop
             # axis over which need to sum during bprop
-            self.axis = inputs.shape[1]
+            self.axis = (1,)
+            self.red_args = {'axis': self.axis, 'keepdims': True}
             self.gamma_scale = gamma / np.sqrt(variance + epsilon)
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
             self.m = np.prod([inputs.shape[ii] for ii in self.axis])
 
-            dgamma = np.sum(delta * self.xhat, axis=self.axis)
-            dbeta = np.sum(delta, axis=self.axis)
+            dgamma = np.sum(delta * self.xhat, **self.red_args)
+            dbeta = np.sum(delta, **self.red_args)
             dx = self.gamma_scale * (delta - (self.xhat * dgamma + dbeta) / self.m)
             np.copyto(outputs, dx)
 
