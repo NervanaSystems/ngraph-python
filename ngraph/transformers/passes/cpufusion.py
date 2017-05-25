@@ -121,8 +121,11 @@ class CPUFusion(GraphRewritePass):
             # Matched bprop batchnorm pattern, do the replacement here.
             input_tensor = label_map[self.batchnorm_bprop_input_tensor]
             delta = label_map[self.batchnorm_bprop_delta]
-            batchnorm_fprop = fprop_batchnorm_dict[input_tensor]
-            self.replace_op(op, BpropBatchnormOp(input_tensor, delta, batchnorm_fprop))
+            if input_tensor in fprop_batchnorm_dict:
+                batchnorm_fprop = fprop_batchnorm_dict[input_tensor]
+            else:
+                batchnorm_fprop = None
+            self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
 
     def construct_batchnorm_bprop_pattern(self):
         """
@@ -267,18 +270,17 @@ class CPUFusion(GraphRewritePass):
     def __init__(self):
         self.tensor_to_op_dict = dict()
 
-        # # Register Relu fprop pattern
-        # pattern_relu_fprop = self.construct_relu_fprop_pattern()
-        # self.register_pattern(pattern_relu_fprop, self.fuse_relu_fprop_callback)
-        #
-        # # Register Relu bprop pattern
-        # pattern_relu_bprop = self.construct_relu_bprop_pattern()
-        # self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)
+        # Register Relu fprop pattern
+        pattern_relu_fprop = self.construct_relu_fprop_pattern()
+        self.register_pattern(pattern_relu_fprop, self.fuse_relu_fprop_callback)
+
+        # Register Relu bprop pattern
+        pattern_relu_bprop = self.construct_relu_bprop_pattern()
+        self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)
 
         # Register batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
         self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
-        print(GraphRewritePass.print_pattern(pattern_batchnorm_bprop))
 
 
 # Delete after moving Batchnorm to CPUFusion

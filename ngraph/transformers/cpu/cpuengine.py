@@ -77,8 +77,17 @@ class Mkldnn(object):
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_double, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, 
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_void_p]
+
+            self.batchnorm_bprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_batchnorm_bprop_primitives
+            self.batchnorm_bprop_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_double,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
 
             self.set_input_tensor = self.mkldnn_engine_dll.set_input_tensor_data_handle
             self.set_input_tensor.argtypes = \
@@ -227,6 +236,31 @@ class Mkldnn(object):
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
             self.batch_norm_output = gamma * self.xhat + bias
             np.copyto(outputs, self.batch_norm_output)
+
+    def bprop_batchnorm(self, name, outputs, delta, inputs, gamma, bias, mean, variance, epsilon):
+        if (self.mkldnn_enabled and name in self.kernels):
+            weights = np.stack([gamma[:, 0], bias[:, 0]])
+            mean_ch = mean[:, 0]
+            variance_ch = variance[:, 0]
+            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], mean_ch.ctypes.data, 1)
+            self.set_input_tensor(self.kernels[name], variance_ch.ctypes.data, 2)
+            self.set_input_tensor(self.kernels[name], delta.ctypes.data, 3)
+            self.set_input_tensor(self.kernels[name], weights.ctypes.data, 4)
+            self.set_output_tensor(self.kernels[name], outputs.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        else:
+            # compute intermediate fprop op's outputs required for batchnorm bprop
+            # axis over which need to sum during bprop
+            self.axis = inputs.shape[1]
+            self.gamma_scale = gamma / np.sqrt(variance + epsilon)
+            self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+            self.m = np.prod([inputs.shape[ii] for ii in self.axis])
+
+            dgamma = np.sum(delta * self.xhat, axis=self.axis)
+            dbeta = np.sum(delta, axis=self.axis)
+            dx = self.gamma_scale * (delta - (self.xhat * dgamma + dbeta) / self.m)
+            np.copyto(outputs, dx)
 
     def fprop_conv(self, name, conv_slices, I, F, O):
         if (self.mkldnn_enabled and name in self.kernels):

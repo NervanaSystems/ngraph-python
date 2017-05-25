@@ -115,7 +115,7 @@ class RNNHelper(object):
                 return anc_op
 
 
-# TODO: Move the following *_size fixtures to conftest.py and refactor other tests to use them
+#TODO: Move the following *_size fixtures to conftest.py and refactor other tests to use them
 @pytest.fixture(params=[32])
 def batch_size(request):
     return request.param

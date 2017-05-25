@@ -36,7 +36,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
-from ngraph.op_graph.batchnorm import BatchnormOp
+from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
@@ -491,6 +491,13 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.fprop_batchnorm('{}', inputs={}, outputs={}, gamma={},\
                      bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
                      output, gamma, bias, mean, variance, epsilon)
+
+    @generate_op.on_type(BpropBatchnormOp)
+    def generate_op(self, op, output, delta, inputs):
+        self.append("mkldnn.bprop_batchnorm('{}', outputs={}, delta={}, inputs={}, \
+                    gamma={}, bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
+                    output, delta, op.fprop.gamma, op.fprop.bias, op.fprop.mean, op.fprop.variance,
+                    op.fprop.eps)
 
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):
