@@ -21,6 +21,24 @@ from ngraph.testing import ExecutorFactory
 pytestmark = pytest.mark.transformer_dependent("module")
 
 
+@pytest.fixture(params=[(1, 2, 1),
+                        (2, 3, 2),
+                        (15, 5, 1)])
+def concatenate_variables(request):
+    num_vars, num_axes, concat_pos = request.param
+    common_axes = [ng.make_axis(length=2) for _ in range(num_axes - 1)]
+    x_list = list()
+    np_list = list()
+    ax = ng.make_axis(length=np.random.randint(3, 10))
+    axes = ng.make_axes(common_axes[:concat_pos] + [ax] + common_axes[concat_pos:])
+    for _ in range(num_vars):
+        var = np.random.uniform(0, 1, axes.full_lengths)
+        np_list.append(var)
+        x_list.append(ng.constant(var, axes=axes))
+
+    return x_list, np_list, concat_pos
+
+
 @pytest.fixture()
 def C():
     return ng.make_axis(length=200)
