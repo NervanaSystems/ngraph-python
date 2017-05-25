@@ -123,10 +123,10 @@ def test_get_node_type(from_node, to_node, expected_type):
 
 @pytest.mark.parametrize('config', [
     {
-        'input': 1,
+        'input': 36,
         'func': 'mean',
-        'device_id': ('1', '2'),
-        'expected_result': [[-17.0, -17.0, -17.0, -17.0]],
+        'device_id': (1, 2),
+        'expected_result': [[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]],
     },
     {
         'input': 1,
@@ -138,22 +138,17 @@ def test_get_node_type(from_node, to_node, expected_type):
 def test_allreduce_hint(config):
     c = config
 
-    H_axis = ng.make_axis(length=4, name='height')
-    W_axis = ng.make_axis(length=6, name='width')
-    with ng.metadata(step='input'):
-        X = ng.placeholder(axes=[H_axis, W_axis])
-        target = ng.constant(1, axes=[W_axis])
-    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
-        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1))
-        dot = ng.dot(W, X)
-        L = ng.squared_L2(target - dot, out_axes=())
-    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
-        grad = ng.deriv(L, W)
+    with ng.metadata(device_id=c['device_id']):
+        H_axis = ng.make_axis(length=4, name='height')
+        batch_axis = ng.make_axis(length=2, name='width')
+        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1,1)).named('weight')
+        # grad = ng.placeholder(36.0, axes=[batch_axis]).named('grad')
+        grad = ng.variable(initial_value=UniformInit(c['input'],c['input']), axes=[batch_axis]).named('gradient')
         grad.metadata['reduce_func'] = c['func']
-        update = (W - grad)
-
+        update = (W - grad).named('update')
+        update.metadata['parallel'] = H_axis
     with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-        out_comp = hetr.computation([update], X)
-        result = out_comp(c['input'])
+        out_comp = hetr.computation([update]).named('out_comp')
+        result = out_comp()
 
-    np.testing.assert_array_equal(result, c['expected_result'])
+        np.testing.assert_array_equal(result, c['expected_result'])
