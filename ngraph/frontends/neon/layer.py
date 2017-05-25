@@ -367,7 +367,7 @@ class ConvBase(Layer):
     @ng.with_op_metadata
     @cached({})
     def __call__(self, in_obj):
-        cpm = self.convparams.copy()  # RP: copy is unnecessary?
+        cpm = self.convparams.copy()
         self.interpret_axes(in_obj, cpm)
 
         conv_op = ng.convolution(cpm, in_obj, self.W, axes=self.o_axes)
@@ -433,7 +433,7 @@ class DeconvBase(ConvBase):
     @ng.with_op_metadata
     @cached({})
     def __call__(self, in_obj):
-        cpm = self.convparams.copy()  # RP: copy is unnecessary?
+        cpm = self.convparams.copy()
         self.interpret_axes(in_obj, cpm)
 
         conv_op = ng.deconvolution(cpm, in_obj, self.W, axes=self.o_axes)

@@ -141,10 +141,10 @@ class DeconvolutionOp(TensorOp):
         # requires conv's forward to be completed before backward
         update_conv_op = update_conv(inputs, delta, filters, self)  # switch inputs and delta
         update_conv_op.add_control_dep(self)
-        fprop_conv_op = fprop_conv(delta, inputs, filters, self)  # bprop for deconv
-        fprop_conv_op.add_control_dep(self)
+        deconv_deriv_op = DeconvDerivOp(delta, inputs, filters, self)
+        deconv_deriv_op.add_control_dep(self)
         filters.generate_add_delta(adjoints, update_conv_op)
-        inputs.generate_add_delta(adjoints, fprop_conv_op)
+        inputs.generate_add_delta(adjoints, deconv_deriv_op)
 
 
 class ConvDerivOp(TensorOp):
@@ -197,7 +197,7 @@ class bprop_conv(ConvDerivOp):
         )
 
 
-class fprop_conv(ConvDerivOp):
+class DeconvDerivOp(ConvDerivOp):
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         """
         Deconv backprop
@@ -206,7 +206,7 @@ class fprop_conv(ConvDerivOp):
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        super(fprop_conv, self).__init__(
+        super(DeconvDerivOp, self).__init__(
             args=(delta, filters),
             fprop=fprop,
             axes=inputs.axes, **kwargs

@@ -21,7 +21,7 @@ from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
     SetItemOp, SequentialOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
-    DeconvolutionOp, fprop_conv
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.ctc import CTCOp
@@ -377,9 +377,9 @@ class AddLayoutConversions(PeepholeGraphPass):
     def op_from_args(self, op, args):
         return DeconvolutionOp(op.conv_params, *args, axes=op.axes)
 
-    @op_from_args.on_type(fprop_conv)
+    @op_from_args.on_type(DeconvDerivOp)
     def op_from_args(self, op, args):
-        return fprop_conv(args[0], op.fprop.args[0], args[1], op.fprop)
+        return DeconvDerivOp(args[0], op.fprop.args[0], args[1], op.fprop)
 
     @op_from_args.on_type(PoolingOp)
     def op_from_args(self, op, args):

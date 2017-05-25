@@ -116,7 +116,7 @@ class LearningRateOptimizer(Optimizer):
 
     @ng.with_op_metadata
     def __call__(self, cost_func, variable_scope=None):
-        self.update_timestep()
+        self._pre_call_hook()
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
         batch_size = cost_func.axes.batch_axis().length
@@ -134,7 +134,7 @@ class LearningRateOptimizer(Optimizer):
         grads = ng.doall(grads)
         return ng.sequential([grads, updates, 0])
 
-    def update_timestep(self):  # TODO method name?
+    def _pre_call_hook(self):
         pass
 
 
@@ -309,7 +309,7 @@ class Adam(LearningRateOptimizer):
         self.gradient_clip_value = gradient_clip_value
         self.t = ng.persistent_tensor(axes=(), initial_value=0)
 
-    def update_timestep(self):
+    def _pre_call_hook(self):
         self.t = ng.sequential([ng.assign(self.t, self.t + 1), self.t])
         self.ell = self.lrate * ng.sqrt(1 - self.beta_2**self.t) / (1 - self.beta_1**self.t)
 

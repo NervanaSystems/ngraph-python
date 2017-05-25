@@ -33,7 +33,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
-    DeconvolutionOp, fprop_conv
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -400,7 +400,7 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.init_conv_bprop('{}', E={}, F={}, gI={}, pad={}, stride={})",
                     op.name, inputs, filters, outputs, pad, stride)
 
-    @allocate_op.on_type(fprop_conv)
+    @allocate_op.on_type(DeconvDerivOp)
     def allocate_op(self, op, gI, delta, filters):
         pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
@@ -511,7 +511,7 @@ class CPUCodeGenerator(PyGen):
         self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
                     op.name, op.name, inputs, filters, outputs)
 
-    @generate_op.on_type(fprop_conv)
+    @generate_op.on_type(DeconvDerivOp)
     def generate_op(self, op, outputs, delta, filters):
         self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
                     op.name, op.fprop.forwarded.name, delta, filters, outputs)
