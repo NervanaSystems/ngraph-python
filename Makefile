@@ -28,9 +28,12 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
-TEST_OPTS := --timeout=600 --cov=ngraph
-TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests/
-TEST_DIRS_FLEX := flex_tests/ tests/
+TEST_OPTS := --timeout=800 --cov=ngraph --timeout_method=thread
+TEST_DIRS := tests/
+TEST_DIRS_SERIAL := serial_tests/
+TEST_DIRS_FLEX := flex_tests/ tests/ serial_tests/
+TEST_DIRS_NEON := ngraph/frontends/neon/tests
+TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
@@ -108,6 +111,7 @@ test_flex: gpu_prepare test_prepare clean
 	--timeout=1200 --cov=ngraph $(TEST_DIRS_FLEX)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
+test_mkldnn: export PYTHONHASHSEED=0
 test_mkldnn: export MKL_TEST_ENABLE=1
 test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
 test_mkldnn: test_prepare clean
@@ -115,14 +119,15 @@ test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_SERIAL)
 	@echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \ 
+	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only" --boxed \
@@ -130,22 +135,31 @@ test_cpu: test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_gpu: export PYTHONHASHSEED=0
 test_gpu: gpu_prepare test_prepare clean
 	echo Running unit tests for gpu dependent transformer tests...
 	py.test --transformer hetr -m "hetr_gpu_only" \
+	--boxed \
 	--junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
-	py.test --transformer gpu -m "transformer_dependent" --boxed \
+	py.test --transformer gpu -m "transformer_dependent" \
+	--boxed -n auto \
 	--junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	py.test --transformer gpu -m "transformer_dependent" \
+	--boxed \
+	--junit-xml=testout_test_gpu_tx_dependent_serial_$(PY).xml \
+	--cov-append \
+	$(TEST_OPTS) $(TEST_DIRS_SERIAL)
 	coverage xml -i -o coverage_test_gpu_$(PY).xml
 
+test_hetr: export PYTHONHASHSEED=0
 test_hetr: test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
 	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_SERIAL) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mxnet: test_prepare clean
