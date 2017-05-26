@@ -18,7 +18,7 @@ from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, \
     ComputationOp, Flatten, unflatten, ReorderAxes, ReductionOp, Divide, \
-    DotLowDimension
+    DotLowDimension, Add
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.batchnorm import BatchnormOp
@@ -468,11 +468,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (len(x.axes.lengths) != 2) or (len(y.axes.lengths) != 2):
                 return
 
-            if (self.mkldnn.mkldnn_verbose):
-                print("Inner Product Input: ", len(x.shape), x.shape,
-                      "..", x.axes,
-                      " Weights: ", y.shape, len(y.shape))
-
             y_d1, y_d2 = y.axes.lengths
             x_shape = x.axes.lengths
             y_shape = (y_d1, y_d2)
@@ -508,6 +503,52 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if (output_layout):
                 self.mkldnn.op_layouts[op.name] = output_layout
+            if self.mkldnn.mkldnn_verbose:
+                print
+                print(op_id, op.name)
+                self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
+
+
+    @visit.on_type(Add)
+    def visit(self, op):
+        if(self.mkldnn.mkldnn_enabled):
+            I_array1 = op.args[0]
+            I_array2 = op.args[1]
+            # Sanity check for tensor shapes
+            # TODO: this check does not work - Sum does not have flags attribute.
+            #if (not (I_array1.flags['C_CONTIGUOUS'] and
+            #         I_array2.flags['C_CONTIGUOUS'])):
+            #    return
+            if (op.dtype.type != np.float32):
+                return
+            if len(I_array1.shape) != 1 or len(I_array2.shape) != 1:
+                return
+
+            array1_shape = I_array1.axes.lengths
+            array2_shape = I_array2.axes.lengths
+            out_shape = op.axes.lengths
+
+            input1_shape = ((ct.c_int) * len(array1_shape))(*array1_shape)
+            input2_shape = ((ct.c_int) * len(array2_shape))(*array2_shape)
+            output_shape = ((ct.c_int) * len(out_shape))(*out_shape)
+
+            input1_layout = self.mkldnn.op_layouts.get(I_array1.name)
+            input2_layout = self.mkldnn.op_layouts.get(I_array2.name)
+            data_type = self.mkldnn.datatype[op.dtype.type]
+
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
+            self.mkldnn.add_kernel(
+                    self.mkldnn.mkldnn_engine,
+                    len(I_array1.shape), len(I_array2.shape), len(output_shape),
+                    input1_shape, input2_shape, output_shape,
+                    input1_layout, input2_layout,
+                    2,
+                    data_type, self.mkldnn.kernels[op.name])
+            output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
+            if (output_layout):
+                self.mkldnn.op_layouts[op.name] = output_layout
+            self.mkldnn.op_uses_opkernel_api[op.name] = True
             if self.mkldnn.mkldnn_verbose:
                 print
                 print(op_id, op.name)
