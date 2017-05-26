@@ -320,9 +320,9 @@ class HetrTransformer(ComputationGraphTransformer):
             mpirun_str = "mpirun -n %s -ppn 1 -bootstrap persist -hostfile %s %s"\
                 % (hetr_server_num, hetr_server_hostfile, hetr_server_path)
             subprocess.call(mpirun_str, shell=True)
-            self.multinode = True
+            self.use_mlsl = True
         else:
-            self.multinode = False
+            self.use_mlsl = False
 
     def close(self):
         if self.is_closed:
