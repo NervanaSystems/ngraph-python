@@ -1503,7 +1503,7 @@ class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
         x: A view of a tensor.
 
     Returns:
-        A view of the tensor. 
+        A view of the tensor.
     """
     def __init__(self, x, **kwargs):
         super(IndexOp, self).__init__(

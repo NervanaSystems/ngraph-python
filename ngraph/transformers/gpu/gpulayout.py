@@ -388,7 +388,7 @@ class GPUBinaryLayoutConstraint(StridedBinaryLayoutConstraint):
 
     def get_reshape(self, arg_mem_order, arg_axes, out_groups, arg):
         """
-        Given an input tensor, generate a ReshapeOp that produces a view of the original tensor
+        Given an input tensor, generate a IndexOp that produces a view of the original tensor
         which is defined by out_groups. Axis groups must be contiguous in the argument; this
         condition is not checked by this method.
 
@@ -399,7 +399,7 @@ class GPUBinaryLayoutConstraint(StridedBinaryLayoutConstraint):
             arg: The op producing this argument
 
         Returns:
-            GPUReshapeOp which contains a view of the original tensor with the desired axes groups
+            GPUIndexOp which contains a view of the original tensor with the desired axes groups
         """
         out_view = self.layout_view(arg_mem_order, arg_axes, out_groups)
         out = GPUIndexOp(arg, out_view)
@@ -492,7 +492,7 @@ class GPUEWLayoutConstraint(GPUBinaryLayoutConstraint):
     def get_layout_transform(self, arg_layout, op_layout, arg):
         """
         Given the op layout and argument layout, check if a DimshuffleOp is needed to convert
-        the argument to a suitable layout. Generates either a DimshuffleOp or GPUReshapeOp for
+        the argument to a suitable layout. Generates either a DimshuffleOp or GPUIndexOp for
         the argument which produces a view which satisfies the op_layout assignment.
 
         Arguments:
@@ -501,7 +501,7 @@ class GPUEWLayoutConstraint(GPUBinaryLayoutConstraint):
             arg (TensorOp): Op producing the argument
 
         Returns:
-            Either a GPUReshapeOp if no transform is needed, or a DimshuffleOp which satisfies
+            Either a GPUIndexOp if no transform is needed, or a DimshuffleOp which satisfies
             the requirements of the op_layout
         """
         # Flattened arg layout axes list used to determine arg contiguity
@@ -588,7 +588,7 @@ class GPUFixedLayoutConstraint(GPUBinaryLayoutConstraint):
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
         """
-        Generates either a DimshuffleOp or GPUReshapeOp for the argument that produces a view
+        Generates either a DimshuffleOp or GPUIndexOp for the argument that produces a view
         which satisfies contiguous order requirement.
 
         Arguments:
@@ -596,7 +596,7 @@ class GPUFixedLayoutConstraint(GPUBinaryLayoutConstraint):
             op_layout: (GPULayoutAssignment): layout required by the op
             arg (TensorOp): Op producing the argument
 
-        Either a GPUReshapeOp if no transform is needed, or a DimshuffleOp which satisfies
+        Either a GPUIndexOp if no transform is needed, or a DimshuffleOp which satisfies
             the requirements of the op_layout
         """
         arg_mem_order = flatten(arg_layout.axes)
@@ -680,7 +680,7 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
         """
-        Generates either a DimshuffleOp or GPUReshapeOp for the argument that produces a view
+        Generates either a DimshuffleOp or GPUIndexOp for the argument that produces a view
         which satisfies the dot op layout.
 
         Arguments:
@@ -688,7 +688,7 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
             op_layout: (GPULayoutAssignment): layout required by the op
             arg (TensorOp): Op producing the argument
 
-        Either a GPUReshapeOp if no transform is needed, or a DimshuffleOp which satisfies
+        Either a GPUIndexOp if no transform is needed, or a DimshuffleOp which satisfies
             the requirements of the op_layout
         """
         arg_mem_order = flatten(arg_layout.axes)
@@ -733,7 +733,7 @@ class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
             op_layout: (GPULayoutAssignment): layout required by the op
             arg (TensorOp): Op producing the argument
 
-        A GPUReshapeOp which satisfies the requirements of the op_layout
+        A GPUIndexOp which satisfies the requirements of the op_layout
         """
         arg_mem_order = flatten(arg_layout.axes)
         arg_view_axes = Axes.as_flattened_list(arg.axes)
