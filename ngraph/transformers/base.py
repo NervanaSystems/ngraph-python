@@ -837,17 +837,20 @@ def transformer_choices():
     return names
 
 
-def allocate_transformer(name, **kargs):
+def allocate_transformer(name, device=None, **kargs):
     """Allocate a named backend."""
     try:
-        return Transformer.transformers[name](**kargs)
+        if name == 'hetr':
+            return Transformer.transformers[name](device, **kargs)
+        else:
+            return Transformer.transformers[name](**kargs)
     except KeyError:
         names = ', '.join(["'%s'" % (_,) for _ in transformer_choices()])
         raise ValueError("transformer must be one of (%s)" % (names,))
 
 
-def make_transformer_factory(name, **kargs):
+def make_transformer_factory(name, device=None, **kargs):
     def factory():
-        return allocate_transformer(name, **kargs)
+        return allocate_transformer(name, device, **kargs)
     factory.name = name  # added for pytest
     return factory

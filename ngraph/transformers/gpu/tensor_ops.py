@@ -339,6 +339,12 @@ class CudaScatterRecvKernel(GPUKernel):
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
+        # get a handle to the send-buffer in our corresponding send-op using the shared queue
+        # In the case where sender/recvr are in the same cpu process,
+        # avoid IPC and pass the direct pointer through the shared q.
+        # since sender/recvr are in the same process in this case,
+        # set_ipc_handle must be called before open_ipc_handle to avoid a hang,
+        # hence doing set_ in bind_buffers and open_ in execute.
         (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues
                                                                  [self.op.idx])
         super(CudaScatterRecvKernel, self).bind_buffers()
@@ -371,6 +377,9 @@ class CudaGatherSendKernel(GPUKernel):
 
     def execute(self):
         if self.recvr_buf is None:
+            # set_ipc_handle must be called before open_ipc_handle in certain cases to avoid a
+            # hang, hence calling set_ in bind_buffers and open_ in execute.
+            # See corresponding comment in ScatterRecv kernel for details.
             (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues
                                                                    [self.op.idx])
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize

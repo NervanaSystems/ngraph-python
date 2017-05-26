@@ -503,6 +503,8 @@ ax_D = ng.make_axis(24)
     },
 ])
 def test_gpu_graph(config):
+    pytest.xfail("Multi-GPU testing not enabled yet")
+
     t = config
     with ng.metadata(device='gpu'):
         x = ng.placeholder(axes=t['axes'])

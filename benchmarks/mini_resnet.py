@@ -129,13 +129,13 @@ def get_fake_data(dataset, batch_size, n_iter):
 
 
 def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
-                         transformer_type, bprop=False, visualize=False):
+                         transformer_type, device, bprop=False, visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
     model_out = get_mini_resnet(inputs, dataset, device_id=device_id)
 
     # Running forward propagation
     fprop_computation_op = ng.computation(model_out, 'all')
-    benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type)
+    benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type, device)
     Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
                                                            dataset + '_msra_fprop', visualize))
 
@@ -149,7 +149,7 @@ def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
         batch_cost_computation_op = ng.computation(batch_cost, "all")
 
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
-                              transformer_type, visualize)
+                              transformer_type, device)
         Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
                                           dataset + '_msra_bprop', visualize))
 
@@ -167,6 +167,8 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
     parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
+    parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
+                        help="device to run on")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
@@ -178,4 +180,5 @@ if __name__ == "__main__":
                              batch_size=args.batch_size,
                              device_id=device_id,
                              transformer_type=args.transformer,
+                             device=args.device,
                              visualize=args.visualize)
