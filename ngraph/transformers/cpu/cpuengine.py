@@ -234,7 +234,7 @@ class Mkldnn(object):
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
-            self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+            self.xhat = (inputs - mean) / (np.sqrt(variance + epsilon))[:, None]
             self.batch_norm_output = gamma * self.xhat + bias
             np.copyto(outputs, self.batch_norm_output)
 
