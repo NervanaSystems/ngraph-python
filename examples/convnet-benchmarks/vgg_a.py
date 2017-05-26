@@ -24,13 +24,12 @@ https://github.com/soumith/convnet-benchmarks
 import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
-from contextlib import closing
+from tqdm import tqdm
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator, GaussianInit
 from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import loop_train, ax
+from ngraph.frontends.neon import ax
 
 np.seterr(all='raise')
 
@@ -91,14 +90,26 @@ optimizer = GradientDescentMomentum(lr_schedule, 0.0, wdecay=0.0005,
 train_prob = seq1(inputs['image'])
 train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-train_outputs = dict(batch_cost=batch_cost)
+train_computation = ng.computation(batch_cost, "all")
 
-with closing(ngt.make_transformer()) as transformer:
-    train_computation = make_bound_computation(transformer, train_outputs, inputs)
+# Now bing the computations we are interested in
+transformer = ngt.make_transformer()
+train_function = transformer.add_computation(train_computation)
 
-    cbs = make_default_callbacks(output_file=args.output_file,
-                                 frequency=10,
-                                 train_computation=train_computation,
-                                 total_iterations=args.num_iterations)
+tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
+interval_cost = 0.0
 
-    loop_train(train_set, train_computation, cbs)
+for step, data in enumerate(train_set):
+    data['iteration'] = step
+    feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
+    output = train_function(feed_dict=feed_dict)
+
+    tpbar.update(1)
+    tpbar.set_description("Training {:0.4f}".format(output[()]))
+    interval_cost += output[()]
+    if (step + 1) % args.iter_interval == 0 and step > 0:
+        tqdm.write("Interval {interval} Iteration {iteration} complete. "
+                   "Avg Train Cost {cost:0.4f}".format(
+                       interval=step // args.iter_interval,
+                       iteration=step,
+                       cost=interval_cost / args.iter_interval))
