@@ -16,7 +16,7 @@ import numpy as np
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
-    ReshapeOp, TensorValueOp, AssignableTensorOp, tdcache
+    IndexOp, TensorValueOp, AssignableTensorOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes, make_axes
@@ -70,7 +70,7 @@ class DimshuffleOp(TensorOp):
         self.axis_order = tuple(axis_order)
 
 
-class GPUReshapeOp(ReshapeOp):
+class GPUIndexOp(IndexOp):
     """
     Layout transformation op for a GPU which does not copy, but changes shape and/or strides
 
@@ -79,7 +79,7 @@ class GPUReshapeOp(ReshapeOp):
         view (GPULayoutView): New view to use for reading the tensor
     """
     def __init__(self, x, view, **kwargs):
-        super(GPUReshapeOp, self).__init__(x, axes=x.axes, **kwargs)
+        super(GPUIndexOp, self).__init__(x, axes=x.axes, **kwargs)
         self.layout_view = view
 
     @tdcache()
@@ -402,7 +402,7 @@ class GPUBinaryLayoutConstraint(StridedBinaryLayoutConstraint):
             GPUReshapeOp which contains a view of the original tensor with the desired axes groups
         """
         out_view = self.layout_view(arg_mem_order, arg_axes, out_groups)
-        out = GPUReshapeOp(arg, out_view)
+        out = GPUIndexOp(arg, out_view)
         out.metadata["layout"] = out_view
         return out
 
