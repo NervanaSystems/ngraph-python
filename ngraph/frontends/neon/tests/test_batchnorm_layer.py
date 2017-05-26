@@ -193,6 +193,7 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
 
     with ExecutorFactory() as ex:
         # Create derivative executor
+        fprop_function = ex.executor(fprop, input_placeholder)
         bprop_function = ex.executor(bprops, input_placeholder, delta_placeholder)
 
         # Generate data
@@ -203,6 +204,7 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
         dx_ref, dgamma_ref, dbeta_ref = BatchNormReference(x, **bn_params).bprop(delta)
 
         # Compute ngraph bprop
+        out = fprop_function(x)
         dx, dgamma, dbeta = bprop_function(x, delta)
 
         assert ng.testing.allclose(dx, dx_ref, rtol=rtol, atol=atol)

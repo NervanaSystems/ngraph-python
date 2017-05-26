@@ -43,5 +43,5 @@ class BpropBatchnormOp(TensorOp):
         bias =  fprop.args[2]
         mean =  fprop.args[4]
         variance = fprop.args[5]
-        super(BpropBatchnormOp, self).__init__(args=(delta, inputs, gamma, bias, mean, variance), axes=delta.axes, **kwargs)
+        super(BpropBatchnormOp, self).__init__(args=(delta, inputs, gamma, bias, mean, variance), axes=inputs.axes, **kwargs)
         self.fprop = fprop

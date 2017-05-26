@@ -156,7 +156,8 @@ mkldnn_netlist_t create_mkldnn_batchnorm_bprop_primitives(
     double epsilon, mkldnn_primitive_desc_t input_fprop_src_pd,
     mkldnn_primitive_desc_t input_weights_pd, mkldnn_primitive_desc_t input_mean_pd,
     mkldnn_primitive_desc_t input_variance_pd,  mkldnn_primitive_desc_t input_error_pd,
-    mkldnn_data_type_t data_type, mkldnn_opkernel_t opkernel) {
+    mkldnn_data_type_t data_type, mkldnn_opkernel_t fprop_kernel,
+    mkldnn_opkernel_t opkernel) {
 
     int mkl_src_dims = 4;
     int mkl_dst_dims = 4;
@@ -168,6 +169,17 @@ mkldnn_netlist_t create_mkldnn_batchnorm_bprop_primitives(
     int mkl_weight_sizes[2];
     int mkl_mean_sizes[1];
     int mkl_variance_sizes[1];
+
+     // C,H,W,N -> N, C, H, W
+    mkl_src_sizes[0] = batchnorm_src_sizes[0];
+    mkl_src_sizes[1] = batchnorm_src_sizes[1];
+    mkl_src_sizes[2] = batchnorm_src_sizes[2];
+    mkl_src_sizes[3] = batchnorm_src_sizes[3];
+
+    mkl_dst_sizes[0] = batchnorm_src_sizes[0];
+    mkl_dst_sizes[1] = batchnorm_src_sizes[1];
+    mkl_dst_sizes[2] = batchnorm_src_sizes[2];
+    mkl_dst_sizes[3] = batchnorm_src_sizes[3];
 
     mkl_weight_sizes[0] = batchnorm_weights_sizes[0];
     mkl_weight_sizes[1] = batchnorm_weights_sizes[1];
@@ -203,11 +215,11 @@ mkldnn_netlist_t create_mkldnn_batchnorm_bprop_primitives(
     }
 
     mkldnn_batch_normalization_desc_t batch_norm_desc;
-    MKL_CHECK(mkldnn_batch_normalization_backward_desc_init(&batch_norm_desc, mkldnn_forward_training,
+    MKL_CHECK(mkldnn_batch_normalization_backward_desc_init(&batch_norm_desc, mkldnn_backward_data,
                                                             &prim_md, &prim_md, epsilon,
                                                             mkldnn_use_global_stats | mkldnn_use_scaleshift));
 
-    MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc, engine, NULL));
+    MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc, engine, fprop_kernel->op_desc));
 
     const_mkldnn_primitive_desc_t kernel_fprop_src_pd =
           mkldnn_primitive_desc_query_pd(opkernel->op_desc, mkldnn_query_src_pd, 0);

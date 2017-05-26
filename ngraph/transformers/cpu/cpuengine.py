@@ -87,7 +87,8 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_double,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p,
+                 ctypes.c_void_p]
 
             self.set_input_tensor = self.mkldnn_engine_dll.set_input_tensor_data_handle
             self.set_input_tensor.argtypes = \

@@ -123,43 +123,57 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(BpropBatchnormOp)
     def visit(self, op):
         if self.mkldnn.mkldnn_enabled:
+            gamma = op.args[2]
+            bias = op.args[3]
+            mean = op.args[4]
+            variance = op.args[5]
             # Only single precision float supported for now
             if op.dtype != np.float32:
                 return
             # Sanity check tensor shapes
-            if (len(op.axes) != 5):
-                return
+            if (len(op.axes.lengths) == 2):
+                C, Flatten_axis = op.axes
+                if (len(unflatten(Flatten_axis).axes.lengths) !=4):
+                    return
+                else:
+                    C = C.axes.lengths[0]
+                    D, H, W, N = unflatten(Flatten_axis).axes.lengths
+                    output_shape = [N, C, H, W]
+                    output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
             data_type = self.mkldnn.datatype[op.dtype.type]
             fprop_src  = op.args[1]
             delta = op.args[0]
-            mean_size = op.fprop.mean.axes.lengths[0]
-            variance_size = op.fprop.mean.axes.lengths[0]
+            mean_size = mean.axes.lengths[0]
+            variance_size = variance.axes.lengths[0]
 
             delta_shape = self.get_data_shape(unflatten(delta).axes)
-            output_shape = self.get_data_shape(op.axes)
+            delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
+            #output_shape = self.get_data_shape(op.axes)
 
             # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
-            gamma_shape = op.fprop.gamma.axes.lengths[0]
-            weights_shape = (2, gamma_shape)
+            gamma_shape = gamma.axes.lengths[0]
+            weights_shape = [2, gamma_shape]
             weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
+
 
             delta_layout = self.mkldnn.op_layouts.get(delta.name)
             fprop_src_layout = self.mkldnn.op_layouts.get(fprop_src.name)
             mean_layout = None
-            if op.fprop.mean.name in self.mkldnn.kernels:
-                mean_layout = self.mkldnn.op_layouts[op.fprop.mean.name]
+            if mean.name in self.mkldnn.kernels:
+                mean_layout = self.mkldnn.op_layouts[mean.name]
 
             variance_layout = None
-            if op.fprop.variance.name in self.mkldnn.kernels:
-                variance_layout = self.mkldnn.op_layouts[op.fprop.variance.name]
+            if variance.name in self.mkldnn.kernels:
+                variance_layout = self.mkldnn.op_layouts[variance.name]
 
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
 
-            self.mkldnn.batchnorm_bprop_kernel(
-                self.mkldnn.mkldnn_engine, delta_shape, output_shape, weights_shape_arg,
-                mean_size, variance_size, op.fprop.eps, fprop_src_layout,
-                None, mean_layout, variance_layout, delta_layout, data_type, self.mkldnn.kernels[op.name])
+            self.mkldnn.batchnorm_bprop_kernel(self.mkldnn.mkldnn_engine, delta_shape_arg, output_shape_arg,
+                                               weights_shape_arg, mean_size, variance_size, op.fprop.eps,
+                                               fprop_src_layout,  None, mean_layout, variance_layout,
+                                               delta_layout, data_type, self.mkldnn.kernels[op.fprop.forwarded.name],
+                                               self.mkldnn.kernels[op.name])
 
             output_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
             if output_layout:
