@@ -151,16 +151,16 @@ def test_allreduce_hint(config):
     c = config
 
     with ng.metadata(device_id=c['device_id']):
-        H_axis = ng.make_axis(length=4, name='height')
-        batch_axis = ng.make_axis(length=2, name='width')
-        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1)).named('weight')
-        grad = ng.variable(initial_value=UniformInit(c['input'], c['input']),
-                           axes=[batch_axis]).named('gradient')
-        grad.metadata['reduce_func'] = c['func']
-        update = (W - grad).named('update')
-        update.metadata['parallel'] = H_axis
+        axis_A = ng.make_axis(length=4, name='axis_A')
+        axis_B = ng.make_axis(length=2, name='axis_B')
+        var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
+        var_B = ng.variable(initial_value=UniformInit(c['input'], c['input']),
+                           axes=[axis_B]).named('var_B')
+        var_B.metadata['reduce_func'] = c['func']
+        var_minus = (var_A - var_B).named('var_minus')
+        var_minus.metadata['parallel'] = axis_A
     with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-        out_comp = hetr.computation([update]).named('out_comp')
+        out_comp = hetr.computation([var_minus]).named('out_comp')
         result = out_comp()
 
         np.testing.assert_array_equal(result, c['expected_result'])
@@ -177,7 +177,7 @@ def test_allreduce_hint(config):
 def test_one_dot_bprop_allreduce(config):
     c = config
 
-    pytest.xfail("Buggy Example")
+    pytest.xfail("Example passes for cpu, but gpu generates errors during AssignLayouts graph pass #1651")
 
     H_axis = ng.make_axis(length=4, name='height')
     W_axis = ng.make_axis(length=6, name='width')
