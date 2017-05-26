@@ -12,14 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import
 from builtins import object
-
+import functools
 import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
+from ngraph.util.names import NameableValue
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
+from orderedset import OrderedSet
+
+
+# Labels should be added as metadata on specific ops and variables
+# Hopefully these can be used to efficiently display and filter the computational graph
+LABELS = {"weight": "weight",
+          "bias": "bias"}
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -55,33 +63,171 @@ def output_dim_deconv(X, S, padding, strides, dilation=1):
     return max_size
 
 
-def inference_mode(*args, **kwargs):
+def wrap_layer(cache_key=keys.hashkey):
     """
-    cachetools.cached key function to ensure that caching takes into account the current value of
-    Layer.inference_mode.
+    A decorator for the __call__ method of neon layers. Supports caching of the output
+    using a specified caching function.
+
+    Arguments:
+        cache_key (function): A function to use for determining the cache's hashkey.
+                              See cachetools.keys.hashkey
+    """
+    def create_decorator(f):
+        @cached({}, key=cache_key)
+        @functools.wraps(f)
+        def layer_wrapper(self, in_obj, *inputs, **kwargs):
+            with ng.Op.all_ops() as ops:
+                output = f(self, in_obj, *inputs, **kwargs)
+            # TODO: This should create unique names for different instances of the same class
+            # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
+            for op in ops:
+                if "neon_layer" not in op.metadata:
+                    op.metadata["neon_layer"] = self.name
+                else:
+                    op.metadata["neon_layer"] = self.name + "/" + op.metadata["neon_layer"]
+            self._subgraph.ops.append(ops)
+
+            return output
+
+        return layer_wrapper
+
+    return create_decorator
+
+
+def _cache_if_initialized(subgraph):
+    # TODO: Should subgraph.ops be mutable?
+    return keys.hashkey(subgraph, len(subgraph.ops) > 0)
+
+
+class SubGraph(object):
+
+    def __init__(self, ops=None):
+        """
+        A connected subset of all ops in the computational graph
+
+        Arguments:
+            ops (list): A list of ops
+        """
+        self.ops = list()
+        if ops is not None:
+            self.ops.append(ops)
+
+    @property
+    @cached({}, key=_cache_if_initialized)
+    def variables(self):
+        """
+        An OrderedSet of all trainable variables created in this layer
+        """
+        if len(self.ops):
+            return OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable)
+        else:
+            return None
+
+    @property
+    @cached({}, key=_cache_if_initialized)
+    def inputs(self):
+        """
+        An OrderedSet of input ops to this layer
+        """
+        if len(self.ops):
+            inputs = OrderedSet()
+            for op in self.ops[0]:
+                if op.tensor.is_trainable:
+                    continue
+                if op.tensor.is_placeholder:
+                    inputs.add(op.tensor)
+                else:
+                    for arg in op.args:
+                        if arg not in self.ops[0]:
+                            inputs.add(arg)
+
+            return inputs
+        else:
+            return None
+
+    @property
+    @cached({}, key=_cache_if_initialized)
+    def side_effects(self):
+        """
+        An OrderedSet of side-effect ops in this layer
+        """
+        if len(self.ops):
+            side_effects = OrderedSet()
+            for op in self.ops[0]:
+                for dep in op.control_deps:
+                    if dep is not op.tensor:
+                        side_effects.add(dep)
+
+            return side_effects
+        else:
+            return None
+
+
+class Layer(NameableValue):
+    """
+    Base class from which all other layers should inherit.
+
+    Attributes:
+        initialized - Whether or not the layer's variables have been created
+        variables - All trainable variables defined in the layer
+        inputs - Ops that are given as input to the layer
+        side_effects - Ops not required to produce the output of the layer but which must run
+                       anyway
+
+    Methods:
+        inference_mode_on - Context manager for inference mode
+        inference_mode_key - cachetools hashing function that accounts for the value of
+                             inference mode
+        variable_scope - Context manager to set the variable scope of subsequently defined ops
     """
 
-    # If the value is provided, just use that instead of the global flag.
-    if "inference_mode" not in kwargs:
-        kwargs["inference_mode"] = Layer.inference_mode
-
-    return keys.hashkey(*args, **kwargs)
-
-
-class Layer(object):
     inference_mode = False
     active_scope = None
+    metadata = {}
 
     def __init__(self, name=None):
-        self.name = name
+        super(Layer, self).__init__(name=name, graph_label_type="neon_layer")
         self.scope = Layer.active_scope
+        self._subgraph = SubGraph()
 
-    def __call__(self, in_obj, inference):
+    def __call__(self, in_obj, reuse=True):
         raise NotImplementedError()
+
+    @property
+    def initialized(self):
+        """
+        True if the layer's __call__ method has been successfully executed
+        """
+        return len(self._subgraph.ops) > 0
+
+    @property
+    def ops(self):
+        return self._subgraph.ops
+
+    @property
+    def inputs(self):
+        return self._subgraph.inputs
+
+    @property
+    def variables(self):
+        return self._subgraph.variables
+
+    @property
+    def side_effects(self):
+        return self._subgraph.side_effects
 
     @staticmethod
     @contextmanager
     def inference_mode_on():
+        """
+        Provides a context manager for doing model inference. This puts certain layers
+        into "inference mode", if necessary (e.g. batch normalization and dropout).
+
+        Examples:
+            train_loss = ng.squared_l2(target - model(input))
+            with Layer.inference_mode_on():
+                eval_loss = ng.squared_l2(target - model(input))
+        """
         Layer.inference_mode = True
         yield Layer.inference_mode
         Layer.inference_mode = False
@@ -98,23 +244,31 @@ class Layer(object):
     @staticmethod
     @contextmanager
     def variable_scope(name):
+        """
+        TODO: Document
+        """
         Layer.active_scope = name
         yield Layer.active_scope
         Layer.active_scope = None
 
 
 class Preprocess(Layer):
-
+    """
+    TODO: Document
+    """
     def __init__(self, functor, **kwargs):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
-    @cached({})
-    def __call__(self, in_obj):
+    @wrap_layer(cache_key=Layer.inference_mode_key)
+    def __call__(self, in_obj, **kwargs):
         return self.functor(in_obj)
 
 
 def cast_tuple(x):
+    """
+    TODO: Document
+    """
     # cast x to a tuple
     if isinstance(x, collections.Iterable):
         return tuple(x)
@@ -124,6 +278,7 @@ def cast_tuple(x):
 
 def infer_axes(nout=None, axes=None):
     """
+    TODO: Document
     Args:
         nout: int or iterable of ints specifying the lengths of the axes to be returned
         axes: Axes object that describe the output axes that should be returned
@@ -151,6 +306,9 @@ def infer_axes(nout=None, axes=None):
 
 
 class Linear(Layer):
+    """
+    TODO: Document
+    """
     metadata = {'layer_type': 'linear'}
 
     def __init__(self, init, nout=None, axes=None, **kwargs):
@@ -185,20 +343,22 @@ class Linear(Layer):
                     "Linear.  Found {}."
                 ).format([is_shadow_axis(axis) for axis in axes]))
 
+        self.input_axes = None
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
 
         self.init = init
         self.W = None
 
-    @ng.with_op_metadata
-    @cached({})
-    def __call__(self, in_obj):
-        if self.W is None:
-            self.W = ng.variable(
-                axes=ng.make_axes(self.axes_map.keys()) + in_obj.axes.feature_axes(),
-                initial_value=self.init, scope=self.scope,
-            ).named('LinW')
+    @wrap_layer()
+    def __call__(self, in_obj, reuse=True):
+
+        if not self.initialized:
+            self.W = ng.variable(axes=(ng.make_axes(self.axes_map.keys()) +
+                                       in_obj.axes.feature_axes()),
+                                 initial_value=self.init, scope=self.scope,
+                                 metadata={"label": LABELS["weight"]},
+                                 ).named('LinW')
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -220,7 +380,6 @@ class LookupTable(Layer):
         pad_idx (int): by knowing the pad value, the update will make sure always
                        have the vector representing pad value to be 0s.
     """
-    metadata = {'layer_type': 'lookuptable'}
 
     def __init__(self, vocab_size, embed_dim, init, update=True, pad_idx=None,
                  **kwargs):
@@ -246,8 +405,7 @@ class LookupTable(Layer):
             init_w[:, pad_idx] = 0
         return init_w
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer()
     def __call__(self, in_obj):
         """
         Arguments:
@@ -264,7 +422,7 @@ class LookupTable(Layer):
         # initializers.
         self.lut_v_axis = ng.make_axis(self.vocab_size).named('V')
         self.axes_map = shadow_axes_map([self.lut_v_axis])
-        self.lut_v_axis = self.axes_map.values()[0]
+        self.lut_v_axis = list(self.axes_map.values())[0]
 
         self.lut_f_axis = ng.make_axis(self.embed_dim).named('F')
 
@@ -272,11 +430,12 @@ class LookupTable(Layer):
         self.lut_o_axes = in_axes | ng.make_axes([self.lut_f_axis])
         self.o_axes = ng.make_axes([self.lut_f_axis]) | in_axes[0].axes
 
-        if self.W is None:
+        if not self.initialized:
             self.W = ng.variable(axes=self.w_axes,
                                  initial_value=self.lut_init(
                                      self.w_axes, self.lut_v_axis, self.pad_idx),
                                  scope=self.scope,
+                                 metadata={"label": LABELS["weight"]},
                                  ).named('LutW')
 
         lut_result = ng.lookuptable(self.W, in_obj, self.lut_o_axes, update=self.update,
@@ -297,7 +456,6 @@ class ConvBase(Layer):
         padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
         dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
     """
-    metadata = {'layer_type': 'convolution'}
 
     def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
@@ -326,7 +484,7 @@ class ConvBase(Layer):
         in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
-        if self.f_axes is None:
+        if not self.initialized:
             self._filter_axes(in_axes, cpm)
 
             # mark 'K' as a shadow axis for the initializers.
@@ -337,9 +495,9 @@ class ConvBase(Layer):
             ])
 
             self.W = ng.variable(axes=self.f_axes, initial_value=self.init,
-                                 scope=self.scope).named(self.W_name)
+                                 scope=self.scope,
+                                 metadata={"label": LABELS["weight"]}).named(self.W_name)
 
-        if self.o_axes is None:
             self.o_axes = ng.make_axes([
                 ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
@@ -364,8 +522,7 @@ class ConvBase(Layer):
         ]
         return out_shape
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer()
     def __call__(self, in_obj):
         cpm = self.convparams.copy()
         self.interpret_axes(in_obj, cpm)
@@ -466,14 +623,14 @@ def make_conv2d(fshape, init, strides, padding, dilation, deconv=False,
 
 
 class Activation(Layer):
-    metadata = {'layer_type': 'activation'}
-
+    """
+    TODO: Document. Why should we pass through this instead of just defining functions? Caching?
+    """
     def __init__(self, transform, **kwargs):
-        self.transform = transform
         super(Activation, self).__init__(**kwargs)
+        self.transform = transform
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer()
     def __call__(self, in_obj):
         # An activation layer with no transform defaults to identity
         if self.transform:
@@ -492,8 +649,6 @@ class PoolBase(Layer):
         strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
         padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
     """
-    metadata = {'layer_type': 'pooling'}
-
     def __init__(self, fshape, strides, padding, op='max', **kwargs):
         super(PoolBase, self).__init__(**kwargs)
         self.poolparams = dict(J=None, T=None, R=None, S=None,
@@ -510,14 +665,13 @@ class PoolBase(Layer):
 
         self.o_axes = None
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer()
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
         in_axes = in_obj.axes
 
-        if self.o_axes is None:
+        if not self.initialized:
             self.o_axes = ng.make_axes([
                 ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
             ])
@@ -535,7 +689,9 @@ class PoolBase(Layer):
 
 
 class Pool2D(PoolBase):
-
+    """
+    TODO: Document
+    """
     def __init__(self, fshape, strides=1, padding=0, **kwargs):
 
         if isinstance(fshape, int):
@@ -561,44 +717,48 @@ class Bias(Layer):
         init (function): function for later initializing bias values
         shared (bool): applies only to convolutional biases.  Whether to use same bias for
                        entire feature map.  Default true.
-    """
-    metadata = {'layer_type': 'bias'}
 
+    TODO: Should default be None or 0?
+    """
     def __init__(self, init, shared=True, **kwargs):
         super(Bias, self).__init__(**kwargs)
         self.W = None
         self.init = init
         self.shared = shared
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer()
     def __call__(self, in_obj):
         if self.init:
-            w_axes = in_obj.axes.sample_axes()
-            if self.shared and in_obj.axes.channel_axis() is not None:
-                w_axes = ng.make_axes(in_obj.axes.channel_axis())
-
-            self.W = self.W or ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope)
+            if not self.initialized:
+                w_axes = in_obj.axes.sample_axes()
+                if self.shared and in_obj.axes.channel_axis() is not None:
+                    w_axes = ng.make_axes(in_obj.axes.channel_axis())
+                self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
+                                     metadata={"label": LABELS["bias"]}).named("bias")
             return in_obj + self.W
         else:
             return in_obj
 
 
 class Affine(Layer):
-
+    """
+    TODO: Document, bias should not be used when batch norm is
+    """
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
-                 batch_norm=False, **kwargs):
+                 batch_norm=False, axes=None, **kwargs):
+        super(Affine, self).__init__(**kwargs)
         self.weight_init = weight_init
         self.nout = nout
         self.bias_init = bias_init
         self.activation = activation
         self.batch_norm = batch_norm
-        self.linear = Linear(init=weight_init, nout=nout, **kwargs)
+        self.linear = Linear(init=weight_init, nout=nout, axes=axes, **kwargs)
         self.bias = Bias(init=bias_init)
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
         self.scope = Layer.active_scope  # only included so all Layers have scope attribute
 
+    @wrap_layer()
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
         b_out = self.bias(l_out)
@@ -607,7 +767,9 @@ class Affine(Layer):
 
 
 class Convolution(Layer):
-
+    """
+    TODO: Document, bias should not be used when batch norm is
+    """
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
         super(Convolution, self).__init__(**kwargs)
@@ -621,6 +783,7 @@ class Convolution(Layer):
         self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
                                 deconv=False, **kwargs)
 
+    @wrap_layer()
     def __call__(self, in_obj):
         l_out = self.conv(in_obj)
         b_out = self.bias(l_out)
@@ -665,10 +828,9 @@ class BatchNorm(Layer):
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
     .. [Laurent2016] https://arxiv.org/abs/1510.01378
     """
-    metadata = {'layer_type': 'batch_norm'}
-
     def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
+        super(BatchNorm, self).__init__(**kwargs)
         # rho needs to be allocated storage because it will be changed dynamically during tuning
         self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
@@ -681,8 +843,7 @@ class BatchNorm(Layer):
         self.gvar = None
         self.scope = Layer.active_scope
 
-    @ng.with_op_metadata
-    @cached({}, key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
 
         in_axes = in_obj.axes
@@ -694,15 +855,17 @@ class BatchNorm(Layer):
         out_axes = in_axes - red_axes
 
         in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
-        if self.gamma is None:
-            self.gvar = self.gvar or ng.persistent_tensor(axes=out_axes, initial_value=1.0)
-            self.gmean = self.gmean or ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+        if not self.initialized:
+            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0)
+            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0)
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,
-                                     scope=self.scope).named('gamma')
+                                     scope=self.scope,
+                                     metadata={"label": LABELS["weight"]}).named('gamma')
             self.beta = ng.variable(axes=out_axes,
                                     initial_value=self.init_beta,
-                                    scope=self.scope).named('beta')
+                                    scope=self.scope,
+                                    metadata={"label": LABELS["bias"]}).named('beta')
 
         xmean = ng.mean(in_obj, out_axes=out_axes)
         xvar = ng.variance(in_obj, out_axes=out_axes)
@@ -730,15 +893,12 @@ class Dropout(Layer):
         keep (float):  Number between 0 and 1 that indicates probability of any particular
                        activation being dropped.  Default 0.5.
     """
-
-    metadata = {'layer_type': 'dropout'}
-
     def __init__(self, keep=0.5, **kwargs):
+        super(Dropout, self).__init__(**kwargs)
         self.keep = keep
         self.mask = None
 
-    @ng.with_op_metadata
-    @cached({}, key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return self.keep * in_obj
@@ -751,9 +911,13 @@ class Dropout(Layer):
 
 
 def get_steps(x, time_axis, backward=False):
+    """
+    TODO: Document
+    """
     time_iter = list(range(time_axis.length))
     if backward:
         time_iter = reversed(time_iter)
+    # TODO: This is pretty ugly. Is there a better way to handle gates?
     if isinstance(x, dict):
         return [{k: ng.slice_along_axis(x[k], time_axis, i) for k in x.keys()} for i in time_iter]
     else:
@@ -789,8 +953,6 @@ class Recurrent(Layer):
             (output_size, output_size)
         b (Tensor): Biases on output units (output_size, 1)
     """
-    metadata = {'layer_type': 'recurrent'}
-
     def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
                  reset_cells=True, return_sequence=True, backward=False, **kwargs):
         super(Recurrent, self).__init__(**kwargs)
@@ -846,8 +1008,7 @@ class Recurrent(Layer):
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
-    @ng.with_op_metadata
-    @cached({}, key=Layer.inference_mode_key)
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -863,27 +1024,34 @@ class Recurrent(Layer):
 
         """
         # try to understand the axes from the input
-        self.interpret_axes(in_obj, init_state)
+        if not self.initialized:
+            self.interpret_axes(in_obj, init_state)
 
-        # initialize the hidden states
-        if init_state is not None:
-            self.h_init = init_state
-        else:
-            if self.reset_cells:
-                self.h_init = ng.constant(
-                    const=0, axes=self.out_axes).named('h_init')
+            # initialize the hidden states
+            if init_state is not None:
+                self.h_init = init_state
             else:
-                self.h_init = ng.variable(
-                    initial_value=0, axes=self.out_axes).named('h_init')
+                if self.reset_cells:
+                    self.h_init = ng.constant(
+                        const=0, axes=self.out_axes).named('h_init')
+                else:
+                    self.h_init = ng.variable(
+                        initial_value=0, axes=self.out_axes).named('h_init')
 
-        self.W_input = ng.variable(axes=self.w_in_axes,
-                                   initial_value=self.init,
-                                   scope=self.scope).named("W_in")
-        self.W_recur = ng.variable(axes=self.w_re_axes,
-                                   initial_value=self.init_inner,
-                                   scope=self.scope).named("W_re")
-        self.b = ng.variable(axes=self.out_feature_axes, initial_value=0,
-                             scope=self.scope).named("bias")
+            self.W_input = ng.variable(axes=self.w_in_axes,
+                                       initial_value=self.init,
+                                       scope=self.scope,
+                                       metadata={"label": LABELS["weight"]},
+                                       ).named("W_in")
+            self.W_recur = ng.variable(axes=self.w_re_axes,
+                                       initial_value=self.init_inner,
+                                       scope=self.scope,
+                                       metadata={"label": LABELS["weight"]},
+                                       ).named("W_re")
+            self.b = ng.variable(axes=self.out_feature_axes, initial_value=0,
+                                 scope=self.scope,
+                                 metadata={"label": LABELS["bias"]},
+                                 ).named("bias")
 
         h = self.h_init
         h_list = []
@@ -938,8 +1106,6 @@ class BiRNN(Layer):
                            list.
         name (str, optional): name to refer to this layer as.
     """
-    metadata = {'layer_type': 'birnn'}
-
     def __init__(self, nout, init, init_inner=None, activation=None, batch_norm=False,
                  reset_cells=False, return_sequence=True, sum_out=False,
                  concat_out=False, **kwargs):
@@ -957,8 +1123,7 @@ class BiRNN(Layer):
                                  batch_norm=batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence, backward=True)
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer()
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1048,8 +1213,7 @@ class LSTM(Recurrent):
 
     Gates: i - input gate, f - forget gate, o - output gate, g - input modulation
     """
-    metadata = {'layer_type': 'LSTM',
-                'gates': ['i', 'f', 'o', 'g']}
+    metadata = {'gates': ['i', 'f', 'o', 'g']}
 
     def __init__(self, nout, init, init_inner=None, activation=None, gate_activation=None,
                  batch_norm=False, reset_cells=True, return_sequence=True, backward=False,
@@ -1082,8 +1246,7 @@ class LSTM(Recurrent):
         h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
-    @ng.with_op_metadata
-    @cached({})
+    @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1099,44 +1262,50 @@ class LSTM(Recurrent):
             rnn_out (Tensor): output
 
         """
-        # try to understand the axes from the input
-        if init_state is not None:
-            assert len(init_state) == 2 and init_state[0].axes == init_state[1].axes
-            self.interpret_axes(in_obj, init_state[0])
-        else:
-            self.interpret_axes(in_obj, init_state)
 
-        # initialize the hidden states
-        if init_state is not None:
-            self.h_init = init_state[0]
-            self.c_init = init_state[1]
-        else:
-            if self.reset_cells:
-                self.h_init = ng.constant(const=0,
-                                          axes=self.out_axes).named('h_init')
-                self.c_init = ng.constant(const=0,
-                                          axes=self.out_axes).named('c_init')
+        if not self.initialized:
+            # try to understand the axes from the input
+            if init_state is not None:
+                assert len(init_state) == 2 and init_state[0].axes == init_state[1].axes
+                self.interpret_axes(in_obj, init_state[0])
             else:
-                self.h_init = ng.variable(initial_value=0,
-                                          axes=self.out_axes).named('h_init')
-                self.c_init = ng.variable(initial_value=0,
-                                          axes=self.out_axes).named('c_init')
+                self.interpret_axes(in_obj, init_state)
 
-        # params are dictionary for i, f, o, g
-        self.W_input = {k: ng.variable(axes=self.w_in_axes,
-                                       initial_value=self.init,
-                                       scope=self.scope).
-                        named("W_in_{}".format(k)) for k in self.metadata['gates']}
+            # initialize the hidden states
+            if init_state is not None:
+                self.h_init = init_state[0]
+                self.c_init = init_state[1]
+            else:
+                if self.reset_cells:
+                    self.h_init = ng.constant(const=0,
+                                              axes=self.out_axes).named('h_init')
+                    self.c_init = ng.constant(const=0,
+                                              axes=self.out_axes).named('c_init')
+                else:
+                    self.h_init = ng.variable(initial_value=0,
+                                              axes=self.out_axes).named('h_init')
+                    self.c_init = ng.variable(initial_value=0,
+                                              axes=self.out_axes).named('c_init')
 
-        self.W_recur = {k: ng.variable(axes=self.w_re_axes,
-                                       initial_value=self.init_inner,
-                                       scope=self.scope).
-                        named("W_re_{}".format(k)) for k in self.metadata['gates']}
+            # params are dictionary for i, f, o, g
+            gates = self.metadata["gates"]
+            self.W_input = {k: ng.variable(axes=self.w_in_axes,
+                                           initial_value=self.init,
+                                           scope=self.scope,
+                                           metadata={"label": LABELS["weight"]},
+                                           ).named("W_in_{}".format(k)) for k in gates}
 
-        self.b = {k: ng.variable(axes=self.out_feature_axes,
-                                 initial_value=0,
-                                 scope=self.scope).
-                  named("bias_{}".format(k)) for k in self.metadata['gates']}
+            self.W_recur = {k: ng.variable(axes=self.w_re_axes,
+                                           initial_value=self.init_inner,
+                                           scope=self.scope,
+                                           metadata={"label": LABELS["weight"]},
+                                           ).named("W_re_{}".format(k)) for k in gates}
+
+            self.b = {k: ng.variable(axes=self.out_feature_axes,
+                                     initial_value=0,
+                                     scope=self.scope,
+                                     metadata={"label": LABELS["bias"]},
+                                     ).named("bias_{}".format(k)) for k in gates}
 
         h = self.h_init
         c = self.c_init

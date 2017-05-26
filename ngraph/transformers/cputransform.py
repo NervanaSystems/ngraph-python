@@ -707,7 +707,7 @@ class CPUCodeGenerator(PyGen):
         self.append("np.tanh({}, out={})", x, out)
 
     @generate_op.on_type(TensorSizeOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, x):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
     @generate_op.on_type(CPUQueueSendOp)

@@ -18,8 +18,9 @@ import pytest
 import ngraph as ng
 from ngraph.testing import executor
 
+pytestmark = pytest.mark.transformer_dependent("module")
 
-@pytest.mark.transformer_dependent
+
 def test_evaluation_twice(transformer_factory):
     """Test executing a computation graph twice on a one layer MLP."""
     C = ng.make_axis(length=2)
@@ -49,7 +50,6 @@ def test_evaluation_twice(transformer_factory):
     assert np.array_equal(result_1, result_2)
 
 
-@pytest.mark.ngraph_core
 def test_missing_arguments_to_execute():
     """
     Expect a failure if the wrong number of arguments are passed to a
@@ -65,7 +65,6 @@ def test_missing_arguments_to_execute():
             f(1)
 
 
-@pytest.mark.ngraph_core
 def test_execute_non_placeholder():
     """
     Expect a failure if a non-input (Variable) is used as an argument to
