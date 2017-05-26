@@ -30,8 +30,6 @@ STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 # pytest options
 TEST_OPTS := --timeout=800 --cov=ngraph --timeout_method=thread
 TEST_DIRS := tests/
-TEST_DIRS_SERIAL := serial_tests/
-TEST_DIRS_FLEX := flex_tests/ tests/ serial_tests/
 TEST_DIRS_NEON := ngraph/frontends/neon/tests
 TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
@@ -100,15 +98,17 @@ test_flex: gpu_prepare test_prepare clean
 	@echo The autoflex package is required for flex testing ...
 	@echo WARNING: flex tests will report the following message if autoflex has not been installed:
 	@echo
-	@echo "     argument --transformer: invalid choice: 'flexgpu' (choose from 'cpu', 'gpu', 'hetr')"
+	@echo "     argument --transformer: invalid choice: 'flexgpu' (choose from 'cpu', 'gpu', \
+	'hetr')"
+
 	@echo
-	@echo In case of test failures, clone the private autoflex repo in ../autoflex and execute
-	@echo "     make autoflex_prepare"
+	@echo "In case of test failures, clone the private autoflex repo in ../autoflex and execute \
+	make autoflex_prepare"
 	@echo
 	@echo Running flex unit tests...
-	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
-	--junit-xml=testout_test_flex_$(PY).xml \
-	--timeout=1200 --cov=ngraph $(TEST_DIRS_FLEX)
+	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
+	or flex_only" --junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
+	$(TEST_DIRS)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export PYTHONHASHSEED=0
@@ -117,11 +117,11 @@ test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
 test_mkldnn: test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
-	py.test -m "not hetr_only" --boxed \
+	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_SERIAL)
+	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \
+	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
@@ -130,7 +130,7 @@ test_mkldnn:
 test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
-	py.test -m "not hetr_only" --boxed \
+	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
@@ -142,24 +142,25 @@ test_gpu: gpu_prepare test_prepare clean
 	--boxed \
 	--junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
-	py.test --transformer gpu -m "transformer_dependent" \
-	--boxed -n auto \
+	py.test --transformer gpu -m "transformer_dependent and not flex_only \
+	and not separate_execution" --boxed -n auto \
 	--junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
-	py.test --transformer gpu -m "transformer_dependent" \
+	py.test --transformer gpu -m "transformer_dependent and not flex_only \
+	and separate_execution" \
 	--boxed \
-	--junit-xml=testout_test_gpu_tx_dependent_serial_$(PY).xml \
+	--junit-xml=testout_test_gpu_tx_dependent_separate_execution_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS_SERIAL)
+	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_gpu_$(PY).xml
 
 test_hetr: export PYTHONHASHSEED=0
 test_hetr: test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed \
+	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_SERIAL) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mxnet: test_prepare clean
@@ -197,7 +198,7 @@ lint3k:
 	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 check: test_prepare
-	echo "Running style checks.  Number of style errors is... "
+	echo "Running style checks.  Number of style faults is... "
 	-flake8 --count $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) \
 	 > /dev/null
 	echo
