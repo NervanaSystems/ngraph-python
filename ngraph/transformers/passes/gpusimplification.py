@@ -19,6 +19,15 @@ from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, set_item, \
     Fill, AssignOp, TensorSliceOp
 
 
+class CPUAssignOp(AssignOp):
+    """
+    Executes tensor[...] = val on the CPU. For use when GPU cannot execute the assignment.
+    """
+    def __init__(self, tensor, val, **kwargs):
+        super(CPUAssignOp, self).__init__(tensor, val, **kwargs)
+
+
+
 class GPUSubstitution(PeepholeGraphPass):
     """TODO."""
     @generic_method(dispatch_base_type=Op)
@@ -50,8 +59,10 @@ class GPUSubstitution(PeepholeGraphPass):
             else:
                 new_slices.append(s)
         if flip:
-            self.replace_op(op, set_item(tensor, new_slices,
-                                          tensor_slice(value, copy_slices)))
+            new_value = tensor_slice(value, copy_slices)
+            dest = tensor_slice(tensor, new_slices, axes=new_value.axes)
+            new_op = CPUAssignOp(dest, new_value)
+            self.replace_op(op, new_op)
 
     @visit.on_type(SetItemOp)
     def visit(self, op):

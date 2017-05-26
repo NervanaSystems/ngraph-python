@@ -705,6 +705,48 @@ class SetItemKernel(GPUKernel):
             self.tensor.__setitem__(self.item, self.value)
 
 
+class CPUAssignKernel(GPUKernel):
+    """
+    Kernel used for an assign not supported on the GPU.
+
+    Arguments:
+        transformer (GPUTransformer): GPU transformer containing instance of
+            NervanaGPU
+        op (CPUAssignOp): Graph op being transformed into this kernel
+
+    Attributes:
+        tensor (GPUTensor): Dest tensor
+        value: Source scalar, numpy array, or tensor
+    """
+
+    def __init__(self, transformer, op):
+        super(CPUAssignKernel, self).__init__(transformer)
+
+        self.tensor, self.value = (_ for _ in op.call_info())
+        self.kernel = None
+
+    def bind_buffers(self):
+        """
+        Get allocated GPU tensor for output and potentially source value
+        """
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        if isinstance(self.value, TensorDescription):
+            self.value = self.tensor_view_from_td(self.value).tensor
+
+        super(SetItemKernel, self).bind_buffers()
+
+    def execute(self):
+        """
+        Run kernel to copy into tensor
+        Temporarily using the neon GPUTensor implementation
+        """
+        if self.tensor.shape == ():
+            self.tensor.tensor.fill(self.value)
+        else:
+            self.tensor.__setitem__(None, self.value)
+
+
 class FlexFillKernel(FillKernel):
     """
     Flex version of FillKernel
