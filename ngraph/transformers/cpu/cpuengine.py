@@ -219,16 +219,13 @@ class Mkldnn(object):
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
-
-
     def fprop_batchnorm(self, name, inputs, outputs, gamma, bias, mean, variance, epsilon):
         if (self.mkldnn_enabled and name in self.kernels):
             weights = np.stack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
-            variance_ch = variance[:, 0]
             self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], mean_ch.ctypes.data, 1)
-            self.set_input_tensor(self.kernels[name], variance_ch.ctypes.data, 2)
+            self.set_input_tensor(self.kernels[name], variance.ctypes.data, 2)
             self.set_input_tensor(self.kernels[name], weights.ctypes.data, 3)
             self.set_output_tensor(self.kernels[name], outputs.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
