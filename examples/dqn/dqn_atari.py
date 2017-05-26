@@ -158,7 +158,7 @@ def main():
     # deterministic version 4 results in a frame skip of 4 and no repeat action probability
     # todo: total_reward isn't always greater than 95 even with a working implementation
     # environment = gym.make('SpaceInvaders-v0')
-    environment = gym.make('PongDeterministic-v4')
+    environment = gym.make('BreakoutDeterministic-v4')
     environment = ReshapeWrapper(environment)
     environment = ClipRewardWrapper(environment)
     environment = RepeatWrapper(frames=4)(environment)
@@ -177,7 +177,11 @@ def main():
         epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000),
         gamma=0.99,
         learning_rate=0.00025,
-        memory=dqn.RepeatMemory(frames_per_observation=4, maxlen=1000000),
+        memory=dqn.RepeatMemory(
+            frames_per_observation=4,
+            maxlen=1000000,
+            observation_shape=(84, 84),
+        ),
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20000)

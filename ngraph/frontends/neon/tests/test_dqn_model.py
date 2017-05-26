@@ -130,11 +130,10 @@ def test_repeat_memory_append_unable_to_sample():
     with pytest.raises(ValueError):
         memory.sample(1)
 
-
 def test_repeat_memory_append():
     frames_per_observation = 3
 
-    memory = dqn.RepeatMemory(frames_per_observation, 10, (1, ))
+    memory = dqn.RepeatMemory(frames_per_observation, 10, (2, ))
 
     observations = [[i, i] for i in range(10)]
     for i in range(4):
@@ -148,6 +147,6 @@ def test_repeat_memory_append():
 
     assert len(sample) == 1
     assert len(sample[0]['state']) == frames_per_observation
-    np.testing.assert_allclose(sample[0]['state'], [[3, 3], [4], [5]])
-    np.testing.assert_allclose(sample[0]['next_state'], [[4], [5], [6]])
+    np.testing.assert_allclose(sample[0]['state'], [[3, 3], [4, 4], [5, 5]])
+    np.testing.assert_allclose(sample[0]['next_state'], [[4, 4], [5, 5], [6, 6]])
     assert sample[0]['done'] == False

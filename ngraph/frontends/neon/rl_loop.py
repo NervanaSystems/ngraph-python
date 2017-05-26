@@ -5,6 +5,9 @@ from ngraph.frontends.neon.dqn import Agent
 def rl_loop(environment, agent, episodes, render=False):
     """
     train an agent inside an environment for a set number of episodes
+
+    # todo: rename to rl_loop_train, and follow the same pattern and callbacks
+    # neon.loop_train used for supervised learning.
     """
     total_steps = 0
     for episode in range(episodes):
@@ -22,10 +25,17 @@ def rl_loop(environment, agent, episodes, render=False):
 
             state = next_state
             step += 1
+            total_steps += 1
             total_reward += reward
 
+            if total_steps % 50000:
+                print(
+                    'evaluation episode total reward: {}'.format(
+                        evaluate_single_episode(environment, agent, render)
+                    )
+                )
+
         agent.end_of_episode()
-        total_steps += step
         print(
             'episode: {}, total_steps: {}, steps: {}, last_reward: {}, '
             'sum(reward): {}'.format(
