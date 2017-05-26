@@ -57,11 +57,12 @@ class ModelWrapper(object):
         self.axes.n = ng.make_axis(name='N', length=batch_size)
         self.axes.n1 = ng.make_axis(name='N', length=1)
 
+        # placeholders
         self.state = ng.placeholder(self.axes.state + [self.axes.n])
         self.state_single = ng.placeholder(self.axes.state + [self.axes.n1])
         self.target = ng.placeholder([self.axes.action, self.axes.n])
 
-        # todo: except model as input parameter to constructor
+        # todo: accept model as input parameter to constructor
         self.model = model(self.axes.action)
 
         # construct inference computation
@@ -214,10 +215,10 @@ class Agent(object):
         return np.argmax(self.model_wrapper.predict_single(state))
 
     def observe_results(self, state, action, reward, next_state, done):
-        # print(state, action, reward, next_state)
-        if done:
-            reward -= 100
-
+        """
+        this method should be called after an action has been taken to inform
+        the agent about the results of the action it took
+        """
         self.memory.append({
             'state': state,
             'action': action,
@@ -298,12 +299,19 @@ class RepeatMemory(object):
     Note: repeated frames are expected to be in axis 0
     """
 
-    def __init__(self, frames_per_observation, maxlen, observation_shape, dtype=np.float32):
+    def __init__(
+            self,
+            frames_per_observation,
+            maxlen,
+            observation_shape,
+            dtype=np.float32
+    ):
         self.frames_per_observation = frames_per_observation
         self.maxlen = maxlen
 
         self.records = [None] * maxlen
-        self.observations = np.zeros((maxlen,) + observation_shape, dtype=dtype)
+        self.observations = np.zeros((maxlen, ) + observation_shape,
+                                     dtype=dtype)
         self.count = 0
         self.write_position = 0
 
@@ -354,9 +362,7 @@ class RepeatMemory(object):
 
             # check to see if this is a valid sample. it is invalid if there is
             # a terminal frame in the middle of the observation
-            records = [
-                self.records[j] for j in range(i, i_end)
-            ]
+            records = [self.records[j] for j in range(i, i_end)]
             if not any(record['done'] for record in records[:-1]):
                 # we can stop looking if this is a valid set of records
                 break

@@ -37,9 +37,25 @@ def model(action_axes):
     ])
 
 
+class PenalizeDoneWrapper(gym.Wrapper):
+    """
+    wraps an environment so that the reward is decreased by 100 in the event of
+    termination.
+    """
+
+    def _step(self, action):
+        observation, reward, done, info = self.env._step(action)
+
+        if done:
+            reward -= 100
+
+        return observation, reward, done, info
+
+
 def main():
     # initialize gym environment
     environment = gym.make('CartPole-v0')
+    environment = PenalizeDoneWrapper(environment)
 
     state_axes = ng.make_axes([
         ng.make_axis(environment.observation_space.shape[0], name='width')

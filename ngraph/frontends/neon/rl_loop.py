@@ -2,7 +2,6 @@ import gym
 from ngraph.frontends.neon.dqn import Agent
 
 
-
 def rl_loop(environment, agent, episodes, render=False):
     """
     train an agent inside an environment for a set number of episodes
@@ -28,10 +27,12 @@ def rl_loop(environment, agent, episodes, render=False):
         agent.end_of_episode()
         total_steps += step
         print(
-            'episode: {}, total_steps: {}, steps: {}, last_reward: {}, sum(reward): {}'.format(
+            'episode: {}, total_steps: {}, steps: {}, last_reward: {}, '
+            'sum(reward): {}'.format(
                 episode, total_steps, step, reward, total_reward
             )
         )
+
 
 def evaluate_single_episode(environment, agent, render=False):
     """
