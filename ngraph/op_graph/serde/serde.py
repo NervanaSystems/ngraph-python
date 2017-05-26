@@ -65,7 +65,11 @@ GLOBAL_AXIS_REGISTRY = weakref.WeakValueDictionary()
 
 
 def dtype_to_protobuf(numpy_dtype):
-    return getattr(ops_pb, numpy_dtype.name.upper())
+    if numpy_dtype.name == 'flex':
+        dtype_name = 'FLEX' + str(numpy_dtype.storage_bits)
+    else:
+        dtype_name = numpy_dtype.name.upper()
+    return getattr(ops_pb, dtype_name)
 
 
 def axis_to_protobuf(axis):

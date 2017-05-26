@@ -96,10 +96,11 @@ test_all_transformers: test_cpu test_hetr test_gpu test_flex
 test_flex: gpu_prepare test_prepare clean
 	@echo
 	@echo The autoflex package is required for flex testing ...
-	@echo WARNING: flex tests will report the following error if autoflex has not been installed:
+	@echo WARNING: flex tests will report the following message if autoflex has not been installed:
 	@echo
-	@echo "     py.test: error: argument --transformer: invalid choice: 'flexgpu' \
-	(choose from 'cpu', 'gpu', 'hetr')"
+	@echo "     argument --transformer: invalid choice: 'flexgpu' (choose from 'cpu', 'gpu', \
+	'hetr')"
+
 	@echo
 	@echo "In case of test failures, clone the private autoflex repo in ../autoflex and execute \
 	make autoflex_prepare"
@@ -196,7 +197,7 @@ lint3k:
 	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
 check: test_prepare
-	echo "Running style checks.  Number of style errors is... "
+	echo "Running style checks.  Number of style faults is... "
 	-flake8 --count $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) \
 	 > /dev/null
 	echo
