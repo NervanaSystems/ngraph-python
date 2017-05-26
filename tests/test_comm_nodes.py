@@ -155,7 +155,7 @@ def test_allreduce_hint(config):
         axis_B = ng.make_axis(length=2, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
         var_B = ng.variable(initial_value=UniformInit(c['input'], c['input']),
-                           axes=[axis_B]).named('var_B')
+                            axes=[axis_B]).named('var_B')
         var_B.metadata['reduce_func'] = c['func']
         var_minus = (var_A - var_B).named('var_minus')
         var_minus.metadata['parallel'] = axis_A
@@ -177,7 +177,7 @@ def test_allreduce_hint(config):
 def test_one_dot_bprop_allreduce(config):
     c = config
 
-    pytest.xfail("Example passes for cpu, but gpu generates errors during AssignLayouts graph pass #1651")
+    pytest.xfail("GPU child transformers generate errors during AssignLayouts graph pass #1651")
 
     H_axis = ng.make_axis(length=4, name='height')
     W_axis = ng.make_axis(length=6, name='width')
