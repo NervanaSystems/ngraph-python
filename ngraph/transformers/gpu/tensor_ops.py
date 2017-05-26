@@ -474,8 +474,7 @@ class CudaAllReduceKernel(GPUKernel):
 
         # Send each GPU its assigned segment
         device_idx = self.op.device_ids.index(self.device_id)
-        for peer_idx in range(ndevs):
-            peer_id = self.op.device_ids[peer_idx]
+        for peer_idx, peer_id in enumerate(self.op.device_ids):
             if (peer_id == self.device_id):
                 continue
 
