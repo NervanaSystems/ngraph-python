@@ -148,13 +148,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
             delta_shape = self.get_data_shape(unflatten(delta).axes)
             delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
-            #output_shape = self.get_data_shape(op.axes)
 
             # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
             gamma_shape = gamma.axes.lengths[0]
             weights_shape = [2, gamma_shape]
             weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
-
 
             delta_layout = self.mkldnn.op_layouts.get(delta.name)
             fprop_src_layout = self.mkldnn.op_layouts.get(fprop_src.name)

@@ -219,8 +219,6 @@ class Mkldnn(object):
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
-
-
     def fprop_batchnorm(self, name, inputs, outputs, gamma, bias, mean, variance, epsilon):
         if (self.mkldnn_enabled and name in self.kernels):
             weights = np.stack([gamma[:, 0], bias[:,0]])
@@ -236,6 +234,7 @@ class Mkldnn(object):
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
             self.batch_norm_output = gamma * self.xhat + bias
+            # TODO - investigate if this copy kill performance ?
             np.copyto(outputs, self.batch_norm_output)
 
     def bprop_batchnorm(self, name, outputs, delta, inputs, gamma, bias, mean, variance, epsilon):
@@ -253,15 +252,16 @@ class Mkldnn(object):
         else:
             # compute intermediate fprop op's outputs required for batchnorm bprop
             # axis over which need to sum during bprop
-            self.axis = (1,)
-            self.red_args = {'axis': self.axis, 'keepdims': True}
-            self.gamma_scale = gamma / np.sqrt(variance + epsilon)
-            self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
-            self.m = np.prod([inputs.shape[ii] for ii in self.axis])
+            axis = (1,)
+            red_args = {'axis': axis, 'keepdims': True}
+            gamma_scale = gamma / np.sqrt(variance + epsilon)
+            xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+            m = np.prod([inputs.shape[ii] for ii in axis])
 
-            dgamma = np.sum(delta * self.xhat, **self.red_args)
-            dbeta = np.sum(delta, **self.red_args)
-            dx = self.gamma_scale * (delta - (self.xhat * dgamma + dbeta) / self.m)
+            dgamma = np.sum(delta * xhat, **red_args)
+            dbeta = np.sum(delta, **red_args)
+            dx = gamma_scale * (delta - (xhat * dgamma + dbeta) / m)
+            # TODO - investigate if this copy kill performance ?
             np.copyto(outputs, dx)
 
     def fprop_conv(self, name, conv_slices, I, F, O):

@@ -69,7 +69,7 @@ mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
     MKL_CHECK(mkldnn_batch_normalization_forward_desc_init(&batch_norm_desc, mkldnn_forward_training,
                                                 &mkldnn_memory_desc_src_md, epsilon, mkldnn_use_global_stats | mkldnn_use_scaleshift));
 
-    /* create a batch norm primitive descriptor - convolution descriptor bound to the CPU engine */
+    /* create a batch norm primitive descriptor - bound to the CPU engine */
     MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc, engine, NULL));
 
     if (input_src_pd) {
@@ -214,13 +214,18 @@ mkldnn_netlist_t create_mkldnn_batchnorm_bprop_primitives(
         prim_md = mkldnn_memory_desc_src_md;
     }
 
+    // create bprop batchnorm descriptor
+    // Note: flags: mkldnn_use_scaleshift, prop_kind: mkldnn_backward_data computes gradient w.r.to data only during bprop
+    // flags: mkldnn_use_scaleshift, prop_kind: mkldnn_backward computes gradient w.r.to data, gamma, beta during bprop
     mkldnn_batch_normalization_desc_t batch_norm_desc;
     MKL_CHECK(mkldnn_batch_normalization_backward_desc_init(&batch_norm_desc, mkldnn_backward_data,
                                                             &prim_md, &prim_md, epsilon,
-                                                            mkldnn_use_global_stats | mkldnn_use_scaleshift));
+                                                            mkldnn_use_scaleshift));
 
     MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc, engine, fprop_kernel->op_desc));
 
+    // query the gradient and source primitive descriptor for batchnorm bprop op desc
+    // this will be used to check if reorder is required or not for delta(error) and fprop src
     const_mkldnn_primitive_desc_t kernel_fprop_src_pd =
           mkldnn_primitive_desc_query_pd(opkernel->op_desc, mkldnn_query_src_pd, 0);
     const_mkldnn_primitive_desc_t kernel_src_pd =
@@ -265,24 +270,67 @@ mkldnn_netlist_t create_mkldnn_batchnorm_bprop_primitives(
     opkernel->num_inputs = 5;
     opkernel->num_outputs = 1;
 
-    // TODO - Figure out if reorders required and change logic accordingly
     // No reorders required
-    opkernel->reorder_i[0] = NULL;
     opkernel->reorder_i[1] = NULL;
     opkernel->reorder_i[2] = NULL;
-    opkernel->reorder_i[3] = NULL;
     opkernel->reorder_i[4] = NULL;
     opkernel->reorder_o[0] = NULL;
 
-    const_mkldnn_primitive_t batch_norm_dsts[] = { opkernel->outputs[0].prim };
+    // check if reorders is required for delta and fprop batchnorm inputs
+     if (!mkldnn_memory_primitive_desc_equal(opkernel->inputs[0].desc, kernel_fprop_src_pd)) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(kernel_fprop_src_pd);
+        create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md, engine, &(opkernel->internal_inputs[0]));
+        mkldnn_primitive_desc_t reorder_pd;
+        MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
+                    opkernel->inputs[0].desc, kernel_fprop_src_pd));
+        mkldnn_primitive_at_t inputs[] = {opkernel->inputs[0].prim};
+        const_mkldnn_primitive_t outputs[] = {opkernel->internal_inputs[0].prim};
+        MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_i[0]), reorder_pd, inputs, outputs));
+    } else {
+        opkernel->reorder_i[0] = NULL;
+    }
+    if (!mkldnn_memory_primitive_desc_equal(opkernel->inputs[3].desc, kernel_src_pd)) {
+        mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
+        create_mkldnn_tensor_from_pd(mkl_src_dims, mkl_src_sizes, &md, engine, &(opkernel->internal_inputs[1]));
+        mkldnn_primitive_desc_t reorder_pd;
+        MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd,
+                    opkernel->inputs[3].desc, kernel_src_pd));
+        mkldnn_primitive_at_t inputs[] = {opkernel->inputs[3].prim};
+        const_mkldnn_primitive_t outputs[] = {opkernel->internal_inputs[3].prim};
+        MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_i[3]), reorder_pd, inputs, outputs));
+    } else {
+        opkernel->reorder_i[3] = NULL;
+    }
+
+
+    if (opkernel->reorder_i[0]) {
+        float* tmp_buf = (float*) alloc_memory(product(batchnorm_src_sizes, mkl_src_dims), data_type);
+        opkernel->internal_inputs[0].buffer = tmp_buf;
+        MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
+                                                tmp_buf));
+    }
+    if (opkernel->reorder_i[3]) {
+        float* tmp_buf = (float*) alloc_memory(product(batchnorm_src_sizes, mkl_src_dims), data_type);
+        opkernel->internal_inputs[3].buffer = tmp_buf;
+        MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[3].prim,
+                                                tmp_buf));
+    }
+
+    mkldnn_primitive_t mkldnn_memory_prim_fprop_src =
+        opkernel->reorder_i[0] ? opkernel->internal_inputs[0].prim
+                                : opkernel->inputs[0].prim;
+    mkldnn_primitive_t mkldnn_memory_prim_src =
+        opkernel->reorder_i[3] ? opkernel->internal_inputs[3].prim
+                                : opkernel->inputs[3].prim;
+
+   const_mkldnn_primitive_t batch_norm_dsts[] = { opkernel->outputs[0].prim };
     mkldnn_primitive_at_t batch_norm_srcs[] =
-         { mkldnn_primitive_at(opkernel->inputs[0].prim, 0),
+         { mkldnn_primitive_at(mkldnn_memory_prim_fprop_src, 0),
            mkldnn_primitive_at(opkernel->inputs[1].prim, 0),
            mkldnn_primitive_at(opkernel->inputs[2].prim, 0),
-           mkldnn_primitive_at(opkernel->inputs[3].prim, 0),
+           mkldnn_primitive_at(mkldnn_memory_prim_src, 0),
            mkldnn_primitive_at(opkernel->inputs[4].prim, 0)
          };
-
     MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc, batch_norm_srcs, batch_norm_dsts));
 
     if (opkernel->reorder_i[0])
