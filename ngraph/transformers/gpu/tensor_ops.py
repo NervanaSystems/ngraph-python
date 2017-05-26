@@ -734,7 +734,7 @@ class CPUAssignKernel(GPUKernel):
         if isinstance(self.value, TensorDescription):
             self.value = self.tensor_view_from_td(self.value).tensor
 
-        super(SetItemKernel, self).bind_buffers()
+        super(CPUAssignKernel, self).bind_buffers()
 
     def execute(self):
         """
