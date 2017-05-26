@@ -174,7 +174,7 @@ def test_allreduce_hint(config):
         'expected_result': [-35.0, -35.0, -35.0, -35.0],
     },
 ])
-def test_scatter_allreduce(config):
+def test_one_dot_bprop_allreduce(config):
     c = config
 
     pytest.xfail("Buggy Example")
