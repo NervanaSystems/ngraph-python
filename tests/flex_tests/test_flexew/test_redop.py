@@ -18,7 +18,6 @@ import ngraph as ng
 from ngraph.testing.flexutil import template_one_placeholder, template_two_placeholders, \
     MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, id_func
 
-
 pytestmark = [pytest.mark.transformer_dependent("module"),
               pytest.mark.flex_only]
 
@@ -35,7 +34,7 @@ test_data_single_operand = (
      "Redop sum function - values from flex range, near positive boundary"),
     (ng.sum, [(np.array([1, 2, 14, 4, 5, 6, 7, 8, 9, -1]), 55.0)],
      "Redop sum function - values from flex range"),
-    (ng.sum, [(np.array([1.0, 2.0, 3.0, 4.0],), 10),
+    (ng.sum, [(np.array([1.0, 2.0, 3.0, 4.0], ), 10),
               (np.array([0.4, 0.03, 0.44, 1.47]), 2.3398),
               (np.array([100, 2000, 3500.4, 10000]), 31.9990,
                "Array's elements and result overflow to 31.9990")],
@@ -89,23 +88,26 @@ test_data_single_operand = (
      "Iterations min of x"),
 
     # test_argmax
-    (ng.argmax, [(np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE + 2.0, MAXIMUM_FLEX_VALUE]), 2)],
+    (ng.argmax,
+     [(np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE + 2.0, MAXIMUM_FLEX_VALUE]), 2)],
      "Redop argmax function - result expected to overflow. "
      "Calculation is done using threads and result is accumulated - check #1424"),
     (ng.argmax, [(np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE]), 1)],
      "Redop argmax function - values from flex range"),
     (ng.argmax, [(np.array([1, 0, 1]), 0)], "Redop argmax function - values from flex range"),
-    (ng.argmax, [(np.array([1, 10, 10, 1]), 2)], "Redop argmax function - values from flex range - check #1424"),
+    (ng.argmax, [(np.array([1, 10, 10, 1]), 2)],
+     "Redop argmax function - values from flex range - check #1424"),
 
     # test_argmin
-    (ng.argmin, [(np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE - 2.0, MINIMUM_FLEX_VALUE]), 2)],
+    (ng.argmin,
+     [(np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE - 2.0, MINIMUM_FLEX_VALUE]), 2)],
      "Redop argmin function - result expected to underflow."
      "Calculation is done using threads and result is accumulated - check #1424"),
     (ng.argmin, [(np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE]), 1)],
      "Redop argmin function - values from flex range"),
-    (ng.argmin, [(np.array([-1, -10, -10, -1]), 2)], "Redop argmax function - values from flex range - check #1424"),
+    (ng.argmin, [(np.array([-1, -10, -10, -1]), 2)],
+     "Redop argmax function - values from flex range - check #1424"),
 )
-
 
 test_data_double_operand = (
     # template:(ng_operation, [(operand_1, operand_2, expected_result, *case_description)],
