@@ -30,8 +30,7 @@ from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Affine, Preprocess, Sequential
-from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, LogisticAtomic, \
-    GradientDescentMomentum
+from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic,GradientDescentMomentum
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
@@ -52,25 +51,16 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 inputs = train_set.make_placeholders()
 ax.Y.length = 10
 
-###########
-# FOR FLEX
-is_flex = args.backend in ['flexgpu', 'argon']
-# Sigmoid cannot be divided into smaller ops.
-logistic = LogisticAtomic if is_flex else Logistic
-# Simpler equivalent of CE cannot be used.
-sig_opt = not is_flex
-
 
 ######################
 # Model specification
 seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
                    Affine(nout=100, weight_init=GaussianInit(), activation=Rectlin()),
-                   Affine(axes=ax.Y, weight_init=GaussianInit(), activation=logistic())])
+                   Affine(axes=ax.Y, weight_init=GaussianInit(), activation=Logistic())])
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
 train_prob = seq1(inputs['image'])
-train_loss = ng.cross_entropy_binary(train_prob, ng.one_hot(inputs['label'], axis=ax.Y),
-                                     enable_sig_opt=sig_opt)
+train_loss = ng.cross_entropy_binary(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_outputs = dict(batch_cost=batch_cost)
@@ -78,8 +68,7 @@ train_outputs = dict(batch_cost=batch_cost)
 with Layer.inference_mode_on():
     inference_prob = seq1(inputs['image'])
 errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), inputs['label'])
-eval_loss = ng.cross_entropy_binary(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y),
-                                    enable_sig_opt=sig_opt)
+eval_loss = ng.cross_entropy_binary(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in

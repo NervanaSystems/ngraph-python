@@ -20,6 +20,7 @@ from six import itervalues
 from weakref import WeakSet
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
     import pycuda.driver as drv
@@ -1055,7 +1056,7 @@ class GPUTransformer(ComputationGraphTransformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
-        self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
+        self.graph_passes = [FlexFusion(), SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass]  # , VizPass(show_metadata="layout")]
 
