@@ -27,14 +27,11 @@ RUN mkdir aeon_build && cd aeon_build && cmake ../private-aeon && pip install . 
 #RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
 #    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
-# This disables a warning from opencv from a defunct driver
-RUN ln /dev/null /dev/raw1394
-
 WORKDIR /root/ngraph-test
 ADD . /root/ngraph-test
-RUN make install
-RUN make gpu_prepare
-RUN make test_prepare
+
+# This disables a warning from opencv from a defunct driver
+RUN ln /dev/null /dev/raw1394
 
 # build Baidu's Warp-CTC 
 # dependencies for deepspeech example
@@ -47,6 +44,12 @@ ENV WARP_CTC_PATH=/root/warp-ctc/build
 ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
 ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
 COPY /root/warp-ctc/build/libwarpctc.so /root/ngraph-test
+
+WORKDIR /root/ngraph-test
+ADD . /root/ngraph-test
+RUN make install
+RUN make gpu_prepare
+RUN make test_prepare
 
 # add in autoflex.  This should will only be added if the user building
 # this dockerfile has permission to access the autoflex repo.  This is a
