@@ -22,10 +22,6 @@ from ngraph.testing.flexutil import template_one_placeholder, template_two_place
 pytestmark = [pytest.mark.transformer_dependent("module"),
               pytest.mark.flex_only]
 
-bug_1424 = pytest.mark.xfail(strict=True, reason="GitHub issue #1424, for ng.argmax and ng.argmin,"
-                                                 "the values outside of the flex range "
-                                                 "are computed")
-
 test_data_single_operand = (
     # template: (ng_operation, [(operand, expected_result, *case_description)], test_description),
     # *case_description is optional
@@ -93,19 +89,21 @@ test_data_single_operand = (
      "Iterations min of x"),
 
     # test_argmax
-    bug_1424((ng.argmax, [(np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE,
-                                     MAXIMUM_FLEX_VALUE + 2.0]), 1)],
-              "Redop argmax function - result expected to overflow")),
+    (ng.argmax, [(np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE + 2.0, MAXIMUM_FLEX_VALUE]), 2)],
+     "Redop argmax function - result expected to overflow. "
+     "Calculation is done using threads and result is accumulated - check #1424"),
     (ng.argmax, [(np.array([MAXIMUM_FLEX_VALUE - 2.0, MAXIMUM_FLEX_VALUE]), 1)],
      "Redop argmax function - values from flex range"),
     (ng.argmax, [(np.array([1, 0, 1]), 0)], "Redop argmax function - values from flex range"),
+    (ng.argmax, [(np.array([1, 10, 10, 1]), 2)], "Redop argmax function - values from flex range - check #1424"),
 
     # test_argmin
-    bug_1424((ng.argmin, [(np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE,
-                                     MINIMUM_FLEX_VALUE - 2]), 1)],
-              "Redop argmin function - result expected to underflow")),
+    (ng.argmin, [(np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE - 2.0, MINIMUM_FLEX_VALUE]), 2)],
+     "Redop argmin function - result expected to underflow."
+     "Calculation is done using threads and result is accumulated - check #1424"),
     (ng.argmin, [(np.array([MINIMUM_FLEX_VALUE + 2.0, MINIMUM_FLEX_VALUE]), 1)],
-     "Redop argmin function - values from flex range")
+     "Redop argmin function - values from flex range"),
+    (ng.argmin, [(np.array([-1, -10, -10, -1]), 2)], "Redop argmax function - values from flex range - check #1424"),
 )
 
 
