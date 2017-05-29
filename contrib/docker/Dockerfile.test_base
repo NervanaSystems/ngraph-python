@@ -35,12 +35,12 @@ RUN ln /dev/null /dev/raw1394
 
 # build Baidu's Warp-CTC 
 # dependencies for deepspeech example
-WORKDIR /root/ngraph-test
+WORKDIR /root
 RUN git clone https://github.com/baidu-research/warp-ctc.git 
 WORKDIR warp-ctc 
 RUN mkdir -p build 
-RUN cd build && cmake ../ && make && cp libwarpctc.so ../.. && cd ../..
-ENV WARP_CTC_PATH=/root/ngraph-test
+RUN cd build && cmake ../ && make && cd ../..
+ENV WARP_CTC_PATH=/root/warp-ctc/build
 ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
 ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
 
