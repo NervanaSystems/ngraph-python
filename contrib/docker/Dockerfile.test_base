@@ -46,7 +46,7 @@ RUN cd build && cmake ../ && make && cd ../..
 ENV WARP_CTC_PATH=/root/warp-ctc/build
 ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
 ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
-ENV LD_PRELOAD=$WARP_CTC_LIB:$LD_PRELOAD
+COPY /root/warp-ctc/build/libwarpctc.so /root/ngraph-test
 
 # add in autoflex.  This should will only be added if the user building
 # this dockerfile has permission to access the autoflex repo.  This is a

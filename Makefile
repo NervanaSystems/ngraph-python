@@ -123,6 +123,7 @@ test_mkldnn:
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_cpu: export LD_PRELOAD+=:./libwarpctc.so
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only" --boxed \
@@ -130,6 +131,7 @@ test_cpu: test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_gpu: export LD_PRELOAD+=:./libwarpctc.so
 test_gpu: gpu_prepare test_prepare clean
 	echo Running unit tests for gpu dependent transformer tests...
 	py.test --transformer hetr -m "hetr_gpu_only" \
