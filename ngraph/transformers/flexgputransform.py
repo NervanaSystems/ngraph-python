@@ -176,12 +176,8 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
         self.flex_entry = self.transformer.flex_manager.make_flex_entry(name=self.name)
 
     def create_device_tensor(self, tensor_description):
-        if tensor_description.layout:
-            shape_str = "_".join((str(_) for _ in tensor_description.layout.shape))
-        else:
-            shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return FlexGPUDeviceTensor(self.transformer, self, tensor_description,
-                                   name="v_" + tensor_description.name + "_" + shape_str)
+        name = self.get_tensor_name(tensor_description)
+        return FlexGPUDeviceTensor(self.transformer, self, tensor_description, name=name)
 
 
 class FlexGPUKernelGroup(GPUKernelGroup):

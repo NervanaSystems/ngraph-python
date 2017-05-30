@@ -650,12 +650,15 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.storage = None
 
     def create_device_tensor(self, tensor_description):
+        name = self.get_tensor_name(tensor_description)
+        return GPUDeviceTensor(self.transformer, self, tensor_description, name=name)
+
+    def get_tensor_name(self, tensor_description):
         if tensor_description.layout:
             shape_str = "_".join((str(_) for _ in tensor_description.layout.shape))
         else:
             shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return GPUDeviceTensor(self.transformer, self, tensor_description,
-                               name="v_" + tensor_description.name + "_" + shape_str)
+        return "v_" + tensor_description.name + "_" + shape_str
 
     @property
     def ref_str(self):
