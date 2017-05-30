@@ -1022,7 +1022,15 @@ class TensorOp(Op):
                     adjoint = adjoint * o.scale
 
                 deriv_handler = o.deriv_handler
-                deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
+                # find hetr distribution metadata, pass other data if exists
+                # todo add reduce func metadata key when fixed #1436
+                hetr_meta_key = ['device', 'device_id', 'parallel']
+                hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
+                                 if o.metadata.get(k) is not None}
+                with metadata(**hetr_metadata):
+                    deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
                 processed.add(o.tensor)
 
         return adjoints
@@ -1452,6 +1460,33 @@ class TensorValueOp(ValueOp):
     @property
     def states_read(self):
         return OrderedSet([self.tensor])
+
+
+class PatternLabelOp(TensorOp):
+    """
+    An op to represent label in the pattern to be matched in graph
+
+    constraint_fn is a predicate that must hold in order to bind the
+    label to its matching op. By default, constraint_fn is always true.
+
+    """
+    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
+        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+        self.label = label
+        self.constraint_fn = constraint_fn
+
+
+class PatternSkipOp(TensorOp):
+    """
+    An op to allow user of pattern matching to skip match for certain ops
+
+    is_optional_op_fn is a predicate that must be defined to specify
+    optional ops. By default, is_optional_op_fn is false.
+
+    """
+    def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
+        super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
+        self.is_optional_op_fn = is_optional_op_fn
 
 
 class ReshapeOp(TensorOp):
@@ -2206,7 +2241,7 @@ def value_of(tensor):
     ])
 
 
-def constant(const, axes=None, dtype=None):
+def constant(const, axes=None, dtype=None, **kwargs):
     """
     Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
         to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
@@ -2233,14 +2268,15 @@ def constant(const, axes=None, dtype=None):
                              graph_label_type=graph_label_type,
                              initial_value=nptensor,
                              const=nptensor,
-                             dtype=dtype)
+                             dtype=dtype,
+                             **kwargs)
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
     return val
 
 
-def placeholder(axes, dtype=None, initial_value=None):
+def placeholder(axes, dtype=None, initial_value=None, **kwargs):
     """
     A place for a tensor to be supplied; typically used for computation arguments.
 
@@ -2258,10 +2294,11 @@ def placeholder(axes, dtype=None, initial_value=None):
                               is_input=True,
                               is_placeholder=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None):
+def temporary(axes, dtype=None, initial_value=None, **kwargs):
     """
     Temporary storage.
 
@@ -2277,12 +2314,15 @@ def temporary(axes, dtype=None, initial_value=None):
     Returns:
         AssignableTensorOp: The placeholder.
     """
+    if initial_value is not None:
+        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def persistent_tensor(axes, dtype=None, initial_value=None):
+def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
     """
     Persistent storage, not trainable.
 
@@ -2301,10 +2341,11 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
                               is_persistent=True,
                               is_input=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None, scope=None):
+def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2325,7 +2366,8 @@ def variable(axes, dtype=None, initial_value=None, scope=None):
                               is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
-                              scope=scope)
+                              scope=scope,
+                              **kwargs)
 
 
 class StackOp(SequentialOp):
@@ -2493,7 +2535,7 @@ def concat_along_axis(x_list, axis):
     if len(x_list) < 1:
         return x_list
 
-    return ConcatOp(x_list, [axis for _ in range(len(x_list))])
+    return ConcatOp(x_list, [x.axes[x.axes.index(axis)] for x in x_list])
 
 
 class UnsliceOp(SequentialOp):
@@ -3320,7 +3362,7 @@ class TensorSizeOp(TensorOp):
         elif reduction_axes is None:
             reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
-        super(TensorSizeOp, self).__init__(axes=())
+        super(TensorSizeOp, self).__init__(args=(x,), axes=())
 
 
 def tensor_size(x, reduction_axes=None, out_axes=None):

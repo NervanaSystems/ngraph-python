@@ -76,8 +76,8 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           metavar='SEED',
                           help='random number generator seed')
 
-    def parse_args(self):
-        args = super(NgraphArgparser, self).parse_args()
+    def parse_args(self, *args, **kwargs):
+        args = super(NgraphArgparser, self).parse_args(*args, **kwargs)
         self.make_and_set_transformer_factory(args)
 
         # invert no_progress_bar meaning and store in args.progress_bar
