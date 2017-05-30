@@ -81,7 +81,7 @@ class Benchmark(object):
         feed_dict = self.fill_feed_dict(self.train_set, self.inputs)
         start = Benchmark.marker.init_mark()
         end = Benchmark.marker.init_mark()
-        with closing(ngt.make_transformer_factory(self.transformer)()) as transformer:
+        with closing(ngt.make_transformer_factory(self.transformer, device=self.device)()) as transformer:
             if visualize:
                 nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
                                                                show_all_metadata=True)
