@@ -17,11 +17,12 @@ import pytest
 
 import ngraph as ng
 from ngraph.op_graph.convolution import bprop_conv, update_conv
-from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
+from ngraph.testing import RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim
 from ngraph.frontends.neon import ax
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_only]
 
 rng = RandomTensorGenerator(0, np.float32)
 

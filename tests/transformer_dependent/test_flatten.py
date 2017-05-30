@@ -19,10 +19,10 @@ import pytest
 import ngraph as ng
 rng = RandomTensorGenerator(0, np.float32)
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
+@pytest.mark.flex_disabled
 def test_flatten_deriv_simplified(transformer_factory):
     """
     Test derivative with dot and flatten
