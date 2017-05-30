@@ -15,21 +15,25 @@
 import numpy as np
 import pytest
 import ngraph as ng
-from ngraph.testing.flexutil import template_one_placeholder, id_func, MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE
+from ngraph.testing.flexutil import template_one_placeholder, id_func, MINIMUM_FLEX_VALUE, \
+    MAXIMUM_FLEX_VALUE
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = [pytest.mark.transformer_dependent("module"),
+              pytest.mark.flex_only]
 
 test_data_single_operand = (
     # template: (ng_operation, [(operand, expected_result, *case_description)], test_description),
     # *case_description is optional
 
     # test_exp
-    (ng.exp, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Exponential function - overflow expected"),
+    (ng.exp, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)],
+     "Exponential function - overflow expected"),
     (ng.exp, [(1.0, 2.71826171875, "High precision check")], "Exponential function of 1"),
     (ng.exp, [(0.0, 1.0)], "Exponential function of 0"),
     (ng.exp, [(int(np.log(MAXIMUM_FLEX_VALUE) / 2), 148.4140625)],
      "Exponential function of a positive value inside of flex range"),
-    (ng.exp, [(-int(np.log(MAXIMUM_FLEX_VALUE)) / 2, 0.0067379474639892578, "High precision check")],
+    (ng.exp, [(-int(np.log(MAXIMUM_FLEX_VALUE)) / 2, 0.0067379474639892578,
+               "High precision check")],
      "Exponential function of a negative value inside of flex range"),
     (ng.exp, [(0, 1),
               (10, 1.9999, "overflow of operand to 1.9999"),
@@ -38,8 +42,10 @@ test_data_single_operand = (
      "Iterations exp of x"),
 
     # test_log
-    (ng.log, [(0, MINIMUM_FLEX_VALUE, "-INF leads to underflow")], "Logarithm of 0 to achieve underflow, -inf"),
-    (ng.log, [(0.01, -4.605224609375, "High precision check")], "Logarithm of a small constant within the flex range"),
+    (ng.log, [(0, MINIMUM_FLEX_VALUE, "-INF leads to underflow")],
+     "Logarithm of 0 to achieve underflow, -inf"),
+    (ng.log, [(0.01, -4.605224609375, "High precision check")],
+     "Logarithm of a small constant within the flex range"),
     (ng.log, [(1, np.log(1))], "Logarithm of 1 to achieve 0"),
     (ng.log, [(MAXIMUM_FLEX_VALUE, 10.39697265625, "High precision check")],
      "Logarithm of a positive border value to achieve a number from flex range"),
@@ -84,17 +90,22 @@ test_data_single_operand = (
 
     #  test_square
     (ng.square, [(1, 1)], "Square of 1 equals 1"),
-    (ng.square, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Square of negative boundary value - overflow expected"),
-    (ng.square, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)], "Square of positive boundary value - overflow expected"),
+    (ng.square, [(MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)],
+     "Square of negative boundary value - overflow expected"),
+    (ng.square, [(MAXIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE)],
+     "Square of positive boundary value - overflow expected"),
 
     # test_sigmoid and sigmoidAtomic
-    (ng.sigmoid,       [(-10, 0.00004539825022220611572265625)], ""),
+    (ng.sigmoid, [(-10, 0.00004539825022220611572265625)], ""),
     (ng.sigmoidAtomic, [(-10, 0.00004539825022220611572265625)], ""),
-    (ng.sigmoid,       [(-11, 0.000030517578125)], "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
+    (ng.sigmoid, [(-11, 0.000030517578125)],
+     "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
     (ng.sigmoidAtomic, [(-11, 0.000016701407730579376220703125)], ""),
-    (ng.sigmoid,       [(-20, 0.000030517578125)], "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
+    (ng.sigmoid, [(-20, 0.000030517578125)],
+     "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
     (ng.sigmoidAtomic, [(-20, 0.00000000186264514923095703125)], ""),
-    (ng.sigmoid,       [(-30, 0.000030517578125)], "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
+    (ng.sigmoid, [(-30, 0.000030517578125)],
+     "denominator in sigmoid equation is saturating to MAX_FLEX_VALUE"),
     (ng.sigmoidAtomic, [(-30, 0.0)], ""),
 )
 
@@ -103,7 +114,8 @@ Minus11 = -11
 test_input_types_cases = (
     # template:(operation, operand, expected_result, description, placeholder)
     (ng.exp, [(Minus11, ExpMinus11)], "Exponential function of -11 as scalar"),
-    (ng.exp, [(np.array([Minus11]), np.array([ExpMinus11]))], "Exponential function of -11 as 1-element array"),
+    (ng.exp, [(np.array([Minus11]), np.array([ExpMinus11]))],
+     "Exponential function of -11 as 1-element array"),
     (ng.exp, [(np.array([Minus11, Minus11]), np.array([ExpMinus11, ExpMinus11]))],
      "Exponential function of -11 as multi-element array"),
 )

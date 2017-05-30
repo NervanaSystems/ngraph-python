@@ -2241,7 +2241,7 @@ def value_of(tensor):
     ])
 
 
-def constant(const, axes=None, dtype=None):
+def constant(const, axes=None, dtype=None, **kwargs):
     """
     Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
         to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
@@ -2268,14 +2268,15 @@ def constant(const, axes=None, dtype=None):
                              graph_label_type=graph_label_type,
                              initial_value=nptensor,
                              const=nptensor,
-                             dtype=dtype)
+                             dtype=dtype,
+                             **kwargs)
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
     return val
 
 
-def placeholder(axes, dtype=None, initial_value=None):
+def placeholder(axes, dtype=None, initial_value=None, **kwargs):
     """
     A place for a tensor to be supplied; typically used for computation arguments.
 
@@ -2293,10 +2294,11 @@ def placeholder(axes, dtype=None, initial_value=None):
                               is_input=True,
                               is_placeholder=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None):
+def temporary(axes, dtype=None, initial_value=None, **kwargs):
     """
     Temporary storage.
 
@@ -2316,10 +2318,11 @@ def temporary(axes, dtype=None, initial_value=None):
         raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def persistent_tensor(axes, dtype=None, initial_value=None):
+def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
     """
     Persistent storage, not trainable.
 
@@ -2338,10 +2341,11 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
                               is_persistent=True,
                               is_input=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None, scope=None):
+def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2362,7 +2366,8 @@ def variable(axes, dtype=None, initial_value=None, scope=None):
                               is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
-                              scope=scope)
+                              scope=scope,
+                              **kwargs)
 
 
 class StackOp(SequentialOp):
@@ -3357,7 +3362,7 @@ class TensorSizeOp(TensorOp):
         elif reduction_axes is None:
             reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
-        super(TensorSizeOp, self).__init__(axes=())
+        super(TensorSizeOp, self).__init__(args=(x,), axes=())
 
 
 def tensor_size(x, reduction_axes=None, out_axes=None):
