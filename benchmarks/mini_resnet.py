@@ -105,8 +105,7 @@ class mini_residual_network(Sequential):
                                  batch_norm=batch_norm, activation=Softmax()))
         else:
             raise ValueError("Incorrect dataset provided")
-
-        self.layers = layers
+        super(mini_residual_network, self).__init__(layers=layers)
 
 
 def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
