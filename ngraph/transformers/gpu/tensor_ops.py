@@ -640,6 +640,21 @@ class RngFillKernel(GPUKernel):
             self.out[:] = self.out * self.params['scale'] + self.params['loc']
 
 
+class CPUAssignKernel(GPUKernel):
+    """
+    Kernel used to assign one tensor to another when a device copy is not available,
+    """
+
+    def __init__(self, transformer, op):
+        super(CPUAssignKernel, self).__init__(transformer)
+
+        self.lvalue, self.rvalue = (_ for _ in op.call_info())
+        self.kernel = None
+
+    def bind_buffers(self):
+
+
+
 class SetItemKernel(GPUKernel):
     """
     Kernel used set all or part of a tensor with a value. Value can be
@@ -729,10 +744,10 @@ class CPUAssignKernel(GPUKernel):
         """
         Get allocated GPU tensor for output and potentially source value
         """
-        if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor_view_from_td(self.tensor)
-        if isinstance(self.value, TensorDescription):
-            self.value = self.tensor_view_from_td(self.value).tensor
+        if isinstance(self.lvalue, TensorDescription):
+            self.lvalue = self.tensor_view_from_td(self.lvalue)
+        if isinstance(self.rvalue, TensorDescription):
+            self.rvalue = self.tensor_view_from_td(self.rvalue).tensor
 
         super(CPUAssignKernel, self).bind_buffers()
 
@@ -741,10 +756,10 @@ class CPUAssignKernel(GPUKernel):
         Run kernel to copy into tensor
         Temporarily using the neon GPUTensor implementation
         """
-        if self.tensor.shape == ():
-            self.tensor.tensor.fill(self.value)
+        if self.rvalue.shape == ():
+            self.lvalue.tensor.fill(self.value)
         else:
-            self.tensor.__setitem__(None, self.value)
+            self.lvalue.__setitem__(None, self.rvalue)
 
 
 class FlexFillKernel(FillKernel):
