@@ -82,9 +82,8 @@ class GPUIndexOp(IndexOp):
         super(GPUIndexOp, self).__init__(x, axes=x.axes, **kwargs)
         self.layout_view = view
 
-    @tdcache()
-    def tensor_description(self):
-        td = self.args[0].tensor_description().clone()
+    def transform_tensor_description(self, tensor_description):
+        td = tensor_description.clone()
         if "layout" in self.metadata:
             td.layout = self.metadata["layout"]
         return td
