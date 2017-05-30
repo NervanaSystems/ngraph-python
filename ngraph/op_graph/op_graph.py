@@ -1470,7 +1470,7 @@ class PatternLabelOp(TensorOp):
     label to its matching op. By default, constraint_fn is always true.
 
     """
-    def __init__(self, label, axes=None, constraint_fn=(lambda op: True), **kwargs):
+    def __init__(self, label, constraint_fn=(lambda op: True), axes=None, **kwargs):
         if axes is None:
             axes = {}
         super(PatternLabelOp, self).__init__(axes=axes, **kwargs)
