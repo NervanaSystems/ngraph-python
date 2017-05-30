@@ -131,7 +131,7 @@ def get_fake_data(dataset, batch_size, n_iter):
 def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
                          transformer_type, device, bprop=False, visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
-    model_out = get_mini_resnet(inputs, dataset, device_id=device_id)
+    model_out = get_mini_resnet(inputs, dataset, device_id)
 
     # Running forward propagation
     fprop_computation_op = ng.computation(model_out, 'all')
