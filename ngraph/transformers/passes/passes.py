@@ -382,6 +382,7 @@ class GraphRewritePass(GraphPass):
                     # pattern. So we use list of tuples as return type.
                     label_map_op_list = []
                     label_map = dict()
+
                     if GraphRewritePass.match_pattern(op, pattern,
                                                       label_map):
                         label_map_op_list.append((label_map, op))

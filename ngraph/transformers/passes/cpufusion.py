@@ -61,7 +61,7 @@ class CPUFusion(GraphRewritePass):
             # We need to store relu_fwd_op in a dictionary so that backward Relu
             # can access it.
             self.tensor_to_op_dict[x] = relu_fwd_op
-        self.replace_op(op, relu_fwd_op)
+            self.replace_op(op, relu_fwd_op)
 
     def construct_relu_bprop_pattern(self):
         """
@@ -109,7 +109,7 @@ class CPUFusion(GraphRewritePass):
             x = label_map[self.relu_bwd_x_label]
             delta = label_map[self.relu_bwd_delta_label]
             relu_fprop = self.tensor_to_op_dict[x]
-        self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
+            self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
     def fuse_batchnorm_bprop_callback(self, op, label_map_op_list):
         """
