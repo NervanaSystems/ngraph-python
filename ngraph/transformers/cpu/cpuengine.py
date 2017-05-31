@@ -33,6 +33,8 @@ class Mkldnn(object):
             np.int32   : 2
         }
         self.memory_format = {
+            'blocked' : 2,
+            'nchw' : 5,    
             'chwn' : 7,
         }
         self.kernels = dict()
@@ -61,6 +63,12 @@ class Mkldnn(object):
 
             self.print_kernel = self.mkldnn_engine_dll.print_mkldnn_opkernel
             self.print_kernel.argtypes = [ctypes.c_void_p]
+
+            self.create_layout_pd = self.mkldnn_engine_dll.create_mkldnn_layout_descriptor
+            self.create_layout_pd.argtypes = [
+                                ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, 
+                                ctypes.c_int]
+            self.create_layout_pd.restype = ctypes.c_void_p
 
             self.query_prim_layout_fn = self.mkldnn_engine_dll.query_prim_layout
             self.query_prim_layout_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
@@ -174,22 +182,24 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, 
                  ctypes.c_void_p]
 
-            self.create_mkldnn_innerproduct_fprop_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_primitives
-            self.create_mkldnn_innerproduct_fprop_primitives_fn.argtypes = \
+            self.innerproduct_fprop_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_innerproduct_fprop_kernel
+            self.innerproduct_fprop_kernel.argtypes = \
                 [ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-            self.create_mkldnn_innerproduct_fprop_primitives_fn.restype = ctypes.c_void_p
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_void_p]
             
-            self.create_mkldnn_add_primitives_fn = \
-                self.mkldnn_engine_dll.create_mkldnn_add_primitives
-            self.create_mkldnn_add_primitives_fn.argtypes = \
-                [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                 ctypes.c_void_p, ctypes.c_int,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int]
-            self.create_mkldnn_add_primitives_fn.restype = ctypes.c_void_p
+            self.add_kernel = \
+                self.mkldnn_engine_dll.create_mkldnn_add_kernel
+            self.add_kernel.argtypes = \
+                [ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_void_p, ctypes.c_void_p,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+            self.add_kernel.restype = ctypes.c_void_p
             
             self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
             self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
@@ -223,16 +233,15 @@ class Mkldnn(object):
         if (self.mkldnn_enabled and name in self.kernels):
             weights = np.stack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
-            variance_ch = variance[:, 0]
             self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], mean_ch.ctypes.data, 1)
-            self.set_input_tensor(self.kernels[name], variance_ch.ctypes.data, 2)
+            self.set_input_tensor(self.kernels[name], variance.ctypes.data, 2)
             self.set_input_tensor(self.kernels[name], weights.ctypes.data, 3)
             self.set_output_tensor(self.kernels[name], outputs.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
-            self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+            self.xhat = (inputs - mean) / (np.sqrt(variance + epsilon))[:, None]
             self.batch_norm_output = gamma * self.xhat + bias
             # TODO - investigate if this copy kill performance ?
             np.copyto(outputs, self.batch_norm_output)
@@ -367,55 +376,23 @@ class Mkldnn(object):
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
 
-    def init_innerproduct_fprop(self, name, out, x, y):
-        if (self.mkldnn_enabled):
-            if (self.mkldnn_verbose):
-                print("Inner Product Input: ", len(x.shape), x.shape,
-                      " Weights: ", y.shape, len(y.shape),
-                      " Outputs: ", out.shape, len(out.shape))
-            # Only single precision float supported for now
-            if ((x.dtype != np.float32) or (y.dtype != np.float32)):
-                return
-            # Sanity check tensor shapes
-            if ((len(x.shape) != 2) or (len(y.shape) != 2) or
-                    (len(out.shape) != 2)):
-                return
-            input_shape = ((ctypes.c_int) * len(x.shape))(*x.shape)
-            weights_shape = ((ctypes.c_int) * len(y.shape))(*y.shape)
-            output_shape = ((ctypes.c_int) * len(out.shape))(*out.shape)
-            self.kernels[name] = \
-                self.create_mkldnn_innerproduct_fprop_primitives_fn(
-                    self.mkldnn_engine,
-                    len(x.shape), len(y.shape), 1, len(out.shape), input_shape,
-                    weights_shape, None, output_shape, x.ctypes.data,
-                    y.ctypes.data, None, out.ctypes.data)
-
     def innerproduct_fprop(self, name, x, y, out):
         if (self.mkldnn_enabled and name in self.kernels):
             assert x.flags['C_CONTIGUOUS']
             assert y.flags['C_CONTIGUOUS']
-            self.run_mkldnn_netlist_fn(self.kernels[name], self.mkldnn_verbose)
+            self.set_input_tensor(self.kernels[name], x.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], y.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             np.dot(x, y, out=out)
 
-    def init_elementwise_add(self, name, I_array1, I_array2, O_array):
-        if(self.mkldnn_enabled):
-            # Sanity check for tensor shapes
-            if (not (I_array1.flags['C_CONTIGUOUS'] and
-                     I_array2.flags['C_CONTIGUOUS'])):
-                return
-            input1_shape = I_array1.size
-            input2_shape = I_array2.size
-            output_shape = O_array.size
-            self.kernels[name] = \
-                self.create_mkldnn_add_primitives_fn(
-                    self.mkldnn_engine, I_array1.ctypes.data,
-                    I_array2.ctypes.data, O_array.ctypes.data,
-                    input1_shape, input2_shape, output_shape, 2)
-
     def elementwise_add(self, name, I_array1, I_array2, O_array):
         if (self.mkldnn_enabled and name in self.kernels):
-            self.run_mkldnn_netlist_fn(self.kernels[name], self.mkldnn_verbose)
+            self.set_input_tensor(self.kernels[name], I_array1.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], I_array2.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], O_array.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             np.add(I_array1, I_array2, out=O_array)
 

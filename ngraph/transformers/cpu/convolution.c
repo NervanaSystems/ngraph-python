@@ -160,6 +160,8 @@ void create_mkldnn_conv_fprop_kernel(
     if (opkernel->reorder_i[1])
         opkernel->net[opkernel->net_size++] = opkernel->reorder_i[1];
     opkernel->net[opkernel->net_size++] = opkernel->op_prim;
+    if (opkernel->reorder_o[0])
+        opkernel->net[opkernel->net_size++] = opkernel->reorder_o[0];
 }
 
 void create_mkldnn_conv_bprop_data_kernel(

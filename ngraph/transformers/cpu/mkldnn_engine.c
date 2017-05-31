@@ -33,6 +33,38 @@ void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
 
+mkldnn_primitive_desc_t create_mkldnn_layout_descriptor(mkldnn_engine_t engine, 
+                                                        int ndims, const int* dim_sizes,
+                                                        const int* dim_strides,
+                                                        mkldnn_data_type_t data_type,
+                                                        mkldnn_memory_format_t fmt) {
+    // Create an MKL layout descriptor based on input size and strides
+    // Assumes non-blocked layout
+    mkldnn_memory_desc_t md;
+    mkldnn_primitive_desc_t pd;
+    md.primitive_kind = mkldnn_memory;
+    md.ndims = ndims;
+    md.format = fmt;
+    md.data_type = data_type;
+    switch(fmt) {
+        case mkldnn_blocked:
+            for (size_t i = 0; i < ndims; i++) {
+                md.layout_desc.blocking.block_dims[i] = 1;
+                md.layout_desc.blocking.strides[1][i]    = 1;
+                md.layout_desc.blocking.strides[0][i]    = dim_strides[i];
+                md.layout_desc.blocking.padding_dims[i]  = dim_sizes[i];
+                md.layout_desc.blocking.offset_padding_to_data[i] = 0;
+                md.dims[i] = dim_sizes[i];
+            }
+            md.layout_desc.blocking.offset_padding = 0;
+            break;
+        default:
+            MKL_CHECK(mkldnn_memory_desc_init(&md, ndims, dim_sizes, data_type, fmt));
+    }
+    MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd, &md, engine));
+    return pd;
+}
+
 void create_mkldnn_tensor(int ndims, const int* dim_sizes,
                           mkldnn_data_type_t data_type,
                           mkldnn_memory_format_t fmt,
@@ -267,7 +299,7 @@ void cleanup_mkldnn(mkldnn_netlist_t mkldnn_net) {
 mkldnn_primitive_desc_t query_opkernel_layout(mkldnn_opkernel_t opkernel, int index) {
     assert (index < opkernel->num_outputs);
     mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
-    if (md.format == mkldnn_x || md.format == mkldnn_ihwo || md.format == mkldnn_chwn) { // Native formats
+    if (md.format == mkldnn_x || md.format == mkldnn_ihwo || md.format == mkldnn_chwn || md.format == mkldnn_nc) { // Native formats
         return NULL;
     } else {
         return opkernel->outputs[index].desc;

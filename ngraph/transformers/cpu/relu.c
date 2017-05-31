@@ -88,7 +88,7 @@ void create_mkldnn_relu_bprop_kernel(
     if (input_fprop_src_pd && input_error_pd) {
         mkldnn_memory_desc_fprop_src_md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_fprop_src_pd));
         mkldnn_memory_desc_src_md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_error_pd));
-        prim_md = mkldnn_memory_desc_src_md;
+        prim_md = mkldnn_memory_desc_fprop_src_md;
     } else if (input_fprop_src_pd) {
         // fprop_src - MKL 5-D, error - 1D, dst - 5D MKL
         mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d((const_mkldnn_primitive_desc_t)input_fprop_src_pd));

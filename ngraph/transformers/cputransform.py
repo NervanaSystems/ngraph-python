@@ -42,7 +42,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
-from ngraph.transformers.passes.cpufusion import CPUFusion, FusionPass
+from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
@@ -371,16 +371,6 @@ class CPUCodeGenerator(PyGen):
     def allocate_op(self, op, arrO, arrI):
         self.pool_params[op.name] = op.pool_params
         self.pool_slices[op.name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
-
-    @allocate_op.on_type(DotLowDimension)
-    def allocate_op(self, op, out, x, y):
-        self.append("mkldnn.init_innerproduct_fprop('{}', out={}, x={}, y={})",
-                    op.name, out, x, y)
-
-    @allocate_op.on_type(Add)
-    def allocate_op(self, op, out, x, y):
-        self.append("mkldnn.init_elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
-                    op.name, x, y, out)
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -714,8 +704,7 @@ class CPUTransformer(Transformer):
         self.rng_seed = None
         self.initialize_mkldnn()
         add_layout_conversion = AddLayoutConversions(None)
-        self.graph_passes = [FusionPass(),
-                             CPUFusion(),
+        self.graph_passes = [CPUFusion(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
