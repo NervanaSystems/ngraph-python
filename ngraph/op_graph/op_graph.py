@@ -784,7 +784,7 @@ def set_item(tensor, item, value):
         if not isinstance(sl, slice):
             sl = slice(sl)
         start, end, step = sl.indices(l)
-        if step < -1:
+        if step <= 0:
             raise ValueError('Invalid slice in item {}'.format(item))
     return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
@@ -2485,6 +2485,7 @@ class ConcatOp(SequentialOp):
 
         slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
+        sets = []
         ops = []
         for ii, (x, ax) in enumerate(zip(self.x_list, axis_list)):
             if len(x.axes - common_axes) > 1:
@@ -2492,11 +2493,14 @@ class ConcatOp(SequentialOp):
                                    " other tensors".format(ii))
             if ax.length is None:
                 raise RuntimeError("Tensor {} axis must have a specified length".format(ii))
-            ops.append(set_item(self.storage,
-                                [slice(start, start + ax.length)] + slices,
-                                axes_with_order(x, [ax] + list(storage_axes[1:]))))
+            sets.append(
+                ([slice(start, start + ax.length)] + slices,
+                 axes_with_order(x, [ax] + list(storage_axes[1:])))
+            )
             start += ax.length
         concat_axis.length = start
+        for item, value in sets:
+            ops.append(set_item(self.storage, item, value))
         self.ops = [
             doall(ops),
             axes_with_order(self.storage, result_axes)
