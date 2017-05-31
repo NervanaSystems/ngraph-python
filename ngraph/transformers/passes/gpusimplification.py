@@ -39,12 +39,9 @@ class GPUSubstitution(PeepholeGraphPass):
 
     @visit.on_type(AssignOp)
     def visit(self, op):
-        tensor = op.args[0]
-        value = op.args[1]
-        if not isinstance(tensor, TensorSliceOp):
-            return
-        slices = tensor.slices
-        tensor = tensor.args[0]
+        lvalue = op.args[0]
+        rvalue = op.args[1]
+        slices = lvalue.slices
         new_slices = []
         copy_slices = []
         flip = False
@@ -59,8 +56,8 @@ class GPUSubstitution(PeepholeGraphPass):
             else:
                 new_slices.append(s)
         if flip:
-            new_value = tensor_slice(value, copy_slices)
-            dest = tensor_slice(tensor, new_slices, axes=new_value.axes)
+            new_value = tensor_slice(rvalue, copy_slices)
+            dest = tensor_slice(lvalue, new_slices, axes=new_value.axes)
             new_op = CPUAssignOp(dest, new_value)
             self.replace_op(op, new_op)
 

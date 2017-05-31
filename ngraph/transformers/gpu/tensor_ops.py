@@ -721,7 +721,6 @@ class CPUAssignKernel(GPUKernel):
 
     def __init__(self, transformer, op):
         super(CPUAssignKernel, self).__init__(transformer)
-
         self.lvalue, self.rvalue = (_ for _ in op.call_info())
         self.kernel = None
 
