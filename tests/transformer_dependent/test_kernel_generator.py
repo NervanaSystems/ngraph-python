@@ -19,8 +19,7 @@ import ngraph as ng
 
 from ngraph.testing import executor, ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
 @pytest.fixture(scope='module', params=[
@@ -55,6 +54,7 @@ def test_exit_condition(transformer_factory):
         np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
 
+@pytest.mark.flex_disabled
 def test_4d_elementwise(transformer_factory, input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))
@@ -69,6 +69,7 @@ def test_4d_elementwise(transformer_factory, input_axes):
     np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
 
+@pytest.mark.flex_disabled
 def test_4d_reduction(transformer_factory, input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     x = ng.constant(x_val, input_axes)
@@ -84,6 +85,7 @@ def test_4d_reduction(transformer_factory, input_axes):
         np.testing.assert_allclose(graph_val2, np_val2, rtol=1e-4)
 
 
+@pytest.mark.flex_disabled
 def test_4d_chained(transformer_factory, input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))
@@ -99,6 +101,7 @@ def test_4d_chained(transformer_factory, input_axes):
     np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
 
+@pytest.mark.flex_disabled
 def test_kernel_cache(transformer_factory):
     X = ng.make_axis(32)
     Y = ng.make_axis(32)
