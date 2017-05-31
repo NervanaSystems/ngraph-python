@@ -1497,7 +1497,7 @@ class PatternSkipOp(TensorOp):
 
 class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
     """
-    An op that changes how a tensor is indexed; i.e. get a view of the same tensor.
+    An base class for ops that change how a tensor is indexed; i.e. get a view of the same tensor.
 
     Arguments:
         x: A view of a tensor.

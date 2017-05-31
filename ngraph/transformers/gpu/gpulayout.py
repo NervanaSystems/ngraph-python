@@ -16,7 +16,7 @@ import numpy as np
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
-    IndexOp, TensorValueOp, AssignableTensorOp, tdcache
+    IndexOp, TensorValueOp, AssignableTensorOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes, make_axes
