@@ -32,22 +32,29 @@ SLEEP_S = 0.1
 ITEMS_PER_THREAD = 32
 
 
-def set_ipc_handle(op, shared_queue, handle):
+def set_ipc_handle(op, shared_queue, handle, local=False):
     lock = drv.mem_alloc(1)
     drv.memset_d8(lock, 0, 1)
-    buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
-    lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
-    shared_queue.put((buf_ipc_hdl, lock_ipc_hdl))
+    if local:
+        buf_ipc_hdl = int(handle)
+        lock_ipc_hdl = int(lock)
+    else:
+        buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
+        lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
+    shared_queue.put((local, buf_ipc_hdl, lock_ipc_hdl))
     return (lock)
 
 
 def open_ipc_handle(shared_queue):
     while True:
         try:
-            (buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
-            buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
-            lock = drv.IPCMemoryHandle(lock_ipc_hdl)
-            return (buf_hdl, lock)
+            (is_local, buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
+            if is_local:
+                return buf_ipc_hdl, lock_ipc_hdl
+            else:
+                buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
+                lock = drv.IPCMemoryHandle(lock_ipc_hdl)
+                return (buf_hdl, lock)
         except Exception as e:
             if isinstance(e, Empty):
                 pass
@@ -304,14 +311,18 @@ class CudaScatterSendKernel(GPUKernel):
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
+        # if input buffer changes we need to make sure to set new ipc handle and
+        # signal the recv kernel to get the new ipc handle.
+        # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
         self.send_ready = list()
-        for i in range(len(self.op.to_id)):
+        for i, to_id in enumerate(self.op.to_id):
             self.send_ready.append(
                 set_ipc_handle(
                     self.op,
                     self.op._shared_queues[i],
-                    self.tensor.tensor.gpudata))
+                    self.tensor.tensor.gpudata,
+                    local=self.op.metadata['device_id'] == int(to_id)))
 
     def execute(self):
         for i in range(len(self.op.to_id)):
@@ -324,11 +335,18 @@ class CudaScatterRecvKernel(GPUKernel):
         super(CudaScatterRecvKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
-        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(op._shared_queues[op.idx])
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
+        # get a handle to the send-buffer in our corresponding send-op using the shared queue
+        # In the case where sender/recvr are in the same cpu process,
+        # avoid IPC and pass the direct pointer through the shared q.
+        # since sender/recvr are in the same process in this case,
+        # set_ipc_handle must be called before open_ipc_handle to avoid a hang,
+        # hence doing set_ in bind_buffers and open_ in execute.
+        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues
+                                                                 [self.op.idx])
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -350,16 +368,23 @@ class CudaGatherSendKernel(GPUKernel):
         super(CudaGatherSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
-        (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(op._shared_queues[op.idx])
+        self.recvr_buf = None
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherSendKernel, self).bind_buffers()
-        chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-        self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
     def execute(self):
+        if self.recvr_buf is None:
+            # set_ipc_handle must be called before open_ipc_handle in certain cases to avoid a
+            # hang, hence calling set_ in bind_buffers and open_ in execute.
+            # See corresponding comment in ScatterRecv kernel for details.
+            (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues
+                                                                   [self.op.idx])
+            chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+            self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+
         # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
         # is least contiguous.
         drv.memcpy_dtod(
@@ -377,16 +402,17 @@ class CudaGatherRecvKernel(GPUKernel):
         self.tensor = op.tensor_description()
 
     def bind_buffers(self):
+        super(CudaGatherRecvKernel, self).bind_buffers()
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        super(CudaGatherRecvKernel, self).bind_buffers()
         self.sender_ready = list()
-        for i in range(len(self.op.from_id)):
+        for i, from_id in enumerate(self.op.from_id):
             self.sender_ready.append(
                 set_ipc_handle(
                     self.op,
                     self.op._shared_queues[i],
-                    self.tensor.tensor.gpudata))
+                    self.tensor.tensor.gpudata,
+                    local=int(from_id) == self.op.metadata['device_id']))
 
     def execute(self):
         for i in range(len(self.op.from_id)):
@@ -445,9 +471,9 @@ class CudaAllReduceKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaAllReduceKernel, self).bind_buffers()
-        self.input_tensor = self.op.args[0].value
+        self.input_tensor = self.tensor_view_from_td(self.op.args[0].tensor_description())
 
     def execute(self):
         ndevs = len(self.op.device_ids)
@@ -473,24 +499,25 @@ class CudaAllReduceKernel(GPUKernel):
             size * dtype.itemsize)
 
         # Send each GPU its assigned segment
-        for peer_id in range(ndevs):
+        device_idx = self.op.device_ids.index(self.device_id)
+        for peer_idx, peer_id in enumerate(self.op.device_ids):
             if (peer_id == self.device_id):
                 continue
 
             # Only send if peer is active
-            if (peer_id >= num_active):
+            if (peer_idx >= num_active):
                 continue
 
             # Compute size and offset of this peer's segment
             peer_segment_size = segment_size
-            peer_segment_offset = peer_id * segment_size
+            peer_segment_offset = peer_idx * segment_size
 
-            if (self.device_id > peer_id):
-                peer_scratch_offset = segment_size * (self.device_id - 1)
+            if (device_idx > peer_idx):
+                peer_scratch_offset = segment_size * (device_idx - 1)
             else:
-                peer_scratch_offset = segment_size * self.device_id
+                peer_scratch_offset = segment_size * device_idx
 
-            if ((peer_id + 1) == num_active):
+            if ((peer_idx + 1) == num_active):
                 peer_segment_size = size - peer_segment_offset
 
             # Enqueue peer to peer memcpy
@@ -515,9 +542,9 @@ class CudaAllReduceKernel(GPUKernel):
                 continue
             self.stream.wait_for_event(self.event_buff_dict[peer_id])
 
-        segment_offset = self.device_id * segment_size
+        segment_offset = device_idx * segment_size
         this_segment_size = segment_size
-        if ((self.device_id + 1) == num_active):
+        if ((device_idx + 1) == num_active):
             this_segment_size = size - segment_offset
 
         src = int(self.output_buff_dict.get(self.device_id)) + \
@@ -530,7 +557,7 @@ class CudaAllReduceKernel(GPUKernel):
             grid_size += 1
 
             # Perform reduction operation
-            if (self.device_id < num_active):
+            if (device_idx < num_active):
                 num_arrays = ndevs - 1
                 params = [src, self.scratch_buff_dict[self.device_id],
                           this_segment_size, num_arrays, segment_size]
