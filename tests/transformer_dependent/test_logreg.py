@@ -19,8 +19,7 @@ import ngraph as ng
 from ngraph.testing import ExecutorFactory
 import pytest
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
 class NumpyLogreg(object):
