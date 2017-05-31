@@ -30,7 +30,7 @@ from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Affine, Preprocess, Sequential
-from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic,GradientDescentMomentum
+from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator

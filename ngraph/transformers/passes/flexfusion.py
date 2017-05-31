@@ -22,7 +22,6 @@ class FlexFusion(GraphRewritePass):
         sigmoid_op = ng.sigmoid(x)
         return sigmoid_op
 
-
     def fuse_sigmoid_callback(self, op, label_map_op_list):
         """
         Callback function that handles fusion for sigmoid  pattern
@@ -30,9 +29,8 @@ class FlexFusion(GraphRewritePass):
         for (label_map, op) in label_map_op_list:
             # Matched Sigmoid pattern, do the replacement here.
             x = label_map[self.sigmoid_x_label]
-            sigmoid_atomic_op =  ng.sigmoidAtomic(x)
+            sigmoid_atomic_op = ng.sigmoidAtomic(x)
             self.replace_op(op, sigmoid_atomic_op)
-
 
     def construct_ce_binnary_inner_pattern(self):
         """
@@ -58,7 +56,6 @@ class FlexFusion(GraphRewritePass):
         cross_op = ng.cross_entropy_binary_inner(y, t, enable_sig_opt=True, enable_diff_opt=True)
         return cross_op
 
-
     def fuse_ce_binnary_inner_callback(self, op, label_map_op_list):
         """
         Callback function that handles fusion for cross_entropy_binnary_inner pattern
@@ -69,9 +66,8 @@ class FlexFusion(GraphRewritePass):
             t = label_map[self.ce_t_label]
 
             cross_without_opt_op = ng.cross_entropy_binary_inner(y, t, enable_sig_opt=False,
-                                                     enable_diff_opt=True)
+                                                                 enable_diff_opt=True)
             self.replace_op(op, cross_without_opt_op)
-
 
     def __init__(self):
         # Register Sigmoid pattern
@@ -81,4 +77,3 @@ class FlexFusion(GraphRewritePass):
         # Register cross_entropy_binnary_inner pattern
         pattern_ce_binnary_inner = self.construct_ce_binnary_inner_pattern()
         self.register_pattern(pattern_ce_binnary_inner, self.fuse_ce_binnary_inner_callback)
-
