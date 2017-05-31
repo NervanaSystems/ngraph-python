@@ -734,6 +734,13 @@ class CPUTransformer(ComputationGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
+    import imp
+    try:
+        imp.find_module('mlsl')
+        use_mlsl = True
+    except ImportError:
+        use_mlsl = False
+
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
         self.current_computation = None
@@ -779,6 +786,10 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
+try:
+    import mlsl
+except ImportError:
+    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -791,6 +802,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
         self.code.execute("mkldnn.open()")
+        if self.use_mlsl:
+            self.code.execute("mlsl_obj = mlsl.MLSL()")
+            self.code.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -881,6 +895,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
             try:
                 if self.code.globals.get('mkldnn', None) is not None:
                     self.code.execute('mkldnn.close()')
+                if self.code.globals.get('mlsl_obj', None) is not None:
+                    self.code.execute('mlsl_obj.finalize()')
             except TypeError:
                 pass
         self.code = None
