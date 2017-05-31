@@ -109,7 +109,7 @@ class CPUFusion(GraphRewritePass):
             x = label_map[self.relu_bwd_x_label]
             delta = label_map[self.relu_bwd_delta_label]
             relu_fprop = self.tensor_to_op_dict[x]
-        self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
+            self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
     def construct_batchnorm_fprop_pattern(self):
         """
@@ -139,8 +139,7 @@ class CPUFusion(GraphRewritePass):
         mean = PatternLabelOp(self.batchnorm_fprop_mean_label,
                               (lambda op: isinstance(op, BroadcastOp)))
 
-        # construct the batchnorm pattren "
-
+        # construct the fprop batchnorm pattern matching the computation graph
         # ng.sqrt(xvar + self.eps)
         SqrtofVarianceAndEps = ng.sqrt(ng.add(variance, epsilon))
         # ng.reciprocal(ng.sqrt(xvar + self.eps))
