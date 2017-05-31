@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from mnist import MNIST
-from cifar10 import CIFAR10
-from ptb import PTB
-from imdb import IMDB
+from ngraph.frontends.neon.data.mnist import MNIST
+from ngraph.frontends.neon.data.cifar10 import CIFAR10
+from ngraph.frontends.neon.data.ptb import PTB
+from ngraph.frontends.neon.data.imdb import IMDB
