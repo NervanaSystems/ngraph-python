@@ -119,11 +119,11 @@ class CPUFusion(GraphRewritePass):
             # Matched bprop batchnorm pattern, do the replacement here.
             input_tensor = label_map[self.batchnorm_bprop_input_tensor]
             delta = label_map[self.batchnorm_bprop_delta]
-            if input_tensor in FusionPass.fprop_batchnorm_dict:
-                batchnorm_fprop = FusionPass.fprop_batchnorm_dict[input_tensor]
+            if input_tensor in self.tensor_to_op_dict:
+                batchnorm_fprop = self.tensor_to_op_dict[input_tensor]
+                self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
             else:
                 assert("No matching fprop BatchnormOp for the input_tensor {}".format(input_tensor) )
-            self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
 
     def construct_batchnorm_bprop_pattern(self):
         """
