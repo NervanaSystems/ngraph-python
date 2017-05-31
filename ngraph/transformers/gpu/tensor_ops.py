@@ -640,21 +640,6 @@ class RngFillKernel(GPUKernel):
             self.out[:] = self.out * self.params['scale'] + self.params['loc']
 
 
-class CPUAssignKernel(GPUKernel):
-    """
-    Kernel used to assign one tensor to another when a device copy is not available,
-    """
-
-    def __init__(self, transformer, op):
-        super(CPUAssignKernel, self).__init__(transformer)
-
-        self.lvalue, self.rvalue = (_ for _ in op.call_info())
-        self.kernel = None
-
-    def bind_buffers(self):
-
-
-
 class SetItemKernel(GPUKernel):
     """
     Kernel used set all or part of a tensor with a value. Value can be

@@ -779,6 +779,13 @@ def assign(lvalue, rvalue):
 
 
 def set_item(tensor, item, value):
+    shape = tensor.tensor_description().shape
+    for sl, l in zip(item, shape):
+        if not isinstance(sl, slice):
+            sl = slice(sl)
+        start, end, step = sl.indices(l)
+        if step < -1:
+            raise ValueError('Invalid slice in item {}'.format(item))
     return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
 
