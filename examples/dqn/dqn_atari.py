@@ -121,7 +121,6 @@ def RepeatWrapper(frames=4):
         def __init__(self, env):
             super(RepeatWrapper, self).__init__(env)
             self.frames = frames
-            self.history = []
 
             # todo: this shouldn't always be a box, low and high aren't
             #       always 0 and 1

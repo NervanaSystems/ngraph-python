@@ -237,7 +237,10 @@ class Agent(object):
             self._update
 
     def _update(self):
-        if len(self.memory) < self.batch_size:
+        # only attempt to sample if our memory has at least one more record
+        # then our batch size.  we need one extra because we need to sample
+        # state as well as next_state which will overlap for all but one record
+        if len(self.memory) <= self.batch_size + 1:
             return
 
         states = []
@@ -322,11 +325,12 @@ class RepeatMemory(object):
 
     def _check_record(self, record):
         # assume for now that the batch axis is at the end
-        if not (record['state'][1:, ...] == record['next_state'][:-1, ...]
-                ).all():
+        if not np.allclose(
+                record['state'][1:, ...], record['next_state'][:-1, ...]
+        ):
             raise ValueError((
                 'expected state and next_state to differ by first frame and'
-                'last frame respectively.  found: state: {} next_state: {}'
+                'last frame respectively.  found: state: {}\nnext_state: {}'
             ).format(
                 record['state'][1:, ...],
                 record['next_state'][:-1, ...],

@@ -15,6 +15,7 @@ def rl_loop(environment, agent, episodes, render=False):
         done = False
         step = 0
         total_reward = 0
+        trigger_evaluation = False
         while not done:
             if render:
                 environment.render()
@@ -28,12 +29,8 @@ def rl_loop(environment, agent, episodes, render=False):
             total_steps += 1
             total_reward += reward
 
-            if total_steps % 50000:
-                print(
-                    'evaluation episode total reward: {}'.format(
-                        evaluate_single_episode(environment, agent, render)
-                    )
-                )
+            if total_steps % 50000 == 0:
+                trigger_evaluation = True
 
         agent.end_of_episode()
         print(
@@ -42,6 +39,15 @@ def rl_loop(environment, agent, episodes, render=False):
                 episode, total_steps, step, reward, total_reward
             )
         )
+
+        if trigger_evaluation:
+            trigger_evaluation = False
+            print(
+                'evaluation episode. total_steps: {}, total reward: {}'.format(
+                    total_steps,
+                    evaluate_single_episode(environment, agent, render)
+                )
+            )
 
 
 def evaluate_single_episode(environment, agent, render=False):
