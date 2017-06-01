@@ -25,8 +25,8 @@ void create_mkldnn_innerproduct_fprop_kernel(
         mkldnn_primitive_desc_t bias_pd,
         mkldnn_data_type_t data_type,
         mkldnn_opkernel_t opkernel) {
-    assert(src_dims == 2);
-    assert(weights_dims == 2);
+    //assert(src_dims == 2);
+    //assert(weights_dims == 2);
     //assert(bias_dims == src_dims);
 
     // Let MKL pick the best format (mkldnn_any)
@@ -92,7 +92,7 @@ void create_mkldnn_innerproduct_fprop_kernel(
                             engine, &(opkernel->inputs[1]));
     } else {
         create_mkldnn_tensor(weights_dims, weights_sizes, data_type,
-                            mkldnn_io, engine, &(opkernel->inputs[1]));
+                            mkldnn_oi, engine, &(opkernel->inputs[1]));
     }
     mkldnn_memory_desc_t output_md =
                         *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);

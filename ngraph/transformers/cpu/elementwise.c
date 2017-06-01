@@ -17,7 +17,7 @@
 #include "mkldnn_util.h"
 
 /* Create list of mkldnn primitives to run elelment Wise add primitive  */
-mkldnn_netlist_t create_mkldnn_add_kernel(
+void create_mkldnn_add_kernel(
     mkldnn_engine_t engine,
     int src1_dims, int src2_dims, int dst_dims,
     int* src1_sizes, int* src2_sizes, int* dst_sizes,

@@ -703,11 +703,12 @@ class CPUTransformer(Transformer):
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
-                             CPUTensorShaping(),
-                             MklCreateOpDescriptors(self.mkldnn),
-                             MklAddLayoutConversions(self.mkldnn, add_layout_conversion)
-                             #,VizPass(show_axes=True,view=False)
+                             CPUTensorShaping()
                              ]
+        if self.mkldnn.mkldnn_enabled:
+          self.graph_passes.append(MklCreateOpDescriptors(self.mkldnn)),
+          self.graph_passes.append(MklAddLayoutConversions(self.mkldnn, add_layout_conversion))
+        #self.graph_passes.append([VizPass(show_axes=True,view=False)])
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
