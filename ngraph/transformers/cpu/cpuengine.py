@@ -38,8 +38,9 @@ class Mkldnn(object):
             'nchw' : 5,    
             'chwn' : 7,
         }
-        self.kernels = dict()
-        self.op_layouts = dict()
+        self.kernels = dict()        # MKL Op kernels
+        self.op_layouts = dict()     # Layout objects for MKL tensors
+        self.native_layouts = dict() # Layout objects for Non-MKL tensors
         try:
             self.mkldnn_engine_dll = ctypes.CDLL(engine_path)
             self.mkldnn_enabled = True
@@ -66,10 +67,6 @@ class Mkldnn(object):
                                 ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, 
                                 ctypes.c_int]
             self.create_layout_pd.restype = ctypes.c_void_p
-
-            self.query_prim_layout_fn = self.mkldnn_engine_dll.query_prim_layout
-            self.query_prim_layout_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            self.query_prim_layout_fn.restype = ctypes.c_void_p
 
             self.output_layout = self.mkldnn_engine_dll.query_opkernel_layout
             self.output_layout.argtypes = [ctypes.c_void_p, ctypes.c_int]
@@ -187,12 +184,10 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
             
-            self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
-            self.cleanup_mkldnn_fn.argtypes = [ctypes.c_void_p]
-
             self.delete_opkernel = self.mkldnn_engine_dll.delete_mkldnn_opkernel
             self.delete_opkernel.argtypes = [ctypes.c_void_p]
-
+            self.delete_layout = self.mkldnn_engine_dll.delete_mkldnn_layout
+            self.delete_layout.argtypes = [ctypes.c_void_p]
             self.destroy_mkldnn_engine_fn = self.mkldnn_engine_dll.destroy_mkldnn_engine
             self.destroy_mkldnn_engine_fn.argtypes = [ctypes.c_void_p]
 
@@ -204,8 +199,9 @@ class Mkldnn(object):
     def close(self):
         if (self.mkldnn_engine_initialized):
             for op in self.kernels:
-                if self.kernels[op]:
-                    self.delete_opkernel(self.kernels[op])
+                self.delete_opkernel(self.kernels[op])
+            for td in self.native_layouts:
+                self.delete_layout(self.native_layouts[td])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 

@@ -48,14 +48,5 @@ void create_mkldnn_reorder_primitive(
     mkldnn_primitive_t *reorder      /** out: reorder primitive created */
     );
 
-mkldnn_netlist_t create_mkldnn_netlist(void);
-
-void destroy_mkldnn_netlist(mkldnn_netlist_t mkldnn_net);
-
 void destroy_mkldnn_engine(mkldnn_engine_t engine);
-
-void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net, int verbose);
-
-void cleanup_mkldnn(mkldnn_netlist_t mkldnn_net);
-
 #endif

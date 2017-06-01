@@ -150,32 +150,8 @@ mkldnn_opkernel_t create_empty_kernel(int id) {
     return op_kernel;
 }
 
-mkldnn_netlist_t create_mkldnn_netlist(void) {
-  mkldnn_netlist_t mkldnn_net =
-      (mkldnn_netlist_t)malloc(sizeof(struct mkldnn_netlist));
-  mkldnn_net->net_size = 0;
-  mkldnn_net->prim_desc_count = 0;
-  mkldnn_net->prim_layouts_count = 0;
-  mkldnn_net->prim_count = 0;
-  mkldnn_net->buffer_count = 0;
-
-  return mkldnn_net;
-}
-
-void destroy_mkldnn_netlist(mkldnn_netlist_t mkldnn_net) {
-  for (int i = 0; i < mkldnn_net->prim_desc_count; i++) {
-    MKL_CHECK(mkldnn_primitive_desc_destroy(mkldnn_net->prim_desc_list[i]));
-  }
-
-  for (int i = 0; i < mkldnn_net->prim_count; i++) {
-    MKL_CHECK(mkldnn_primitive_destroy(mkldnn_net->prim_list[i]));
-  }
-
-  for (int i = 0; i < mkldnn_net->buffer_count; i++) {
-    free(mkldnn_net->buffer_list[i]);
-  }
-
-  free(mkldnn_net);
+void delete_mkldnn_layout(mkldnn_primitive_desc_t* pd) {
+    MKL_CHECK(mkldnn_primitive_desc_destroy(pd));
 }
 
 void delete_mkldnn_tensor(mkldnn_tensor* tensor) {
@@ -267,35 +243,6 @@ void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel, int verbose) {
   }
 }
 
-void run_mkldnn_netlist(mkldnn_netlist_t mkldnn_net, int verbose) {
-  struct timespec start, end;
-  if (verbose) {
-      clock_gettime(CLOCK_REALTIME, &start);
-  }
-  MKL_CHECK(mkldnn_stream_create(&mkldnn_net->stream, mkldnn_eager));
-  mkldnn_primitive_t error_primitive;
-  mkldnn_status_t s =
-      mkldnn_stream_submit(mkldnn_net->stream, mkldnn_net->net_size,
-                           mkldnn_net->net, &error_primitive);
-  if (s != mkldnn_success) {
-    printf(
-        "[%s:%d] error: mkldnn_stream_submit returns %d, error_primitive: %p\n",
-        __FILE__, __LINE__, s, error_primitive);
-    exit(2);
-  }
-  MKL_CHECK(mkldnn_stream_wait(mkldnn_net->stream, mkldnn_net->net_size, NULL));
-  MKL_CHECK(mkldnn_stream_destroy(mkldnn_net->stream));
-  if (verbose) {
-      clock_gettime(CLOCK_REALTIME, &end);
-      printf("\nNetlist         start: %lld.%lld s end: %lld.%lld s time_taken: %.2f ms",
-     			start.tv_sec, start.tv_nsec, end.tv_sec,end.tv_nsec, (end.tv_sec - start.tv_sec) * 1000 + ((double)(end.tv_nsec - start.tv_nsec)) / 1000000);
-  }
-}
-
-void cleanup_mkldnn(mkldnn_netlist_t mkldnn_net) {
-  destroy_mkldnn_netlist(mkldnn_net);
-}
-
 mkldnn_primitive_desc_t query_opkernel_layout(mkldnn_opkernel_t opkernel, int index) {
     assert (index < opkernel->num_outputs);
     mkldnn_memory_desc_t md = *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
@@ -304,10 +251,6 @@ mkldnn_primitive_desc_t query_opkernel_layout(mkldnn_opkernel_t opkernel, int in
     } else {
         return opkernel->outputs[index].desc;
     }
-}
-
-mkldnn_primitive_desc_t query_prim_layout(mkldnn_netlist_t mkldnn_net, int index) {
-  return mkldnn_net->prim_layouts[index];
 }
 
 int compare_layouts(mkldnn_primitive_desc_t a, mkldnn_primitive_desc_t b) {

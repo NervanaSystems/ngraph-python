@@ -17,7 +17,7 @@
 #include "mkldnn_util.h"
 
 /* Create list of mkldnn primitives to run batch norm fprop */
-mkldnn_netlist_t create_mkldnn_batchnorm_fprop_primitives(
+void create_mkldnn_batchnorm_fprop_primitives(
     mkldnn_engine_t engine,
     int src_dims, int weights_dims, int dest_dims,int mean_sizes, int variance_sizes,
     int *batchnorm_src_sizes, int *batchnorm_weights_sizes,

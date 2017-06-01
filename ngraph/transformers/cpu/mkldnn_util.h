@@ -23,7 +23,6 @@
 
 #include "mkldnn.h"
 
-#define MKLDNN_NETLIST_MAX_SIZE 10
 #define MKLDNN_MAX_ARGS 8
 
 typedef struct {
@@ -56,24 +55,6 @@ struct mkldnn_opkernel {
 };
 
 typedef struct mkldnn_opkernel* mkldnn_opkernel_t;
-
-struct mkldnn_netlist {
-  mkldnn_stream_t stream;
-  int net_size;
-  mkldnn_primitive_t net[MKLDNN_NETLIST_MAX_SIZE];
-  int prim_desc_count;
-  int prim_count;
-  int buffer_count;
-  int prim_layouts_count;
-  mkldnn_primitive_desc_t prim_desc_list[3 * MKLDNN_NETLIST_MAX_SIZE];
-  mkldnn_primitive_t prim_list[3 * MKLDNN_NETLIST_MAX_SIZE];
-  mkldnn_primitive_desc_t prim_layouts[3*MKLDNN_NETLIST_MAX_SIZE];
-  float* buffer_list[MKLDNN_NETLIST_MAX_SIZE];
-  mkldnn_primitive_desc_t fwd_desc;
-  float * fprop_src_addr;
-};
-
-typedef struct mkldnn_netlist* mkldnn_netlist_t;
 
 #define MKL_CHECK(f)                                                       \
   do {                                                                     \

@@ -102,7 +102,7 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     mkldnn.mkldnn_engine,
     len(mkl_shape), mkl_shape_arg,
     mkl_strides_arg, data_type, memory_format)
-  # TODO(jbobba): Figure out where to destroy the mkl layout object created here
+  mkldnn.native_layouts[td] = native_layout
   return (native_layout, mkl_axes)
 
 def get_mkl_layout(mkldnn, op, order, use_formats=False):
