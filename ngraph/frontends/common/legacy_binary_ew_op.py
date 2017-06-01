@@ -19,15 +19,15 @@ import ngraph as ng
 
 
 class LegacyOpsBinary():
-    def _element_wise_binary(self, ng_op, tf_node, inputs):
+    def _element_wise_binary(self, ng_op, inputs, name=None):
         """
         Element-wise binary operation with broadcast.
         Args:
             ng_op: ngraph Op to be applied.
-            tf_node: NodeDef object, the tensorflow node to convert.
             inputs: List of ngraph Ops as inputs to this node.
+            name: name of the ngraph op
         Returns:
-            A ngraph Op corresponding to the tensorflow node.
+            A ngraph Op corresponding to the element-wise binary op
         """
         # get inputs
         left, right = inputs
@@ -115,11 +115,11 @@ class LegacyOpsBinary():
         elif left_shape == right_shape:
             # cast right axes to be the same as left
             right = ng.cast_axes(right, left.axes)
-            result_op = ng_op(left, right).named(tf_node.name)
+            result_op = ng_op(left, right).named(name)
 
         else:
             # no need for casting
-            result_op = ng_op(left, right).named(tf_node.name)
+            result_op = ng_op(left, right).named(name)
 
         # return op
         return result_op
