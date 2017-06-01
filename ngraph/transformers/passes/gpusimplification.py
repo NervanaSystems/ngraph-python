@@ -37,53 +37,6 @@ class GPUSubstitution(PeepholeGraphPass):
         """
         pass
 
-    @visit.on_type(AssignOp)
-    def visit(self, op):
-        lvalue = op.args[0]
-        rvalue = op.args[1]
-        slices = lvalue.slices
-        new_slices = []
-        copy_slices = []
-        flip = False
-        for s in slices:
-            if isinstance(s, slice) and s.step is not None and s.step < 0:
-                new_slices.append(slice(s.start, s.stop, -s.step))
-                copy_slices.append(slice(None, None, -1))
-                flip = True
-            elif isinstance(s, slice):
-                copy_slices.append(slice(None))
-                new_slices.append(s)
-            else:
-                new_slices.append(s)
-        if flip:
-            new_value = tensor_slice(rvalue, copy_slices)
-            dest = tensor_slice(lvalue, new_slices, axes=new_value.axes)
-            new_op = CPUAssignOp(dest, new_value)
-            self.replace_op(op, new_op)
-
-    @visit.on_type(SetItemOp)
-    def visit(self, op):
-        # PyCuda cannot copy in opposite directions
-        tensor = op.args[0]
-        value = op.args[1]
-        slices = op.item
-        new_slices = []
-        copy_slices = []
-        flip = False
-        for s in slices:
-            if isinstance(s, slice) and s.step is not None and s.step < 0:
-                new_slices.append(slice(s.start, s.stop, -s.step))
-                copy_slices.append(slice(None, None, -1))
-                flip = True
-            elif isinstance(s, slice):
-                copy_slices.append(slice(None))
-                new_slices.append(s)
-            else:
-                new_slices.append(s)
-        if flip:
-            self.replace_op(op, SetItemOp(tensor, new_slices,
-                                          tensor_slice(value, copy_slices)))
-
     @visit.on_type(Fill)
     def visit(self, op):
         # Fill op must operate on contiguous tensor
