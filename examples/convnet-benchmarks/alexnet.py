@@ -26,7 +26,8 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from tqdm import tqdm
 
-from ngraph.frontends.neon import NgraphArgparser, ArrayIterator, GaussianInit
+from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
+from ngraph.frontends.neon import GaussianInit, UniformInit
 from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
 from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax
@@ -52,18 +53,26 @@ train_set = ArrayIterator(train_data,
 inputs = train_set.make_placeholders(include_iteration=True)
 ax.Y.length = 1000  # number of outputs of last layer.
 
+# weight initialization
+init = UniformInit(low=-0.08, high=0.08)
+
 # Setup model
 seq1 = Sequential([Convolution((11, 11, 64), filter_init=GaussianInit(var=0.01),
+                               bias_init=init,
                                activation=Rectlin(), padding=3, strides=4),
                    Pool2D(3, strides=2),
                    Convolution((5, 5, 192), filter_init=GaussianInit(var=0.01),
+                               bias_init=init,
                                activation=Rectlin(), padding=2),
                    Pool2D(3, strides=2),
                    Convolution((3, 3, 384), filter_init=GaussianInit(var=0.03),
+                               bias_init=init,
                                activation=Rectlin(), padding=1),
                    Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
+                               bias_init=init,
                                activation=Rectlin(), padding=1),
                    Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
+                               bias_init=init,
                                activation=Rectlin(), padding=1),
                    Pool2D(3, strides=2),
                    Affine(nout=4096, weight_init=GaussianInit(var=0.01),
