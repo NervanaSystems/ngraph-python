@@ -111,6 +111,67 @@ class CPUFusion(GraphRewritePass):
             relu_fprop = self.tensor_to_op_dict[x]
             self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
+    def construct_batchnorm_fprop_pattern(self):
+        """
+        Generate graph op that represents a pattern for batchnorm fprop operation.
+        self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta
+        Returns:
+               Single pattern that matches batchnorm fprop op
+        """
+        self.batchnorm_fprop_input_tensor_label = "in_obj"
+        self.batchnorm_fprop_gamma_label = "gamma"
+        self.batchnorm_fprop_beta_label = "beta"
+        self.batchnorm_fprop_variance_label = "variance"
+        self.batchnorm_fprop_epsilon_label = "epsilon"
+        self.batchnorm_fprop_mean_label = "mean"
+
+        # bind the label to the op's which needed to be updated in the dict
+        in_obj = PatternLabelOp(self.batchnorm_fprop_input_tensor_label,
+                                (lambda op: isinstance(op, Flatten)))
+        gamma = PatternLabelOp(self.batchnorm_fprop_gamma_label,
+                               (lambda op: isinstance(op, BroadcastOp)))
+        beta = PatternLabelOp(self.batchnorm_fprop_beta_label,
+                              (lambda op: isinstance(op, BroadcastOp)))
+        variance = PatternLabelOp(self.batchnorm_fprop_variance_label,
+                                  (lambda op: isinstance(op, Divide)))
+        epsilon = PatternLabelOp(self.batchnorm_fprop_epsilon_label,
+                                 (lambda op: isinstance(op, BroadcastOp)))
+        mean = PatternLabelOp(self.batchnorm_fprop_mean_label,
+                              (lambda op: isinstance(op, BroadcastOp)))
+
+        # construct the fprop batchnorm pattern matching the computation graph
+        # ng.sqrt(xvar + self.eps)
+        SqrtofVarianceAndEps = ng.sqrt(ng.add(variance, epsilon))
+        # ng.reciprocal(ng.sqrt(xvar + self.eps))
+        reciprocal_op = ng.reciprocal(SqrtofVarianceAndEps)
+        reciprocal_op_w_braodcast = ng.PatternSkipOp(reciprocal_op,
+                                                     lambda op: isinstance(op, BroadcastOp))
+        # (in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))
+        mul_op_1 = ng.multiply(ng.subtract(in_obj, mean), reciprocal_op_w_braodcast)
+        # "self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps)))
+        MultiplyGamma = ng.multiply(mul_op_1, gamma)
+        # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta
+        AddBeta = ng.Add(MultiplyGamma, beta)
+        return AddBeta
+
+    def fuse_batchnorm_fprop_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for batchnorm fprop pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            # Matched bprop batchnorm pattern, do the replacement here.
+            inputs = label_map[self.batchnorm_fprop_input_tensor_label]
+            gamma = label_map[self.batchnorm_fprop_gamma_label]
+            beta = label_map[self.batchnorm_fprop_beta_label]
+            variance = label_map[self.batchnorm_fprop_variance_label]
+            mean = label_map[self.batchnorm_fprop_mean_label]
+            epsilon = label_map[self.batchnorm_fprop_epsilon_label].args[0].tensor.const
+            batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
+
+            # book keep the fprop batchnorm op to use during back propogation
+            self.tensor_to_op_dict[inputs] = batchnorm_fwd_op
+            self.replace_op(op, batchnorm_fwd_op)
+
     def __init__(self):
         self.tensor_to_op_dict = dict()
 
@@ -122,132 +183,6 @@ class CPUFusion(GraphRewritePass):
         pattern_relu_bprop = self.construct_relu_bprop_pattern()
         self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)
 
-
-# Delete after moving Batchnorm to CPUFusion
-class FusionPass(PeepholeGraphPass):
-
-
-    @generic_method()
-    def visit(self, op):
-        """
-        Base case.
-        """
-        pass
-
-    def fuse_fprop_batch_norm(self, dict_ops_to_params, op):
-        inputs = dict_ops_to_params["in_obj"]
-        gamma = dict_ops_to_params["gamma"]
-        bias = dict_ops_to_params["bias"]
-        variance = BroadcastOp(dict_ops_to_params["variance"], axes=inputs.axes)
-        epsilon = dict_ops_to_params["epsilon"].args[0].tensor.const
-        mean = BroadcastOp(dict_ops_to_params["mean"], axes=inputs.axes)
-        new_op = BatchnormOp(inputs, gamma, bias, epsilon, mean, variance)
-        self.replace_op(op, new_op)
-
-    def check_for_pattern(self, args1, args2, op_type1, op_type2):
-        """
-        check if the subgraph matches the expected pattren across all the inputs
-        """
-        if (isinstance(args1, op_type1) and isinstance(args2, op_type2)) or \
-                (isinstance(args1, op_type2) and isinstance(args2, op_type1)):
-            return True
-        else:
-            return False
-
-    def map_ops_to_batch_params(self, key, op, arg_list, op_dict):
-        """
-        For a given op, match the op.args to the corrosponding keywords in the arg_list
-        ex: if op = Add, op_dict["in_obj"] = FalttenOp; op_dict["mean"]=Divide
-        """
-        if len(arg_list) > 1:
-            if isinstance(op, Subtract):
-                if (isinstance(arg_list[0], Flatten)):
-                    op_dict[key[0]] = arg_list[0]
-                    op_dict[key[1]] = arg_list[1]
-                else:
-                    op_dict[key[1]] = arg_list[0]
-                    op_dict[key[0]] = arg_list[1]
-
-            elif isinstance(op, Add):
-                if (isinstance(arg_list[0], BinaryElementWiseOp)):
-                    op_dict[key[0]] = arg_list[1]
-                    op_dict[key[1]] = arg_list[0]
-                else:
-                    op_dict[key[0]] = arg_list[0]
-                    op_dict[key[1]] = arg_list[1]
-
-        else:
-            op_dict[key[0]] = arg_list[0]
-
-    @visit.on_type(Add)
-    def visit(self, op):
-        """
-        self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta
-        is fused to BatchNorm Op for IA transformer
-        """
-        # Op dictionary which maps between op and op type
-        keys = ["mean", "variance", "gamma", "bias", "in_obj", "epsilon"]
-        op_dict = {key: None for key in keys}
-        root_op = op
-
-        # queue to maintain the list of op's, op will be remove once it is visited
-        next_op = Queue()
-        next_op.append(op)
-
-        # keep track's of tree level
-        level = 0
-
-        # BFS to find if the sub graph matches the expected pattren
-        while next_op:
-            op = next_op.popleft()
-            op_args = op.args
-
-            if (isinstance(op, Add) and (level == 0)):
-                if (self.check_for_pattern(op_args[0], op_args[1], Multiply, BroadcastOp)):
-                    if isinstance(op_args[0], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["bias"], op, [op_args[1]], op_dict)
-                        next_op.append(op_args[0])
-                    elif isinstance(op_args[1], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["bias"], op, [op_args[0]], op_dict)
-                        next_op.append(op_args[1])
-                    level = level + 1
-
-            elif (isinstance(op, Multiply) and (level == 1)):
-                if (self.check_for_pattern(op_args[0], op_args[1], Multiply, BroadcastOp)):
-                    if isinstance(op_args[0], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["gamma"], op, [op_args[1]], op_dict)
-                        next_op.append(op_args[0])
-                    elif isinstance(op_args[1], BinaryElementWiseOp):
-                        self.map_ops_to_batch_params(["gamma"], op, [op_args[0]], op_dict)
-                        next_op.append(op_args[1])
-                    level = level + 1
-
-            elif ((level == 2) and isinstance(op, Multiply)):
-                if (self.check_for_pattern(op_args[0], op_args[1], Subtract, BroadcastOp)):
-                    next_op.append(op_args[0])
-                    next_op.append(op_args[1])
-                    level = level + 1
-
-            elif ((level == 3) and isinstance(op, Subtract)):
-                self.map_ops_to_batch_params(["in_obj", "mean"], op, [op_args[0], op_args[1]], op_dict)
-
-            elif ((level == 3) and isinstance(op, BroadcastOp)):
-                next_op.append(op_args[0])
-                level = level + 1
-
-            elif ((level == 4) and isinstance(op, ReciprocalOp)):
-                next_op.append(op_args[0])
-                level = level + 1
-
-            elif ((level == 5) and isinstance(op, SqrtOp)):
-                next_op.append(op_args[0])
-                level = level + 1
-
-            elif ((level == 6) and isinstance(op, Add)):
-                if (self.check_for_pattern(op_args[0], op_args[1], Divide, BroadcastOp)):
-                    self.map_ops_to_batch_params(["epsilon", "variance"], op, [op_args[0], op_args[1]], op_dict)
-                    level = level + 1
-
-        # if we reach the correct depth and all the pattern matches then fuse to form BatchnormOp
-        if (level == 7):
-            self.fuse_fprop_batch_norm(op_dict, root_op)
+        # Register batchnorm fprop pattern
+        pattern_batchnorm_fprop = self.construct_batchnorm_fprop_pattern()
+        self.register_pattern(pattern_batchnorm_fprop, self.fuse_batchnorm_fprop_callback)

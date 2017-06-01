@@ -213,16 +213,15 @@ class Mkldnn(object):
         if (self.mkldnn_enabled and name in self.kernels):
             weights = np.stack([gamma[:, 0], bias[:,0]])
             mean_ch = mean[:, 0]
-            variance_ch = variance[:, 0]
             self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], mean_ch.ctypes.data, 1)
-            self.set_input_tensor(self.kernels[name], variance_ch.ctypes.data, 2)
+            self.set_input_tensor(self.kernels[name], variance.ctypes.data, 2)
             self.set_input_tensor(self.kernels[name], weights.ctypes.data, 3)
             self.set_output_tensor(self.kernels[name], outputs.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
-            self.xhat = (inputs - mean) / np.sqrt(variance + epsilon)
+            self.xhat = (inputs - mean) / (np.sqrt(variance + epsilon))[:, None]
             self.batch_norm_output = gamma * self.xhat + bias
             np.copyto(outputs, self.batch_norm_output)
 

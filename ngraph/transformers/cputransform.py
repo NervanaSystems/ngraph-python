@@ -42,7 +42,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
-from ngraph.transformers.passes.cpufusion import CPUFusion, FusionPass
+from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
@@ -699,7 +699,6 @@ class CPUTransformer(Transformer):
         self.initialize_mkldnn()
         add_layout_conversion = AddLayoutConversions(None)
         self.graph_passes = [CPUFusion(),
-                             FusionPass(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),

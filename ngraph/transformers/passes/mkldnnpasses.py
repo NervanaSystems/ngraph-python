@@ -152,7 +152,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
             data_type = self.mkldnn.datatype[op.dtype.type]
             C, D, H, W, N = unflatten_inputs.axes.lengths
-            inputs_shape = (C, H, W, N)
+            inputs_shape = [C, H, W, N]
             mean_size = mean.axes.lengths[0]
             gamma_shape = gamma.axes.lengths[0]
             bias_shape = bias.axes.lengths[0]
@@ -160,7 +160,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             outputs_shape = op.axes.lengths
 
             # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
-            weights_shape = (2, gamma_shape)
+            weights_shape = [2, gamma_shape]
             weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
 
             input_shape_arg = ((ct.c_int) * len(inputs_shape))(*inputs_shape)
