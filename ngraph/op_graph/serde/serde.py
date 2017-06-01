@@ -218,7 +218,7 @@ def op_to_protobuf(op):
     # Hoist metadata into the general purpose attrs dict with namespacing
     for key in op.metadata:
         # hetr only
-        if key in ('hetr_replaced_by', 'replaces_op', 'layout'):
+        if key in ('hetr_replaced_by', 'replaces_op', 'layout', 'clones'):
             continue
         assign_op_attr(pb_op.attrs['_ngraph_metadata_' + key], op.metadata[key])
 
