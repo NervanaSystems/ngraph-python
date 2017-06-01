@@ -107,7 +107,8 @@ test_flex: gpu_prepare test_prepare clean
 	@echo
 	@echo Running flex unit tests...
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
-	or flex_only" --junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
+	and not hetr_only" \
+	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
 	$(TEST_DIRS)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
@@ -121,7 +122,7 @@ test_mkldnn:
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
+	py.test --transformer hetr -m "transformer_dependent and not flex_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
@@ -142,23 +143,18 @@ test_gpu: gpu_prepare test_prepare clean
 	--boxed \
 	--junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
-	py.test --transformer gpu -m "transformer_dependent and not flex_only \
-	and not separate_execution" --boxed -n auto \
-	--junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
-	--cov-append \
+	py.test --transformer gpu -m "not flex_only and not hetr_only and not separate_execution" \
+	--boxed -n auto --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
-	py.test --transformer gpu -m "transformer_dependent and not flex_only \
-	and separate_execution" \
-	--boxed \
-	--junit-xml=testout_test_gpu_tx_dependent_separate_execution_$(PY).xml \
-	--cov-append \
+	py.test --transformer gpu -m "not flex_only and not hetr_only and  separate_execution" \
+	--boxed --junit-xml=testout_test_gpu_tx_dependent_separate_execution_$(PY).xml --cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_gpu_$(PY).xml
 
 test_hetr: export PYTHONHASHSEED=0
 test_hetr: test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
+	py.test --transformer hetr -m "transformer_dependent and not flex_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
