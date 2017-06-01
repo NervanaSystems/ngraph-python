@@ -86,7 +86,7 @@ def ingest_mnist(root_dir, overwrite=False):
     # Now write out image files and manifests
     for setn, manifest in zip(set_names, manifest_files):
         records = []
-        for idx, (img, lbl) in enumerate(tqdm(zip(*dataset[setn]))):
+        for idx, (img, lbl) in enumerate(tqdm(zip(*dataset[setn]))):  # noqa pylint: disable=zip-builtin-not-iterating
             img_path = os.path.join(img_paths[setn][lbl], str(idx) + '.png')
             im = Image.fromarray(img)
             im.save(os.path.join(out_dir, img_path), format='PNG')
