@@ -90,7 +90,7 @@ seq1 = Sequential([Convolution((3, 3, 64), filter_init=GaussianInit(var=0.01),
                           activation=Rectlin()),
                    Affine(nout=4096, weight_init=GaussianInit(var=0.01),
                           activation=Rectlin()),
-                   Affine(nout=1000, weight_init=GaussianInit(var=0.01),
+                   Affine(axes=ax.Y, weight_init=GaussianInit(var=0.01),
                           activation=Softmax())])
 
 # Learning rate change based on schedule from learning_rate_policies.py
@@ -108,7 +108,12 @@ train_computation = ng.computation(batch_cost, "all")
 transformer = ngt.make_transformer()
 train_function = transformer.add_computation(train_computation)
 
-tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
+if args.no_progress_bar:
+    ncols = 0
+else:
+    ncols = 100
+
+tpbar = tqdm(unit="batches", ncols=ncols, total=args.num_iterations)
 interval_cost = 0.0
 
 for step, data in enumerate(train_set):
