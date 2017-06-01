@@ -78,8 +78,9 @@ class Mkldnn(object):
             self.batchnorm_fprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_batchnorm_fprop_primitives
             self.batchnorm_fprop_kernel.argtypes = \
-                [ctypes.c_void_p,
-                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                [ctypes.c_void_p,ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_double, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -88,7 +89,8 @@ class Mkldnn(object):
             self.batchnorm_bprop_kernel = \
                 self.mkldnn_engine_dll.create_mkldnn_batchnorm_bprop_primitives
             self.batchnorm_bprop_kernel.argtypes = \
-                [ctypes.c_void_p,
+                [ctypes.c_void_p, ctypes.c_int,
+                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_double,
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -233,7 +235,6 @@ class Mkldnn(object):
             # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             self.xhat = (inputs - mean) / (np.sqrt(variance + epsilon))[:, None]
             self.batch_norm_output = gamma * self.xhat + bias
-            # TODO - investigate if this copy kill performance ?
             np.copyto(outputs, self.batch_norm_output)
 
     def bprop_batchnorm(self, name, outputs, delta, inputs, gamma, bias, mean, variance, epsilon):
@@ -259,7 +260,6 @@ class Mkldnn(object):
             dgamma = np.sum(delta * xhat, **red_args)
             dbeta = np.sum(delta, **red_args)
             dx = gamma_scale * (delta - (xhat * dgamma + dbeta) / m)
-            # TODO - investigate if this copy kill performance ?
             np.copyto(outputs, dx)
 
     def fprop_conv(self, name, conv_slices, I, F, O):

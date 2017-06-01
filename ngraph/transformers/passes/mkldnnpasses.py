@@ -21,8 +21,8 @@ from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, BroadcastOp, \
     DotLowDimension, Add, ContiguousOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.batchnorm import BatchnormOp
-from ngraph.op_graph.axes import Axes
+from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
+from ngraph.op_graph.axes import Axes, FlattenedAxis
 from ngraph.transformers.passes.layout import AddLayoutConversions
 
 
@@ -149,44 +149,116 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             mean = op.args[4]
             variance = op.args[5]
             # unflatten the inputs and extract C H W N params
-            unflatten_inputs = unflatten(inputs)
+            if isinstance(inputs, Flatten):
+                unflatten_inputs = unflatten(inputs)
+                # Sanity check tensor shapes
+                if (len(unflatten_inputs.axes.lengths) != 5):
+                    return
+
             # Only single precision float supported for now
             if op.dtype != np.float32:
                 return
-            # Sanity check tensor shapes
-            if (len(unflatten_inputs.axes.lengths) != 5):
-                return
+
             data_type = self.mkldnn.datatype[op.dtype.type]
-            C, D, H, W, N = unflatten_inputs.axes.lengths
-            inputs_shape = [C, H, W, N]
+            inputs_shape = get_size_mkl_order(unflatten(inputs).axes, [4, 0, 2, 3])
             mean_size = mean.axes.lengths[0]
+            mean_dims = 1
             gamma_shape = gamma.axes.lengths[0]
             bias_shape = bias.axes.lengths[0]
             variance_size = variance.axes.lengths[0]
+            variance_dims = 1
             outputs_shape = op.axes.lengths
 
             # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
-            weights_shape = [2, gamma_shape]
+            weights_shape = [gamma_shape, bias_shape]
             weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
-
             input_shape_arg = ((ct.c_int) * len(inputs_shape))(*inputs_shape)
             outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
 
             (inputs_layout, mkl_axes) = get_mkl_layout(self.mkldnn, unflatten_inputs, [4, 0, 2, 3], True)
             mean_layout = None
             variance_layout = None
-            
+
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
 
             self.mkldnn.batchnorm_fprop_kernel(
-                self.mkldnn.mkldnn_engine, len(inputs_shape), len(weights_shape),
-                len(outputs_shape), mean_size, variance_size, input_shape_arg, weights_shape_arg, outputs_shape_arg,
+                self.mkldnn.mkldnn_engine, len(inputs_shape), len(outputs_shape), len(weights_shape),
+                mean_dims, variance_dims, mean_size, variance_size, input_shape_arg, weights_shape_arg, outputs_shape_arg,
                 op.eps, inputs_layout, None, mean_layout, variance_layout, data_type, self.mkldnn.kernels[op.name])
-            #mkl_order = [4, 0, 2, 3]
-            #op_axes = Axes.as_flattened_list(op.axes)
-            #out_axes = get_axes_mkl_order(op_axes, mkl_order)
+
             self.set_mkl_layout_data(op, mkl_axes)
+            if self.mkldnn.mkldnn_verbose:
+                print
+                print(op_id, op.name)
+                self.mkldnn.print_kernel(self.mkldnn.kernels[op.name])
+
+    @visit.on_type(BpropBatchnormOp)
+    def visit(self, op):
+        if self.mkldnn.mkldnn_enabled:
+            gamma = op.args[2]
+            bias = op.args[3]
+            mean = op.args[4]
+            variance = op.args[5]
+            axis_len_5d = False
+            # Only single precision float supported for now
+            if op.dtype != np.float32:
+                return
+            # Sanity check tensor shapes
+            if (len(op.axes.lengths) == 2):
+                if isinstance(op.axes[1], FlattenedAxis):
+                    C, Flatten_axis = op.axes
+                    if (len(unflatten(Flatten_axis).axes.lengths) !=4):
+                        return
+                    else:
+                        outputs_shape = get_size_mkl_order(unflatten(op).axes, [4, 0, 2, 3])
+                        outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
+                        axis_len_5d = True
+                else:
+                    return
+            data_type = self.mkldnn.datatype[op.dtype.type]
+            fprop_src  = op.args[1]
+            delta = op.args[0]
+            mean_dims = 1
+            variance_dims = 1
+            mean_size = mean.axes.lengths[0]
+            variance_size = variance.axes.lengths[0]
+
+            delta_shape = get_size_mkl_order(unflatten(delta).axes, [4, 0, 2, 3])
+            delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
+
+            # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd dimension contains beta parameter.
+            gamma_shape = gamma.axes.lengths[0]
+            bias_shape = bias.axes.lengths[0]
+            weights_shape = [gamma_shape, bias_shape]
+            weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
+
+            if (axis_len_5d):
+                (delta_layout, mkl_axes) = get_mkl_layout(self.mkldnn, unflatten(delta), [4, 0, 2, 3], True)
+            if (axis_len_5d):
+                (fprop_src_layout, _) = get_mkl_layout(self.mkldnn, unflatten(fprop_src), [4, 0, 2, 3], True)
+
+            fprop_src_layout = self.mkldnn.op_layouts.get(fprop_src.name)
+            mean_layout = None
+            if mean.name in self.mkldnn.kernels:
+                mean_layout = self.mkldnn.op_layouts[mean.name]
+
+            variance_layout = None
+            if variance.name in self.mkldnn.kernels:
+                variance_layout = self.mkldnn.op_layouts[variance.name]
+
+            op_id = len(self.mkldnn.kernels)
+            self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
+
+            self.mkldnn.batchnorm_bprop_kernel(self.mkldnn.mkldnn_engine, len(delta_shape), len(outputs_shape), len(weights_shape),
+                                               mean_dims, variance_dims, delta_shape_arg, outputs_shape_arg,
+                                               weights_shape_arg, mean_size, variance_size, op.fprop.eps,
+                                               fprop_src_layout,  None, mean_layout, variance_layout,
+                                               delta_layout, data_type, self.mkldnn.kernels[op.fprop.forwarded.name],
+                                               self.mkldnn.kernels[op.name])
+            mkl_order = get_order_from_axes(unflatten(delta).axes, mkl_axes)
+            out_axes = get_axes_mkl_order(unflatten(op).axes, mkl_order)
+            self.set_mkl_layout_data(op, out_axes)
             if self.mkldnn.mkldnn_verbose:
                 print
                 print(op_id, op.name)
@@ -204,7 +276,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
 
             data_type = self.mkldnn.datatype[op.dtype.type]
-            # Assumes (C, D, H, W, N) for convolution axes 
+            # Assumes (C, D, H, W, N) for convolution axes
             input_shape = get_size_mkl_order(input.axes, [4, 0, 2, 3])
             filter_shape = get_size_mkl_order(filter.axes, [4, 0, 2, 3])
             output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
@@ -221,7 +293,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             pad_arg = ((ct.c_int) * len(pad))(*pad)
             (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
             filter_layout = None
-
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.conv_fprop_kernel(
@@ -252,7 +323,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 return
 
             data_type = self.mkldnn.datatype[op.dtype.type]
-            # Assumes (C, D, H, W, N) for convolution axes 
+            # Assumes (C, D, H, W, N) for convolution axes
             input_shape = get_size_mkl_order(input.axes, [4, 0, 2, 3])
             filter_shape = get_size_mkl_order(filter.axes, [4, 0, 2, 3])
             output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
@@ -270,7 +341,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             pad_arg = ((ct.c_int) * len(pad))(*pad)
             (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
             filter_layout = None
-            
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
             self.mkldnn.conv_bprop_kernel(
