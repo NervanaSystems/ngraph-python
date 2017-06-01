@@ -40,6 +40,11 @@ def rl_loop(environment, agent, episodes, render=False):
             )
         )
 
+        # we would like to evaluate the model at a consistent time measured
+        # in update steps, but we can't start an evaluation in the middle of an
+        # episode.  if we have accumulated enough updates to warrant an evaluation
+        # set trigger_evaluation to true, and run an evaluation at the end of
+        # the episode.
         if trigger_evaluation:
             trigger_evaluation = False
             print(
