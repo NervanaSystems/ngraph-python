@@ -46,10 +46,10 @@ class Computation(NameableValue):
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, transformer, computation, **kwargs):
+    def __init__(self, transformer, computation_op, **kwargs):
         super(Computation, self).__init__(**kwargs)
         self.transformer = transformer
-        self.computation = computation
+        self.computation_op = computation_op
         self.computation_name = None
         self.executor = None
 
@@ -70,14 +70,14 @@ class Computation(NameableValue):
                     'to Computation'
                 ))
 
-            args = tuple(feed_dict[param.tensor] for param in self.computation.parameters)
+            args = tuple(feed_dict[param.tensor] for param in self.computation_op.parameters)
 
-        if len(args) != len(self.computation.parameters):
+        if len(args) != len(self.computation_op.parameters):
             raise ValueError((
                 'Computation was expecting {expected} arguments, but was '
                 'called with {called}.'
             ).format(
-                expected=len(self.computation.parameters),
+                expected=len(self.computation_op.parameters),
                 called=len(args),
             ))
         return args
@@ -92,8 +92,7 @@ class Computation(NameableValue):
         self.transformer.initialize()
 
         # Get the parameters to the device
-        for param, arg in zip(self.computation.parameters, args):
-            param.value[()] = arg
+        self.transformer.host_to_device(self, self.computation_op.parameters, args)
 
         self.executor()
 
@@ -106,18 +105,17 @@ class Computation(NameableValue):
             :return: Return value for op.
             """
             if op.is_tensor_op:
-                if op.value is not None:
-                    return op.value.get(None)
+                return self.transformer.device_to_host(self, op)
             else:
                 return None
 
-        if isinstance(self.computation.returns, Op):
-            return value(self.computation.returns)
-        elif isinstance(self.computation.returns, (collections.Sequence, OrderedSet)):
-            return tuple(value(op) for op in self.computation.returns)
-        elif isinstance(self.computation.returns, collections.Set):
+        if isinstance(self.computation_op.returns, Op):
+            return value(self.computation_op.returns)
+        elif isinstance(self.computation_op.returns, (collections.Sequence, OrderedSet)):
+            return tuple(value(op) for op in self.computation_op.returns)
+        elif isinstance(self.computation_op.returns, collections.Set):
             result = dict()
-            for op in self.computation.returns:
+            for op in self.computation_op.returns:
                 result[op] = value(op)
             return result
         else:
@@ -225,7 +223,7 @@ class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
     """
     def __init__(self, transformer, **kwargs):
         super(DeviceBufferReference, self).__init__(self, **kwargs)
-        self.__device_buffer = None
+        self.device_buffer = None
 
 
 class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
@@ -319,124 +317,35 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
-        self.computations = OrderedSet()
-        self.finalized = False
-        self.allocated = False
-        self.initialized = False
-        self.device_buffers = OrderedSet()
-        self.graph_passes = None
 
-    def register_graph_pass(self, graph_pass, position=None):
-        """
-        Register a graph pass to be run.
-
-        Arguments:
-            graph_pass (): The pass to register
-            position (int): insert index in the list of passes, append by default
-        """
-        if position:
-            self.graph_passes.insert(position, graph_pass)
-        else:
-            self.graph_passes.append(graph_pass)
-
-    def run_registered_graph_passes(self, ops):
-        for graph_pass in self.graph_passes:
-            graph_pass.do_pass(ops, self)
-        return ops
-
-    def _transform_computations(self):
-        """
-        Transform computation graphs to a form that can be run.
+    @abc.abstractproperty
+    def use_exop(self):
         """
 
-        # Run passes on the computation graphs
-        all_results = []
-        for comp in self.computations:
-            all_results.append(comp.computation)
+        Returns: True if this transformer uses the execution graph.
 
-        all_ops = self.run_registered_graph_passes(all_results)
-
-        # Collect up all ops from the graph and obtain the init graph
-        all_ops = OrderedSet(Op.ordered_ops(all_ops))
-
-        def init_tensor_description(tensor_description):
-            if tensor_description.buffer is None:
-                tensor_description.buffer = self.device_buffer_storage(
-                    tensor_description.base.tensor_size,
-                    tensor_description.dtype,
-                    tensor_description.name
-                )
-                self.device_buffers.add(tensor_description.buffer)
-            tensor_description.value = \
-                tensor_description.buffer.device_tensor(tensor_description)
-
-        self.ops = Op.ordered_ops(all_ops)
-        for op in self.ops:
-            if op.is_tensor_op:
-                init_tensor_description(op.tensor_description())
-
-        self.start_transform_allocate()
-        for device_buffer in self.device_buffers:
-            device_buffer.transform_allocate()
-        self.finish_transform_allocate()
-
-        # Compile the computations now that we know their storage
-        for comp in self.computations:
-            comp.computation_name = \
-                self.transform_ordered_ops(comp,
-                                           Op.ordered_ops([comp.computation]),
-                                           name=comp.name)
-        self.finish_transform()
-        self.finalized = True
+        """
+        pass
 
     @abc.abstractmethod
-    def start_transform_allocate(self):
+    def initialize_allocations(self):
         """
-        Called just before allocation code is transformed.
+        Inititializes allocation caches.
+
         """
 
     @abc.abstractmethod
-    def finish_transform_allocate(self):
+    def get_tensor_view_value(self, op, host_tensor=None):
         """
-        Called after last allocation is transformed.
-        """
+        Returns the contents of the tensor view for op.
 
-    @abc.abstractmethod
-    def transform_ordered_ops(self, computation, ordered_ops, name):
-        """
-        Generate code to compute ordered_ops.
+        Args:
+            op: The computation graph op.
+            host_tensor: Optional tensor to copy value into.
 
-        Arguments:
-            computation: The computation being compiled.
-            ordered_ops: Ops to compute
-            name: The name of the computation.
+        Returns:
+            A NumPy tensor with the elements associated with op.
 
-        Returns: Handle for generated code
-        """
-
-    @abc.abstractmethod
-    def finish_transform(self):
-        """
-        Finish generating the model.
-        """
-
-    @abc.abstractmethod
-    def allocate_storage(self):
-        """
-        Allocate storage on the device.
-        """
-
-    @abc.abstractmethod
-    def device_buffer_storage(self, bytes, dtype, name):
-        """
-        Make a DeviceBuffer.
-
-        Arguments:
-            bytes: Size of buffer.
-            dtype: dtype of buffer.
-            name: Name of the storage variable
-
-        returns: A DeviceBuffer.
         """
 
     @abc.abstractmethod
@@ -445,6 +354,33 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Make a DeviceBufferReference.
 
         Returns: A DeviceBufferReference.
+        """
+
+    @abc.abstractmethod
+    def host_to_device(self, computation, parameters, args):
+        """
+        Copy args to parameters in computation.
+
+        Args:
+            computation: The computation.
+            parameters: Parameters of the computation.
+            args: Values for the parameters.
+
+        """
+
+    @abc.abstractmethod
+    def device_to_host(self, computation, op, tensor=None):
+        """
+        Copy a computation result from the device back to the host.
+
+        Args:
+            computation: The computation.
+            op: The op associated with the value.
+            tensor: Optional tensor for returned value.
+
+        Returns:
+            The value of op.
+
         """
 
     def get_layouts(self, op):
@@ -507,22 +443,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         return self.add_computation(computation(results, *parameters))
 
     def add_computation(self, computation):
-        """
-        Adds a computation to the transformer.
-
-        Arguments:
-            computation: A computation Op.
-
-        Returns:
-            Callable.
-        """
-        if self.finalized:
-            raise ValueError(
-                'Cannot create computations from a finalized transformer'
-            )
-        result = self.make_computation(computation)
-        self.computations.add(result)
-        return result
+        return self.make_computation(computation)
 
     def make_computation(self, computation):
         """
@@ -536,6 +457,246 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         """
         return Computation(self, computation)
+
+    def initialize(self):
+        """
+        Initialize storage.  Will allocate if not already performed.
+        """
+        pass
+
+    def close(self):
+        pass
+
+    def __del__(self):
+        self.close()
+
+
+class ComputationGraphTransformer(Transformer):
+    def __init__(self, **kwargs):
+        super(ComputationGraphTransformer, self).__init__(**kwargs)
+        self.computations = OrderedSet()
+        self.device_buffers = None
+        self.op_tensors = None
+        self.op_tensor_views = None
+        self.initialize_allocations()
+        self.finalized = False
+        self.allocated = False
+        self.initialized = False
+        self.graph_passes = None
+
+    def register_graph_pass(self, graph_pass, position=None):
+        """
+        Register a graph pass to be run.
+
+        Arguments:
+            graph_pass (): The pass to register
+            position (int): insert index in the list of passes, append by default
+        """
+        if position is not None:
+            self.graph_passes.insert(position, graph_pass)
+        else:
+            self.graph_passes.append(graph_pass)
+
+    def run_registered_graph_passes(self, ops):
+        for graph_pass in self.graph_passes:
+            graph_pass.do_pass(ops, self)
+        return ops
+
+    def initialize_allocations(self):
+        """
+        Inititializes allocation caches.
+
+        """
+        self.op_tensors = dict()
+        self.op_tensor_views = dict()
+        self.device_buffers = OrderedSet()
+
+    def get_op_tensor(self, op):
+        """
+        Returns the tensor allocated for this op.
+
+        Args:
+            op: A computation graph op.
+
+        Returns:
+            A device tensor (DeviceBuffer).
+
+        """
+        return self.op_tensors[op.forwarded.tensor.forwarded.tensor_description().base]
+
+    def has_op_tensor(self, op):
+        """
+        Returns true if the op has a device tensor.
+
+        Args:
+            op: A computation graph op.
+
+        Returns:
+            True if the op has a device tensor.
+
+        """
+        return op.forwarded.tensor.forwarded.tensor_description().base in self.op_tensors
+
+    def get_op_tensor_view(self, op):
+        """
+        Returns the tensor view for this op.
+
+        Args:
+            op: A computation graph op.
+
+        Returns:
+            A device tensor view.
+
+        """
+        return self.op_tensor_views[op.forwarded.tensor.forwarded.tensor_description()]
+
+    def get_tensor_view_value(self, op, host_tensor=None):
+        """
+        Returns the contents of the tensor view for op.
+
+        Args:
+            op: The computation graph op.
+            host_tensor: Optional tensor to copy value into.
+
+        Returns:
+            A NumPy tensor with the elements associated with op.
+
+        """
+        return self.get_op_tensor_view(op).get(host_tensor)
+
+    def get_tensor_description_tensor(self, tensor_description):
+        """
+        Returns a tensor for a tensor description.
+
+        Deprecated. Use op version.
+
+        Args:
+            tensor_description:
+
+        Returns:
+            A device tensor (DeviceBuffer).
+
+
+        """
+        return self.op_tensors[tensor_description.base]
+
+    def has_tensor_description_tensor(self, tensor_description):
+        """
+        Tests if a tensor description has a device tensor.
+
+        Deprecated, only used by flex.
+
+        Args:
+            tensor_description:
+
+        Returns:
+            True if the tensor description has a device tensor.
+
+        """
+        return tensor_description.base in self.op_tensors
+
+    def get_tensor_description_tensor_view(self, tensor_description):
+        """
+        Returns a tensor for a tensor description.
+
+        Deprecated, only used by flex.
+
+        Args:
+            tensor_description:
+
+        Returns:
+            A device tensor view.
+
+        """
+        return self.op_tensor_views[tensor_description]
+
+    def host_to_device(self, computation, parameters, args):
+        """
+        Copy args to parameters in computation.
+
+        Args:
+            computation: The computation.
+            parameters: Parameters of the computation.
+            args: Values for the parameters.
+
+        """
+        for param, arg in zip(parameters, args):
+            self.get_op_tensor_view(param)[...] = arg
+
+    def device_to_host(self, computation, op, tensor=None):
+        """
+        Copy a computation result from the device back to the host.
+
+        Args:
+            computation: The computation.
+            op: The op associated with the value.
+            tensor: Optional tensor for returned value.
+
+        Returns:
+            The value of op.
+
+        """
+        if self.has_op_tensor(op):
+            return self.get_op_tensor_view(op).get(tensor)
+
+    @property
+    def use_exop(self):
+        """
+
+        Returns: True if this transformer uses the execution graph.
+
+        """
+        return False
+
+    @abc.abstractmethod
+    def start_transform_allocate(self):
+        """
+        Called just before allocation code is transformed.
+        """
+
+    @abc.abstractmethod
+    def finish_transform_allocate(self):
+        """
+        Called after last allocation is transformed.
+        """
+
+    @abc.abstractmethod
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        """
+        Generate code to compute ordered_ops.
+
+        Arguments:
+            computation: The computation being compiled.
+            ordered_ops: Ops to compute
+            name: The name of the computation.
+
+        Returns: Handle for generated code
+        """
+
+    @abc.abstractmethod
+    def finish_transform(self):
+        """
+        Finish generating the model.
+        """
+
+    @abc.abstractmethod
+    def allocate_storage(self):
+        """
+        Allocate storage on the device.
+        """
+
+    @abc.abstractmethod
+    def device_buffer_storage(self, bytes, dtype, name):
+        """
+        Make a DeviceBuffer.
+
+        Arguments:
+            bytes: Size of buffer.
+            dtype: dtype of buffer.
+            name: Name of the storage variable
+
+        returns: A DeviceBuffer.
+        """
 
     def allocate(self):
         """
@@ -551,14 +712,37 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
         self.allocate_storage()
 
+        init_states = OrderedSet()
         for op in OrderedSet(self.ops):
+            op = op.forwarded
             states = op.states_read | op.states_written
             for state in states:
+                state = state.forwarded
                 if state.initial_value is not None:
-                    tensor_description = state.tensor.tensor_description()
-                    tensor_description.value[()] = state.initial_value
+                    init_states.add(state)
+        for state in init_states:
+            tensor_description = state.tensor.tensor_description()
+            self.get_tensor_description_tensor_view(tensor_description)[...] = state.initial_value
 
         self.allocated = True
+
+    def add_computation(self, computation):
+        """
+        Adds a computation to the transformer.
+
+        Arguments:
+            computation: A computation Op.
+
+        Returns:
+            Callable.
+        """
+        if self.finalized:
+            raise ValueError(
+                'Cannot create computations from a finalized transformer'
+            )
+        computation = super(ComputationGraphTransformer, self).add_computation(computation)
+        self.computations.add(computation)
+        return computation
 
     def initialize(self):
         """
@@ -572,11 +756,55 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         # try to initialize.
         self.initialized = True
 
-    def close(self):
-        pass
+    def _transform_computations(self):
+        """
+        Transform computation graphs to a form that can be run.
+        """
 
-    def __del__(self):
-        self.close()
+        # Run passes on the computation graphs
+        all_results = []
+        for comp in self.computations:
+            all_results.append(comp.computation_op)
+
+        all_ops = self.run_registered_graph_passes(all_results)
+
+        # Collect up all ops from the graph and obtain the init graph
+        all_ops = OrderedSet(Op.ordered_ops(all_ops))
+
+        def ensure_tensor(op):
+            op = op.forwarded
+            tensor_description = op.tensor_description()
+            base = tensor_description.base
+            tensor = self.op_tensors.get(base, None)
+            if tensor is None:
+                tensor = self.device_buffer_storage(
+                    base.tensor_size,
+                    base.dtype,
+                    base.name
+                )
+                self.op_tensors[base] = tensor
+                self.device_buffers.add(tensor)
+            tensor_view = tensor.device_tensor(tensor_description)
+            self.op_tensor_views[tensor_description] = tensor_view
+
+        self.ops = Op.ordered_ops(all_ops)
+        for op in self.ops:
+            if op.is_tensor_op:
+                ensure_tensor(op)
+
+        self.start_transform_allocate()
+        for device_buffer in self.device_buffers:
+            device_buffer.transform_allocate()
+        self.finish_transform_allocate()
+
+        # Compile the computations now that we know their storage
+        for comp in self.computations:
+            comp.computation_name = \
+                self.transform_ordered_ops(comp,
+                                           Op.ordered_ops([comp.computation_op]),
+                                           name=comp.name)
+        self.finish_transform()
+        self.finalized = True
 
 
 __transformer_factory = None

@@ -23,6 +23,8 @@ import numpy as np
 from builtins import object
 from functools import wraps
 from collections import defaultdict
+import abc
+from future.utils import with_metaclass
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
@@ -345,7 +347,7 @@ class Op(NameableValue):
         Returns: The op providing the value.
 
         """
-        return self
+        return self.forwarded
 
     @property
     def states_read(self):
@@ -943,6 +945,10 @@ class Fill(Op):
     def states_written(self):
         return self.args[0].states_read
 
+    @property
+    def states_read(self):
+        return self.args[0].states_read
+
 
 def fill(x, scalar):
     return Fill(x, scalar)
@@ -1022,7 +1028,15 @@ class TensorOp(Op):
                     adjoint = adjoint * o.scale
 
                 deriv_handler = o.deriv_handler
-                deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
+                # find hetr distribution metadata, pass other data if exists
+                # todo add reduce func metadata key when fixed #1436
+                hetr_meta_key = ['device', 'device_id', 'parallel']
+                hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
+                                 if o.metadata.get(k) is not None}
+                with metadata(**hetr_metadata):
+                    deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
                 processed.add(o.tensor)
 
         return adjoints
@@ -1251,17 +1265,6 @@ class TensorOp(Op):
         """
         return mean(self, reduction_axes=reduction_axes, out_axes=out_axes)
 
-    @property
-    def value(self):
-        """
-        Returns a handle to the device tensor.
-
-        The transformer must have been initialized.
-
-        :return: A handle to the device tensor.
-        """
-        return self.forwarded.tensor_description().value
-
 
 class ValueOp(TensorOp, ControlBlockOp):
     """
@@ -1283,7 +1286,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The op that supplies the value.
         """
-        if self._tensor:
+        if self._tensor is not None:
             return self._tensor.forwarded.tensor.forwarded
         else:
             return None
@@ -1295,7 +1298,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The immediate value returned by this op; see tensor for the closure.
         """
-        if self._tensor:
+        if self._tensor is not None:
             return self._tensor.forwarded
         else:
             return None
@@ -1319,10 +1322,6 @@ class ValueOp(TensorOp, ControlBlockOp):
     @property
     def is_tensor_op(self):
         return self.tensor.is_tensor_op
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):
@@ -1469,14 +1468,67 @@ class TensorValueOp(ValueOp):
         return OrderedSet([self.tensor])
 
 
-class ReshapeOp(TensorOp):
+class PatternLabelOp(TensorOp):
+    """
+    An op to represent label in the pattern to be matched in graph
 
+    constraint_fn is a predicate that must hold in order to bind the
+    label to its matching op. By default, constraint_fn is always true.
+
+    """
+    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
+        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+        self.label = label
+        self.constraint_fn = constraint_fn
+
+
+class PatternSkipOp(TensorOp):
+    """
+    An op to allow user of pattern matching to skip match for certain ops
+
+    is_optional_op_fn is a predicate that must be defined to specify
+    optional ops. By default, is_optional_op_fn is false.
+
+    """
+    def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
+        super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
+        self.is_optional_op_fn = is_optional_op_fn
+
+
+class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
+    """
+    An base class for ops that change how a tensor is indexed; i.e. get a view of the same tensor.
+
+    Arguments:
+        x: A view of a tensor.
+
+    Returns:
+        A view of the tensor.
+    """
     def __init__(self, x, **kwargs):
-        super(ReshapeOp, self).__init__(
+        super(IndexOp, self).__init__(
             args=(x,),
             dtype=x.dtype,
             **kwargs
         )
+
+    @abc.abstractmethod
+    def transform_tensor_description(self, tensor_description):
+        """
+        Apply this index operation to tensor_description.
+
+        Args:
+            tensor_description: TensorDescription of the input view.
+
+        Returns:
+            TensorDescription of the transformed view.
+
+        """
+
+    @tdcache()
+    def tensor_description(self):
+        return self.transform_tensor_description(self.args[0].tensor_description()).named(
+            self.name)
 
     @property
     def is_scalar(self):
@@ -1507,7 +1559,7 @@ class ReshapeOp(TensorOp):
         return self.args[0].states_read
 
 
-class Transpose(ReshapeOp):
+class Transpose(IndexOp):
     """
     Used to reverse the axes of a tensor.
 
@@ -1522,15 +1574,14 @@ class Transpose(ReshapeOp):
             **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        return self.args[0].tensor_description().transpose().named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.transpose()
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Transpose(delta))
 
 
-class AxesCastOp(ReshapeOp):
+class AxesCastOp(IndexOp):
     """
     Used to label a tensor with known axes, without altering its value
 
@@ -1549,9 +1600,8 @@ class AxesCastOp(ReshapeOp):
             raise ValueError("casting axes {} must have the same length as original axes {}"
                              .format(axes, x.axes))
 
-    @tdcache()
-    def tensor_description(self):
-        return self.args[0].tensor_description().cast(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.cast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
@@ -1674,7 +1724,7 @@ def cast_role(tensor, axes):
     return RoleCastOp(tensor, axes)
 
 
-class ExpandDims(ReshapeOp):
+class ExpandDims(IndexOp):
     """
     Adds additional axes into a tensor.
     Arguments:
@@ -1691,16 +1741,8 @@ class ExpandDims(ReshapeOp):
         axes = make_axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-        Arguments:
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.broadcast(self.axes)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1731,7 +1773,7 @@ def expand_dims(x, axis, dim):
     return ExpandDims(x, axis, dim)
 
 
-class BroadcastOp(ReshapeOp):
+class BroadcastOp(IndexOp):
     """
     Used to add additional axes for a returned derivative.
 
@@ -1746,18 +1788,8 @@ class BroadcastOp(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        td, = tensor_descriptions(self.args)
-        return td.broadcast(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         dx = sum(delta, reduction_axes=delta.axes - x.axes)
@@ -1799,7 +1831,7 @@ def axes_with_order(x, axes):
     return ReorderAxes(x, axes)
 
 
-class ReorderAxes(ReshapeOp):
+class ReorderAxes(IndexOp):
     """
     Reorders the axes of a tensor, without making a copy.
 
@@ -1817,18 +1849,8 @@ class ReorderAxes(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        td, = tensor_descriptions(self.args)
-        return td.reorder(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.reorder(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, axes_with_order(
@@ -1852,7 +1874,7 @@ def tensor_slice(x, slices, axes=None):
     return TensorSliceOp(x, slices, axes)
 
 
-class TensorSliceOp(ReshapeOp):
+class TensorSliceOp(IndexOp):
     """
     Creates a sliced version of a tensor.
 
@@ -1896,18 +1918,8 @@ class TensorSliceOp(ReshapeOp):
 
         self.slices = slices
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.slice(self.slices, self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2008,16 +2020,14 @@ def slice_along_axis(x, axis, idx):
     return tensor_slice(x, ss, axes=axes)
 
 
-class Flatten(ReshapeOp):
+class Flatten(IndexOp):
 
     def __init__(self, x, axes, **kwargs):
         x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.flatten(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.flatten(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, unflatten(
@@ -2051,7 +2061,7 @@ def flatten_at(x, idx):
         )))
 
 
-class Unflatten(ReshapeOp):
+class Unflatten(IndexOp):
 
     def __init__(self, x, axes=None, **kwargs):
         if axes is None:
@@ -2062,10 +2072,8 @@ class Unflatten(ReshapeOp):
         Axes.assert_valid_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.unflatten(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.unflatten(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, flatten(
@@ -2221,7 +2229,7 @@ def value_of(tensor):
     ])
 
 
-def constant(const, axes=None, dtype=None):
+def constant(const, axes=None, dtype=None, **kwargs):
     """
     Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
         to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
@@ -2248,14 +2256,15 @@ def constant(const, axes=None, dtype=None):
                              graph_label_type=graph_label_type,
                              initial_value=nptensor,
                              const=nptensor,
-                             dtype=dtype)
+                             dtype=dtype,
+                             **kwargs)
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
     return val
 
 
-def placeholder(axes, dtype=None, initial_value=None):
+def placeholder(axes, dtype=None, initial_value=None, **kwargs):
     """
     A place for a tensor to be supplied; typically used for computation arguments.
 
@@ -2273,10 +2282,11 @@ def placeholder(axes, dtype=None, initial_value=None):
                               is_input=True,
                               is_placeholder=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None):
+def temporary(axes, dtype=None, initial_value=None, **kwargs):
     """
     Temporary storage.
 
@@ -2292,12 +2302,15 @@ def temporary(axes, dtype=None, initial_value=None):
     Returns:
         AssignableTensorOp: The placeholder.
     """
+    if initial_value is not None:
+        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def persistent_tensor(axes, dtype=None, initial_value=None):
+def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
     """
     Persistent storage, not trainable.
 
@@ -2316,10 +2329,11 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
                               is_persistent=True,
                               is_input=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None, scope=None):
+def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2340,7 +2354,8 @@ def variable(axes, dtype=None, initial_value=None, scope=None):
                               is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
-                              scope=scope)
+                              scope=scope,
+                              **kwargs)
 
 
 class StackOp(SequentialOp):
@@ -2508,7 +2523,7 @@ def concat_along_axis(x_list, axis):
     if len(x_list) < 1:
         return x_list
 
-    return ConcatOp(x_list, [axis for _ in range(len(x_list))])
+    return ConcatOp(x_list, [x.axes[x.axes.index(axis)] for x in x_list])
 
 
 class UnsliceOp(SequentialOp):
@@ -2624,10 +2639,6 @@ class StopGradient(UnaryElementWiseOp):
     @property
     def is_tensor_op(self):
         return False
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):
@@ -3339,7 +3350,7 @@ class TensorSizeOp(TensorOp):
         elif reduction_axes is None:
             reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
-        super(TensorSizeOp, self).__init__(axes=())
+        super(TensorSizeOp, self).__init__(args=(x,), axes=())
 
 
 def tensor_size(x, reduction_axes=None, out_axes=None):

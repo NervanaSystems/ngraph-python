@@ -15,8 +15,12 @@
 from ngraph.op_graph.op_graph import TensorValueOp
 from ngraph.factory.comm_node_factory import get_comm_pattern
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
+from ngraph.frontends.neon import UniformInit
+from contextlib import closing
 import ngraph as ng
+import ngraph.transformers as ngt
 import pytest
+import numpy as np
 
 
 ax_A = ng.make_axis(length=10, name='A')
@@ -105,6 +109,91 @@ def test_calculate_new_axes_null_parallel_axis():
         ng.Op(metadata=dict(device='cpu', device_id='0', transformer='cpu0')),
         'gather'
     ),
+    (
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
+                            transformer=['cpu1', 'cpu2'], reduce_func='mean')),
+        ng.Op(metadata=dict(device='cpu', device_id=('1', '2'), parallel=ax_C,
+                            transformer=['cpu1', 'cpu2'])),
+        'allreduce'
+    ),
 ])
 def test_get_node_type(from_node, to_node, expected_type):
     assert expected_type == get_comm_pattern(from_node, to_node)
+
+
+@pytest.mark.parametrize('config', [
+    {
+        'input': 36,
+        'func': 'mean',
+        'device_id': (1, 2),
+        'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
+    },
+    {
+        'input': 36,
+        'func': 'sum',
+        'device_id': (1, 2),
+        'expected_result': [[[-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0]]],
+    },
+    {
+        'input': 36,
+        'func': 'mean',
+        'device_id': (1, 4, 3, 2),
+        'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
+    },
+    {
+        'input': 25,
+        'func': 'sum',
+        'device_id': (5, 7, 3, 4),
+        'expected_result': [[[-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0]]],
+    },
+])
+def test_allreduce_hint(config):
+    c = config
+
+    with ng.metadata(device_id=c['device_id']):
+        axis_A = ng.make_axis(length=4, name='axis_A')
+        axis_B = ng.make_axis(length=2, name='axis_B')
+        var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
+        var_B = ng.variable(initial_value=UniformInit(c['input'], c['input']),
+                            axes=[axis_B]).named('var_B')
+        var_B.metadata['reduce_func'] = c['func']
+        var_minus = (var_A - var_B).named('var_minus')
+        var_minus.metadata['parallel'] = axis_A
+    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+        out_comp = hetr.computation([var_minus]).named('out_comp')
+        result = out_comp()
+
+        np.testing.assert_array_equal(result, c['expected_result'])
+
+
+@pytest.mark.parametrize('config', [
+    {
+        'input': 1,
+        'func': 'sum',
+        'device_id': (1, 2),
+        'expected_result': [-35.0, -35.0, -35.0, -35.0],
+    },
+])
+def test_one_dot_bprop_allreduce(config):
+    c = config
+
+    pytest.xfail("GPU child transformers generate errors during AssignLayouts graph pass #1651")
+
+    H_axis = ng.make_axis(length=4, name='height')
+    W_axis = ng.make_axis(length=6, name='width')
+    with ng.metadata(step='input'):
+        X = ng.placeholder(axes=[H_axis, W_axis])
+        target = ng.constant(1, axes=[W_axis])
+    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
+        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1))
+        dot = ng.dot(W, X)
+        L = ng.squared_L2(target - dot, out_axes=())
+        grad = ng.deriv(L, W)
+        grad.metadata['reduce_func'] = c['func']
+        update = (W - grad)
+
+    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+        out_comp = hetr.computation([update], X)
+        result = out_comp(c['input'])
+
+        np.testing.assert_array_equal(result, c['expected_result'])
