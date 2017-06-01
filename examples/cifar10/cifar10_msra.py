@@ -128,7 +128,7 @@ class residual_network(Sequential):
         layers.append(Affine(axes=ax.Y,
                              weight_init=KaimingInit(),
                              activation=Softmax()))
-        self.layers = layers
+        super(residual_network, self).__init__(layers=layers)
 
 
 def loop_eval(dataset, computation, metric_names):
