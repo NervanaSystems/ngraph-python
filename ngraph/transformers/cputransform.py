@@ -192,7 +192,28 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
             self.transformer.allocate_storage_code.append(
-                "{}(np.empty({}, dtype=np.dtype('{}')))",
+"""
+try:
+    import ctypes 
+    if '{2}' == 'float32':
+        type_size = 4
+        c_type = ctypes.c_float
+    elif '{2}' == 'float64':
+        type_size = 8
+        c_type = ctypes.c_double
+    else:
+        assert False, 'Not supported data type'
+    if {1} == 0:
+        np_array_{0} = np.empty(0, dtype=np.dtype('{2}'))
+    else:
+        buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
+        array_{0} = ctypes.cast(buf_{0}, ctypes.POINTER(c_type * {1}))
+        np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
+    {0}(np_array_{0})
+    print 'MLSL Allocated'
+except NameError:
+    {0}(np.empty({1}, dtype=np.dtype('{2}')))
+""",
                 self.update_name, elts, self.dtype.name)
             self.transformer.allocate_storage_code.endl()
 
