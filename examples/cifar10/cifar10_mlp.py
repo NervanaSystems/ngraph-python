@@ -35,7 +35,7 @@ from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_d
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
-from cifar10 import CIFAR10
+from ngraph.frontends.neon import CIFAR10
 import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on cifar10 dataset')
