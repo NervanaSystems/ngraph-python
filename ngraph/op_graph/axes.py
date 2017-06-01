@@ -1096,7 +1096,8 @@ class TensorDescription(NameableValue):
         self.__is_persistent = is_persistent
         self.__is_input = is_input
         self.__is_placeholder = is_placeholder
-
+        if not isinstance(self.name, str):
+            raise ValueError()
         for axis in axes:
             if axis.length is None:
                 raise ValueError((
@@ -1163,6 +1164,10 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides, self.layout)
 
+    @property
+    def axes_key(self):
+        return (self.axes, self.shape, self.dtype, self.offset, self.strides, self.layout)
+
     def flatten(self, new_axes):
         """
         Flattens a tensor description to give it the Axes in new_axes.
@@ -1201,7 +1206,8 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rFlatten',
         )
 
     def unflatten(self, new_axes):
@@ -1282,7 +1288,8 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rUnflatten',
         )
 
     def transpose(self):
@@ -1302,7 +1309,8 @@ class TensorDescription(NameableValue):
             full_strides=tuple(full_strides),
             full_sizes=tuple(full_sizes),
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rTranspose',
         )
 
     def clone(self):
@@ -1319,7 +1327,8 @@ class TensorDescription(NameableValue):
             full_strides=self.full_strides,
             full_sizes=self.full_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self.next_tensor_description,
+            name=self.name + 'cView',
         )
 
     def broadcast(self, new_axes):
@@ -1399,7 +1408,8 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rReorderBroadcast',
         )
 
     def cast(self, new_axes):
@@ -1426,7 +1436,8 @@ class TensorDescription(NameableValue):
             full_strides=full_strides,
             full_sizes=full_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rCast',
         )
 
     def slice(self, slices, new_axes):
@@ -1497,7 +1508,8 @@ class TensorDescription(NameableValue):
             full_strides=tuple(full_strides),
             full_sizes=tuple(full_sizes),
             offset=offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + "rSlice",
         )
 
     @property

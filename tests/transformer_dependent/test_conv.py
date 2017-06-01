@@ -21,8 +21,7 @@ from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -258,6 +257,7 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
+@pytest.mark.flex_disabled
 def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """
     test convolution backprop path
@@ -281,6 +281,7 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
         ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
 
 
+@pytest.mark.flex_disabled
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """
     Test deriv of conv followed by flatten
