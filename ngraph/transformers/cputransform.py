@@ -192,9 +192,10 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
             self.transformer.allocate_storage_code.append(
-"""
+                """
 try:
-    import ctypes 
+    import ctypes
+    import atexit
     if '{2}' == 'float32':
         type_size = 4
         c_type = ctypes.c_float
@@ -202,18 +203,21 @@ try:
         type_size = 8
         c_type = ctypes.c_double
     else:
-        assert False, 'Not supported data type'
-    if {1} == 0:
-        np_array_{0} = np.empty(0, dtype=np.dtype('{2}'))
-    else:
-        buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
-        array_{0} = ctypes.cast(buf_{0}, ctypes.POINTER(c_type * {1}))
-        np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
+        raise TypeError('Not supported data type')
+
+    mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
+    c_array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(c_type * {1}))
+    np_array_{0} = np.frombuffer(c_array_{0}.contents, dtype=np.dtype('{2}'))
+
+    @atexit.register
+    def free_buffer():
+        mlsl_obj.free(mlsl_buf_{0})
+
     {0}(np_array_{0})
-    print 'MLSL Allocated'
-except NameError:
-    {0}(np.empty({1}, dtype=np.dtype('{2}')))
-""",
+
+except (NameError, TypeError) as error:
+    # We may want to print some debug message there
+    {0}(np.empty({1}, dtype=np.dtype('{2}')))""",
                 self.update_name, elts, self.dtype.name)
             self.transformer.allocate_storage_code.endl()
 
