@@ -19,7 +19,7 @@ import numpy as np
 from ngraph.testing.flexutil import template_dot_two_placeholders, template_dot_one_placeholder,\
     template_dot_one_placeholder_and_scalar
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
+pytestmark = [pytest.mark.transformer_dependent,
               pytest.mark.flex_only]
 
 

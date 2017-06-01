@@ -4,7 +4,7 @@ import os
 import subprocess
 import re
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
+pytestmark = [pytest.mark.transformer_dependent,
               pytest.mark.flex_only]
 
 
