@@ -18,8 +18,7 @@ import ngraph as ng
 from ngraph.testing.flexutil import template_one_placeholder, template_two_placeholders, \
     MINIMUM_FLEX_VALUE, MAXIMUM_FLEX_VALUE, id_func
 
-pytestmark = [pytest.mark.transformer_dependent,
-              pytest.mark.flex_only]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_only]
 
 test_data_single_operand = (
     # template: (ng_operation, [(operand, expected_result, *case_description)], test_description),

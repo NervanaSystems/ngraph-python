@@ -21,8 +21,7 @@ from ngraph.testing.flexutil import template_one_placeholder, MINIMUM_FLEX_VALUE
     MAXIMUM_FLEX_VALUE, id_func, template_two_placeholders, assert_allclose
 from ngraph.testing import executor
 
-pytestmark = [pytest.mark.transformer_dependent,
-              pytest.mark.flex_only]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_only]
 
 # Known issues
 bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues:"
