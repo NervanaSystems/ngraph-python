@@ -644,6 +644,16 @@ def test_cross_entropy_binary(
         ng.testing.assert_allclose(dval_u_graph, dval_u_num, atol=1e-2, rtol=1e-2)
 
 
+def test_cross_entropy_binary_unmatched_axes(input_tensor):
+    """If y and t have different axes, an error should be thrown immediately"""
+    y = input_tensor
+    feature_axis, batch_axis = y.axes
+    t = ng.placeholder([ng.make_axis(feature_axis.length), batch_axis])
+
+    with pytest.raises(ng.UnmatchedAxesError):
+        ng.cross_entropy_binary_inner(y, t)
+
+
 def adiff_softmax(x):
     """
     The version of the diff we use in autodiff, without batch axis.
@@ -852,6 +862,16 @@ def test_cross_entropy_softmax_rec_deriv(transformer_factory, recurrent_input_te
         parameter_values=[t],
         atol=1e-2, rtol=1e-2
     )
+
+
+def test_cross_entropy_multi_unmatched_axes(input_tensor):
+    """If y and t have different axes, an error should be thrown immediately"""
+    y = input_tensor
+    feature_axis, batch_axis = y.axes
+    t = ng.placeholder([ng.make_axis(feature_axis.length), batch_axis])
+
+    with pytest.raises(ng.UnmatchedAxesError):
+        ng.cross_entropy_multi(y, t)
 
 
 @pytest.mark.flex_disabled
