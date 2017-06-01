@@ -110,7 +110,9 @@ class ModelWrapper(object):
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
-        return self.inference_function_single(state[..., np.newaxis])[..., 0]
+        # return self.inference_function_single(state[..., np.newaxis])[..., 0]
+        state = np.stack([state] * self.axes.n.length, axis=-1)
+        return self.inference_function(state)[..., 0]
 
     def predict(self, state):
         if state.shape != self.state.axes.lengths:
