@@ -106,12 +106,12 @@ build_test_base: build_base
 	# contains private code in it.
 	rm -rf ${DIR}/contrib/docker/autoflex
 	cd ${DIR}/contrib/docker
-	git clone git@github.com:NervanaSystems/autoflex.git
+	git clone https://github.com/NervanaSystems/autoflex.git
 
 # workaround for blocking issues for aeon
 	rm -rf ${DIR}/contrib/docker/private-aeon
 	cd ${DIR}/contrib/docker
-	git clone git@github.com:NervanaSystems/private-aeon.git
+	git clone https://github.com/NervanaSystems/private-aeon.git
 
 	# now build the docker container
 	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.test_base -t=ngraph_test_base:${BUILD_VERSION} ${DIR}
@@ -134,7 +134,7 @@ build_test_cpu: build_base_cpu
 	# contains private code in it.
 	rm -rf ${DIR}/contrib/docker/autoflex
 	cd ${DIR}/contrib/docker
-	git clone git@github.com:NervanaSystems/autoflex.git
+	git clone https://github.com/NervanaSystems/autoflex.git
 
 # workaround for blocking issues for aeon
 	rm -rf ${DIR}/contrib/docker/private-aeon
@@ -172,7 +172,7 @@ build_mxnet: build_test_base
 	# contains private code in it.
 	rm -rf ${DIR}/contrib/docker/ngraph-mxnet
 	cd ${DIR}/contrib/docker
-	git clone git@github.com:NervanaSystems/ngraph-mxnet.git --recursive
+	git clone https://github.com/NervanaSystems/ngraph-mxnet.git --recursive
 
 	$(DOCKER_BUILD) -f=${BUILD_DIR}/Dockerfile.mxnet -t=ngraph_mxnet:${BUILD_VERSION} ${DIR}
 	# remove the tag for the previous latest image

@@ -48,7 +48,7 @@ from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
 from ngraph.transformers.passes.layout import AddLayoutConversions
 from ngraph.transformers.passes.nviz import VizPass
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
+from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
@@ -149,8 +149,8 @@ class CPUPoolEngine(object):
 
 
 class CPUComputation(Computation):
-    def __init__(self, transformer, computation, **kwargs):
-        super(CPUComputation, self).__init__(transformer, computation, **kwargs)
+    def __init__(self, transformer, computation_op, **kwargs):
+        super(CPUComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
         self.pool_slices = dict()
         self.conv_params = dict()
@@ -623,7 +623,7 @@ class CPUCodeGenerator(PyGen):
         self.append("np.tanh({}, out={})", x, out)
 
     @generate_op.on_type(TensorSizeOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, x):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
     @generate_op.on_type(CPUQueueSendOp)
@@ -669,14 +669,8 @@ class CPUCodeGenerator(PyGen):
         self.allreduce_nodes.append(op)
         self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
     
-    @generate_op.on_type(ReductionOp)
-    def generate_op(self, op, out, *args):
-        # TODO(jbobba): Added to get a UT to pass. 
-        # Need to look into why we need this
-        pass
 
-
-class CPUTransformer(Transformer):
+class CPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
@@ -688,6 +682,13 @@ class CPUTransformer(Transformer):
     transformer_name = "cpu"
     default_rtol = 1e-05
     default_atol = 1e-08
+
+    import imp
+    try:
+        imp.find_module('mlsl')
+        use_mlsl = True
+    except ImportError:
+        use_mlsl = False
 
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
@@ -708,11 +709,12 @@ class CPUTransformer(Transformer):
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
-                             CPUTensorShaping(),
-                             MklCreateOpDescriptors(self.mkldnn),
-                             MklAddLayoutConversions(self.mkldnn, add_layout_conversion)
-                             #,VizPass(show_axes=True,view=False)
+                             CPUTensorShaping()
                              ]
+        if self.mkldnn.mkldnn_enabled:
+          self.graph_passes.append(MklCreateOpDescriptors(self.mkldnn)),
+          self.graph_passes.append(MklAddLayoutConversions(self.mkldnn, add_layout_conversion))
+        #self.graph_passes.append([VizPass(show_axes=True,view=False)])
 
     def device_buffer_storage(self, bytes, dtype, name):
         """
@@ -750,6 +752,10 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
+try:
+    import mlsl
+except ImportError:
+    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -757,6 +763,10 @@ from ngraph.transformers.cpu.cpuengine import ConvLocals
 from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 """)
+
+        if self.use_mlsl:
+            self.code.execute("mlsl_obj = mlsl.MLSL()")
+            self.code.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -847,6 +857,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
             try:
                 if self.code.globals.get('mkldnn', None) is not None:
                     self.code.execute('mkldnn.close()')
+                if self.code.globals.get('mlsl_obj', None) is not None:
+                    self.code.execute('mlsl_obj.finalize()')
             except TypeError:
                 pass
         self.code = None

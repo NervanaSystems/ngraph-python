@@ -27,19 +27,19 @@ class Mkldnn(object):
         self.mkldnn_enabled = False
         self.mkldnn_engine_initialized = False
         self.mkldnn_verbose = False
-        # TODO(jbobba): Defines from mkldnn_types.h. 
+        # TODO(jbobba): Defines from mkldnn_types.h.
         self.datatype = {
             np.float32 : 1,
             np.int32   : 2
         }
         self.memory_format = {
             'blocked' : 2,
+            'nc'   : 4,
             'nchw' : 5,    
             'chwn' : 7,
         }
         self.kernels = dict()
         self.op_layouts = dict()
-        self.op_uses_opkernel_api = dict() # Temporary dictionary to track opkernels
         try:
             self.mkldnn_engine_dll = ctypes.CDLL(engine_path)
             self.mkldnn_enabled = True
@@ -54,9 +54,6 @@ class Mkldnn(object):
             self.init_mkldnn_engine_fn = self.mkldnn_engine_dll.init_mkldnn_engine
             self.init_mkldnn_engine_fn.restype = ctypes.c_void_p
             
-            self.create_mkldnn_netlist_fn = self.mkldnn_engine_dll.create_mkldnn_netlist
-            self.create_mkldnn_netlist_fn.restype = ctypes.c_void_p
-
             self.create_empty_kernel = self.mkldnn_engine_dll.create_empty_kernel
             self.create_empty_kernel.argtypes = [ctypes.c_int]
             self.create_empty_kernel.restype = ctypes.c_void_p
@@ -199,10 +196,6 @@ class Mkldnn(object):
                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_void_p, ctypes.c_void_p,
                  ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
-            self.add_kernel.restype = ctypes.c_void_p
-            
-            self.run_mkldnn_netlist_fn = self.mkldnn_engine_dll.run_mkldnn_netlist
-            self.run_mkldnn_netlist_fn.argtypes = [ctypes.c_void_p, ctypes.c_int]
             
             self.cleanup_mkldnn_fn = self.mkldnn_engine_dll.cleanup_mkldnn
             self.cleanup_mkldnn_fn.argtypes = [ctypes.c_void_p]
@@ -222,10 +215,7 @@ class Mkldnn(object):
         if (self.mkldnn_engine_initialized):
             for op in self.kernels:
                 if self.kernels[op]:
-                    if op in self.op_uses_opkernel_api:
-                        self.delete_opkernel(self.kernels[op])
-                    else:
-                        self.cleanup_mkldnn_fn(self.kernels[op])
+                    self.delete_opkernel(self.kernels[op])
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -377,8 +367,6 @@ class Mkldnn(object):
 
     def innerproduct_fprop(self, name, x, y, out):
         if (self.mkldnn_enabled and name in self.kernels):
-            assert x.flags['C_CONTIGUOUS']
-            assert y.flags['C_CONTIGUOUS']
             self.set_input_tensor(self.kernels[name], x.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], y.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
@@ -419,8 +407,6 @@ class Mkldnn(object):
             self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
             self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
-        else:
-            output[...] = np.copy(input)
 
     def update_conv(self, name, conv_slices, I, E, U):
         if (self.mkldnn_enabled and name in self.kernels):
