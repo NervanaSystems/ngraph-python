@@ -197,14 +197,13 @@ try:
     import ctypes
     import atexit
     if '{2}' == 'float32':
-        type_size = 4
         c_type = ctypes.c_float
     elif '{2}' == 'float64':
-        type_size = 8
         c_type = ctypes.c_double
     else:
         raise TypeError('Not supported data type')
 
+    type_size = ctypes.sizeof(c_type(1))
     mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
     c_array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(c_type * {1}))
     np_array_{0} = np.frombuffer(c_array_{0}.contents, dtype=np.dtype('{2}'))
