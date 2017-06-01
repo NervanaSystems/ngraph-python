@@ -340,8 +340,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op):
             if (op.dtype.type != np.float32):
                 return
-            #if (len(op.axes) != 5 and len(op.axes) != 2):
-            if (len(op.axes) != 5):
+            if (len(op.axes) != 5 and len(op.axes) != 2):
+            #if (len(op.axes) != 5):
                 return
             data_type = self.mkldnn.datatype[op.dtype.type]
             input = op.args[0]
@@ -370,8 +370,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op):
             if (op.dtype.type != np.float32):
                 return
-            #if (len(op.axes) != 5 and len(op.axes) != 2):
-            if (len(op.axes) != 5):
+            if (len(op.axes) != 5 and len(op.axes) != 2):
+            #if (len(op.axes) != 5):
                 return
             data_type = self.mkldnn.datatype[op.dtype.type]
             delta = op.args[0]
@@ -549,7 +549,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(Add)
     def visit(self, op):
-            return
+
             I_array1 = op.args[0]
             I_array2 = op.args[1]
             # Sanity check for tensor shapes
@@ -570,8 +570,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             input2_shape = ((ct.c_int) * len(array2_shape))(*array2_shape)
             output_shape = ((ct.c_int) * len(out_shape))(*out_shape)
 
-            (input1_layout, mkl_axes) = get_mkl_layout(self.mkldnn, inputs, [0])
-            (input2_layout, _) = get_mkl_layout(self.mkldnn, inputs, [0])
+            (input1_layout, mkl_axes) = get_mkl_layout(self.mkldnn, I_array1, [0])
+            (input2_layout, _) = get_mkl_layout(self.mkldnn, I_array2, [0])
             #(input1_layout, mkl_axes) = self.get_mkl_layout_data(I_array1, 4)
             #(input2_layout, _) = self.get_mkl_layout_data(I_array2, 4)
             data_type = self.mkldnn.datatype[op.dtype.type]
