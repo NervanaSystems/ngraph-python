@@ -1,131 +1,118 @@
-from ngraph.transformers.passes.passes import PeepholeGraphPass
-from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Add, Maximum, Multiply, Minimum, Greater, Less
+import ngraph as ng
+from ngraph.transformers.passes.passes import GraphRewritePass
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
+from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
+from ngraph.op_graph.op_graph import Maximum, Minimum, BroadcastOp
+from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 
 
-class FusionPass(PeepholeGraphPass):
+class CPUFusion(GraphRewritePass):
 
-    @generic_method()
-    def visit(self, op):
+    def construct_relu_fprop_pattern(self):
         """
-        Base case.
+        Generate graph op that represents a pattern for Relu operation.
+        max(val, 0) + slope * min (0, val)
+
+        Note that there could be multiple patterns:
+        Pattern 1 - max(x, 0) + slope * min (0, x)
+        Pattern 2 - max(0, x) + slope * min (0, x)
+        ..
+        But we generate only 1 and match_pattern takes care of matching all
+        permutations.
+
+        Returns:
+            Single pattern that matches Relu fprop op
+
         """
-        pass
+        zero = ng.constant(0)
+        zero_w_broadcast = PatternSkipOp(zero,
+                                         (lambda op:
+                                          isinstance(op, BroadcastOp)))
+        # We want to match x tensor and slope for Relu.
+        self.relu_fwd_slope_label = "S"
+        self.relu_fwd_x_label = "X"
+        # We bind op to X unconditionally.
+        x = PatternLabelOp(self.relu_fwd_x_label)
+        max_op = Maximum(x, zero_w_broadcast)
+        # We bind slope op to S only if it is scalar.
+        slope_label_op = PatternLabelOp(self.relu_fwd_slope_label,
+                                        (lambda op: op.is_scalar))
+        slope = PatternSkipOp(slope_label_op,
+                              (lambda op: isinstance(op, BroadcastOp)))
+        min_op = Minimum(zero_w_broadcast, x)
+        mul_op = Multiply(slope, min_op)
+        add_op = Add(max_op, mul_op)
+        return add_op
+
+    def fuse_relu_fprop_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for Relu fprop pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            # Matched Relu pattern, do the replacement here.
+            x = label_map[self.relu_fwd_x_label]
+            slope = label_map[self.relu_fwd_slope_label]
+            relu_fwd_op = ReluOp(x, slope.tensor.const)
+            # We need to store relu_fwd_op in a dictionary so that backward Relu
+            # can access it.
+            self.tensor_to_op_dict[x] = relu_fwd_op
+        self.replace_op(op, relu_fwd_op)
+
+    def construct_relu_bprop_pattern(self):
+        """
+        Generate graph op that represents a pattern for Relu backprop operation.
+        delta * greater(x, 0) + delta * slope * less(x, 0)
+
+        Returns:
+            Single pattern that matches Relu bprop op
+
+        """
+        # We want to match x tensor, slope and delta for Relu.
+        self.relu_bwd_slope_label = "S"
+        self.relu_bwd_x_label = "X"
+        self.relu_bwd_delta_label = "D"
+
+        # construct 1st operand of Add
+        zero = ng.constant(0)
+        zero_w_broadcast = ng.PatternSkipOp(zero,
+                                            (lambda op:
+                                             isinstance(op, BroadcastOp)))
+        x = ng.PatternLabelOp(self.relu_bwd_x_label,
+                              (lambda op: not op.is_scalar))  # X is not scalar.
+        greater_op = Greater(x, zero_w_broadcast)
+        delta = PatternLabelOp(self.relu_bwd_delta_label,
+                               (lambda op: not op.is_scalar))  # delta is not scalar.
+        mul_greater_delta_op = Multiply(greater_op, delta)
+
+        # Construct 2nd operand of Add
+        # We bind slope op to S only if it is scalar.
+        slope = PatternLabelOp(self.relu_bwd_slope_label,
+                               (lambda op: op.is_scalar))
+        less_op = Less(x, zero_w_broadcast)
+        mul_slope_delta_op = Multiply(slope, delta)
+        mul_slope_delta_less_op = Multiply(less_op, mul_slope_delta_op)
+
+        add_op = Add(mul_greater_delta_op, mul_slope_delta_less_op)
+        return add_op
+
+    def fuse_relu_bprop_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for Relu bprop pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            # Matched Relu pattern, do the replacement here.
+            x = label_map[self.relu_bwd_x_label]
+            delta = label_map[self.relu_bwd_delta_label]
+            relu_fprop = self.tensor_to_op_dict[x]
+            self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
     def __init__(self):
-        self.dict = {}
+        self.tensor_to_op_dict = dict()
 
-    def fuse_fprop_relu(self, input1, input2, op):
-        """
-        Max and min fused to relu for the IA transformer.
-        """
-        # expression is maximum(x,0) + slope*minimum(0,x)
-        mul_arg1, mul_arg2 = input2.args
-        max_arg1, max_arg2 = input1.args
-        if(max_arg1.is_scalar and max_arg1.args[0].tensor.const == 0
-           and not(max_arg2.is_scalar)):  # check max(0,x) or max(x,0)
-            input_tensor = max_arg2
-        elif(max_arg2.is_scalar and max_arg2.args[0].tensor.const == 0
-             and not(max_arg1.is_scalar)):
-            input_tensor = max_arg1
-        else:
-            return
-        # check if slope* Minimum(0,x)  or Minimum(0,x)* slope
-        if(mul_arg1.is_scalar and not(mul_arg2.is_scalar) and isinstance(mul_arg2, Minimum)):
-            input_slope, = mul_arg1.args
-            min_arg1, min_arg2 = mul_arg2.args
-            if not ((min_arg1.is_scalar and min_arg1.args[0].tensor.const == 0
-                    and not(min_arg2.is_scalar)) and min_arg2 == input_tensor):  # Min(0,x)/(x,0)
-                if not ((min_arg2.is_scalar and min_arg2.args[0].tensor.const == 0
-                        and not(min_arg1.is_scalar)) and min_arg1 == input_tensor):
-                    return
-            new_op = ReluOp(input_tensor, input_slope.tensor.const)
-            self.replace_op(op, new_op)
-            self.dict[input_tensor] = new_op
-        elif(mul_arg2.is_scalar and not(mul_arg1.is_scalar) and isinstance(mul_arg1, Minimum)):
-            input_slope, = mul_arg2.args
-            min_arg1, min_arg2 = mul_arg1.args
-            if not ((min_arg1.is_scalar and min_arg1.args[0].tensor.const == 0
-                    and not(min_arg2.is_scalar)) and min_arg2 == input_tensor):
-                if not ((min_arg2.is_scalar and min_arg2.args[0].tensor.const == 0
-                        and not(min_arg1.is_scalar)) and min_arg1 == input_tensor):
-                    return
-            new_op = ReluOp(input_tensor, input_slope.tensor.const)
-            self.replace_op(op, new_op)
-            self.dict[input_tensor] = new_op
-        else:
-            return
+        # Register Relu fprop pattern
+        pattern_relu_fprop = self.construct_relu_fprop_pattern()
+        self.register_pattern(pattern_relu_fprop, self.fuse_relu_fprop_callback)
 
-    def pattern_check_and_fuse_bprop_relu(self, mul_arg3, mul_arg4, input_tensor, delta, op):
-        #  delta * slope * less(x, 0)
-        less_arg1, less_arg2 = mul_arg3.args
-        mul_arg5, mul_arg6 = mul_arg4.args
-        if not ((less_arg1.is_scalar and less_arg1.args[0].tensor.const == 0
-                and not(less_arg2.is_scalar) and less_arg2 == input_tensor)):
-            if not ((less_arg2.is_scalar and less_arg2.args[0].tensor.const == 0 and
-                    not(less_arg1.is_scalar) and less_arg1 == input_tensor)):
-                return
-        if ((mul_arg5.is_scalar and mul_arg5.args[0].tensor.const == 0
-           and not(mul_arg6.is_scalar))):
-            input_slope, = mul_arg5.args
-        elif ((mul_arg6.is_scalar and mul_arg6.args[0].tensor.const == 0
-              and not(mul_arg5.is_scalar))):
-            input_slope, = mul_arg6.args
-        else:
-            return
-        fprop = self.dict[input_tensor]
-        new_op = BpropReluOp(delta, input_tensor, fprop)
-        self.replace_op(op, new_op)
-
-    def pattern_check_bprop_relu(self, mul_arg1, mul_arg2, mul_arg3, mul_arg4, op):
-        # check Greater(x,0)* delta or delta*Greater(x,0)
-        greater_arg1, greater_arg2 = mul_arg1.args
-        delta = mul_arg2
-        if ((greater_arg1.is_scalar and greater_arg1.args[0].tensor.const == 0
-           and not(greater_arg2.is_scalar))):
-            input_tensor = greater_arg2
-        elif ((greater_arg2.is_scalar and greater_arg2.args[0].tensor.const == 0
-               and not(greater_arg1.is_scalar))):
-            input_tensor = greater_arg1
-        else:
-            return
-        if(isinstance(mul_arg3, Less) and isinstance(mul_arg4, Multiply)):
-            self.pattern_check_and_fuse_bprop_relu(mul_arg3, mul_arg4, input_tensor, delta, op)
-        elif(isinstance(mul_arg4, Less) and isinstance(mul_arg3, Multiply)):
-            self.pattern_check_and_fuse_bprop_relu(mul_arg4, mul_arg3, input_tensor, delta, op)
-
-    def check_arg_ordering_bprop_relu(self, input1, input2, op):
-        """
-        Max and min fused to relu for the IA transformer.
-        """
-        mul_arg1, mul_arg2 = input1.args
-        mul_arg3, mul_arg4 = input2.args
-        if (isinstance(mul_arg1, Greater) and not(mul_arg2.is_scalar)):
-            self.pattern_check_bprop_relu(mul_arg1, mul_arg2, mul_arg3, mul_arg4, op)
-        elif (isinstance(mul_arg2, Greater) and not(mul_arg1.is_scalar)):
-            self.pattern_check_bprop_relu(mul_arg2, mul_arg1, mul_arg3, mul_arg4, op)
-
-    @visit.on_type(Add)
-    def visit(self, op):
-        """
-        Max and min fused to relu for the IA transformer.
-        """
-        # expression is maximum(x,0) + slope*minimum(0,x)
-        input1, input2 = op.args
-        if (isinstance(input1, Maximum) and isinstance(input2, Multiply)):
-            self.fuse_fprop_relu(input1, input2, op)
-        elif (isinstance(input2, Maximum) and isinstance(input1, Multiply)):
-            self.fuse_fprop_relu(input2, input1, op)
-        # expression is delta*greater(x, 0) + delta*slope*less(x, 0)
-        elif (isinstance(input1, Multiply) and isinstance(input2, Multiply)):
-            mul_arg1, mul_arg2 = input1.args
-            mul_arg3, mul_arg4 = input2.args
-            if (isinstance(mul_arg2, Greater) or isinstance(mul_arg1, Greater)):
-                if (isinstance(mul_arg3, Multiply) and isinstance(mul_arg4, Less) or
-                   isinstance(mul_arg4, Multiply) and isinstance(mul_arg3, Less)):
-                    self.check_arg_ordering_bprop_relu(input1, input2, op)
-            elif (isinstance(mul_arg1, Multiply) and isinstance(mul_arg2, Less) or
-                  isinstance(mul_arg2, Multiply) and isinstance(mul_arg1, Less)):
-                if (isinstance(mul_arg4, Greater) or isinstance(mul_arg3, Greater)):
-                    self.check_arg_ordering_bprop_relu(input2, input1, op)
+        # Register Relu bprop pattern
+        pattern_relu_bprop = self.construct_relu_bprop_pattern()
+        self.register_pattern(pattern_relu_bprop, self.fuse_relu_bprop_callback)

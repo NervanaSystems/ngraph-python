@@ -28,8 +28,9 @@ try:
 except ImportError:
     raise UnsupportedTransformerException("No GPU")
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor, PYCUDA_LOGIC_ERROR_CODE
+from ngraph.transformers.base import ComputationGraphTransformer, \
+    DeviceBufferStorage, DeviceBufferReference, DeviceTensor, \
+    PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
@@ -509,6 +510,8 @@ class GPUKernelGroup(object):
             if not k.buffers_bound:
                 k.bind_buffers()
 
+        for k in self.kernels:
+
             self.setup_kernel_execute(k)
             k.execute()
             self.after_kernel_execute(k)
@@ -650,12 +653,15 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.storage = None
 
     def create_device_tensor(self, tensor_description):
+        name = self.get_tensor_name(tensor_description)
+        return GPUDeviceTensor(self.transformer, self, tensor_description, name=name)
+
+    def get_tensor_name(self, tensor_description):
         if tensor_description.layout:
             shape_str = "_".join((str(_) for _ in tensor_description.layout.shape))
         else:
             shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return GPUDeviceTensor(self.transformer, self, tensor_description,
-                               name="v_" + tensor_description.name + "_" + shape_str)
+        return "v_" + tensor_description.name + "_" + shape_str
 
     @property
     def ref_str(self):
@@ -1027,7 +1033,7 @@ class GPURuntime(object):
             self.scratch_size = total_size
 
 
-class GPUTransformer(Transformer):
+class GPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a GPU, backed by pycuda and NervanaGPU.
 

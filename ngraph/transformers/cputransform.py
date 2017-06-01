@@ -41,9 +41,9 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
-from ngraph.transformers.passes.cpufusion import FusionPass
+from ngraph.transformers.passes.cpufusion import CPUFusion
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, \
+from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
@@ -145,8 +145,8 @@ class CPUPoolEngine(object):
 
 
 class CPUComputation(Computation):
-    def __init__(self, transformer, computation, **kwargs):
-        super(CPUComputation, self).__init__(transformer, computation, **kwargs)
+    def __init__(self, transformer, computation_op, **kwargs):
+        super(CPUComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
         self.pool_slices = dict()
         self.conv_params = dict()
@@ -683,7 +683,7 @@ class CPUCodeGenerator(PyGen):
         self.append("np.tanh({}, out={})", x, out)
 
     @generate_op.on_type(TensorSizeOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, x):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
     @generate_op.on_type(CPUQueueSendOp)
@@ -743,7 +743,7 @@ class CPUCodeGenerator(PyGen):
                     broadcast_recv_id, out)
 
 
-class CPUTransformer(Transformer):
+class CPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
@@ -755,6 +755,13 @@ class CPUTransformer(Transformer):
     transformer_name = "cpu"
     default_rtol = 1e-05
     default_atol = 1e-08
+
+    import imp
+    try:
+        imp.find_module('mlsl')
+        use_mlsl = True
+    except ImportError:
+        use_mlsl = False
 
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
@@ -769,7 +776,7 @@ class CPUTransformer(Transformer):
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.graph_passes = [FusionPass(),
+        self.graph_passes = [CPUFusion(),
                              CPUTensorLayout(),
                              SimplePrune(),
                              RequiredTensorShaping(),
@@ -801,6 +808,10 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
+try:
+    import mlsl
+except ImportError:
+    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -813,6 +824,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
         self.code.execute("mkldnn.open()")
+        if self.use_mlsl:
+            self.code.execute("mlsl_obj = mlsl.MLSL()")
+            self.code.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -905,6 +919,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
             try:
                 if self.code.globals.get('mkldnn', None) is not None:
                     self.code.execute('mkldnn.close()')
+                if self.code.globals.get('mlsl_obj', None) is not None:
+                    self.code.execute('mlsl_obj.finalize()')
             except TypeError:
                 pass
         self.code = None
