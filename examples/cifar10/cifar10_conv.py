@@ -35,7 +35,7 @@ from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import ArrayIterator
 
-from cifar10 import CIFAR10
+from ngraph.frontends.neon import CIFAR10
 import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple CNN on cifar10 dataset')
