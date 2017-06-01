@@ -19,7 +19,7 @@ from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
 from ngraph.op_graph.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
 import ngraph as ng
 
-pytestmark = [pytest.mark.hetr_only, pytest.mark.transformer_dependent]
+pytestmark = pytest.mark.hetr_only
 
 
 def test_find_recvs():

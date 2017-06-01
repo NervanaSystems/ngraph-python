@@ -28,7 +28,7 @@ import threading
 import time
 
 
-pytestmark = [pytest.mark.hetr_only, pytest.mark.transformer_dependent]
+pytestmark = pytest.mark.hetr_only
 
 
 def check_device_assign_pass(default_device, default_device_id,
