@@ -330,11 +330,8 @@ class Mkldnn(object):
 
     def innerproduct_fprop(self, name, x, y, out):
         if (self.mkldnn_enabled and name in self.kernels):
-            assert x.flags['C_CONTIGUOUS']
-            assert y.flags['C_CONTIGUOUS']
-            # Switching order to match MKL expectation y - data, x - weights
-            self.set_input_tensor(self.kernels[name], x.ctypes.data, 1)
-            self.set_input_tensor(self.kernels[name], y.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], x.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], y.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:

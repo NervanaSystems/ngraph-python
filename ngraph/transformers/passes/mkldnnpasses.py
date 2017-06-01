@@ -85,12 +85,18 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
   memory_format = mkldnn.memory_format['blocked']
   if use_formats:
     # Look for canned formats
-    [N, C, H, W] = mkl_strides
-    stride_order = sorted([N, C, H, W], reverse=True)
-    if (stride_order == [C, H, W, N]):
-      memory_format = mkldnn.memory_format['chwn']
-    elif (stride_order == [N, C, H, W]):
-      memory_format = mkldnn.memory_format['nchw']
+    if len(mkl_strides) == 4:
+      [N, C, H, W] = mkl_strides
+      stride_order = sorted([N, C, H, W], reverse=True)
+      if (stride_order == [C, H, W, N]):
+        memory_format = mkldnn.memory_format['chwn']
+      elif (stride_order == [N, C, H, W]):
+        memory_format = mkldnn.memory_format['nchw']
+    elif len(mkl_strides) == 2:
+      [N, C] = mkl_strides
+      stride_order = sorted([N, C], reverse=True)
+      if stride_order == [N, C]:
+        memory_format = mkldnn.memory_format['nc']
 
   native_layout = mkldnn.create_layout_pd(
     mkldnn.mkldnn_engine,
@@ -499,8 +505,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(DotLowDimension)
     def visit(self, op):
-            x = op.args[1]
-            y = op.args[0]
+            x = op.args[0]
+            y = op.args[1]
 
             # Sanity check tensor shapes
             if (len(x.axes.lengths) != 2) or (len(y.axes.lengths) != 2):
@@ -512,16 +518,16 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             #if not x.name in self.mkldnn.op_layouts:
             #  return
 
-            x_shape = get_size_mkl_order(x.axes, [1,0])
-            y_shape = get_size_mkl_order(y.axes, [0,1])
-            o_shape = get_size_mkl_order(op.axes, [1,0])
+            x_shape = get_size_mkl_order(x.axes, [0,1])
+            y_shape = get_size_mkl_order(y.axes, [1,0])
+            o_shape = get_size_mkl_order(op.axes, [0,1])
 
-            input_shape = ((ct.c_int) * len(x_shape))(*x_shape)
-            weights_shape = ((ct.c_int) * len(y_shape))(*y_shape)
-            output_shape = ((ct.c_int) * len(o_shape))(*o_shape)
+            x_shape_arg = ((ct.c_int) * len(x_shape))(*x_shape)
+            y_shape_arg = ((ct.c_int) * len(y_shape))(*y_shape)
+            o_shape_arg = ((ct.c_int) * len(o_shape))(*o_shape)
 
-            (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [1, 0], False)
-            (y_layout, _) = get_mkl_layout(self.mkldnn, y, [0, 1], False)
+            (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [0, 1], True)
+            (y_layout, _) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
             data_type = self.mkldnn.datatype[op.dtype.type]
 
             op_id = len(self.mkldnn.kernels)
@@ -529,11 +535,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.innerproduct_fprop_kernel(
                     self.mkldnn.mkldnn_engine,
                     len(x_shape), len(y_shape), 1, len(o_shape),
-                    input_shape, weights_shape, None, output_shape,
+                    x_shape_arg, y_shape_arg, None, o_shape_arg,
                     x_layout, y_layout, None,
                     data_type, self.mkldnn.kernels[op.name])
 
-            out_axes = get_axes_mkl_order(op.axes, [1, 0])
+            out_axes = get_axes_mkl_order(op.axes, [0, 1])
             self.set_mkl_layout_data(op, out_axes)
             if self.mkldnn.mkldnn_verbose:
                 print
@@ -625,7 +631,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         all_axis = Axes.as_flattened_list(op.axes)
         (mkl_layout, mkl_axes) = op.in_layout
         mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
-        (out_layout, _) = get_mkl_layout(self.mkldnn, op, mkl_axes_order)
+        (out_layout, _) = get_mkl_layout(self.mkldnn, op, mkl_axes_order, True)
         ndims = len(mkl_axes)
         dims = get_size_mkl_order(op.axes, mkl_axes_order)
         dims_arg = ((ct.c_int) * ndims)(*dims)
@@ -678,6 +684,11 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             # Input in MKL layout.
             # Expect downstream ops to handle MKL layout or insert explicit conversions
             self.replace_op(op, op.args[0])
+        elif isinstance(arg, MklReorderOp):
+          # TODO(jbobba) - Can we eliminate ContiguousOp here?
+          td = arg.tensor_description()
+          arg_td = arg.args[0].tensor_description()
+          #self.replace_op(op, op.args[0])
 
     @visit.on_type(MapRolesOp)
     def visit(self, op):
