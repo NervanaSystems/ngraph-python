@@ -511,6 +511,8 @@ class GPUKernelGroup(object):
             if not k.buffers_bound:
                 k.bind_buffers()
 
+        for k in self.kernels:
+
             self.setup_kernel_execute(k)
             k.execute()
             self.after_kernel_execute(k)
