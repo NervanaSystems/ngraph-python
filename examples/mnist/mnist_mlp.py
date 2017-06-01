@@ -36,7 +36,7 @@ from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_d
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
-from mnist import MNIST
+from ngraph.frontends.neon import MNIST
 import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
