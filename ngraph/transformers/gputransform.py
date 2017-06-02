@@ -242,10 +242,6 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(AssignOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
-
     @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
@@ -392,6 +388,10 @@ class GPUKernelGroup(object):
 
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
+
+    @add_kernel.on_type(AssignOp)
+    def add_kernel(self, op):
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
 
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):

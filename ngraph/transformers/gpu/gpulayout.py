@@ -15,8 +15,8 @@
 import numpy as np
 
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
-    SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
-    ReshapeOp, TensorValueOp, AssignableTensorOp, tdcache
+    UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, ReshapeOp, \
+    TensorValueOp, AssignableTensorOp, tdcache
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes, make_axes
@@ -714,19 +714,19 @@ class GPUDotLayoutConstraint(GPUBinaryLayoutConstraint):
                 return self.get_reshape(arg_mem_order, arg_axes, out_groups, arg)
 
 
-class GPUSetItemLayoutConstraint(GPUBinaryLayoutConstraint):
+class GPUAssignLayoutConstraint(GPUBinaryLayoutConstraint):
     """
-    Simple constraint for SetItemOp, which can handle any number of strided axes.
+    Simple constraint for AssignOp, which can handle any number of strided axes.
     """
     def __init__(self, op, arg):
-        super(GPUSetItemLayoutConstraint, self).__init__(op, arg)
+        super(GPUAssignLayoutConstraint, self).__init__(op, arg)
 
     def get_cost(self, arg_layout, op_layout):
         return 0.0
 
     def get_layout_transform(self, arg_layout, op_layout, arg):
         """
-        Returns a reshape view of the argument strided to match the SetItemOp axes
+        Returns a reshape view of the argument strided to match the AssignOp axes
 
         Arguments:
             arg_layout (GPULayoutAssignment): layout of the argument
@@ -811,7 +811,7 @@ def gpu_layout_factory(op):
         List of possible layout assignment descriptors
     """
     if isinstance(op, AssignOp):
-        return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
+        return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, len(op.args[0].axes))
     elif isinstance(op, UnaryElementWiseOp):
         return GPULayoutAssignment.generate_ew_layouts(op.args[0].axes, 3)
     elif isinstance(op, BinaryElementWiseOp):
@@ -823,8 +823,6 @@ def gpu_layout_factory(op):
     elif isinstance(op, TensorSizeOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, Fill):
-        return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
-    elif isinstance(op, SetItemOp):
         return GPULayoutAssignment.generate_default_layout(op.args[0].axes, 3)
     elif isinstance(op, DotOp):
         return GPULayoutAssignment.generate_default_dot_layout(op)
@@ -874,9 +872,7 @@ def gpu_constraint_factory(op, arg):
         Binary layout constraint object
     """
     if isinstance(op, AssignOp):
-        return GPUEWLayoutConstraint(op, arg)
-    elif isinstance(op, SetItemOp):
-        return GPUSetItemLayoutConstraint(op, arg)
+        return GPUAssignLayoutConstraint(op, arg)
     elif isinstance(op, UnaryElementWiseOp):
         return GPUEWLayoutConstraint(op, arg)
     elif isinstance(op, BinaryElementWiseOp):

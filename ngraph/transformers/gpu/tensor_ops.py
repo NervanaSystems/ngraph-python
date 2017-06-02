@@ -19,7 +19,9 @@ from builtins import range
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
+from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.op_graph.axes import TensorDescription
+from ngraph.op_graph.op_graph import AssignOp
 from queue import Empty
 import numpy as np
 import pycuda.driver as drv
@@ -167,19 +169,28 @@ class DimShuffleKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
-        out = TensorDescriptionWrapper(self.transformer, op.tensor_description())
-        (arg, ) = (_ for _ in op.call_info())
-        in_tensor = TensorDescriptionWrapper(self.transformer, arg, ignore_layout=True)
+        if isinstance(op, DimshuffleOp):
+            out = TensorDescriptionWrapper(self.transformer, op.tensor_description())
+            (arg, ) = (_ for _ in op.call_info())
+            in_tensor = TensorDescriptionWrapper(self.transformer, arg, ignore_layout=True)
 
-        # Reshape the tensors in place with dimshuffle views
-        in_tensor.shape = tuple(op.in_view.shape)
-        in_tensor.strides = tuple(op.in_view.strides)
-        out.shape = tuple(op.out_view.shape)
-        out.strides = tuple(op.out_view.strides)
+            # Reshape the tensors in place with dimshuffle views
+            in_tensor.shape = tuple(op.in_view.shape)
+            in_tensor.strides = tuple(op.in_view.strides)
+            out.shape = tuple(op.out_view.shape)
+            out.strides = tuple(op.out_view.strides)
 
-        dtype = out.dtype
-        shape = in_tensor.shape
-        axes = op.axis_order
+            dtype = out.dtype
+            shape = in_tensor.shape
+            axes = op.axis_order
+        elif isinstance(op, AssignOp):
+            (larg, rarg) = (_ for _ in op.call_info())
+            out = TensorDescriptionWrapper(self.transformer, larg)
+            in_tensor = TensorDescriptionWrapper(self.transformer, rarg)
+
+            dtype = out.dtype
+            shape = in_tensor.shape
+            axes = tuple(range(len(shape)))
 
         self.kernel, self.params = get_dimshuffle(dtype, shape, axes, in_tensor, out)
 
