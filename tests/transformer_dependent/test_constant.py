@@ -23,8 +23,7 @@ import ngraph as ng
 from ngraph.testing import executor
 import pytest
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.separate_execution]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
 
 def test_constant_init(transformer_factory):

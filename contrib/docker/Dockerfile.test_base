@@ -55,6 +55,6 @@ WORKDIR /root/ngraph-test
 ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
 
-ADD tests/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
+ADD tests/config/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
 
 WORKDIR /root/ngraph-test
