@@ -1,14 +1,12 @@
 import ngraph as ng
-from ngraph.transformers.passes.passes import GraphRewritePass, PeepholeGraphPass
-from ngraph.util.generics import generic_method
+from ngraph.transformers.passes.passes import GraphRewritePass
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
-from ngraph.op_graph.op_graph import Maximum, Minimum, BroadcastOp, NegativeOp, Sum
-from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp, AssignableTensorOp, variable, TensorOp
+from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
+from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
-from ngraph.op_graph.op_graph import Unflatten, ContiguousOp, BroadcastOp, BinaryElementWiseOp, Flatten, Divide
+from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
 from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
-from collections import deque as Queue
 
 
 class CPUFusion(GraphRewritePass):
@@ -123,7 +121,8 @@ class CPUFusion(GraphRewritePass):
                 batchnorm_fprop = self.tensor_to_op_dict[input_tensor]
                 self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
             else:
-                assert("No matching fprop BatchnormOp for the input_tensor {}".format(input_tensor))
+                assert("No matching fprop BatchnormOp for the input_tensor \
+                       {}".format(input_tensor))
 
     def construct_batchnorm_bprop_pattern(self):
         """
@@ -188,19 +187,19 @@ class CPUFusion(GraphRewritePass):
                                                     lambda op: isinstance(op, BroadcastOp))
         # construct the pattern
         dxhat = Multiply(gamma, delta)
-        #divar = np.sum(dxhat*xmu, axis=0)
+        # divar = np.sum(dxhat*xmu, axis=0)
         divar = Sum(Multiply(dxhat, xmu1))
-        #dxmu1 = dxhat * ivar
+        # dxmu1 = dxhat * ivar
         dxmu1 = Multiply(dxhat, ivar)
-        #dsqrtvar = -1. /(sqrtvar**2) * divar
+        # dsqrtvar = -1. /(sqrtvar**2) * divar
         dsqrtvar = Multiply(Multiply(inverse_sqrtvar, negative_inverse_sqrtvar), divar)
-        #dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar
+        # dvar = 0.5 * 1. /np.sqrt(var+eps) * dsqrtvar
         dvar = Divide(Multiply(dsqrtvar, constant_point_5_w_broadcast), sqrtvar)
-        #dsq = 1. / N * np.ones((N, D)) * dvar
+        # dsq = 1. / N * np.ones((N, D)) * dvar
         dsq = Divide(Multiply(dvar, var), sqrsum)
         dsq_w_broadcast = ng.PatternSkipOp(dsq,
                                            (lambda op: isinstance(op, BroadcastOp)))
-        #dxmu2 = 2 * xmu * dsq
+        # dxmu2 = 2 * xmu * dsq
         dxmu2 = Multiply(xmu2, Multiply(constant_two_w_broadcast, dsq_w_broadcast))
 
         # dx1 = (dxmu1 + dxmu2)
