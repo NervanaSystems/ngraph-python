@@ -12,18 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
-# commonly used modules.  Should these still be imported in neon frontend?
-from ngraph import make_axes
-from ngraph.frontends.neon.axis import ax
-from ngraph.frontends.neon.activation import Rectlin, Rectlinclip, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic
-from ngraph.frontends.neon.argparser import NgraphArgparser
-from ngraph.frontends.neon.arrayiterator import *
-from ngraph.frontends.neon.callbacks import *
-# from ngraph.frontends.neon.callbacks2 import *
-from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.model import *
-from ngraph.frontends.neon.optimizer import *
-from ngraph.frontends.neon.initializer import *
-from ngraph.frontends.neon.data import *
+from ngraph.frontends.neon.data.mnist import MNIST
+from ngraph.frontends.neon.data.cifar10 import CIFAR10
+from ngraph.frontends.neon.data.ptb import PTB
+from ngraph.frontends.neon.data.imdb import IMDB

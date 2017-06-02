@@ -126,7 +126,8 @@ class ImporterTester(object):
 
         # evaluate ngraph
         with ExecutorFactory() as ex:
-            ng_result_comp = ex.transformer.computation(ng_target_node, *ng_feed_dict.keys())
+            ng_result_comp = ex.transformer.computation(ng_target_node,
+                                                        *ng_feed_dict.keys())
 
             if tf_init_op:
                 ex.transformer.computation(importer.get_op_handle(tf_init_op))()

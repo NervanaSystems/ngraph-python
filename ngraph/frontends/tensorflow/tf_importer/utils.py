@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-import ngraph as ng
 import numpy as np
 import tensorflow as tf
 
@@ -64,7 +63,7 @@ def np_layout_shuffle(in_tensor, in_axes, out_axes):
     if len(in_axes) < len(out_axes):
         # expand
         extra_axes = "".join(list(out_axes_set - in_axes_set))
-        extra_dims = (1, ) * len(extra_axes)
+        extra_dims = (1,) * len(extra_axes)
         in_tensor = np.reshape(in_tensor, in_tensor.shape + extra_dims)
         in_axes = in_axes + extra_axes
     elif len(in_axes) > len(out_axes):
@@ -106,7 +105,7 @@ def remove_tf_name_prefix(name):
     return name[1:] if name[0] == "^" else name
 
 
-def tf_to_shape_tuple(input):
+def tf_obj_shape(input):
     """
     Convert tf objects to shape tuple.
 
@@ -120,64 +119,13 @@ def tf_to_shape_tuple(input):
     if isinstance(input, tf.TensorShape):
         return tuple([int(i.value) for i in input])
     elif isinstance(input, tf.Tensor):
-        return tf_to_shape_tuple(input.get_shape())
+        return tf_obj_shape(input.get_shape())
     elif isinstance(input, tf.AttrValue):
         return tuple([int(d.size) for d in input.shape.dim])
     elif isinstance(input, tf.NodeDef):
-        return tf_to_shape_tuple(input.attr['shape'])
+        return tf_obj_shape(input.attr['shape'])
     else:
-        raise TypeError("Input to `tf_to_shape_tuple` has the wrong type.")
-
-
-def tf_to_shape_axes(input):
-    """
-    Convert tf objects to axes.
-
-    Arguments:
-        input: tf.TensorShape, tf.Tensor, tf.AttrValue or tf.NodeDef
-               the corresponding tensorflow object
-
-    Returns:
-        tuple: new axes of the tensorflow object
-    """
-    return shape_to_axes(tf_to_shape_tuple(input))
-
-
-def shape_to_axes(shape):
-    """
-    Convert shape to axes.
-
-    Arguments:
-        shape: Shape of tensor
-
-    Returns:
-        Axes: Axes for shape.
-    """
-    if not shape:
-        return ng.make_axes()
-    axes = [ng.make_axis(length=s) for s in shape]
-    return axes
-
-
-def is_compatible_numpy_shape(left_shape, right_shape):
-    """
-    Check if left_shape and right_shape are numpy-compatible.
-
-    Arguments:
-        left_shape: Shape of the left tensor.
-        right_shape: Shape of the right tensor.
-
-    Returns:
-        True if numpy-compatible, False otherwise.
-    """
-    if (not left_shape) or (not right_shape):
-        return True
-    for l, r in zip(reversed(left_shape), reversed(right_shape)):
-        if l == 1 or r == 1:
-            continue
-        elif l != r:
-            return False
-    return True
+        raise TypeError("Input to `tf_obj_shape` has the wrong type.")
 
 
 def to_int(input):
@@ -197,3 +145,17 @@ def to_int(input):
         return [int(i) for i in input]
     else:
         return int(input)
+
+
+def get_nested_attr(obj, name):
+    """
+    Similar to `getattr`, supports getting from nested attributes.
+    E.g.
+    tf.tanh <-> get_nested_attr(tf, 'tanh')
+    tf.nn.relu <-> get_nested_attr(tf, 'nn.relu')
+    """
+    names = name.split('.')
+    if len(names) != 1:
+        return get_nested_attr(getattr(obj, names[0]), '.'.join(names[1:]))
+    else:
+        return getattr(obj, names[0])
