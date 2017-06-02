@@ -198,7 +198,7 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
             else:
                 c_type_name = None
 
-            if c_type_name is not None and self.transformer.use_mlsl == True:
+            if c_type_name is not None and self.transformer.use_mlsl:
                 self.transformer.allocate_storage_code.append(
                     """try:
     import ctypes
@@ -221,7 +221,7 @@ except NameError as error:
                 self.transformer.allocate_storage_code.append(
                     "{}(np.empty({}, dtype=np.dtype('{}')))",
                     self.update_name, elts, self.dtype.name)
- 
+
             self.transformer.allocate_storage_code.endl()
 
         self.transformer.allocate_storage_code.append("def {}(buffer):",
