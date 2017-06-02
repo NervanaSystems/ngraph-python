@@ -1476,8 +1476,10 @@ class PatternLabelOp(TensorOp):
     label to its matching op. By default, constraint_fn is always true.
 
     """
-    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
-        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+    def __init__(self, label, constraint_fn=(lambda op: True), axes=None, **kwargs):
+        if axes is None:
+            axes = {}
+        super(PatternLabelOp, self).__init__(axes=axes, **kwargs)
         self.label = label
         self.constraint_fn = constraint_fn
 
@@ -3725,7 +3727,7 @@ class CrossEntropyBinaryInnerOp(ValueOp):
         self.y = y
         self.t = t
         self.value_tensor = -(safelog(y) * t + safelog(1 - y) * (1 - t))
-        if isinstance(y.deriv_handler, SigmoidOp) or isinstance(y.deriv_handler, SigmoidAtomicOp):
+        if isinstance(y.deriv_handler, SigmoidOp):
             self.x = y.deriv_handler.x
             if enable_sig_opt:
                 # Simpler equivalent
