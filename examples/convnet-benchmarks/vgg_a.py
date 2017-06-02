@@ -87,10 +87,13 @@ seq1 = Sequential([Convolution((3, 3, 64), filter_init=GaussianInit(var=0.01),
                                activation=Rectlin(), padding=1),
                    Pool2D(2, strides=2),
                    Affine(nout=4096, weight_init=GaussianInit(var=0.01),
+                          bias_init=init,
                           activation=Rectlin()),
                    Affine(nout=4096, weight_init=GaussianInit(var=0.01),
+                          bias_init=init,
                           activation=Rectlin()),
                    Affine(axes=ax.Y, weight_init=GaussianInit(var=0.01),
+                          bias_init=init,
                           activation=Softmax())])
 
 # Learning rate change based on schedule from learning_rate_policies.py
@@ -104,7 +107,6 @@ train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_computation = ng.computation(batch_cost, "all")
 
-# Now bing the computations we are interested in
 transformer = ngt.make_transformer()
 train_function = transformer.add_computation(train_computation)
 
