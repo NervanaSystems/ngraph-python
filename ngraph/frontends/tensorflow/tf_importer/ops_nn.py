@@ -15,7 +15,7 @@
 from __future__ import division
 import ngraph as ng
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
-from ngraph.frontends.common.utils import common_conv2d_pool_padding,\
+from ngraph.frontends.common.utils import common_conv2d_pool_padding, \
     common_conv2d_pool_output_shape
 
 
@@ -122,10 +122,11 @@ class OpsNN(OpsBase):
         output = ng.convolution(params, image, weight, axes=ax_o)
 
         # output KMPQN -> NPQK
-        output = ng.axes_with_order(output, ng.make_axes(
-            [N, M, P, Q, K]))  # KMPQN -> NMPQK
+        # KMPQN -> NMPQK
+        output = ng.axes_with_order(output, ng.make_axes([N, M, P, Q, K]))
+        # NMPQK -> NPQK
         output = ng.tensor_slice(output, [slice(None), 0, slice(None),
-                                          slice(None), slice(None)])  # NMPQK -> NPQK
+                                          slice(None), slice(None)])
 
         return output
 
@@ -227,11 +228,12 @@ class OpsNN(OpsBase):
         output = ng.pooling(params, image, axes=ax_o)
 
         # output KMPQN -> NPQK
+        # KMPQN -> NMPQK
         output = ng.axes_with_order(output, ng.make_axes(
-            [N, M, P, Q, K]))  # KMPQN -> NMPQK
+            [N, M, P, Q, K]))
+        # NMPQK -> NPQK
         output = ng.tensor_slice(output, [slice(None), 0, slice(None),
-                                          slice(None),
-                                          slice(None)])  # NMPQK -> NPQK
+                                          slice(None), slice(None)])
 
         return output
 
@@ -252,7 +254,8 @@ class OpsNN(OpsBase):
             logits, labels, name
         """
 
-        # logits: (N1, Y1), labels: (N2,)
+        #         (    N,     Y),         (    N)
+        # logits: (pos_1, pos_0), labels: (pos_0)
         logits, labels = inputs
 
         # check input dimension
@@ -265,25 +268,18 @@ class OpsNN(OpsBase):
                                       "labels' shape must be (N,), "
                                       "other shapes not supported yet.")
         # get axis
-        axis_y = logits.axes[1]
+        axis_n, axis_y = logits.axes
 
-        # labels_one_hot: (Y2, N2)
-        labels_one_hot = ng.one_hot(labels, axis=axis_y)
+        # convert labels to one-hot labels
+        labels = ng.cast_axes(labels, ng.make_axes(axis_n))
+        labels = ng.one_hot(labels, axis=axis_y)
+        labels = ng.axes_with_order(labels, axes=logits.axes)
 
-        # predicts: (N1, Y1)
+        # predicts: (N, Y)
         predicts = ng.softmax(logits, normalization_axes=axis_y)
 
-        # dim-shuffle / cast to (Y1, N1)
-        predicts_axes = ng.make_axes(
-            [axis for axis in reversed(predicts.axes)])
-        predicts = ng.axes_with_order(predicts, axes=predicts_axes)
-        labels_one_hot = ng.cast_axes(labels_one_hot, predicts_axes)
-
-        # cross_entropy: (N1,)
-        cross_entropy = ng.cross_entropy_multi(
-            predicts, labels_one_hot, out_axes=(logits.axes[0],))
-
-        return cross_entropy
+        # cross_entropy: (N)
+        return ng.cross_entropy_multi(predicts, labels, out_axes=(axis_n,))
 
     def Softmax(self, tf_node, inputs):
         """

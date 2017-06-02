@@ -13,8 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_axes
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
+from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 import ngraph as ng
 
 
@@ -37,6 +38,6 @@ class OpsPlaceholder(OpsBase):
         Inputs to tf_node:
             dtype, shape, name
         """
-        axes = tf_to_shape_axes(tf_node)
+        axes = make_pos_axes(tf_obj_shape(tf_node))
         ng_op = ng.placeholder(axes).named(tf_node.name)
         return ng_op
