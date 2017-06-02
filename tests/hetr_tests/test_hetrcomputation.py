@@ -443,6 +443,21 @@ ax_D = ng.make_axis(24)
 @pytest.mark.parametrize('config', [
     {
         'axes': ng.make_axes([ax_A]),
+        'device_id': ('0'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
         'device_id': ('1', '2'),
         'parallel_axis': ax_A,
     },
@@ -488,6 +503,8 @@ ax_D = ng.make_axis(24)
     },
 ])
 def test_gpu_graph(config):
+    pytest.xfail("Multi-GPU testing not enabled yet")
+
     t = config
     with ng.metadata(device='gpu'):
         x = ng.placeholder(axes=t['axes'])
@@ -499,8 +516,8 @@ def test_gpu_graph(config):
         x_plus_two = x_plus_one + 1
 
     np_x = np.random.randint(100, size=t['axes'].full_lengths)
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_two, x)
+    with closing(ngt.make_transformer_factory('hetr')()) as transformer:
+        computation = transformer.computation(x_plus_two, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 2)
 

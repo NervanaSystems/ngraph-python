@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import \
+    cast_to_pos_axes
 import ngraph as ng
 
 
@@ -48,11 +50,18 @@ class OpsMatmul(OpsBase):
         assert len(left.axes) == len(right.axes) == 2
         assert left.axes[1].length == right.axes[0].length
 
-        # cast axis
-        left_cast = ng.cast_axes(left, [left.axes[0], right.axes[0]])
+        # step 1: cast left (pos_1, pos_0), right (pos_1, pos_0) =>
+        #              left (temp , pos_1), right (pos_1, pos_0)
+        # step 2: perform left dot right, result
+        #         (temp, pos_0)
+        # step 3: cast back to (post_1, pos_0)
+        left_temp_axes = ng.make_axes([ng.make_axis(left.axes[0].length),
+                                       right.axes[0]])
+        left = ng.cast_axes(left, axes=left_temp_axes)
 
         # result op
-        result_op = ng.dot(left_cast, right).named(tf_node.name)
+        result_op = ng.dot(left, right).named(tf_node.name)
+        result_op = cast_to_pos_axes(result_op)
 
         # return
         return result_op
