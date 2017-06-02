@@ -14,20 +14,9 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
-from ngraph.frontends.tensorflow.tf_importer.utils import shape_to_axes
-import collections
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 import ngraph as ng
 import numpy as np
-
-
-def _flatten(x):
-    """
-    https://goo.gl/yPP8hh
-    """
-    if isinstance(x, collections.Iterable):
-        return [a for i in x for a in _flatten(i)]
-    else:
-        return [x]
 
 
 class OpsTransform(OpsBase):
@@ -88,7 +77,7 @@ class OpsTransform(OpsBase):
 
         # return
         return ng.constant(range_val,
-                           shape_to_axes(range_val.shape)).named(tf_node.name)
+                           make_pos_axes(range_val.shape)).named(tf_node.name)
 
     def Size(self, tf_node, inputs):
         """
@@ -206,7 +195,7 @@ class OpsTransform(OpsBase):
             # reshape const
             np_val = np.reshape(tensor.const, shape_o)
             return ng.constant(np_val,
-                               shape_to_axes(np_val.shape)).named(tf_node.name)
+                               make_pos_axes(np_val.shape)).named(tf_node.name)
         else:
             ndims_o = len(shape_o)
             if ndims_o != 1 and ndims_o != 2:
@@ -218,7 +207,7 @@ class OpsTransform(OpsBase):
                 cumprods = list(np.cumprod(shape_i))
                 flatten_at_idx = cumprods.index(shape_o[0]) + 1
                 tensor = ng.flatten_at(tensor, flatten_at_idx)
-            res = ng.cast_axes(tensor, shape_to_axes(shape_o))
+            res = ng.cast_axes(tensor, make_pos_axes(shape_o))
             return res.named(tf_node.name)
 
     def Tile(self, tf_node, inputs):
@@ -255,7 +244,7 @@ class OpsTransform(OpsBase):
 
         # make new constants
         return ng.constant(output_val,
-                           shape_to_axes(output_val.shape)).named(tf_node.name)
+                           make_pos_axes(output_val.shape)).named(tf_node.name)
 
     def ExpandDims(self, tf_node, inputs):
         """
