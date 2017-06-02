@@ -22,7 +22,7 @@ import collections
 from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 rng = RandomTensorGenerator(0, np.float32)
