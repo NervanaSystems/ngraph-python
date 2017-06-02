@@ -86,6 +86,10 @@ def log(x, name=None):
     return ng.log(x).named(name)
 
 
+def negative(x, name=None):
+    return ng.negative(x).named(name)
+
+
 def square(x, name=None):
     return ng.square(x).named(name)
 
@@ -104,7 +108,7 @@ def _reduction(input_tensor, ng_op, axis=None, keep_dims=False, name=None):
     else:
         try:
             iter(axis)
-        except TypeError, _:
+        except TypeError:
             axis = list(axis)
         ng_reduction_axes = ng.make_axes([input_tensor.axes[ind] for ind in
                                           axis])
@@ -177,6 +181,12 @@ def matmul(left, right, transpose_a=False, transpose_b=False, name=None):
     """
     Only support 2d matmul for now.
     """
+    # Transpose
+    if transpose_a:
+        left = ng.Transpose(left)
+    if transpose_b:
+        right = ng.Transpose(right)
+
     # Check shape
     assert len(left.axes) == len(right.axes) == 2
     assert left.axes[1].length == right.axes[0].length
@@ -221,11 +231,11 @@ def sparse_softmax_cross_entropy_with_logits(labels=None, logits=None,
     """
     Computes softmax cross entropy. The inputs `logits` are unscaled log
     probabilities, and each row of `labels[i]` must be a valid distribution.
-    
+
     Args:
         labels: of axis (N,) for (POS_0,)
         logits: of axis (N, Y) for (POS_1, POS_0)
-        name: 
+        name: name of the ngraph op
     """
     # Check input dimension
     #         (    N,     Y),         (    N)

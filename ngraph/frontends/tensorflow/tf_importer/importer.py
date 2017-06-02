@@ -230,7 +230,8 @@ class TFImporter:
             ng_variables = self.get_op_handle(tf_variables)
             ng_restore_ops = []
             with tf.Session() as sess:
-                checkpoint_path = os.path.join(os.getcwd(), self._checkpoint_path)
+                checkpoint_path = os.path.join(os.getcwd(),
+                                               self._checkpoint_path)
                 self.saver.restore(sess, checkpoint_path)
                 for tf_variable, ng_variable in zip(tf_variables, ng_variables):
                     val = sess.run(tf_variable)

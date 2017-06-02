@@ -22,7 +22,7 @@ from ngraph.frontends.common.utils import CommonSGDOptimizer
 import numpy as np
 import tensorflow as tf
 import ngraph as ng
-import ngraph_shaped as ns
+import ngraph.frontends.tensorflow.tf_importer.ngraph_shaped as ns
 import argparse
 
 
@@ -43,7 +43,11 @@ def mnist_mlp_ns(args):
         ex.transformer.initialize()
 
         # train
-        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        if args.random_data is not None:
+            mnist = args.random_data
+            mnist.reset(0)
+        else:
+            mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
 
         ng_cost_vals = []
         for idx in range(args.max_iter):
@@ -72,7 +76,11 @@ def mnist_mlp_tf(args):
         train_step = tf.train.GradientDescentOptimizer(args.lrate).minimize(
             cost)
         sess.run(init)
-        mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
+        if args.random_data is not None:
+            mnist = args.random_data
+            mnist.reset(0)
+        else:
+            mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
         tf_cost_vals = []
         for idx in range(args.max_iter):
             batch_xs, batch_ys = mnist.train.next_batch(args.batch_size)
@@ -91,6 +99,7 @@ if __name__ == "__main__":
     parser.add_argument('-l', '--lrate', type=float, default=0.1,
                         help="Learning rate")
     parser.add_argument('-b', '--batch_size', type=int, default=128)
+    parser.add_argument('--random_data', default=None)
     args = parser.parse_args()
     mnist_mlp_ns(args)
     mnist_mlp_tf(args)
