@@ -811,7 +811,11 @@ class DuplicateAxisNames(ValueError):
         self.duplicate_axis_names = duplicate_axis_names
 
 
-class UnmatchedAxesError(ValueError):
+class IncompatibleAxesError(ValueError):
+    pass
+
+
+class UnmatchedAxesError(IncompatibleAxesError):
     pass
 
 
