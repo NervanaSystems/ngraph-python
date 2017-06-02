@@ -2,12 +2,14 @@ FROM ngraph_base
 
 # install dependencies
 WORKDIR /root
-RUN apt-get install -y python-dev cmake && \
+RUN apt-get update && \
+    apt-get install -y python-dev cmake && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
 # install aeon dependency
-RUN apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev cmake libgtest-dev && \
+RUN apt-get update && \
+    apt-get install -y libcurl4-openssl-dev clang libopencv-dev libsox-dev cmake libgtest-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
@@ -53,6 +55,6 @@ WORKDIR /root/ngraph-test
 ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
 
-ADD tests/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
+ADD tests/config/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
 
 WORKDIR /root/ngraph-test

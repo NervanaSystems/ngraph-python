@@ -29,7 +29,7 @@ from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
-from ptb import PTB
+from ngraph.frontends.neon import PTB
 
 
 # parse the command line arguments

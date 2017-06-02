@@ -102,9 +102,9 @@ class ConvFpropKernel(GPUKernel):
         Gets GPUTensor for inputs and output. Binds all parameters to the GPU
         kernels
         """
-        I_data = self.I.value.tensor
-        F_data = self.F.value.tensor
-        O_data = self.O.value.tensor
+        I_data = self.tensor_view_from_td(self.I).tensor
+        F_data = self.tensor_view_from_td(self.F).tensor
+        O_data = self.tensor_view_from_td(self.O).tensor
         self.fprop_kernels.bind_params(I_data, F_data, O_data, X=None,
                                        bias=None, bsum=None, alpha=1.0, beta=0.0,
                                        relu=False, brelu=False, slope=0.0)
@@ -198,9 +198,9 @@ class ConvBpropKernel(GPUKernel):
         Gets GPUTensor for inputs and output. Binds all parameters to the GPU
         kernels
         """
-        E_data = self.E.value.tensor
-        F_data = self.F.value.tensor
-        O_data = self.O.value.tensor
+        E_data = self.tensor_view_from_td(self.E).tensor
+        F_data = self.tensor_view_from_td(self.F).tensor
+        O_data = self.tensor_view_from_td(self.O).tensor
         self.bprop_kernels.bind_params(E_data, F_data, O_data, O_data,
                                        bias=None, bsum=None, alpha=1.0, beta=0.0,
                                        relu=False, brelu=False, slope=0.0)
@@ -298,9 +298,9 @@ class ConvUpdateKernel(GPUKernel):
         Gets GPUTensor for inputs and output. Binds all parameters to the GPU
         kernels
         """
-        E_data = self.E.value.tensor
-        I_data = self.I.value.tensor
-        U_data = self.U.value.tensor
+        E_data = self.tensor_view_from_td(self.E).tensor
+        I_data = self.tensor_view_from_td(self.I).tensor
+        U_data = self.tensor_view_from_td(self.U).tensor
         self.updat_kernels.bind_params(I_data, E_data, U_data, alpha=1.0, beta=0.0)
         super(ConvUpdateKernel, self).bind_buffers()
 

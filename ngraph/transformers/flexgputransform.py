@@ -99,8 +99,9 @@ class FlexGPUTransformer(GPUTransformer):
 
         FlexDECPass().do_pass(self.ops, self)
 
-    def transform_ordered_ops(self, ordered_ops, name):
-        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
+            computation, ordered_ops, name)
 
         # device memory allocation after drv init
         self.flex_manager.allocate()
@@ -175,9 +176,8 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
         self.flex_entry = self.transformer.flex_manager.make_flex_entry(name=self.name)
 
     def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return FlexGPUDeviceTensor(self.transformer, self, tensor_description,
-                                   name="v_" + tensor_description.name + "_" + shape_str)
+        name = self.get_tensor_name(tensor_description)
+        return FlexGPUDeviceTensor(self.transformer, self, tensor_description, name=name)
 
 
 class FlexGPUKernelGroup(GPUKernelGroup):

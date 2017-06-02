@@ -35,7 +35,7 @@ class DeviceAssignPass(GraphBuildingPass):
         op.metadata['host_transformer'] = socket.gethostname()
         if isinstance(op.metadata['device_id'], (list, tuple)):
             op.metadata['transformer'] = \
-                [op.metadata['device'] + i for i in op.metadata['device_id']]
+                [op.metadata['device'] + str(i) for i in op.metadata['device_id']]
             [self.hetr.register_transformer(tname) for tname in op.metadata['transformer']]
         else:
             op.metadata['transformer'] = transformer
@@ -57,8 +57,10 @@ class CommunicationPass(GraphBuildingPass):
             comm_pattern = get_comm_pattern(from_node=arg, to_node=op)
             if comm_pattern:
                 pair = CommNodePair(from_node=arg, to_node=op, node_type=comm_pattern)
-                self.send_nodes.add(pair.get_send_node())
-                args.append(pair.get_recv_node())
+                if pair.get_send_node():
+                    self.send_nodes.add(pair.get_send_node())
+                if pair.get_recv_node():
+                    args.append(pair.get_recv_node())
             else:
                 args.append(arg)
 

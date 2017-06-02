@@ -17,7 +17,7 @@
 from ngraph import make_axes
 from ngraph.frontends.neon.axis import ax
 from ngraph.frontends.neon.activation import Rectlin, Rectlinclip, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic
+    Logistic, LogisticAtomic
 from ngraph.frontends.neon.argparser import NgraphArgparser
 from ngraph.frontends.neon.arrayiterator import *
 from ngraph.frontends.neon.callbacks import *
@@ -26,3 +26,4 @@ from ngraph.frontends.neon.layer import *
 from ngraph.frontends.neon.model import *
 from ngraph.frontends.neon.optimizer import *
 from ngraph.frontends.neon.initializer import *
+from ngraph.frontends.neon.data import *

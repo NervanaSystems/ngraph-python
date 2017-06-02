@@ -17,81 +17,36 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
 import numpy as np
+import pytest
+import tensorflow as tf
+
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
-from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
+from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape, \
+    get_nested_attr
 
 
+# call by tf.unary_ew_op(tensor)
 class Tester(ImporterTester):
-    def test_tanh_sigmoid(self):
-        # computation
-        a = tf.placeholder(tf.float32, shape=(2, 3))
-        b = tf.placeholder(tf.float32, shape=(3, 4))
-        c = tf.placeholder(tf.float32, shape=(2, 4))
-        d = tf.sigmoid(tf.matmul(a, tf.tanh(b)))
-        e = tf.sigmoid(c)
-        f = d + e
+    @pytest.mark.parametrize("op_name", [
+        'tanh',
+        'sigmoid',
+        'nn.relu',
+        'identity',
+        'log',
+        'neg',
+        'square'
+    ])
+    def test_unary_ops(self, op_name):
+        # op
+        tf_op = get_nested_attr(tf, op_name)
 
-        # value
-        feed_dict = dict()
-        for x in [a, b, c]:
-            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
+        # input tensor
+        x = tf.placeholder(tf.float32, shape=(3, 3))
 
-        # test
-        self.run(f, tf_feed_dict=feed_dict)
+        # feed_dict
+        feed_dict = {x: np.random.rand(*tf_obj_shape(x))}
 
-    def test_relu(self):
-        # computation
-        a = tf.placeholder(tf.float32, shape=(100, 200))
-        f = tf.nn.relu(a)
-
-        # value
-        feed_dict = {a: np.random.randn(*tf_to_shape_tuple(a))}
-
-        # test
-        self.run(f, tf_feed_dict=feed_dict)
-
-    def test_identity(self):
-        # computation
-        a = tf.placeholder(tf.float32, shape=(2, 3))
-        b = tf.placeholder(tf.float32, shape=(2, 3))
-        c = tf.identity(a) + b
-        f = tf.identity(c)
-
-        # value
-        feed_dict = dict()
-        for x in [a, b]:
-            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
-
-        # test
-        self.run(f, tf_feed_dict=feed_dict)
-
-    def test_log(self):
-        # computation
-        vals = np.array([[0.5], [1.], [1.5], [10]])
-        x = tf.placeholder(tf.float32, shape=(1, ))
-        log_x = tf.log(x)
-
-        # test
-        for val in vals:
-            self.run(log_x, tf_feed_dict={x: val})
-
-    def test_neg(self):
-        # computation
-        a = tf.placeholder(tf.float32, shape=(20, 30))
-        neg_a = tf.neg(a)
-
-        # test
-        feed_dict = {a: np.random.rand(*tf_to_shape_tuple(a))}
-        self.run(neg_a, tf_feed_dict=feed_dict)
-
-    def test_square(self):
-        # tf ops
-        y = tf.placeholder(tf.float32, [8, 5])
-        f = tf.square(y)
-        y_np = np.random.randn(8, 5)
-        feed_dict = {y: y_np}
-
-        # test
+        # check tf vs ng
+        f = tf_op(x)
         self.run(f, tf_feed_dict=feed_dict)
