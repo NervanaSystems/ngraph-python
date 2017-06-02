@@ -34,11 +34,11 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     SetItemOp, ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
-from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.debug import PrintOp
+from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
     CPUTensorShaping, SimplePrune
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout

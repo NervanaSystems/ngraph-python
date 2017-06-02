@@ -1,12 +1,12 @@
 import ngraph as ng
-from ngraph.transformers.passes.passes import GraphRewritePass
-from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
 from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
-from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
+from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
+from ngraph.transformers.passes.passes import GraphRewritePass
 
 
 class CPUFusion(GraphRewritePass):

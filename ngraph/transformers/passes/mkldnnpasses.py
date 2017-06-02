@@ -12,22 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from operator import itemgetter
+from __future__ import division
 
-from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, ComputationOp, \
     Flatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp
-from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.batchnorm import BatchnormOp, BpropBatchnormOp
+from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.op_graph.axes import FlattenedAxis
-
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
+from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
 
 import ctypes as ct
 import numpy as np
 import collections
+from operator import itemgetter
 from orderedset import OrderedSet
 
 
@@ -80,7 +80,7 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     mkl_shape = get_size_mkl_order(op_axes, order)
     data_type = mkldnn.datatype[td.dtype.type]
     elem_size = td.dtype.itemsize
-    mkl_strides = [stride / elem_size for stride in get_strides_mkl_order(td, order)]
+    mkl_strides = [stride // elem_size for stride in get_strides_mkl_order(td, order)]
     # TODO(jbobba) - Handle views for tensors that are not fully materialized
     mkl_axes = [axis for axis in get_axes_mkl_order(op_axes, order)]
     mkl_shape_arg = ((ct.c_int) * len(mkl_shape))(*mkl_shape)
@@ -118,8 +118,8 @@ def get_mkl_layout(mkldnn, op, order, use_formats=False):
 
 def dbg_print_kernel(mkldnn, op, op_id):
     if (mkldnn.mkldnn_verbose):
-        print
-        print(op_id, op.name)
+        # print
+        # print(op_id, op.name)
         mkldnn.print_kernel(mkldnn.kernels[op.name])
 
 
@@ -657,9 +657,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         output_shape = ((ct.c_int) * len(out_shape))(*out_shape)
 
         (input1_layout, mkl_axes) = \
-            get_mkl_layout(self.mkldnn, I_array1, range(len(I_array1.axes)))
+            get_mkl_layout(self.mkldnn, I_array1, list(range(len(I_array1.axes))))
         (input2_layout, _) = \
-            get_mkl_layout(self.mkldnn, I_array2, range(len(I_array2.axes)))
+            get_mkl_layout(self.mkldnn, I_array2, list(range(len(I_array2.axes))))
         data_type = self.mkldnn.datatype[op.dtype.type]
 
         op_id = len(self.mkldnn.kernels)
