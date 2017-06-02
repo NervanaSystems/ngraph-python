@@ -46,7 +46,7 @@ from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
-from ngraph.transformers.passes.nviz import VizPass
+# from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
     DeviceBufferReference, DeviceTensor, make_transformer_factory, \
@@ -149,6 +149,7 @@ class CPUPoolEngine(object):
 
 
 class CPUComputation(Computation):
+
     def __init__(self, transformer, computation_op, **kwargs):
         super(CPUComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
@@ -479,9 +480,9 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(BatchnormOp)
     def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
         self.append("mkldnn.fprop_batchnorm('{}', inputs={}, outputs={}, gamma={},\
-                     bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
-                     output, gamma, bias, mean, variance, epsilon)
-    # self, name, outputs, delta, inputs, gamma, bias, mean, variance, epsilon
+                    bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
+                    output, gamma, bias, mean, variance, epsilon)
+
     @generate_op.on_type(BpropBatchnormOp)
     def generate_op(self, op, output, delta, inputs, gamma, bias, mean, variance):
         self.append("mkldnn.bprop_batchnorm('{}', outputs={}, delta={}, inputs={}, \
@@ -494,7 +495,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(BpropReluOp)
     def generate_op(self, op, outputs, delta, inputs):
-        self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})", op.name, delta, outputs, inputs, op.fprop.slope)
+        self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})",
+                    op.name, delta, outputs, inputs, op.fprop.slope)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -546,7 +548,6 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(MklReorderOp)
     def generate_op(self, op, output, input):
-        #self.append("{}[...] = np.copy({})", output, input)
         self.append("mkldnn.mkl_reorder('{}', {}, {})", op.name, output, input)
 
     @generate_op.on_type(Multiply)
@@ -668,7 +669,7 @@ class CPUCodeGenerator(PyGen):
         allreduce_id = len(self.allreduce_nodes)
         self.allreduce_nodes.append(op)
         self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
-    
+
 
 class CPUTransformer(ComputationGraphTransformer):
     """
@@ -711,10 +712,10 @@ class CPUTransformer(ComputationGraphTransformer):
                              RequiredTensorShaping(),
                              CPUTensorShaping()
                              ]
-        if self.mkldnn.mkldnn_enabled:
-          self.graph_passes.append(MklCreateOpDescriptors(self.mkldnn)),
-          self.graph_passes.append(MklAddLayoutConversions(self.mkldnn, add_layout_conversion))
-        #self.graph_passes.append([VizPass(show_axes=True,view=False)])
+        if self.mkldnn.enabled:
+            self.graph_passes.append(MklCreateOpDescriptors(self.mkldnn)),
+            self.graph_passes.append(MklAddLayoutConversions(self.mkldnn, add_layout_conversion))
+        # self.graph_passes.append([VizPass(show_axes=True,view=False)])
 
     def device_buffer_storage(self, bytes, dtype, name):
         """

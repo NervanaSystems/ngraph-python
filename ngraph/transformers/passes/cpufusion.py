@@ -123,7 +123,7 @@ class CPUFusion(GraphRewritePass):
                 batchnorm_fprop = self.tensor_to_op_dict[input_tensor]
                 self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
             else:
-                assert("No matching fprop BatchnormOp for the input_tensor {}".format(input_tensor) )
+                assert("No matching fprop BatchnormOp for the input_tensor {}".format(input_tensor))
 
     def construct_batchnorm_bprop_pattern(self):
         """
@@ -150,43 +150,43 @@ class CPUFusion(GraphRewritePass):
         self.batchnorm_bprop_mean_2 = "mean_2"
         self.batchnorm_bprop_input_sum = "input_sum"
 
-        #bind the op's to the label
+        # bind the op's to the label
         input_tensor = PatternLabelOp(self.batchnorm_bprop_input_tensor,
-                        (lambda op: isinstance(op, Flatten)))
+                                      (lambda op: isinstance(op, Flatten)))
         var = PatternLabelOp(self.batchnorm_bprop_var_label,
-                        (lambda op: isinstance(op, Divide)))
+                             (lambda op: isinstance(op, Divide)))
         gamma = PatternLabelOp(self.batchnorm_bprop_gamma_label,
-                        (lambda op: isinstance(op, BroadcastOp)))
+                               (lambda op: isinstance(op, BroadcastOp)))
         delta = PatternLabelOp(self.batchnorm_bprop_delta,
-                        (lambda op: isinstance(op, Flatten)))
+                               (lambda op: isinstance(op, Flatten)))
         xmu1 = PatternLabelOp(self.batchnorm_bprop_xmu1_label,
-                        (lambda op: isinstance(op, Subtract)))
+                              (lambda op: isinstance(op, Subtract)))
         xmu2 = PatternLabelOp(self.batchnorm_bprop_xmu2_label,
                               (lambda op: isinstance(op, Subtract)))
         ivar = PatternLabelOp(self.batchnorm_bprop_ivar_label,
-                        (lambda op: isinstance(op, BroadcastOp)))
+                              (lambda op: isinstance(op, BroadcastOp)))
         negative_inverse_sqrtvar = PatternLabelOp(self.batchnorm_bprop_negative_inverse_sqrtvar,
-                        (lambda op: isinstance(op, NegativeOp)))
+                                                  (lambda op: isinstance(op, NegativeOp)))
         inverse_sqrtvar = PatternLabelOp(self.batchnorm_bprop_inverse_sqrtvar,
-                        (lambda op: isinstance(op, ReciprocalOp)))
+                                         (lambda op: isinstance(op, ReciprocalOp)))
         sqrtvar = PatternLabelOp(self.batchnorm_bprop_sqrtvar_label,
-                        (lambda op: isinstance(op, SqrtOp)))
+                                 (lambda op: isinstance(op, SqrtOp)))
         sqrsum = PatternLabelOp(self.batchnorm_bprop_sqrsum,
                                 (lambda op: isinstance(op, Sum)))
         mean_1 = PatternLabelOp(self.batchnorm_bprop_mean_1,
-                         (lambda op: isinstance(op, Divide)))
+                                (lambda op: isinstance(op, Divide)))
         mean_2 = PatternLabelOp(self.batchnorm_bprop_mean_2,
-                         (lambda op: isinstance(op, Divide)))
+                                (lambda op: isinstance(op, Divide)))
         input_sum = PatternLabelOp(self.batchnorm_bprop_input_sum,
-                         (lambda op: isinstance(op, Sum)))
+                                   (lambda op: isinstance(op, Sum)))
 
         constant_point_5 = ng.constant(0.5)
         constant_point_5_w_broadcast = ng.PatternSkipOp(constant_point_5,
-                        lambda op:isinstance(op, BroadcastOp))
+                                                        lambda op: isinstance(op, BroadcastOp))
         constant_two = ng.constant(2)
         constant_two_w_broadcast = ng.PatternSkipOp(constant_two,
-                                                        lambda op: isinstance(op, BroadcastOp))
-        #construct the pattern
+                                                    lambda op: isinstance(op, BroadcastOp))
+        # construct the pattern
         dxhat = Multiply(gamma, delta)
         #divar = np.sum(dxhat*xmu, axis=0)
         divar = Sum(Multiply(dxhat, xmu1))
@@ -199,7 +199,7 @@ class CPUFusion(GraphRewritePass):
         #dsq = 1. / N * np.ones((N, D)) * dvar
         dsq = Divide(Multiply(dvar, var), sqrsum)
         dsq_w_broadcast = ng.PatternSkipOp(dsq,
-                                (lambda op: isinstance(op, BroadcastOp)))
+                                           (lambda op: isinstance(op, BroadcastOp)))
         #dxmu2 = 2 * xmu * dsq
         dxmu2 = Multiply(xmu2, Multiply(constant_two_w_broadcast, dsq_w_broadcast))
 
@@ -210,7 +210,7 @@ class CPUFusion(GraphRewritePass):
         dxmu2_mul = Multiply(Sum(ng.negative(dxmu2)), mean_2)
         dxmu2_div = Divide(dxmu2_mul, input_sum)
         dxmu2_div_w_broadcast = ng.PatternSkipOp(dxmu2_div,
-                                (lambda op: isinstance(op, BroadcastOp)))
+                                                 (lambda op: isinstance(op, BroadcastOp)))
         dxmu2_div_plus_dxmu2 = Add(dxmu2_div_w_broadcast, dxmu2)
 
         dx1 = Add(dxmu1, dxmu2_div_plus_dxmu2)
@@ -220,7 +220,7 @@ class CPUFusion(GraphRewritePass):
                                                  (lambda op: isinstance(op, BroadcastOp)))
         dx = Add(dxmu1_div_w_broadcast, dx1)
         return dx
-    
+
     def construct_batchnorm_fprop_pattern(self):
         """
         Generate graph op that represents a pattern for batchnorm fprop operation.
@@ -296,9 +296,7 @@ class CPUFusion(GraphRewritePass):
         # Register batchnorm fprop pattern
         pattern_batchnorm_fprop = self.construct_batchnorm_fprop_pattern()
         self.register_pattern(pattern_batchnorm_fprop, self.fuse_batchnorm_fprop_callback)
-        
+
         # Register Batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
         self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
-
-

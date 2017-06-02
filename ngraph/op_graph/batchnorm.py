@@ -15,10 +15,22 @@
 
 from ngraph.op_graph.op_graph import TensorOp
 
+
 class BatchnormOp(TensorOp):
 
     def __init__(self, inputs, gamma, beta, epsilon, mean, variance, **kwargs):
-        super(BatchnormOp, self).__init__(args=(inputs, gamma, beta, epsilon, mean, variance), axes=inputs.axes, **kwargs)
+        super(
+            BatchnormOp,
+            self).__init__(
+            args=(
+                inputs,
+                gamma,
+                beta,
+                epsilon,
+                mean,
+                variance),
+            axes=inputs.axes,
+            **kwargs)
         self.eps = epsilon
 
     def generate_adjoints(self, adjoints, delta, inputs):
@@ -28,16 +40,28 @@ class BatchnormOp(TensorOp):
 
 
 class BpropBatchnormOp(TensorOp):
-    """ 
+    """
     Arguments:
     fprop: corrosponding batchnormOp.
     delta: global gradients from the previous layer
     inputs: fprop src input to the batchnormOp
     """
-    def __init__(self, delta, inputs,  fprop, **kwargs):
+
+    def __init__(self, delta, inputs, fprop, **kwargs):
         gamma = fprop.args[1]
-        beta =  fprop.args[2]
-        mean =  fprop.args[4]
+        beta = fprop.args[2]
+        mean = fprop.args[4]
         variance = fprop.args[5]
-        super(BpropBatchnormOp, self).__init__(args=(delta, inputs, gamma, beta, mean, variance), axes=inputs.axes, **kwargs)
+        super(
+            BpropBatchnormOp,
+            self).__init__(
+            args=(
+                delta,
+                inputs,
+                gamma,
+                beta,
+                mean,
+                variance),
+            axes=inputs.axes,
+            **kwargs)
         self.fprop = fprop

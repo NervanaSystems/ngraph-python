@@ -27,7 +27,7 @@ class CPUTensorLayout(PeepholeGraphPass):
         inputs, filters = op.args
 
         replace = False
-        #if not isinstance(inputs, ContiguousOp):
+        # if not isinstance(inputs, ContiguousOp):
         #    inputs = ContiguousOp(inputs)
         #    replace = True
 
@@ -48,7 +48,7 @@ class CPUTensorLayout(PeepholeGraphPass):
             delta = ContiguousOp(delta)
             replace = True
 
-        #if not isinstance(inputs, ContiguousOp):
+        # if not isinstance(inputs, ContiguousOp):
         #    inputs = ContiguousOp(inputs)
         #    replace = True
 
