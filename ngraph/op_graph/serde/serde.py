@@ -103,22 +103,8 @@ def tensor_to_protobuf(tensor):
     pb_tensor = ops_pb.Tensor()
     pb_tensor.dtype = dtype_to_protobuf(tensor.dtype)
     pb_tensor.shape.extend(tensor.shape)
-    if tensor.dtype == np.float16:
-        destination = pb_tensor.float_data
-    elif tensor.dtype == np.float32:
-        destination = pb_tensor.float_data
-    elif tensor.dtype == np.float64:
-        destination = pb_tensor.double_data
-    elif tensor.dtype == np.int64:
-        destination = pb_tensor.int_data
-    elif tensor.dtype == np.uint64:
-        destination = pb_tensor.uint_data
-
-    if isinstance(tensor, np.ndarray):
-        destination.extend(tensor.ravel().tolist())
-    elif isinstance(tensor, np.generic):
-        # A numpy scalar (obtained with `my_ndarray[()]`)
-        destination.append(np.asscalar(tensor))
+    if isinstance(tensor, (np.ndarray, np.generic)):
+        pb_tensor.raw_data = tensor.tobytes()
     else:
         raise ValueError("Unknown tensor value of {}".format(tensor))
     return pb_tensor
@@ -350,12 +336,7 @@ def pb_to_dict(map_val):
 
 def pb_to_tensor(pb_tensor):
     np_dtype = pb_to_dtype(pb_tensor.dtype)
-    if np_dtype == np.float64:
-        data = pb_tensor.double_data
-    elif np_dtype == np.float32 or np_dtype == np.float16:
-        data = pb_tensor.float_data
-    elif np_dtype == np.int64:
-        data = pb_tensor.int_data
+    data = np.fromstring(pb_tensor.raw_data, dtype=np_dtype)
     if len(pb_tensor.shape) == 0:
         return np_dtype.type(data[0])
     else:

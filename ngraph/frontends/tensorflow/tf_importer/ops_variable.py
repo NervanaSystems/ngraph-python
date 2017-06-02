@@ -13,8 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_axes
 from ngraph.frontends.tensorflow.tf_importer.ops_base import OpsBase
+from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 import ngraph as ng
 
 
@@ -37,7 +38,7 @@ class OpsVariable(OpsBase):
 
         # get axes
         try:
-            axes = tf_to_shape_axes(tf_node.attr['shape'])
+            axes = make_pos_axes(tf_obj_shape(tf_node.attr['shape']))
         except:
             raise NotImplementedError('Shape must be know prior to execution')
 
