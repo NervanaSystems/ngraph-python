@@ -112,10 +112,7 @@ message Tensor {
   repeated uint32 shape = 3;
   // TODO(jknight) storing the data inline like this is currently a short term solution for
   // constants.
-  repeated float  float_data  = 4;
-  repeated double double_data = 5;
-  repeated uint64 uint_data   = 6; // int data can go in a
-  repeated sint64 int_data    = 7; // int data can go in a
+  bytes raw_data = 8;
 }
 
 message TensorDescription {

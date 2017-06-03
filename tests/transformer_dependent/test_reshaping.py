@@ -19,7 +19,7 @@ import ngraph as ng
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.testing import ExecutorFactory
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 delta = 1e-3
