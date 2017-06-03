@@ -19,7 +19,7 @@ import pytest
 import ngraph as ng
 rng = RandomTensorGenerator(0, np.float32)
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 @pytest.mark.flex_disabled

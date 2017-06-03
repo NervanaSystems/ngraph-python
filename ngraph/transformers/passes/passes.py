@@ -163,6 +163,7 @@ class GraphRewritePass(GraphPass):
 
     """
     registered_patterns = []
+    replacement_list = []
 
     # Return values for pattern matching
     found = True

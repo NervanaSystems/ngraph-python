@@ -20,7 +20,7 @@ from __future__ import print_function
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
-from ngraph.frontends.tensorflow.tests.test_util import FakeMNIST
+from ngraph.frontends.tensorflow.tests.utils import FakeMNIST
 import argparse
 
 import pytest

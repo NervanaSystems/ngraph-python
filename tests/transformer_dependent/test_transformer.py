@@ -18,7 +18,7 @@ import pytest
 import ngraph as ng
 from ngraph.testing import executor
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 def test_evaluation_twice(transformer_factory):

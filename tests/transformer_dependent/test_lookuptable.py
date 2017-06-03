@@ -22,7 +22,7 @@ from ngraph.testing import RandomTensorGenerator, ExecutorFactory
 from ngraph.frontends.neon import ax
 import pytest
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 rng = RandomTensorGenerator(0, np.float32)
