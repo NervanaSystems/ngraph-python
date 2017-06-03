@@ -56,7 +56,7 @@ class CPUFusion(GraphRewritePass):
             # We need to store relu_fwd_op in a dictionary so that backward Relu
             # can access it.
             self.tensor_to_op_dict[x] = relu_fwd_op
-        self.replace_op(op, relu_fwd_op)
+            self.replace_op(op, relu_fwd_op)
 
     def construct_relu_bprop_pattern(self):
         """
