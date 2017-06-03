@@ -192,9 +192,37 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         self.transformer.allocate_storage_code.append("def {}():", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
-            self.transformer.allocate_storage_code.append(
-                "{}(np.empty({}, dtype=np.dtype('{}')))",
-                self.update_name, elts, self.dtype.name)
+            if self.dtype.name == 'float32':
+                c_type_name = 'c_float'
+            elif self.dtype.name == 'float64':
+                c_type_name = 'c_double'
+            else:
+                c_type_name = None
+
+            if c_type_name is not None and self.transformer.use_mlsl:
+                self.transformer.allocate_storage_code.append(
+                    """try:
+    import ctypes
+    import atexit
+
+    type_size = ctypes.sizeof(ctypes.{3}(1))
+    mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
+    array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(ctypes.{3} * {1}))
+    np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
+    {0}(np_array_{0})
+
+    @atexit.register
+    def free_buffer():
+        mlsl_obj.free(mlsl_buf_{0})
+except NameError as error:
+    print str(error)
+    {0}(np.empty({1}, dtype=np.dtype('{2}')))""",
+                    self.update_name, elts, self.dtype.name, c_type_name)
+            else:
+                self.transformer.allocate_storage_code.append(
+                    "{}(np.empty({}, dtype=np.dtype('{}')))",
+                    self.update_name, elts, self.dtype.name)
+
             self.transformer.allocate_storage_code.endl()
 
         self.transformer.allocate_storage_code.append("def {}(buffer):",

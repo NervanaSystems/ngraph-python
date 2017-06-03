@@ -19,7 +19,7 @@ import ngraph as ng
 
 from ngraph.testing import executor, ExecutorFactory
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 @pytest.fixture(scope='module', params=[
