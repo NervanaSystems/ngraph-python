@@ -4,8 +4,7 @@ from ngraph.frontends import neon
 
 
 def test_convolution():
-    action_axis = ng.make_axis(name='action', length=5)
-    state_axes = ng.make_axes([
+    feature_axes = ng.make_axes([
         ng.make_axis(4, name='feature'),
         ng.make_axis(84, name='width'),
         ng.make_axis(84, name='height'),
@@ -13,8 +12,8 @@ def test_convolution():
     batch_axis_1 = ng.make_axis(name='N', length=1)
     batch_axis_all = ng.make_axis(name='N', length=32)
 
-    state_placeholder = ng.placeholder(state_axes + [batch_axis_1])
-    state_placeholder_all = ng.placeholder(state_axes + [batch_axis_all])
+    state_placeholder = ng.placeholder(feature_axes + [batch_axis_1])
+    state_placeholder_all = ng.placeholder(feature_axes + [batch_axis_all])
 
     model = neon.Convolution(
         (8, 8, 32),
