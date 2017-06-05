@@ -21,7 +21,7 @@ from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
 from ngraph.frontends.neon.layer import output_dim, output_dim_deconv
 
-pytestmark = pytest.mark.transformer_dependent
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -299,6 +299,7 @@ def test_conv(transformer_factory, n64_hw32_c32_3x3):
     assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
 
 
+@pytest.mark.flex_disabled
 def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -337,6 +338,7 @@ def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     assert np.allclose(gradF_ng, gradF_np, rtol=0.1, atol=0)
 
 
+@pytest.mark.flex_disabled
 def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf1 = ConvParams(**deconv_n4_hw4_c1_5x5)
 
