@@ -1,27 +1,24 @@
+import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.frontends import neon
 
 
-def test_convolution():
-    feature_axes = ng.make_axes([
-        ng.make_axis(4, name='feature'),
-        ng.make_axis(84, name='width'),
-        ng.make_axis(84, name='height'),
-    ])
+@pytest.fixture(params=[3])
+def input_size(request):
+    return request.param
+
+
+def test_convolution(input_axis, spatial_axes):
+    feature_axes = spatial_axes + input_axis
+
     batch_axis_1 = ng.make_axis(name='N', length=1)
     batch_axis_all = ng.make_axis(name='N', length=32)
 
     state_placeholder = ng.placeholder(feature_axes + [batch_axis_1])
     state_placeholder_all = ng.placeholder(feature_axes + [batch_axis_all])
 
-    model = neon.Convolution(
-        (8, 8, 32),
-        neon.XavierInit(),
-        strides=4,
-        activation=neon.Rectlin(),
-        batch_norm=True,
-    )
+    model = neon.Convolution((1, 1, 2), neon.XavierInit())
 
     def make_function(placeholder):
         computation = ng.computation(model(placeholder), placeholder)
