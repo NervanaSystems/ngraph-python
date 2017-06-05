@@ -28,7 +28,7 @@ def test_convolution(input_axis, spatial_axes):
 
     # make a computation using the batch size of 32, though it doesn't need to be used
     make_function(state_placeholder_all)
-    # now make another competition with the batch size of 1.
+    # now make another computation with the batch size of 1.
     # the convolution fails because part of the graph is thinking that the batch size
     # is 32 and part of the graph is thinking it is a batch size of 1
     make_function(state_placeholder)(np.zeros(state_placeholder.axes.lengths))
