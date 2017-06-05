@@ -201,9 +201,6 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
             if c_type_name is not None and self.transformer.use_mlsl:
                 self.transformer.allocate_storage_code.append(
                     """try:
-    import ctypes
-    import atexit
-
     type_size = ctypes.sizeof(ctypes.{3}(1))
     mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
     array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(ctypes.{3} * {1}))
@@ -812,6 +809,7 @@ import numpy.ctypeslib as npct
 import itertools as itt
 try:
     import mlsl
+    import ctypes
 except ImportError:
     pass
 from ngraph.op_graph import axes
