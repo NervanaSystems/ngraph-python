@@ -23,10 +23,12 @@ import numpy as np
 from builtins import object
 from functools import wraps
 from collections import defaultdict
+import abc
+from future.utils import with_metaclass
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
-    default_int_dtype, AxesMap
+    default_int_dtype, AxesMap, UnmatchedAxesError
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
@@ -345,7 +347,7 @@ class Op(NameableValue):
         Returns: The op providing the value.
 
         """
-        return self
+        return self.forwarded
 
     @property
     def states_read(self):
@@ -943,6 +945,10 @@ class Fill(Op):
     def states_written(self):
         return self.args[0].states_read
 
+    @property
+    def states_read(self):
+        return self.args[0].states_read
+
 
 def fill(x, scalar):
     return Fill(x, scalar)
@@ -1280,7 +1286,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The op that supplies the value.
         """
-        if self._tensor:
+        if self._tensor is not None:
             return self._tensor.forwarded.tensor.forwarded
         else:
             return None
@@ -1292,7 +1298,7 @@ class ValueOp(TensorOp, ControlBlockOp):
         Returns:
             The immediate value returned by this op; see tensor for the closure.
         """
-        if self._tensor:
+        if self._tensor is not None:
             return self._tensor.forwarded
         else:
             return None
@@ -1470,8 +1476,10 @@ class PatternLabelOp(TensorOp):
     label to its matching op. By default, constraint_fn is always true.
 
     """
-    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
-        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+    def __init__(self, label, constraint_fn=(lambda op: True), axes=None, **kwargs):
+        if axes is None:
+            axes = {}
+        super(PatternLabelOp, self).__init__(axes=axes, **kwargs)
         self.label = label
         self.constraint_fn = constraint_fn
 
@@ -1489,14 +1497,40 @@ class PatternSkipOp(TensorOp):
         self.is_optional_op_fn = is_optional_op_fn
 
 
-class ReshapeOp(TensorOp):
+class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
+    """
+    An base class for ops that change how a tensor is indexed; i.e. get a view of the same tensor.
 
+    Arguments:
+        x: A view of a tensor.
+
+    Returns:
+        A view of the tensor.
+    """
     def __init__(self, x, **kwargs):
-        super(ReshapeOp, self).__init__(
+        super(IndexOp, self).__init__(
             args=(x,),
             dtype=x.dtype,
             **kwargs
         )
+
+    @abc.abstractmethod
+    def transform_tensor_description(self, tensor_description):
+        """
+        Apply this index operation to tensor_description.
+
+        Args:
+            tensor_description: TensorDescription of the input view.
+
+        Returns:
+            TensorDescription of the transformed view.
+
+        """
+
+    @tdcache()
+    def tensor_description(self):
+        return self.transform_tensor_description(self.args[0].tensor_description()).named(
+            self.name)
 
     @property
     def is_scalar(self):
@@ -1527,7 +1561,7 @@ class ReshapeOp(TensorOp):
         return self.args[0].states_read
 
 
-class Transpose(ReshapeOp):
+class Transpose(IndexOp):
     """
     Used to reverse the axes of a tensor.
 
@@ -1542,15 +1576,14 @@ class Transpose(ReshapeOp):
             **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        return self.args[0].tensor_description().transpose().named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.transpose()
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Transpose(delta))
 
 
-class AxesCastOp(ReshapeOp):
+class AxesCastOp(IndexOp):
     """
     Used to label a tensor with known axes, without altering its value
 
@@ -1569,9 +1602,8 @@ class AxesCastOp(ReshapeOp):
             raise ValueError("casting axes {} must have the same length as original axes {}"
                              .format(axes, x.axes))
 
-    @tdcache()
-    def tensor_description(self):
-        return self.args[0].tensor_description().cast(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.cast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
@@ -1694,7 +1726,7 @@ def cast_role(tensor, axes):
     return RoleCastOp(tensor, axes)
 
 
-class ExpandDims(ReshapeOp):
+class ExpandDims(IndexOp):
     """
     Adds additional axes into a tensor.
     Arguments:
@@ -1711,16 +1743,8 @@ class ExpandDims(ReshapeOp):
         axes = make_axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-        Arguments:
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.broadcast(self.axes)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1751,7 +1775,7 @@ def expand_dims(x, axis, dim):
     return ExpandDims(x, axis, dim)
 
 
-class BroadcastOp(ReshapeOp):
+class BroadcastOp(IndexOp):
     """
     Used to add additional axes for a returned derivative.
 
@@ -1766,18 +1790,8 @@ class BroadcastOp(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        td, = tensor_descriptions(self.args)
-        return td.broadcast(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         dx = sum(delta, reduction_axes=delta.axes - x.axes)
@@ -1819,7 +1833,7 @@ def axes_with_order(x, axes):
     return ReorderAxes(x, axes)
 
 
-class ReorderAxes(ReshapeOp):
+class ReorderAxes(IndexOp):
     """
     Reorders the axes of a tensor, without making a copy.
 
@@ -1837,18 +1851,8 @@ class ReorderAxes(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        td, = tensor_descriptions(self.args)
-        return td.reorder(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.reorder(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, axes_with_order(
@@ -1872,7 +1876,7 @@ def tensor_slice(x, slices, axes=None):
     return TensorSliceOp(x, slices, axes)
 
 
-class TensorSliceOp(ReshapeOp):
+class TensorSliceOp(IndexOp):
     """
     Creates a sliced version of a tensor.
 
@@ -1916,18 +1920,8 @@ class TensorSliceOp(ReshapeOp):
 
         self.slices = slices
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.slice(self.slices, self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -2028,16 +2022,14 @@ def slice_along_axis(x, axis, idx):
     return tensor_slice(x, ss, axes=axes)
 
 
-class Flatten(ReshapeOp):
+class Flatten(IndexOp):
 
     def __init__(self, x, axes, **kwargs):
         x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.flatten(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.flatten(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, unflatten(
@@ -2071,7 +2063,7 @@ def flatten_at(x, idx):
         )))
 
 
-class Unflatten(ReshapeOp):
+class Unflatten(IndexOp):
 
     def __init__(self, x, axes=None, **kwargs):
         if axes is None:
@@ -2082,10 +2074,8 @@ class Unflatten(ReshapeOp):
         Axes.assert_valid_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.unflatten(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.unflatten(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, flatten(
@@ -3653,11 +3643,17 @@ class CrossEntropyMultiOp(ValueOp):
 
     Returns:
         The cross-entropy.
+
+    Raises:
+        UnmatchedAxesError: If y and t do not have matching axes
     """
 
     def __init__(self, y, t, usebits=False, out_axes=None,
                  enable_softmax_opt=True,
                  enable_diff_opt=True, **kwargs):
+        if y.axes != t.axes:
+            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
+                                                                                         t.axes))
         super(CrossEntropyMultiOp, self).__init__(**kwargs)
         if out_axes is None:
             # Compute along non-recurrent and non-batch axes
@@ -3719,13 +3715,19 @@ class CrossEntropyBinaryInnerOp(ValueOp):
 
     Returns:
         Cross entropy of individual samples.
+
+    Raises:
+        UnmatchedAxesError: If y and t do not have matching axes
     """
     def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
+        if y.axes != t.axes:
+            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
+                                                                                         t.axes))
         super(CrossEntropyBinaryInnerOp, self).__init__(**kwargs)
         self.y = y
         self.t = t
         self.value_tensor = -(safelog(y) * t + safelog(1 - y) * (1 - t))
-        if isinstance(y.deriv_handler, SigmoidOp) or isinstance(y.deriv_handler, SigmoidAtomicOp):
+        if isinstance(y.deriv_handler, SigmoidOp):
             self.x = y.deriv_handler.x
             if enable_sig_opt:
                 # Simpler equivalent

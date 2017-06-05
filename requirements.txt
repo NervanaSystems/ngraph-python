@@ -28,3 +28,6 @@ nbformat==4.3.0
 
 # setuptools is autoflex's requirement, but it is here for now
 setuptools==18.5
+
+# cffi is required to wrap warp-ctc
+cffi>=1.0
