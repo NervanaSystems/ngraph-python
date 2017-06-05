@@ -191,9 +191,37 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         self.transformer.allocate_storage_code.append("def {}():", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
-            self.transformer.allocate_storage_code.append(
-                "{}(np.empty({}, dtype=np.dtype('{}')))",
-                self.update_name, elts, self.dtype.name)
+            if self.dtype.name == 'float32':
+                c_type_name = 'c_float'
+            elif self.dtype.name == 'float64':
+                c_type_name = 'c_double'
+            else:
+                c_type_name = None
+
+            if c_type_name is not None and self.transformer.use_mlsl:
+                self.transformer.allocate_storage_code.append(
+                    """try:
+    import ctypes
+    import atexit
+
+    type_size = ctypes.sizeof(ctypes.{3}(1))
+    mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
+    array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(ctypes.{3} * {1}))
+    np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
+    {0}(np_array_{0})
+
+    @atexit.register
+    def free_buffer():
+        mlsl_obj.free(mlsl_buf_{0})
+except NameError as error:
+    print str(error)
+    {0}(np.empty({1}, dtype=np.dtype('{2}')))""",
+                    self.update_name, elts, self.dtype.name, c_type_name)
+            else:
+                self.transformer.allocate_storage_code.append(
+                    "{}(np.empty({}, dtype=np.dtype('{}')))",
+                    self.update_name, elts, self.dtype.name)
+
             self.transformer.allocate_storage_code.endl()
 
         self.transformer.allocate_storage_code.append("def {}(buffer):",
@@ -674,7 +702,7 @@ class CPUCodeGenerator(PyGen):
         self.append("np.tanh({}, out={})", x, out)
 
     @generate_op.on_type(TensorSizeOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, x):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
     @generate_op.on_type(CPUQueueSendOp)
@@ -734,6 +762,13 @@ class CPUTransformer(ComputationGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
+    import imp
+    try:
+        imp.find_module('mlsl')
+        use_mlsl = True
+    except ImportError:
+        use_mlsl = False
+
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
         self.current_computation = None
@@ -779,6 +814,10 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
+try:
+    import mlsl
+except ImportError:
+    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -791,6 +830,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
         self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
         self.code.execute("mkldnn.open()")
+        if self.use_mlsl:
+            self.code.execute("mlsl_obj = mlsl.MLSL()")
+            self.code.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -881,6 +923,8 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
             try:
                 if self.code.globals.get('mkldnn', None) is not None:
                     self.code.execute('mkldnn.close()')
+                if self.code.globals.get('mlsl_obj', None) is not None:
+                    self.code.execute('mlsl_obj.finalize()')
             except TypeError:
                 pass
         self.code = None

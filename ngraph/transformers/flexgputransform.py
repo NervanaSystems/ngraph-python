@@ -18,6 +18,7 @@ from __future__ import division
 import numpy as np
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
     from ngraph.flex import GPUFlexManager, GPUFlex
@@ -81,6 +82,7 @@ class FlexGPUTransformer(GPUTransformer):
         self.fixed_point = fixed_point
 
         # flex passes for setting Op dtypes to flex
+        self.register_graph_pass(FlexFusion(), 0)
         self.register_graph_pass(ClearTensorDescriptions())
         self.register_graph_pass(FlexDtypePass())
 
@@ -176,9 +178,8 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
         self.flex_entry = self.transformer.flex_manager.make_flex_entry(name=self.name)
 
     def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return FlexGPUDeviceTensor(self.transformer, self, tensor_description,
-                                   name="v_" + tensor_description.name + "_" + shape_str)
+        name = self.get_tensor_name(tensor_description)
+        return FlexGPUDeviceTensor(self.transformer, self, tensor_description, name=name)
 
 
 class FlexGPUKernelGroup(GPUKernelGroup):

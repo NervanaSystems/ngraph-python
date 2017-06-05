@@ -298,7 +298,7 @@ class HetrTransformer(ComputationGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    def __init__(self, **kwargs):
+    def __init__(self, device='cpu', **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
         self.my_pid = os.getpid()
@@ -306,7 +306,7 @@ class HetrTransformer(ComputationGraphTransformer):
         self.child_transformers = dict()
         self.send_nodes = OrderedSet()
         self.graph_passes = [DeviceAssignPass(hetr=self,
-                                              default_device='cpu',
+                                              default_device=device,
                                               default_device_id=0),
                              CommunicationPass(self.send_nodes),
                              DistributedPass(self.send_nodes)]

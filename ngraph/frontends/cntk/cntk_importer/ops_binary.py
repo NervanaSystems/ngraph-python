@@ -14,9 +14,10 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
+from ngraph.frontends.common.legacy_binary_ew_op import LegacyOpsBinary
 
 
-class OpsBinary():
+class OpsBinary(LegacyOpsBinary):
     """
     Bridging binary operations between CNTK and ngraph.
     """
