@@ -811,6 +811,14 @@ class DuplicateAxisNames(ValueError):
         self.duplicate_axis_names = duplicate_axis_names
 
 
+class IncompatibleAxesError(ValueError):
+    pass
+
+
+class UnmatchedAxesError(IncompatibleAxesError):
+    pass
+
+
 class AxesMap(frozendict):
     """
     AxesMap provides a way to define a axis name mapping: {Axis.name: Axis.name} and

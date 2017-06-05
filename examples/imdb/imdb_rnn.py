@@ -25,7 +25,7 @@ from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph.transformers as ngt
 
-from imdb import IMDB
+from ngraph.frontends.neon import IMDB
 
 
 # parse the command line arguments

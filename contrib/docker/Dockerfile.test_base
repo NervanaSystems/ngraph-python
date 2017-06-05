@@ -29,24 +29,28 @@ RUN mkdir aeon_build && cd aeon_build && cmake ../private-aeon && pip install . 
 #RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
 #    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
+WORKDIR /root/ngraph-test
+ADD . /root/ngraph-test
+
 # This disables a warning from opencv from a defunct driver
 RUN ln /dev/null /dev/raw1394
+
+# build Baidu's Warp-CTC 
+# dependencies for deepspeech example
+WORKDIR /root/..
+RUN git clone https://github.com/baidu-research/warp-ctc.git 
+WORKDIR warp-ctc 
+RUN mkdir -p build 
+RUN cd build && cmake ../ && make && cd ../..
+ENV WARP_CTC_PATH=/warp-ctc/build
+ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
+ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
 
 WORKDIR /root/ngraph-test
 ADD . /root/ngraph-test
 RUN make install
 RUN make gpu_prepare
 RUN make test_prepare
-
-# build Baidu's Warp-CTC 
-# dependencies for deepspeech example
-WORKDIR /root/..
-RUN pip install cffi
-RUN git clone https://github.com/baidu-research/warp-ctc.git 
-WORKDIR warp-ctc 
-RUN mkdir -p build 
-RUN cd build && cmake ../ && make && cd ../.. 
-ENV WARP_CTC_PATH=/warp-ctc/build
 
 # add in autoflex.  This should will only be added if the user building
 # this dockerfile has permission to access the autoflex repo.  This is a
@@ -55,6 +59,6 @@ WORKDIR /root/ngraph-test
 ADD contrib/docker/autoflex /root/autoflex
 RUN pip install -e /root/autoflex
 
-ADD tests/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
+ADD tests/config/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
 
 WORKDIR /root/ngraph-test

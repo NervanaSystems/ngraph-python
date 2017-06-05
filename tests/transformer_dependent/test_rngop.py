@@ -22,7 +22,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 @pytest.fixture()
