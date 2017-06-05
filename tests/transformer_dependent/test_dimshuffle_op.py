@@ -6,7 +6,7 @@ from ngraph.testing import executor
 
 import ngraph as ng
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 def test_dimshuffle_op(transformer_factory):
