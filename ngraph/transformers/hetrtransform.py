@@ -31,6 +31,7 @@ from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
+import subprocess
 
 
 def build_transformer(name):
@@ -309,6 +310,19 @@ class HetrTransformer(ComputationGraphTransformer):
                                               default_device_id=0),
                              CommunicationPass(self.send_nodes),
                              DistributedPass(self.send_nodes)]
+
+        hetr_server_path = os.path.dirname(os.path.realpath(__file__)) + "/cpu/hetr_server.py"
+        hetr_server_num = os.getenv('HETR_SERVER_NUM')
+        hetr_server_hostfile = os.getenv('HETR_SERVER_HOSTFILE')
+        # Assumption is that hydra_persist processes are started on remote nodes
+        # Otherwise, remove "-bootstrap persist" from the command line (it then uses ssh)
+        if (hetr_server_num is not None) & (hetr_server_hostfile is not None):
+            mpirun_str = "mpirun -n %s -ppn 1 -bootstrap persist -hostfile %s %s"\
+                % (hetr_server_num, hetr_server_hostfile, hetr_server_path)
+            subprocess.call(mpirun_str, shell=True)
+            self.use_mlsl = True
+        else:
+            self.use_mlsl = False
 
     def close(self):
         if self.is_closed:
