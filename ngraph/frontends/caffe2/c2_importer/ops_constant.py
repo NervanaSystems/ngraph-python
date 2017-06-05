@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
 import caffe2.python.core as c2core
 import caffe2.proto.caffe2_pb2 as c2proto
@@ -21,7 +20,7 @@ import numpy as np
 from utils import make_const_op
 
 
-class OpsConstant(OpsBase):
+class OpsConstant():
     """
     Mix-in class for constant ops.
     """
