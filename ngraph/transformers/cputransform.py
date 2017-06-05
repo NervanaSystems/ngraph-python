@@ -209,10 +209,6 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
     array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(ctypes.{3} * {1}))
     np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
     {0}(np_array_{0})
-
-    @atexit.register
-    def free_buffer():
-        mlsl_obj.free(mlsl_buf_{0})
 except NameError as error:
     print str(error)
     {0}(np.empty({1}, dtype=np.dtype('{2}')))""",
@@ -924,6 +920,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
                 if self.code.globals.get('mkldnn', None) is not None:
                     self.code.execute('mkldnn.close()')
                 if self.code.globals.get('mlsl_obj', None) is not None:
+                    for device_buffer in self.device_buffers:
+                        self.code.execute("mlsl_obj.free({}.__array_interface__['data'][0])"
+                                          .format(device_buffer.ref_str))
                     self.code.execute('mlsl_obj.finalize()')
             except TypeError:
                 pass
