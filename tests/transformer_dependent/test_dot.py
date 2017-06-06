@@ -118,20 +118,25 @@ def test_dot_sum_backprop(transformer_factory):
     d = ng.dot(x, y)
     s = ng.sum(d, out_axes=())
 
+    x_cpu = ng.placeholder(x_axes)
+    y_cpu = ng.placeholder(y_axes)
+    d_cpu = ng.dot(x_cpu, y_cpu)
+    s_cpu = ng.sum(d_cpu, out_axes=())
+
     with ExecutorFactory() as ex:
         s_fun = ex.executor(s, x, y)
         d_fun = ex.executor(d, x, y)
 
-        dd_dx_fun_num = ex.numeric_derivative(d, x, delta, y)
+        dd_dx_fun_num = ex.numeric_derivative(d_cpu, x_cpu, delta, y_cpu)
         dd_dx_fun_sym = ex.derivative(d, x, y)
 
-        dd_dy_fun_num = ex.numeric_derivative(d, y, delta, x)
+        dd_dy_fun_num = ex.numeric_derivative(d_cpu, y_cpu, delta, x_cpu)
         dd_dy_fun_sym = ex.derivative(d, y, x)
 
-        ds_dx_fun_num = ex.numeric_derivative(s, x, delta, y)
+        ds_dx_fun_num = ex.numeric_derivative(s_cpu, x_cpu, delta, y_cpu)
         ds_dx_fun_sym = ex.derivative(s, x, y)
 
-        ds_dy_fun_num = ex.numeric_derivative(s, y, delta, x)
+        ds_dy_fun_num = ex.numeric_derivative(s_cpu, y_cpu, delta, x_cpu)
         ds_dy_fun_sym = ex.derivative(s, y, x)
 
         # assert outputs are equal
@@ -139,30 +144,29 @@ def test_dot_sum_backprop(transformer_factory):
         d_val = d_fun(x_np, y_np)
         ng.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
 
-        dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
-        dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
-        ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
-
-        dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
-        dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
-        ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
-
         s_np = np.sum(d_np)
         s_val = s_fun(x_np, y_np)
         ng.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
 
         # assert derivative wrt to both tensors is the same when computed
         # symbolically by ngraph and numerically
-        ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
-        ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
-        ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
 
-        ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
+        dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
+        dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
+        ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
         ds_dy_val_sym = ds_dy_fun_sym(y_np, x_np)
+
+        dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
+        dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
+        ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
+        ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
+
+        ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
         ng.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
 
 
-@pytest.mark.flex_disabled
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
@@ -228,17 +232,22 @@ def test_tensor_dot_tensor(transformer_factory):
             test['tensor2'], dtype=np.float32
         )
 
+        tensor1_cpu = ng.placeholder(test['tensor1_axes'])
+        tensor2_cpu = ng.placeholder(test['tensor2_axes'])
+
         # compute outputs
         expected_output = np.array(test['expected_output'], dtype=np.float32)
 
         with ExecutorFactory() as ex:
             dot = ng.dot(tensor1, tensor2)
+            dot_cpu = ng.dot(tensor1_cpu, tensor2_cpu)
+
             evaluated_fun = ex.executor(dot, tensor1, tensor2)
 
-            deriv1_fun_num = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
+            deriv1_fun_num = ex.numeric_derivative(dot_cpu, tensor1_cpu, 1e-3, tensor2_cpu)
             deriv1_fun_sym = ex.derivative(dot, tensor1, tensor2)
 
-            deriv2_fun_num = ex.numeric_derivative(dot, tensor2, 1e-3, tensor1)
+            deriv2_fun_num = ex.numeric_derivative(dot_cpu, tensor2_cpu, 1e-3, tensor1_cpu)
             deriv2_fun_sym = ex.derivative(dot, tensor2, tensor1)
 
             # assert outputs are equal
@@ -247,12 +256,13 @@ def test_tensor_dot_tensor(transformer_factory):
 
             # assert derivative wrt to both tensors is the same when computed
             # symbolically by ngraph and numerically
-            deriv1_val_num = deriv1_fun_num(value1, value2)
             deriv1_val_sym = deriv1_fun_sym(value1, value2)
-            ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
-
-            deriv2_val_num = deriv2_fun_num(value2, value1)
             deriv2_val_sym = deriv2_fun_sym(value2, value1)
+
+            deriv1_val_num = deriv1_fun_num(value1, value2)
+            deriv2_val_num = deriv2_fun_num(value2, value1)
+
+            ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
             ng.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
 
 

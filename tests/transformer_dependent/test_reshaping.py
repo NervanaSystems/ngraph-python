@@ -65,11 +65,14 @@ def test_expand_dims(transformer_factory):
                     test['tensor'], dtype=np.float32
                 )
                 tensor = ng.placeholder(tensor_axes)
+                tensor_cpu = ng.placeholder(tensor_axes)
 
                 expanded = ng.ExpandDims(tensor, new_axis, dim)
+                expanded_cpu = ng.ExpandDims(tensor_cpu, new_axis, dim)
+
                 with ExecutorFactory() as ex:
                     expander_fun = ex.executor(expanded, tensor)
-                    num_deriv_fun = ex.numeric_derivative(expanded, tensor, delta)
+                    num_deriv_fun = ex.numeric_derivative(expanded_cpu, tensor_cpu, delta)
                     sym_deriv_fun = ex.derivative(expanded, tensor)
 
                     expanded_shape = tensor_np.shape[:dim] \

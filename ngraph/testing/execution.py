@@ -29,10 +29,12 @@ class ExecutorFactory(object):
 
     def __enter__(self):
         self.transformer = ngt.make_transformer()
+        self.cpu_transformer = ngt.Transformer.transformers['cpu']()
         return self
 
     def __exit__(self, *args):
         self.transformer.close()
+        self.cpu_transformer.close()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
@@ -41,7 +43,10 @@ class ExecutorFactory(object):
         return self.transformer.get_tensor_view_value(op, host_tensor)
 
     def numeric_derivative(self, f, p_x, dx, *params):
-        comp = self.transformer.computation(f, p_x, *params)
+        if is_flex_transformer(self.transformer):
+            comp = self.cpu_transformer.computation(f, p_x, *params)
+        else:
+            comp = self.transformer.computation(f, p_x, *params)
 
         def helper(x, *args):
             def comp_helper(xx):
@@ -94,6 +99,9 @@ class ExecutorFactory(object):
                     adjoint, flags=['multi_index'], op_flags=['readwrite'])
                 for dfdxiter in idxiter:
                     dfdxiter[...] = 1
+
+                    if is_flex_transformer(comp.transformer) and comp.executor is not None:
+                        reset_flex_entry(comp)
 
                     df = comp(adjoint, x, *args)
 
@@ -202,3 +210,20 @@ def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], *
             dfdx_symbolic(x_value, *parameter_values),
             **kwargs
         )
+
+
+def is_flex_transformer(transformer):
+    flex_transformers = ['flexgpu']
+    for flex_t in flex_transformers:
+        if isinstance(transformer, ngt.Transformer.transformers[flex_t]):
+            return True
+    return False
+
+
+def reset_flex_entry(comp):
+    for flex_id in comp.executor.output_flex_ids:
+        flex_entry = comp.transformer.flex_manager.flex_entries[flex_id]
+        flex_entry.initialized = False
+        flex_entry.scale = 1.0 / 2 ** 8
+        flex_entry.init_count = 0
+        flex_entry.stats.clear()
