@@ -11,6 +11,10 @@ def input_size(request):
 
 
 def test_convolution(input_axis, spatial_axes):
+    """
+    this test ensures that we can share filter waits for convolution ops with
+    different batch sizes.
+    """
     feature_axes = spatial_axes + input_axis
 
     batch_axis_1 = ng.make_axis(name='N', length=1)
