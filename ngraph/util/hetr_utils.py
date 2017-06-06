@@ -138,8 +138,8 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
 
     # update newly cloned op metadata, generate new UUIDs
     for op in cloned_graph:
-        op_clones = orig_ops[op.uuid].metadata.get('clones')
-        if op_clones is None or op_clones.get(str(clone_id)) is None:
+        cloned_ops = orig_ops[op.uuid].metadata.get('clones')
+        if cloned_ops is None or cloned_ops.get(str(clone_id)) is None:
             op.metadata['transformer'] = op.metadata['device'] + str(clone_id)
             op.metadata['device_id'] = str(clone_id)
 
@@ -174,7 +174,7 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                 op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
                                                            num_clones)
 
-            args_list = list(op._args)
+            args_list = list(op.args)
             for arg_idx, arg_op in enumerate(args_list):
                 if arg_op.uuid in orig_ops.keys():
                     if orig_ops[arg_op.uuid].metadata.get('clones') and \
