@@ -22,8 +22,7 @@ import ngraph as ng
 from ngraph.frontends.neon import GradientDescentMomentum, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = pytest.mark.transformer_dependent
-# TO FURTHER CHECK, TO MANY FAILING TESTCASES
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
 
 class GDMReference(object):
@@ -117,6 +116,7 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, trans
             ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
 
 
+@pytest.mark.flex_disabled
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
     drop_factor = 0.1

@@ -93,29 +93,6 @@ clean:
 
 test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
-test_flex_temporary: gpu_prepare test_prepare clean
-	@echo
-	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
-	and not hetr_only or flex_only" \
-	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
-	$(TEST_DIRS_NEON)
-	coverage xml -i -o coverage_test_flex_$(PY).xml
-
-test_gpu_temporary: gpu_prepare test_prepare clean
-	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
-	not separate_execution" \
-	--boxed -n auto --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
-	$(TEST_OPTS) $(TEST_DIRS_NEON)
-
-test_hetr_temporary: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
-test_hetr_temporary: export PYTHONHASHSEED=0
-test_hetr_temporary: test_prepare clean
-	echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
-	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS_NEON)
-	coverage xml -i -o coverage_test_hetr_$(PY).xml
-
 test_flex: gpu_prepare test_prepare clean
 	@echo
 	@echo The autoflex package is required for flex testing ...

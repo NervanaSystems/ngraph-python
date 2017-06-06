@@ -22,7 +22,7 @@ from ngraph.frontends.neon import Linear, UniformInit
 from ngraph.frontends.neon.axis import make_shadow_axis
 from ngraph.testing import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
+pytestmark = pytest.mark.transformer_dependent
 
 
 

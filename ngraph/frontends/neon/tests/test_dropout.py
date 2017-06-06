@@ -22,7 +22,7 @@ from ngraph.testing import ExecutorFactory
 import ngraph as ng
 from ngraph.frontends.neon.layer import Layer, Dropout
 
-pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
+pytestmark = pytest.mark.transformer_dependent
 
 
 atol, rtol = 0, 1e-6

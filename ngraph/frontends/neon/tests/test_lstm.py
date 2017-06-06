@@ -41,9 +41,7 @@ from ngraph.frontends.neon import LSTM, GaussianInit, Tanh, Logistic
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
-pytestmark = [pytest.mark.transformer_dependent,
-              pytest.mark.flex_disabled]
-                # FLEX DISABLED SHOULD BE THERE
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
 rng = RandomTensorGenerator()
 
