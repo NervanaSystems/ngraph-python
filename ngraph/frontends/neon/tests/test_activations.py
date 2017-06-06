@@ -27,7 +27,6 @@ from ngraph.testing import ExecutorFactory
 pytestmark = pytest.mark.transformer_dependent
 
 
-
 class ActivationPair(object):
     tolerance = 0.0
 
@@ -178,7 +177,6 @@ def activation_pair(request):
                 ])
 def all_inputs(request):
     return request.param.astype(np.float32)
-
 
 
 def test_activation(all_inputs, activation_pair, transformer_factory):

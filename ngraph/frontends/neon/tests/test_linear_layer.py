@@ -25,7 +25,6 @@ from ngraph.testing import ExecutorFactory
 pytestmark = pytest.mark.transformer_dependent
 
 
-
 @pytest.fixture(scope='module', params=[2])
 def input_size(request):
     return request.param
