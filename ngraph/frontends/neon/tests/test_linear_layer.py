@@ -22,8 +22,8 @@ from ngraph.frontends.neon import Linear, UniformInit
 from ngraph.frontends.neon.axis import make_shadow_axis
 from ngraph.testing import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
+
 
 
 @pytest.fixture(scope='module', params=[2])

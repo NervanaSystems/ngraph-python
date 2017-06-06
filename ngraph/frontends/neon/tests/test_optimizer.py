@@ -22,8 +22,8 @@ import ngraph as ng
 from ngraph.frontends.neon import GradientDescentMomentum, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent
+# TO FURTHER CHECK, TO MANY FAILING TESTCASES
 
 
 class GDMReference(object):

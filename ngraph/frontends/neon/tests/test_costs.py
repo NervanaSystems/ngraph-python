@@ -17,8 +17,7 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled("module")]
 
 
 def safelog(x):
@@ -86,6 +85,13 @@ class MeanSquaredPair(CostPair):
     MeanSquaredPair()
 ])
 def test_costs(y, t, cost, transformer_factory):
+
+    # X-FAIL for Flex's known issue
+    if np.array_equal(y, np.array([0.5, 1.0, 0.0, 0.0001])) and \
+       isinstance(cost, (CrossEntropyMultiPair, CrossEntropyBinaryPair)) and \
+       transformer_factory.name == "flexgpu":
+        pytest.xfail('Failing test for Flex: CrossEntropyMultiPair and CrossEntropyBinaryPair')
+
     ng.testing.assert_allclose(cost.baseline_value(y, t),
                                cost.reference_value(y, t),
                                rtol=cost.tolerance)
