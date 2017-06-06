@@ -874,6 +874,32 @@ def test_cross_entropy_multi_unmatched_axes(input_tensor):
         ng.cross_entropy_multi(y, t)
 
 
+def test_cross_entropy_multi_axis_order(transformer_factory, input_tensor):
+    """If y and t have different axis orders, it should give the same result"""
+    y = input_tensor
+    t1 = ng.placeholder(y.axes)
+
+    # Reorder axes
+    feature_axis, batch_axis = y.axes
+    t2 = ng.placeholder(ng.make_axes([batch_axis, feature_axis]))
+
+    # Set up numpy variables
+    np_y = np.random.uniform(0, 1, y.axes.lengths)
+    if feature_axis.length > batch_axis.length:
+        np_t1 = np.eye(feature_axis.length)[:, :batch_axis.length]
+    else:
+        np_t1 = np.eye(batch_axis.length)[:feature_axis.length, :]
+    np_t2 = np_t1.T
+
+    with ExecutorFactory() as ex:
+        f1 = ex.executor(ng.cross_entropy_multi(ng.softmax(y), t1), y, t1)
+        f2 = ex.executor(ng.cross_entropy_multi(ng.softmax(y), t2), y, t2)
+
+        out1 = f1(np_y, np_t1)
+        out2 = f2(np_y, np_t2)
+        ng.testing.assert_allclose(out1.ravel(), out2.ravel(), rtol=1e-5)
+
+
 @pytest.mark.flex_disabled
 def test_sigmoid_deriv(transformer_factory, input_tensor):
     """TODO."""
