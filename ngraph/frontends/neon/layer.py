@@ -506,7 +506,7 @@ class ConvBase(Layer):
         in_obj = reorder_spatial_axes(in_obj)
 
         filter_axes, axes_map = self._filter_axes(in_obj)
-        if self.W == None:
+        if self.W is None:
             self.W = ng.variable(axes=filter_axes,
                                  initial_value=self.init,
                                  scope=self.scope,
@@ -523,7 +523,7 @@ class ConvBase(Layer):
                 ).format(
                     existing_filter_axes=self.W.axes,
                     input_axes=in_obj.axes,
-                    new_filter_axes=filter_axis,
+                    new_filter_axes=filter_axes,
                 ))
 
         return ng.map_roles(
