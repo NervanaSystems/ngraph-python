@@ -27,7 +27,7 @@ class Mkldnn(object):
     def __init__(self, engine_path):
         self.enabled = False
         self.mkldnn_engine_initialized = False
-        self.mkldnn_verbose = False
+        self.mkldnn_verbose = True
         # TODO(jbobba): Defines from mkldnn_types.h.
         self.datatype = {
             np.float32: 1,

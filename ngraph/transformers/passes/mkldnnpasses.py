@@ -57,7 +57,19 @@ def get_order_from_axes(axes, sub_axes):
 
 
 def get_axes_mkl_order(axes, order):
-    return [axes[index] for index in order]
+    axes_list = []
+    flattend_axis_flag = False
+    for axis in axes:
+        if(axis.is_flattened and len(order)>2):
+            for indx in range(len(unflatten(axis).axes)):
+                axes_list.append(unflatten(axis).axes[indx])
+                flattend_axis_flag = True
+        else:
+            axes_list.append(axis)
+    if flattend_axis_flag:
+        return [axes_list[index] for index in order]
+    else:
+        return [axes[index] for index in order]
 
 
 def get_size_mkl_order(axes, order):
@@ -65,7 +77,21 @@ def get_size_mkl_order(axes, order):
 
 
 def get_strides_mkl_order(td, order):
-    return [td.strides[index] for index in order]
+    strides_list = []
+    flattend_axis_flag = False
+    for axis in td.axes:
+        if (axis.is_flattened and len(order) > 2):
+                flattend_axis_flag = True
+    if flattend_axis_flag:
+        for each_stride in td.full_strides:
+            if isinstance(each_stride, tuple):
+                for stride_val in each_stride:
+                    strides_list.append(stride_val)
+            else:
+                strides_list.append(each_stride)
+        return [strides_list[index] for index in order]
+    else:
+        return [td.strides[index] for index in order]
 
 
 def get_native_layout(mkldnn, td, order, use_formats=False):
@@ -118,8 +144,8 @@ def get_mkl_layout(mkldnn, op, order, use_formats=False):
 
 def dbg_print_kernel(mkldnn, op, op_id):
     if (mkldnn.mkldnn_verbose):
-        # print
-        # print(op_id, op.name)
+        print
+        print(op_id, op.name)
         mkldnn.print_kernel(mkldnn.kernels[op.name])
 
 
@@ -709,10 +735,20 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     def init_mkldnn_reorder(self, op):
         (mkl_layout, mkl_axes) = op.in_layout
-        mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
+        check_flatten = False
+        for axis_indx, each_axis in enumerate(op.axes):
+            if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened):
+                check_flatten = True
+        if check_flatten:
+            mkl_axes_order = get_order_from_axes(unflatten(op).axes, mkl_axes)
+        else:
+            mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
         (out_layout, _) = get_mkl_layout(self.mkldnn, op, mkl_axes_order, True)
         ndims = len(mkl_axes)
-        dims = get_size_mkl_order(op.axes, mkl_axes_order)
+        if check_flatten:
+            dims = get_size_mkl_order(unflatten(op).axes, mkl_axes_order)
+        else:
+            dims = get_size_mkl_order(op.axes, mkl_axes_order)
         dims_arg = ((ct.c_int) * ndims)(*dims)
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
