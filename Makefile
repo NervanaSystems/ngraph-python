@@ -114,7 +114,8 @@ test_flex: gpu_prepare test_prepare clean
 
 test_mkldnn: export PYTHONHASHSEED=0
 test_mkldnn: export MKL_TEST_ENABLE=1
-test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
+test_mkldnn: export LD_PRELOAD+=:./mkldnn_engine.so
+test_mkldnn: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_mkldnn: test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
@@ -128,6 +129,7 @@ test_mkldnn:
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
@@ -136,6 +138,7 @@ test_cpu: test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_gpu: export PYTHONHASHSEED=0
 test_gpu: gpu_prepare test_prepare clean
 	echo Running unit tests for gpu dependent transformer tests...
@@ -153,6 +156,7 @@ test_gpu: gpu_prepare test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_gpu_$(PY).xml
 
+test_hetr: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_hetr: export PYTHONHASHSEED=0
 test_hetr: test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...

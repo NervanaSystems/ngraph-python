@@ -28,7 +28,7 @@ from future.utils import with_metaclass
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
-    default_int_dtype, AxesMap
+    default_int_dtype, AxesMap, UnmatchedAxesError
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
@@ -1476,8 +1476,10 @@ class PatternLabelOp(TensorOp):
     label to its matching op. By default, constraint_fn is always true.
 
     """
-    def __init__(self, label, constraint_fn=(lambda op: True), **kwargs):
-        super(PatternLabelOp, self).__init__(axes={}, **kwargs)
+    def __init__(self, label, constraint_fn=(lambda op: True), axes=None, **kwargs):
+        if axes is None:
+            axes = {}
+        super(PatternLabelOp, self).__init__(axes=axes, **kwargs)
         self.label = label
         self.constraint_fn = constraint_fn
 
@@ -3641,11 +3643,17 @@ class CrossEntropyMultiOp(ValueOp):
 
     Returns:
         The cross-entropy.
+
+    Raises:
+        UnmatchedAxesError: If y and t do not have matching axes
     """
 
     def __init__(self, y, t, usebits=False, out_axes=None,
                  enable_softmax_opt=True,
                  enable_diff_opt=True, **kwargs):
+        if y.axes.is_not_equal_set(t.axes):
+            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
+                                                                                         t.axes))
         super(CrossEntropyMultiOp, self).__init__(**kwargs)
         if out_axes is None:
             # Compute along non-recurrent and non-batch axes
@@ -3707,13 +3715,19 @@ class CrossEntropyBinaryInnerOp(ValueOp):
 
     Returns:
         Cross entropy of individual samples.
+
+    Raises:
+        UnmatchedAxesError: If y and t do not have matching axes
     """
     def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
+        if y.axes.is_not_equal_set(t.axes):
+            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
+                                                                                         t.axes))
         super(CrossEntropyBinaryInnerOp, self).__init__(**kwargs)
         self.y = y
         self.t = t
         self.value_tensor = -(safelog(y) * t + safelog(1 - y) * (1 - t))
-        if isinstance(y.deriv_handler, SigmoidOp) or isinstance(y.deriv_handler, SigmoidAtomicOp):
+        if isinstance(y.deriv_handler, SigmoidOp):
             self.x = y.deriv_handler.x
             if enable_sig_opt:
                 # Simpler equivalent

@@ -23,9 +23,6 @@ class OpsBridge(OpsConstant, OpsNN, OpsBinary, OpsUnary):
     """
     Bridging op between Caffe2 / ngraph.
 
-    OpsBase
-        ^
-        |_____________________________________________________ ...
         |                 |                 |
     OpsBinary         OpsUnary           OpsReduction          ...
         ^                 ^                 ^

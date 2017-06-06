@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,18 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
+from contextlib import closing
+import ngraph as ng
+import ngraph.transformers as ngt
 
-# commonly used modules.  Should these still be imported in neon frontend?
-from ngraph import make_axes
-from ngraph.frontends.neon.axis import ax
-from ngraph.frontends.neon.activation import Rectlin, Rectlinclip, Identity, Explin, Normalizer, Softmax, Tanh, \
-    Logistic
-from ngraph.frontends.neon.argparser import NgraphArgparser
-from ngraph.frontends.neon.arrayiterator import *
-from ngraph.frontends.neon.callbacks import *
-# from ngraph.frontends.neon.callbacks2 import *
-from ngraph.frontends.neon.layer import *
-from ngraph.frontends.neon.model import *
-from ngraph.frontends.neon.optimizer import *
-from ngraph.frontends.neon.initializer import *
-from ngraph.frontends.neon.data import *
+# Build the graph for our mock hetr_server
+x = ng.placeholder(())
+x_plus_one = x + 1
+
+# TBD:
+# 1) Setting up RPC endpoint to get serialized subgraph
+# 2) Deserialize subgraph
+
+# Select CPU transformer
+with closing(ngt.make_transformer_factory('cpu')()) as cpu_t:
+    # Define a computation based on deserialized subgraph (just use a mock so far)
+    plus_one = cpu_t.computation(x_plus_one, x)
+
+    # Run the computation
+    res = plus_one(0)
+
+    # Logic for returning the results using RPC
