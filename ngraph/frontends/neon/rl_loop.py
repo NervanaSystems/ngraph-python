@@ -22,7 +22,9 @@ def rl_loop(environment, agent, episodes, render=False):
 
             action = agent.act(state)
             next_state, reward, done, _ = environment.step(action)
-            agent.observe_results(state, action, reward, next_state, done)
+            agent.observe_results(
+                state, action, reward, next_state, done, total_steps
+            )
 
             state = next_state
             step += 1

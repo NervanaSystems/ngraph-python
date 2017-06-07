@@ -181,6 +181,7 @@ def main():
             maxlen=1000000,
             observation_shape=(84, 84),
         ),
+        target_network_update_frequency=1000,
     )
 
     rl_loop.rl_loop(environment, agent, episodes=20000)
