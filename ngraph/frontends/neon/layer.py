@@ -472,10 +472,9 @@ class ConvBase(Layer):
             raise ValueError("Missing conv keys: {}".format(missing_keys))
 
         self.init = init
-        self.f_axes = None
-        self.o_axes = None
         self.W = None
         self.W_name = 'convwt'
+        self.layer_name = 'convolution'
 
     def _filter_axes(self, in_object):
         f_axes = ng.make_axes([in_object.axes[0]])
@@ -484,7 +483,6 @@ class ConvBase(Layer):
         return f_axes
 
     def _output_axes(self, in_object):
-        cpm = self.convparams.copy()
         in_axes = in_object.axes
 
         output_axes = ng.make_axes([
@@ -511,9 +509,9 @@ class ConvBase(Layer):
 
     def _conv_op(self, in_obj):
         return ng.convolution(self.convparams.copy(),
-                                in_obj, 
-                                self.W,
-                                axes=self._output_axes(in_obj))
+                              in_obj,
+                              self.W,
+                              axes=self._output_axes(in_obj))
 
     @wrap_layer()
     def __call__(self, in_obj):
@@ -536,13 +534,14 @@ class ConvBase(Layer):
         else:
             if filter_axes != self.W.axes:
                 raise ValueError((
-                    "convolution layer has already been initialized with an "
+                    "{layer_name} layer has already been initialized with an "
                     "input object which has resulted in filter axes: "
                     "{existing_filter_axes}. This new input object has axes: "
                     "{input_axes}, which implies the need for filter axes: "
                     "{new_filter_axes} which are different than the existing "
                     "filter axes."
                 ).format(
+                    layer_name=self.layer_name,
                     existing_filter_axes=self.W.axes,
                     input_axes=in_obj.axes,
                     new_filter_axes=filter_axes,
@@ -570,14 +569,14 @@ class DeconvBase(ConvBase):
         super(DeconvBase, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
 
         self.W_name = 'deconvwt'
+        self.layer_name = 'deconvolution'
         self.deconv_out_shape = deconv_out_shape
 
     def _filter_axes(self, in_object):
-        cpm = self.convparams
         # swap lengths of C and K
-        f_axes = ng.make_axes(ng.make_axis(length=cpm['K'], name='C'))
+        f_axes = ng.make_axes(ng.make_axis(length=self.convparams['K'], name='C'))
         for nm in 'TRS':
-            f_axes |= ng.make_axis(length=cpm[nm], name=nm)
+            f_axes |= ng.make_axis(length=self.convparams[nm], name=nm)
         f_axes |= ng.make_axis(length=in_object.axes[0].length, name='K')
         return f_axes
 
@@ -612,12 +611,11 @@ class DeconvBase(ConvBase):
 
     def _conv_op(self, in_obj):
         conv_op = ng.deconvolution(self.convparams.copy(),
-                                       in_obj,
-                                       self.W,
-                                       axes=self._output_axes(in_obj))
+                                   in_obj,
+                                   self.W,
+                                   axes=self._output_axes(in_obj))
         if self.deconv_out_shape:
             conv_op = conv_op[:, self.T_slice, self.R_slice, self.S_slice, :]
-            #self.o_axes = conv_op.axes
         return conv_op
 
 
