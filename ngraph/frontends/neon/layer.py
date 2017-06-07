@@ -467,44 +467,69 @@ class ConvBase(Layer):
         self.o_axes = None
         self.W = None
 
+    def _filter_axes(self, in_object):
+        f_axes = ng.make_axes([in_object.axes[0]])
+        for nm in 'TRSK':
+            f_axes |= ng.make_axis(length=self.convparams[nm], name=nm)
+
+        # mark 'K' as a shadow axis for the initializers.
+        axes_map = shadow_axes_map(f_axes.find_by_name('K'))
+        return ng.make_axes([
+            axis if axis.name != 'K' else list(axes_map.keys())[0]
+            for axis in f_axes
+        ]), axes_map
+
+    def _output_axes(self, in_object):
+        cpm = self.convparams.copy()
+        in_axes = in_object.axes
+
+        output_axes = ng.make_axes([
+            ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
+        ])
+        # set lengths
+        out_shape = [
+            self.W.axes[-1].length,
+            output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
+                       cpm['dil_d']),
+            output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
+                       cpm['dil_h']),
+            output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
+                       cpm['dil_w'])
+        ]
+        output_axes.set_shape(out_shape)
+        output_axes |= in_axes.batch_axis()
+
+        return output_axes
+
     @wrap_layer()
     def __call__(self, in_obj):
-        cpm = self.convparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
-        in_axes = in_obj.axes
 
-        if not self.initialized:
-            self.f_axes = ng.make_axes([in_axes[0]])
-            for nm in 'TRSK':
-                self.f_axes |= ng.make_axis(length=cpm[nm], name=nm)
-            # mark 'K' as a shadow axis for the initializers.
-            self.axes_map = shadow_axes_map(self.f_axes.find_by_name('K'))
-            self.f_axes = ng.make_axes([
-                axis if axis.name != 'K' else list(self.axes_map.keys())[0]
-                for axis in self.f_axes
-            ])
-
-            self.W = ng.variable(axes=self.f_axes, initial_value=self.init,
+        filter_axes, axes_map = self._filter_axes(in_obj)
+        if self.W is None:
+            self.W = ng.variable(axes=filter_axes,
+                                 initial_value=self.init,
                                  scope=self.scope,
                                  metadata={"label": LABELS["weight"]}).named('convwt')
+        else:
+            if filter_axes != self.W.axes:
+                raise ValueError((
+                    "convolution layer has already been initialized with an "
+                    "input object which has resulted in filter axes: "
+                    "{existing_filter_axes}. This new input object has axes: "
+                    "{input_axes}, which implies the need for filter axes: "
+                    "{new_filter_axes} which are different than the existing "
+                    "filter axes."
+                ).format(
+                    existing_filter_axes=self.W.axes,
+                    input_axes=in_obj.axes,
+                    new_filter_axes=filter_axes,
+                ))
 
-            self.o_axes = ng.make_axes([
-                ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
-            ])
-            # set lengths
-            out_shape = [
-                self.f_axes[-1].length,
-                output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
-                           cpm['dil_d']),
-                output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
-                           cpm['dil_h']),
-                output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
-                           cpm['dil_w'])
-            ]
-            self.o_axes.set_shape(out_shape)
-            self.o_axes |= in_axes.batch_axis()
-
-        return ng.map_roles(ng.convolution(cpm, in_obj, self.W, axes=self.o_axes), self.axes_map)
+        return ng.map_roles(
+            ng.convolution(self.convparams.copy(), in_obj, self.W, axes=self._output_axes(in_obj)),
+            axes_map
+        )
 
 
 class Conv2D(ConvBase):
