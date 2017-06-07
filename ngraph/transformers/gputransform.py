@@ -48,7 +48,7 @@ from ngraph.op_graph.ctc import CTCOp
 from ngraph.util.generics import generic_method
 
 from ngraph.transformers.passes.passes import SimplePrune
-from ngraph.transformers.passes.gpusimplification import GPUSubstitution, CPUAssignOp
+from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
 # from ngraph.transformers.passes.nviz import VizPass
@@ -61,7 +61,6 @@ from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, \
-    CPUAssignKernel, \
     RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
     CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -431,10 +430,6 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(BpropPoolOp)
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
-
-    @add_kernel.on_type(CPUAssignOp)
-    def add_kernel(self, op):
-        self.kernels.append(CPUAssignKernel(self.transformer, op))
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
