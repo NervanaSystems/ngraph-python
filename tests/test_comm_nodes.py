@@ -197,3 +197,30 @@ def test_one_dot_bprop_allreduce(config):
         result = out_comp(c['input'])
 
         np.testing.assert_array_equal(result, c['expected_result'])
+
+
+@pytest.mark.parametrize('config', [
+    {
+        'input': 1,
+        'device_id': (1, 2),
+        'result_two': [[4.0, 4.0, 4.0, 4.0],
+                       [4.0, 4.0, 4.0, 4.0]],
+        'result_one': [[2.0, 2.0, 2.0, 2.0],
+                       [2.0, 2.0, 2.0, 2.0]],
+    },
+])
+def test_multiple_gather_ops(config):
+    c = config
+
+    H = ng.make_axis(length=2, name='height')
+    W = ng.make_axis(length=4, name='width')
+    x = ng.placeholder(axes=[H, W])
+    with ng.metadata(device_id=c['device_id'], parallel=W):
+        x_plus_one = x + 1
+        x_plus_two = x_plus_one + 2
+    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+        plus = hetr.computation([x_plus_two, x_plus_one], x)
+        result_two, result_one = plus(c['input'])
+
+        np.testing.assert_array_equal(result_two, c['result_two'])
+        np.testing.assert_array_equal(result_one, c['result_one'])
