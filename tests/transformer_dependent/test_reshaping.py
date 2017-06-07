@@ -19,7 +19,7 @@ import ngraph as ng
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.testing import ExecutorFactory
 
-pytestmark = pytest.mark.transformer_dependent("module")
+pytestmark = pytest.mark.transformer_dependent
 
 
 delta = 1e-3
@@ -175,13 +175,12 @@ def test_reverse_slice(transformer_factory):
     C = ng.make_axis(length=10)
     D = ng.make_axis(length=10)
 
-    with ExecutorFactory() as ex:
-        x = ng.placeholder([C, D])
-        with pytest.raises(ValueError):
-            s = ng.tensor_slice(x, [slice(0, 10, -1), slice(0, 10)])
+    x = ng.placeholder([C, D])
+    with pytest.raises(ValueError):
+        ng.tensor_slice(x, [slice(0, 10, -1), slice(0, 10)])
 
-        with pytest.raises(ValueError):
-            ng.set_item(x, [0, slice(None, None, -1)], 0)
+    with pytest.raises(ValueError):
+        ng.set_item(x, [0, slice(None, None, -1)], 0)
 
 
 @pytest.mark.flex_disabled

@@ -15,8 +15,7 @@
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, set_item, \
-    Fill, AssignOp, TensorSliceOp
+from ngraph.op_graph.op_graph import Op, Fill, AssignOp
 
 
 class CPUAssignOp(AssignOp):
@@ -25,7 +24,6 @@ class CPUAssignOp(AssignOp):
     """
     def __init__(self, tensor, val, **kwargs):
         super(CPUAssignOp, self).__init__(tensor, val, **kwargs)
-
 
 
 class GPUSubstitution(PeepholeGraphPass):

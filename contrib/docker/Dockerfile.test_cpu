@@ -27,20 +27,23 @@ RUN mkdir aeon_build && cd aeon_build && cmake ../private-aeon && pip install . 
 #RUN git clone https://github.com/NervanaSystems/aeon.git --depth 1 --single-branch --branch rc1-master && \
 #    mkdir aeon_build && cd aeon_build && cmake ../aeon && pip install . && cd ..
 
+# build Baidu's Warp-CTC
+# dependencies for deepspeech example
+WORKDIR /root/..
+RUN git clone https://github.com/baidu-research/warp-ctc.git
+WORKDIR warp-ctc
+RUN mkdir -p build
+RUN cd build && cmake ../ && make && cd ../..
+ENV WARP_CTC_PATH=/warp-ctc/build
+ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
+ENV LD_LIBRARY_PATH=$WARP_CTC_PATH:$LD_LIBRARY_PATH
+
 WORKDIR /root/ngraph-test
 ADD test_requirements.txt /root/ngraph-test/test_requirements.txt
 RUN pip install -r test_requirements.txt
 ADD examples_requirements.txt /root/ngraph-test/examples_requirements.txt
 RUN pip install -r examples_requirements.txt
 
-# build Baidu's Warp-CTC
-# dependencies for deepspeech example
-RUN pip install cffi
-RUN git clone https://github.com/baidu-research/warp-ctc.git
-WORKDIR warp-ctc
-RUN mkdir -p build
-RUN cd build && cmake ../ && make && cd ../..
-ENV WARP_CTC_PATH=/warp-ctc/build
 
 # add chown_files script
 WORKDIR /root/ngraph-test

@@ -482,9 +482,9 @@ class CudaAllReduceKernel(GPUKernel):
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
+            self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaAllReduceKernel, self).bind_buffers()
-        self.input_tensor = self.op.args[0].value
+        self.input_tensor = self.tensor_view_from_td(self.op.args[0].tensor_description())
 
     def execute(self):
         ndevs = len(self.op.device_ids)
@@ -510,24 +510,25 @@ class CudaAllReduceKernel(GPUKernel):
             size * dtype.itemsize)
 
         # Send each GPU its assigned segment
-        for peer_id in range(ndevs):
+        device_idx = self.op.device_ids.index(self.device_id)
+        for peer_idx, peer_id in enumerate(self.op.device_ids):
             if (peer_id == self.device_id):
                 continue
 
             # Only send if peer is active
-            if (peer_id >= num_active):
+            if (peer_idx >= num_active):
                 continue
 
             # Compute size and offset of this peer's segment
             peer_segment_size = segment_size
-            peer_segment_offset = peer_id * segment_size
+            peer_segment_offset = peer_idx * segment_size
 
-            if (self.device_id > peer_id):
-                peer_scratch_offset = segment_size * (self.device_id - 1)
+            if (device_idx > peer_idx):
+                peer_scratch_offset = segment_size * (device_idx - 1)
             else:
-                peer_scratch_offset = segment_size * self.device_id
+                peer_scratch_offset = segment_size * device_idx
 
-            if ((peer_id + 1) == num_active):
+            if ((peer_idx + 1) == num_active):
                 peer_segment_size = size - peer_segment_offset
 
             # Enqueue peer to peer memcpy
@@ -552,9 +553,9 @@ class CudaAllReduceKernel(GPUKernel):
                 continue
             self.stream.wait_for_event(self.event_buff_dict[peer_id])
 
-        segment_offset = self.device_id * segment_size
+        segment_offset = device_idx * segment_size
         this_segment_size = segment_size
-        if ((self.device_id + 1) == num_active):
+        if ((device_idx + 1) == num_active):
             this_segment_size = size - segment_offset
 
         src = int(self.output_buff_dict.get(self.device_id)) + \
@@ -567,7 +568,7 @@ class CudaAllReduceKernel(GPUKernel):
             grid_size += 1
 
             # Perform reduction operation
-            if (self.device_id < num_active):
+            if (device_idx < num_active):
                 num_arrays = ndevs - 1
                 params = [src, self.scratch_buff_dict[self.device_id],
                           this_segment_size, num_arrays, segment_size]
