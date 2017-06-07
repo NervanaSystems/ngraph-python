@@ -109,7 +109,7 @@ test_flex: gpu_prepare test_prepare clean
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
 	and not hetr_only or flex_only" \
 	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
-	$(TEST_DIRS)
+	$(TEST_DIRS) $(TEST_DIRS_NEON)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export PYTHONHASHSEED=0
