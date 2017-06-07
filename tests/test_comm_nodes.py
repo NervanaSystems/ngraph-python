@@ -17,7 +17,7 @@ from ngraph.op_graph.op_graph import TensorValueOp
 from ngraph.factory.comm_node_factory import get_comm_pattern
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes, \
     CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Event, Manager
 from ngraph.frontends.neon import UniformInit
 from contextlib import closing
 import ngraph as ng
@@ -154,11 +154,15 @@ def test_broadcast_ops(config):
             self.comp_name = comp_name
             self.manager = Manager()
             self.results_qs = self.manager.Queue()
+            self.exit = Event()
 
         def run(self):
             with closing(ngt.make_transformer_factory('cpu')()) as t:
                 comp = t.computation(self.y)
                 self.results_qs.put(comp())
+
+            while not self.exit.is_set():
+                time.sleep(0.1)
 
         def get_result(self):
             while True:
@@ -201,6 +205,8 @@ def test_broadcast_ops(config):
     for i in range(len(c['device_ids'])):
         if i != c['sender_index']:
             results.append(active_processes[i].get_result().tolist())
+        active_processes[i].exit.set()
+        active_processes[i].join()
 
     np.testing.assert_array_equal(results, c['expected_results'])
 
