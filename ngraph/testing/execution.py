@@ -105,7 +105,7 @@ class ExecutorFactory(object):
                     df = comp(adjoint, x, *args)
 
                     if is_flex_transformer(comp.transformer):
-                        reset_flex_entry(comp)
+                        reset_flex_entries(comp)
 
                     # import pytest; pytest.set_trace()
                     # with open("code_sum.py", "w") as f: f.write(comp.transformer.code.code)
@@ -217,13 +217,12 @@ def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], *
 def is_flex_transformer(transformer):
     # Probably 'argon' also need to be added here
     flex_transformers = ['flexgpu']
-    for flex_t in flex_transformers:
-        if isinstance(transformer, ngt.Transformer.transformers[flex_t]):
-            return True
+    if transformer.transformer_name in flex_transformers:
+        return True
     return False
 
 
-def reset_flex_entry(comp):
+def reset_flex_entries(comp):
     for flex_id in comp.executor.output_flex_ids:
         flex_entry = comp.transformer.flex_manager.flex_entries[flex_id]
         flex_entry.reset_entry()
