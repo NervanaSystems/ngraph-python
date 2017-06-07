@@ -217,7 +217,6 @@ class Mkldnn(object):
             gamma_scale = gamma / np.sqrt(variance + epsilon)[:, None]
             xhat = (inputs - mean) / np.sqrt(variance + epsilon)[:, None]
             m = np.prod([inputs.shape[ii] for ii in axis])
-
             dgamma = np.sum(delta * xhat, **red_args)
             dbeta = np.sum(delta, **red_args)
             dx = gamma_scale * (delta - (xhat * dgamma + dbeta) / m)

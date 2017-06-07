@@ -34,14 +34,10 @@ void create_mkldnn_batchnorm_fprop_primitives(
 
   /* create a batch norm descriptor - logical descriptor of the batch norm */
   mkldnn_memory_desc_t mkldnn_memory_desc_src_md;
-//  if (input_src_pd) {
-//    mkldnn_memory_desc_src_md = *(mkldnn_primitive_desc_query_memory_d(
-//        (const_mkldnn_primitive_desc_t)input_src_pd));
-//  } else {
+
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                       batchnorm_src_sizes, data_type,
                                       mkldnn_nChw16c));
-//  }
 
   mkldnn_batch_normalization_desc_t batch_norm_desc;
   MKL_CHECK(mkldnn_batch_normalization_forward_desc_init(
@@ -65,7 +61,7 @@ void create_mkldnn_batchnorm_fprop_primitives(
     create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->inputs[0]));
   } else {
-    create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
+    create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_nChw16c,
                          engine, &(opkernel->inputs[0]));
   }
 
@@ -183,6 +179,11 @@ void create_mkldnn_batchnorm_fprop_primitives(
   MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc,
                                     batch_norm_prim_srcs,
                                     batch_norm_prim_dsts));
+  if(opkernel->reorder_i[0])
+    opkernel->net[opkernel->net_size++] = opkernel->reorder_i[0];
+  if(opkernel->reorder_o[0])
+    opkernel->net[opkernel->net_size++] = opkernel->reorder_o[0];
+
   opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
