@@ -138,8 +138,8 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
 
     # update newly cloned op metadata, generate new UUIDs
     for op in cloned_graph:
-        op_clones = orig_ops[op.uuid].metadata.get('clones')
-        if op_clones is None or op_clones.get(str(clone_id)) is None:
+        cloned_ops = orig_ops[op.uuid].metadata.get('clones')
+        if cloned_ops is None or cloned_ops.get(str(clone_id)) is None:
             op.metadata['transformer'] = op.metadata['device'] + str(clone_id)
             op.metadata['device_id'] = str(clone_id)
 
