@@ -22,8 +22,7 @@ import ngraph as ng
 from ngraph.frontends.neon import GradientDescentMomentum, Adam, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
 
 class GDMReference(object):
@@ -183,6 +182,7 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, trans
     compare_optimizer(adam, adam_reference)
 
 
+@pytest.mark.flex_disabled
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
     drop_factor = 0.1
