@@ -202,6 +202,7 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
+@pytest.mark.flex_disabled
 def test_prod_constant(transformer_factory):
     """
     Test reduce product of constants
@@ -246,6 +247,7 @@ def test_prod_constant(transformer_factory):
     np.testing.assert_allclose(res_0_1_2_np, res_0_1_2_ng)
 
 
+@pytest.mark.flex_disabled
 def test_prod_deriv(transformer_factory):
     """
     Test reduce product's gradient

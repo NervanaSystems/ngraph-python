@@ -29,12 +29,14 @@ class ExecutorFactory(object):
 
     def __enter__(self):
         self.transformer = ngt.make_transformer()
-        self.cpu_transformer = ngt.Transformer.transformers['cpu']()
+        if is_flex_transformer(self.transformer):
+            self.cpu_transformer = ngt.Transformer.transformers['cpu']()
         return self
 
     def __exit__(self, *args):
+        if is_flex_transformer(self.transformer):
+            self.cpu_transformer.close()
         self.transformer.close()
-        self.cpu_transformer.close()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
@@ -100,10 +102,10 @@ class ExecutorFactory(object):
                 for dfdxiter in idxiter:
                     dfdxiter[...] = 1
 
-                    if is_flex_transformer(comp.transformer) and comp.executor is not None:
-                        reset_flex_entry(comp)
-
                     df = comp(adjoint, x, *args)
+
+                    if is_flex_transformer(comp.transformer):
+                        reset_flex_entry(comp)
 
                     # import pytest; pytest.set_trace()
                     # with open("code_sum.py", "w") as f: f.write(comp.transformer.code.code)
@@ -213,6 +215,7 @@ def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], *
 
 
 def is_flex_transformer(transformer):
+    # Probably 'argon' also need to be added here
     flex_transformers = ['flexgpu']
     for flex_t in flex_transformers:
         if isinstance(transformer, ngt.Transformer.transformers[flex_t]):
@@ -223,7 +226,4 @@ def is_flex_transformer(transformer):
 def reset_flex_entry(comp):
     for flex_id in comp.executor.output_flex_ids:
         flex_entry = comp.transformer.flex_manager.flex_entries[flex_id]
-        flex_entry.initialized = False
-        flex_entry.scale = 1.0 / 2 ** 8
-        flex_entry.init_count = 0
-        flex_entry.stats.clear()
+        flex_entry.reset_entry()
