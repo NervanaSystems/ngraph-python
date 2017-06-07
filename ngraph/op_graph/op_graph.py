@@ -791,31 +791,6 @@ def set_item(tensor, item, value):
     return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
 
-class SetItemOp(Op):
-    """
-    tensor[item] = val
-
-    This is a stub and has no frontend support at this time.
-
-    Arguments:
-        tensor (AssignableTensorOp): An assignable tensor.
-        item: An index into the tensor.
-        val (TensorOp): A value to assign.
-    """
-
-    def __init__(self, tensor, item, val, **kwargs):
-        super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
-        self.item = tuple(item)
-
-    @property
-    def states_written(self):
-        return self.args[0].states_read
-
-    @property
-    def states_read(self):
-        return self.args[0].states_read | self.args[1].states_read
-
-
 class ControlBlockOp(Op):
     """
     An Op that affects execution sequencing.

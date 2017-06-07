@@ -31,7 +31,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
     ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
-    SetItemOp, ReductionOp
+    ReductionOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
@@ -664,10 +664,6 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(AssignOp)
     def generate_op(self, op, out, tensor, value):
         self.append("{}.__setitem__((), {})", tensor, value)
-
-    @generate_op.on_type(SetItemOp)
-    def generate_op(self, op, out, tensor, value):
-        self.append("{}.__setitem__({}, {})", tensor, tuple(op.item), value)
 
     @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
