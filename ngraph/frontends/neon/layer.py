@@ -472,8 +472,6 @@ class ConvBase(Layer):
             raise ValueError("Missing conv keys: {}".format(missing_keys))
 
         self.init = init
-        self.f_axes = None
-        self.o_axes = None
         self.W = None
         self.W_name = 'convwt'
         self.layer_name = 'convolution'
