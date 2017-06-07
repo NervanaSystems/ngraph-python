@@ -133,22 +133,6 @@ def test_slice(transformer_factory):
             'sliced_axes': None,
             'axes_lengths': {C: 2, D: 3},
             'expected': [5, 6]
-        },
-        {
-            'tensor': [[1, 4, 5], [2, 5, 6]],
-            'tensor_axes': (C, D),
-            'slice': [1, slice(None, None, -1)],
-            'sliced_axes': None,
-            'axes_lengths': {C: 2, D: 3},
-            'expected': [6, 5, 2]
-        },
-        {
-            'tensor': [[1, 4, 5], [2, 5, 6]],
-            'tensor_axes': (C, D),
-            'slice': [slice(None, None, -1), slice(None, None, -1)],
-            'sliced_axes': None,
-            'axes_lengths': {C: 2, D: 3},
-            'expected': [[6, 5, 2], [5, 4, 1]]
         }
     ]
 
@@ -183,6 +167,21 @@ def test_slice(transformer_factory):
             assert ng.testing.allclose(
                 numeric_deriv, sym_deriv, rtol=rtol, atol=atol
             )
+
+
+def test_reverse_slice(transformer_factory):
+    """TODO."""
+
+    C = ng.make_axis(length=10)
+    D = ng.make_axis(length=10)
+
+    with ExecutorFactory() as ex:
+        x = ng.placeholder([C, D])
+        with pytest.raises(ValueError):
+            s = ng.tensor_slice(x, [slice(0, 10, -1), slice(0, 10)])
+
+        with pytest.raises(ValueError):
+            ng.set_item(x, [0, slice(None, None, -1)], 0)
 
 
 @pytest.mark.flex_disabled

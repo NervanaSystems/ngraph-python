@@ -1900,6 +1900,11 @@ class TensorSliceOp(ReshapeOp):
                 tensor_dim=len(x.shape),
                 slices_len=len(slices),
             ))
+        for s in slices:
+            if not isinstance(s, slice):
+                continue
+            if s.step is not None and s.step < 0:
+                raise ValueError("Negative slice steps are not supported.")
 
         if axes is None:
             axes = []
