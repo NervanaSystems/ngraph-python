@@ -15,6 +15,7 @@
 from __future__ import division
 from builtins import object
 from contextlib import contextmanager
+from orderedset import OrderedSet
 
 import numpy as np
 from copy import deepcopy
@@ -60,9 +61,11 @@ class ExecutorFactory(object):
 
     def get_copied_params(self, graph, input_params):
         placeholders = self.get_all_placeholders(graph)
-        copied_params = []
+        copied_params = OrderedSet()
         for i in input_params:
-            copied_params += [p for p in placeholders if i.name == p.tensor.name]
+            for p in placeholders:
+                if i.name == p.tensor.name:
+                    copied_params.add(p.tensor)
         return tuple(copied_params)
 
     def numeric_derivative(self, f, p_x, dx, *params):
