@@ -28,7 +28,7 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
-TEST_OPTS := --timeout=800 --cov=ngraph --timeout_method=thread
+TEST_OPTS := --timeout=300 --cov=ngraph --timeout_method=thread
 TEST_DIRS := tests/
 TEST_DIRS_NEON := ngraph/frontends/neon/tests
 TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
@@ -109,7 +109,7 @@ test_flex: gpu_prepare test_prepare clean
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
 	and not hetr_only or flex_only" \
 	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
-	$(TEST_DIRS)
+	$(TEST_DIRS) $(TEST_DIRS_NEON)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export PYTHONHASHSEED=0
