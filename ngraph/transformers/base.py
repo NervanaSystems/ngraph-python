@@ -60,6 +60,8 @@ class Computation(NameableValue):
         self.gather_send_nodes = []
         self.gather_recv_nodes = []
         self.allreduce_nodes = []
+        self.broadcast_send_nodes = []
+        self.broadcast_recv_nodes = []
 
     def unpack_args_or_feed_dict(self, args, kwargs):
         feed_dict = kwargs.pop('feed_dict', None)
