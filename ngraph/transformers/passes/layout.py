@@ -24,6 +24,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
+from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp 
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.op_graph.comm_nodes import GPUCudaScatterSendOp, GPUCudaGatherSendOp, \
     GPUCudaAllReduceOp
@@ -400,6 +401,14 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(BpropReluOp)
     def op_from_args(self, op, args):
         return BpropReluOp(args[0], args[1], op.fprop)
+
+    @op_from_args.on_type(BatchnormOp)
+    def op_from_args(self, op, args):
+        return BatchnormOp(args[0], args[1], args[2], args[3], args[4], args[5])
+    
+    @op_from_args.on_type(BpropBatchnormOp)
+    def op_from_args(self, op, args):
+        return BpropBatchnormOp(args[0], args[1], op.fprop)
 
     @op_from_args.on_type(ReorderAxes)
     def op_from_args(self, op, args):
