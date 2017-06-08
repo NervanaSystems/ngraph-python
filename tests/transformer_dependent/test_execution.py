@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import range
-from copy import deepcopy
 
 import numpy as np
 import pytest
@@ -460,21 +459,19 @@ def test_elementwise_unary_ops_matched_args(
     be_op = getattr(ng, elementwise_unary_op)
 
     p_u = symmetric_tensor
-    p_u_cpu = deepcopy(symmetric_tensor)
     u = rng.uniform(1.0, 2.0, p_u.axes)
     u_np = np_op(u)
     result_op = be_op(p_u)
-    result_op_cpu = be_op(p_u_cpu)
 
     with ExecutorFactory() as ex:
         fun = ex.executor(result_op, p_u)
-        dudunum_fun = ex.numeric_derivative(result_op_cpu, p_u_cpu, delta)
+        dudunum_fun = ex.numeric_derivative(result_op, p_u, delta)
         dudut_fun = ex.derivative(result_op, p_u)
 
         u_t = fun(u)
         ng.testing.assert_allclose(u_np, u_t, atol=1e-4, rtol=1e-4)
-        dudut = dudut_fun(u)
         dudunum = dudunum_fun(u)
+        dudut = dudut_fun(u)
         ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 

@@ -17,6 +17,8 @@ from builtins import object
 from contextlib import contextmanager
 
 import numpy as np
+from copy import deepcopy
+
 import ngraph as ng
 import ngraph.transformers as ngt
 
@@ -44,9 +46,30 @@ class ExecutorFactory(object):
     def get_tensor_view_value(self, op, host_tensor=None):
         return self.transformer.get_tensor_view_value(op, host_tensor)
 
+    @staticmethod
+    def get_all_placeholders(graph):
+        placeholders = []
+        ops = [graph]
+        for op in ops:
+            for arg in op.args:
+                if isinstance(arg, ng.TensorValueOp):
+                    placeholders.append(arg)
+                else:
+                    ops.append(arg)
+        return placeholders
+
+    def get_copied_params(self, graph, input_params):
+        placeholders = self.get_all_placeholders(graph)
+        copied_params = []
+        for i in input_params:
+            copied_params += [p for p in placeholders if i.name == p.tensor.name]
+        return tuple(copied_params)
+
     def numeric_derivative(self, f, p_x, dx, *params):
         if is_flex_transformer(self.transformer):
-            comp = self.cpu_transformer.computation(f, p_x, *params)
+            f_cpu = deepcopy(f)
+            copied_params = self.get_copied_params(f_cpu, (p_x,) + params)
+            comp = self.cpu_transformer.computation(f_cpu, *copied_params)
         else:
             comp = self.transformer.computation(f, p_x, *params)
 
