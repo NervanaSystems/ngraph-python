@@ -59,8 +59,9 @@ class ExecutorFactory(object):
                     ops.append(arg)
         return placeholders
 
-    def get_copied_params(self, graph, input_params):
-        placeholders = self.get_all_placeholders(graph)
+    @staticmethod
+    def get_copied_params(graph, input_params):
+        placeholders = ExecutorFactory.get_all_placeholders(graph)
         copied_params = OrderedSet()
         for i in input_params:
             for p in placeholders:
