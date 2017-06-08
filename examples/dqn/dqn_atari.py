@@ -22,34 +22,29 @@ def model(action_axes):
             neon.XavierInit(),
             strides=4,
             activation=neon.Rectlin(),
-            batch_norm=True,
         ),
         neon.Convolution(
             (4, 4, 64),
             neon.XavierInit(),
             strides=2,
             activation=neon.Rectlin(),
-            batch_norm=True,
         ),
         neon.Convolution(
             (3, 3, 64),
             neon.XavierInit(),
             strides=1,
             activation=neon.Rectlin(),
-            batch_norm=True,
         ),
         neon.Affine(
             nout=512,
             weight_init=neon.XavierInit(),
             bias_init=neon.ConstantInit(),
             activation=neon.Rectlin(),
-            batch_norm=True,
         ),
         neon.Affine(
             weight_init=neon.XavierInit(),
             bias_init=neon.ConstantInit(),
             activation=neon.Rectlin(),
-            batch_norm=True,
             axes=(action_axes, )
         ),
     ])
