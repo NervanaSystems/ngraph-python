@@ -20,8 +20,8 @@ from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
     SetItemOp, SequentialOp, ReorderAxes, Flatten, TensorSliceOp, TensorSizeOp
-from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
-    SetItemOp, SequentialOp, DeconvolutionOp, DeconvDerivOp
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
@@ -187,7 +187,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
                 self.transformer.get_layout_cost_function(op.tensor)
             self.binary_constraints[op.tensor] = []
 
-this
+
 class AssignLayouts(GraphPass):
     """
     Computes an upper bound for layout cost by using default layouts for every op, then
