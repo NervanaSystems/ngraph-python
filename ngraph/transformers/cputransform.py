@@ -32,7 +32,8 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
     SetItemOp, ReductionOp
-from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
@@ -49,7 +50,8 @@ from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferSt
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
-    CPUQueueScatterRecvOp, CPUQueueAllReduceOp
+    CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
+    CPUQueueBroadcastRecvOp
 
 
 class CPUConvEngine(object):
@@ -373,6 +375,14 @@ class CPUCodeGenerator(PyGen):
     def allreduce_nodes(self):
         return self.transformer.current_computation.allreduce_nodes
 
+    @property
+    def broadcast_send_nodes(self):
+        return self.transformer.current_computation.broadcast_send_nodes
+
+    @property
+    def broadcast_recv_nodes(self):
+        return self.transformer.current_computation.broadcast_recv_nodes
+
     @generic_method(Op)
     def allocate_op(self, op, *args):
         pass
@@ -406,6 +416,28 @@ class CPUCodeGenerator(PyGen):
         stride = [str_d, str_h, str_w]
         self.append("mkldnn.init_update_conv('{}', arrI={}, arrE={}, arrO={}, pad={}, stride={})",  # noqa
                     op.name, arrI, arrE, arrO, pad, stride)
+
+    @allocate_op.on_type(DeconvolutionOp)
+    def allocate_op(self, op, outputs, inputs, filters):
+        self.conv_params[op.name] = op.conv_params
+        # get_slices args: swap outputs and inputs
+        self.conv_slices[op.name] = \
+            CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        pad = [pad_d, pad_h, pad_w]
+        stride = [str_d, str_h, str_w]
+        self.append("mkldnn.init_conv_bprop('{}', E={}, F={}, gI={}, pad={}, stride={})",
+                    op.name, inputs, filters, outputs, pad, stride)
+
+    @allocate_op.on_type(DeconvDerivOp)
+    def allocate_op(self, op, gI, delta, filters):
+        pad_d, pad_h, pad_w = itemgetter(*('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        str_d, str_h, str_w = itemgetter(*('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        pad = [pad_d, pad_h, pad_w]
+        stride = [str_d, str_h, str_w]
+        self.append("mkldnn.init_conv_fprop('{}', I={}, F={}, O={}, pad={}, stride={})",
+                    op.name, delta, filters, gI, pad, stride)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
@@ -503,6 +535,16 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, outputs, delta, inputs):
         self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={})",
                     op.name, op.fprop.forwarded.name, inputs, delta, outputs)
+
+    @generate_op.on_type(DeconvolutionOp)
+    def generate_op(self, op, outputs, inputs, filters):
+        self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
+                    op.name, op.name, inputs, filters, outputs)
+
+    @generate_op.on_type(DeconvDerivOp)
+    def generate_op(self, op, outputs, delta, filters):
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
+                    op.name, op.fprop.forwarded.name, delta, filters, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
@@ -741,6 +783,19 @@ class CPUCodeGenerator(PyGen):
         self.allreduce_nodes.append(op)
         self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
 
+    @generate_op.on_type(CPUQueueBroadcastSendOp)
+    def generate_op(self, op, out, arg):
+        broadcast_send_id = len(self.broadcast_send_nodes)
+        self.broadcast_send_nodes.append(op)
+        self.append("self.queue_broadcast_send({}, {})", broadcast_send_id, arg)
+
+    @generate_op.on_type(CPUQueueBroadcastRecvOp)
+    def generate_op(self, op, out):
+        broadcast_recv_id = len(self.broadcast_recv_nodes)
+        self.broadcast_recv_nodes.append(op)
+        self.append("self.broadcast_recv_from_queue_broadcast_send({}, out={})",
+                    broadcast_recv_id, out)
+
 
 class CPUTransformer(ComputationGraphTransformer):
     """
@@ -906,7 +961,9 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
                            scatter_recv_nodes=computation.scatter_recv_nodes,
                            gather_send_nodes=computation.gather_send_nodes,
                            gather_recv_nodes=computation.gather_recv_nodes,
-                           allreduce_nodes=computation.allreduce_nodes)
+                           allreduce_nodes=computation.allreduce_nodes,
+                           broadcast_send_nodes=computation.broadcast_send_nodes,
+                           broadcast_recv_nodes=computation.broadcast_recv_nodes)
             computation.executor = executor
 
     def allocate_storage(self):
