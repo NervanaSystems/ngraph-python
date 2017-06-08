@@ -17,7 +17,8 @@ import numpy as np
 from ngraph.op_graph.op_graph import OneHotOp, RngOp, TensorSizeOp, Fill, AssignOp, \
     SetItemOp, UnaryElementWiseOp, BinaryElementWiseOp, ReductionOp, DotOp, TensorOp, \
     IndexOp, TensorValueOp, AssignableTensorOp
-from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes, make_axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
@@ -833,6 +834,10 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, update_conv):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, DeconvolutionOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, DeconvDerivOp):
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, PoolingOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, BpropPoolOp):
@@ -895,6 +900,10 @@ def gpu_constraint_factory(op, arg):
     elif isinstance(op, bprop_conv):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, update_conv):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, DeconvolutionOp):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
+    elif isinstance(op, DeconvDerivOp):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, PoolingOp):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
