@@ -38,8 +38,8 @@ from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent
+
 
 rng = RandomTensorGenerator()
 
@@ -113,6 +113,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
     return W_in, W_rec, b, init_state, init_state_value
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -170,6 +171,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -232,6 +234,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                                        rtol=bprop_rtol, atol=bprop_atol)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -276,6 +279,7 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
                                        rtol=num_rtol, atol=num_atol)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
