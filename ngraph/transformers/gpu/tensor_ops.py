@@ -680,12 +680,16 @@ class RngFillKernel(GPUKernel):
 
 class FlexAssignKernel(GPUKernel):
     def __init__(self, transformer, tensor, value, **kwargs):
-        super(GPUKernel, self).__init__(transformer, **kwargs)
-        self.tensor = self.tensor_view_from_td(self.tensor).flex_entry
-        self.value = self.tensor_view_from_td(self.value).flex_entry
+        super(FlexAssignKernel, self).__init__(transformer, **kwargs)
+        self.tensor = self.tensor_view_from_td(tensor)
+        self.value = self.tensor_view_from_td(value)
+        self.output_flex_ids = []
 
     def execute(self):
-        self.tensor[...] = self.value
+        self.tensor[...] = self.value.get(None)
+
+    def bind_flex_scales(self):
+        pass
 
 
 class FlexFillKernel(FillKernel):

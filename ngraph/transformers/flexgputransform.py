@@ -200,7 +200,7 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         super(FlexGPUKernelGroup, self).add_kernel(op)
 
     @add_kernel.on_type(AssignOp)
-    def add_kernel(self, op, tensor, value):
+    def add_kernel(self, op):
         self.kernels.append(FlexAssignKernel(self.transformer,
                                              op.call_info()[0], op.call_info()[1]))
 
