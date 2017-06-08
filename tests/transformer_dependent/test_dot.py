@@ -139,30 +139,29 @@ def test_dot_sum_backprop(transformer_factory):
         d_val = d_fun(x_np, y_np)
         ng.testing.assert_allclose(d_np, d_val, rtol=rtol, atol=atol)
 
-        dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
-        dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
-        ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
-
-        dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
-        dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
-        ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
-
         s_np = np.sum(d_np)
         s_val = s_fun(x_np, y_np)
         ng.testing.assert_allclose(s_val, s_np, rtol=rtol, atol=atol)
 
         # assert derivative wrt to both tensors is the same when computed
         # symbolically by ngraph and numerically
-        ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
-        ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
-        ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
 
-        ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
+        dd_dx_val_sym = dd_dx_fun_sym(x_np, y_np)
+        dd_dy_val_sym = dd_dy_fun_sym(y_np, x_np)
+        ds_dx_val_sym = ds_dx_fun_sym(x_np, y_np)
         ds_dy_val_sym = ds_dy_fun_sym(y_np, x_np)
+
+        dd_dx_val_num = dd_dx_fun_num(x_np, y_np)
+        dd_dy_val_num = dd_dy_fun_num(y_np, x_np)
+        ds_dx_val_num = ds_dx_fun_num(x_np, y_np)
+        ds_dy_val_num = ds_dy_fun_num(y_np, x_np)
+
+        ng.testing.assert_allclose(dd_dx_val_num, dd_dx_val_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(dd_dy_val_num, dd_dy_val_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(ds_dx_val_num, ds_dx_val_sym, rtol=rtol, atol=atol)
         ng.testing.assert_allclose(ds_dy_val_num, ds_dy_val_sym, rtol=rtol, atol=atol)
 
 
-@pytest.mark.flex_disabled
 @raise_all_numpy_errors
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
@@ -233,6 +232,7 @@ def test_tensor_dot_tensor(transformer_factory):
 
         with ExecutorFactory() as ex:
             dot = ng.dot(tensor1, tensor2)
+
             evaluated_fun = ex.executor(dot, tensor1, tensor2)
 
             deriv1_fun_num = ex.numeric_derivative(dot, tensor1, 1e-3, tensor2)
@@ -247,12 +247,13 @@ def test_tensor_dot_tensor(transformer_factory):
 
             # assert derivative wrt to both tensors is the same when computed
             # symbolically by ngraph and numerically
-            deriv1_val_num = deriv1_fun_num(value1, value2)
             deriv1_val_sym = deriv1_fun_sym(value1, value2)
-            ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
-
-            deriv2_val_num = deriv2_fun_num(value2, value1)
             deriv2_val_sym = deriv2_fun_sym(value2, value1)
+
+            deriv1_val_num = deriv1_fun_num(value1, value2)
+            deriv2_val_num = deriv2_fun_num(value2, value1)
+
+            ng.testing.assert_allclose(deriv1_val_num, deriv1_val_sym, rtol=1e-2, atol=1e-2)
             ng.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
 
 

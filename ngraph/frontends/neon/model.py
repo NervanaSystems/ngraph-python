@@ -65,9 +65,9 @@ class BoundComputation(object):
     Callable object that has inputs and outputs of a computation bound via names
     """
     def __init__(self, transformer, named_outputs, named_inputs):
-        self.input_keys = tuple(named_inputs.keys())
+        self.input_keys = tuple(sorted(named_inputs.keys()))
 
-        self.output_keys = tuple(named_outputs.keys())
+        self.output_keys = tuple(sorted(named_outputs.keys()))
 
         outputs = itemgetter(*self.output_keys)(named_outputs)
         outputs = [outputs] if len(self.output_keys) == 1 else list(outputs)
