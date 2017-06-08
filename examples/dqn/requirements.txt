@@ -1,0 +1,2 @@
+gym[all]>=0.9.1
+opencv-python
