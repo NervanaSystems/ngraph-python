@@ -678,6 +678,16 @@ class RngFillKernel(GPUKernel):
             self.out[:] = self.out * self.params['scale'] + self.params['loc']
 
 
+class FlexAssignKernel(GPUKernel):
+    def __init__(self, transformer, tensor, value, **kwargs):
+        super(GPUKernel, self).__init__(transformer, **kwargs)
+        self.tensor = self.tensor_view_from_td(self.tensor).flex_entry
+        self.value = self.tensor_view_from_td(self.value).flex_entry
+
+    def execute(self):
+        self.tensor[...] = self.value
+
+
 class FlexFillKernel(FillKernel):
     """
     Flex version of FillKernel
