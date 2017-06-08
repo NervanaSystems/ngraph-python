@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import object, zip
+import numpy as np
 import ngraph as ng
 import numbers
 import ngraph.frontends.common.learning_rate_policies as lrp
@@ -115,6 +116,7 @@ class LearningRateOptimizer(Optimizer):
 
     @ng.with_op_metadata
     def __call__(self, cost_func, variable_scope=None):
+        self._pre_call_hook()
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
         batch_size = cost_func.axes.batch_axis().length
@@ -131,6 +133,9 @@ class LearningRateOptimizer(Optimizer):
         updates = ng.doall(all_updates)
         grads = ng.doall(grads)
         return ng.sequential([grads, updates, 0])
+
+    def _pre_call_hook(self):
+        pass
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
@@ -260,5 +265,61 @@ class RMSProp(LearningRateOptimizer):
             ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
             ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
                                             / (ng.sqrt(state + epsilon) + epsilon)))
+        ])
+        return updates
+
+
+class Adam(LearningRateOptimizer):
+    """
+    Adam optimizer
+
+    TODO docstring
+
+    """
+    metadata = {'layer_type': 'adam_optimizer'}
+
+    def __init__(
+        self,
+        learning_rate=1e-3,
+        beta_1=0.9,
+        beta_2=0.999,
+        epsilon=1e-8,
+        gradient_clip_norm=None,
+        gradient_clip_value=None,
+        **kwargs
+    ):
+        """
+        Class constructor.
+        Arguments:
+            learning_rate (float): the multiplication coefficient of updates
+            beta_1 (float): decay of 1st order moment
+            beta_2 (float): decay of 2nd order moment
+            epsilon (float): numerical stability factor
+            gradient_clip_norm (float, optional): Target gradient norm.
+                                                  Defaults to None.
+            gradient_clip_value (float, optional): Value to element-wise clip
+                                                   gradients.
+                                                   Defaults to None.
+        """
+        super(Adam, self).__init__(learning_rate, **kwargs)
+        self.beta_1 = ng.constant(beta_1, dtype=np.float32)
+        self.beta_2 = ng.constant(beta_2, dtype=np.float32)
+        self.epsilon = epsilon
+        self.gradient_clip_norm = gradient_clip_norm
+        self.gradient_clip_value = gradient_clip_value
+        self.t = ng.persistent_tensor(axes=(), initial_value=0)
+
+    def _pre_call_hook(self):
+        self.t = ng.sequential([ng.assign(self.t, self.t + 1), self.t])
+        self.ell = self.lrate * ng.sqrt(1 - self.beta_2**self.t) / (1 - self.beta_1**self.t)
+
+    def variable_update(self, variable, grad, scale_factor):
+        m = ng.persistent_tensor(axes=grad.axes, initial_value=0.)
+        v = ng.persistent_tensor(axes=grad.axes, initial_value=0.)
+        updates = ng.sequential([
+            ng.assign(m, m * self.beta_1 + (1 - self.beta_1) * grad),
+            ng.assign(v, v * self.beta_2 + (1 - self.beta_2) * grad * grad),
+            ng.assign(variable,
+                      variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
         ])
         return updates
