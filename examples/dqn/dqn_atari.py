@@ -2,7 +2,6 @@ import gym
 from collections import deque
 import numpy as np
 import cv2
-import simple_environments
 from ngraph.frontends.neon import dqn, rl_loop
 from ngraph.frontends import neon
 import ngraph as ng
@@ -144,15 +143,14 @@ class RepeatWrapper(gym.Wrapper):
         )
 
     def _reset(self):
-        self.history = deque([self.env.reset()],
-                             maxlen=self.frames)
+        self.history = deque([self.env.reset()], maxlen=self.frames)
 
         # take random actions to start and fill frame buffer
         for _ in range(self.frames - 1):
             action = self.env.action_space.sample()
             observation, reward, done, info = self.env.step(action)
             self.history.append(observation)
-            assert done != True
+            assert done is not True
 
         return self._get_observation()
 
@@ -199,7 +197,7 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
             observation = self.env.reset()
         else:
             observation, _, self.needs_reset, _ = self.env.step(0)
-            assert self.needs_reset != True
+            assert self.needs_reset is not True
 
         self.last_lives = self.env.unwrapped.ale.lives()
 
@@ -233,8 +231,6 @@ def main():
     )
 
     rl_loop.rl_loop(environment, agent, episodes=200000)
-
-    total_reward = rl_loop.evaluate_single_episode(environment, agent)
 
 
 if __name__ == "__main__":

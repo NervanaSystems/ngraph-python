@@ -1,5 +1,5 @@
 import gym
-import simple_environments
+import simple_environments  # NOQA
 from ngraph.frontends.neon import dqn, rl_loop
 from ngraph.frontends import neon
 import numpy as np

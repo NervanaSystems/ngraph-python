@@ -1,7 +1,7 @@
 import random
 import numpy as np
 import gym
-from gym.envs.registration import registry, register, make, spec
+from gym.envs.registration import register
 from gym import spaces
 
 

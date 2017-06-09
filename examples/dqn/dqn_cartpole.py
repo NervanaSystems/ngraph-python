@@ -93,7 +93,7 @@ def main():
     rl_loop.rl_loop(environment, agent, episodes=1000)
 
     total_reward = rl_loop.evaluate_single_episode(environment, agent)
-    print total_reward
+    print(total_reward)
 
 
 if __name__ == "__main__":
