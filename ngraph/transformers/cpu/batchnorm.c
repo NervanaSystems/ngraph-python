@@ -282,7 +282,7 @@ void create_mkldnn_batchnorm_bprop_primitives(
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
     create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
-                                 &(opkernel->internal_inputs[1]));
+                                 &(opkernel->internal_inputs[3]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
         &reorder_pd, opkernel->inputs[3].desc, kernel_src_pd));
