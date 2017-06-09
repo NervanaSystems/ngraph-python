@@ -457,12 +457,12 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(DeconvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
         self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
-                op.name, op.name, inputs, filters, outputs)
+                    op.name, op.name, inputs, filters, outputs)
 
     @generate_op.on_type(DeconvDerivOp)
     def generate_op(self, op, outputs, delta, filters):
         self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                op.name, op.fprop.forwarded.name, delta, filters, outputs)
+                    op.name, op.fprop.forwarded.name, delta, filters, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
