@@ -80,14 +80,14 @@ class ReshapeWrapper(gym.Wrapper):
         return observation
 
     def _step(self, action):
-        observation, reward, done, info = self.env._step(action)
+        observation, reward, done, info = self.env.step(action)
 
         observation = self._modify_observation(observation)
 
         return observation, reward, done, info
 
     def _reset(self):
-        return self._modify_observation(self.env._reset())
+        return self._modify_observation(self.env.reset())
 
 
 class ClipRewardWrapper(gym.Wrapper):
@@ -96,7 +96,7 @@ class ClipRewardWrapper(gym.Wrapper):
     """
 
     def _step(self, action):
-        observation, reward, done, info = self.env._step(action)
+        observation, reward, done, info = self.env.step(action)
 
         # clip reward to -1, 0, or 1
         if reward > 0:
@@ -141,20 +141,20 @@ class RepeatWrapper(gym.Wrapper):
         )
 
     def _reset(self):
-        self.history = deque([super(RepeatWrapper, self)._reset()],
+        self.history = deque([self.env.reset()],
                              maxlen=self.frames)
 
         # take random actions to start and fill frame buffer
         for _ in range(self.frames - 1):
             action = self.env.action_space.sample()
-            observation, reward, done, info = self.env._step(action)
+            observation, reward, done, info = self.env.step(action)
             self.history.append(observation)
             assert done != True
 
         return self._get_observation()
 
     def _step(self, action):
-        observation, reward, done, info = self.env._step(action)
+        observation, reward, done, info = self.env.step(action)
 
         self.history.append(observation)
 
@@ -173,10 +173,10 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
         super(TerminateOnEndOfLifeWrapper, self).__init__(env)
 
         self.last_lives = 0
-        self.needs_reset = False
+        self.needs_reset = True
 
     def _step(self, action):
-        observation, reward, done, info = self.env._step(action)
+        observation, reward, done, info = self.env.step(action)
         self.needs_reset = done
 
         lives = self.env.unwrapped.ale.lives()
@@ -192,13 +192,16 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
         # the termination. if we are getting reset because alive was lost,
         # just take a normal step and pretend it was a reset.
         if self.needs_reset:
+            print('real reset')
             self.needs_reset = False
-            observation = super(RepeatWrapper, self)._reset()
+            observation = self.env.reset()
         else:
-            observation, _, self.needs_reset, _ = self.env._step(0)
+            print('fake reset')
+            observation, _, self.needs_reset, _ = self.env.step(0)
             assert self.needs_reset != True
 
         self.last_lives = self.env.unwrapped.ale.lives()
+        print('lives', self. last_lives)
 
         return observation
 

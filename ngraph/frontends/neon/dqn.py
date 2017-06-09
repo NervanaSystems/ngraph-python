@@ -140,13 +140,18 @@ class ModelWrapper(object):
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
+        state = np.asarray(state)
+
+        # add a batch axis of 1 if it doesn't already exist
+        if state.shape == self.state_single.axes.lengths[:-1]:
+            state = state.reshape(self.state_single.axes.lengths)
+
         if state.shape != self.state_single.axes.lengths:
             raise ValueError((
                 'predict received state with wrong shape. found {}, expected {} '
             ).format(state.shape, self.state_single.axes.lengths))
 
         return self.inference_function_single(state)
-
 
     def predict(self, state):
         if state.shape != self.state.axes.lengths:
