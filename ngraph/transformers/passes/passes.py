@@ -64,13 +64,29 @@ class GraphBuildingPass(GraphPass):
             ops = Op.ordered_ops(op.forwarded for op in min_ops)
             for op in ops:
                 op.update_forwards()
-                self.visit(op)
+                self.visit(op, *op.args)
 
             # Perform the gathered replacements
             for old, rep in self.replacement_list:
                 old.forwarded.replace_self(rep.forwarded)
             has_work = len(self.replacement_list) > 0
             min_ops = list(op.forwarded for op in min_ops)
+
+    def op_arg(self, op, n):
+        """
+
+        Args:
+            op: The op we want the args of.
+            n: The arg number.
+
+        Returns:
+            The arg's op.
+
+        """
+        return op.args[n]
+
+    def op_args(self, op):
+        return op.args
 
     def replace_op(self, op, replacement):
         """
@@ -424,12 +440,11 @@ class RequiredTensorShaping(PeepholeGraphPass):
     """
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         pass
 
     @visit.on_type(DotOp)
-    def visit(self, op):
-        x, y = op.args
+    def visit(self, op, x, y):
         reduction_axes = op.reduction_axes
         out_axes = op.axes
         if len(reduction_axes) == 0:
@@ -482,23 +497,21 @@ class RequiredTensorShaping(PeepholeGraphPass):
 class CPUTensorShaping(PeepholeGraphPass):
     """TODO."""
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         pass
 
     @visit.on_type(ContiguousOp)
-    def visit(self, op):
-        if op.args[0].tensor_description().c_contiguous:
-            self.replace_op(op, op.args[0])
+    def visit(self, op, x):
+        if x.tensor_description().c_contiguous:
+            self.replace_op(op, x)
 
     @visit.on_type(ReorderAxes)
-    def visit(self, op):
-        x = op.args[0]
+    def visit(self, op, x):
         if op.axes == x.axes:
             self.replace_op(op, x)
 
     @visit.on_type(BroadcastOp)
-    def visit(self, op):
-        x = op.args[0]
+    def visit(self, op, x):
         if op.axes == x.axes:
             self.replace_op(op, x)
 
@@ -506,7 +519,7 @@ class CPUTensorShaping(PeepholeGraphPass):
 class SimplePrune(PeepholeGraphPass):
     """TODO."""
     @generic_method()
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         TODO.
 
@@ -516,7 +529,7 @@ class SimplePrune(PeepholeGraphPass):
         pass
 
     @visit.on_type(NegativeOp)
-    def visit(self, op):
+    def visit(self, op, x):
         """
         TODO.
 
@@ -526,12 +539,11 @@ class SimplePrune(PeepholeGraphPass):
         Returns:
           TODO
         """
-        x, = op.args
         if x.is_scalar and x.is_constant:
             self.replace_op(op, constant(-x.const))
 
     @visit.on_type(Multiply)
-    def visit(self, op):
+    def visit(self, op, x, y):
         """
         TODO.
 
@@ -541,7 +553,6 @@ class SimplePrune(PeepholeGraphPass):
         Returns:
           TODO
         """
-        x, y = op.args
         rep = None
         if x.is_scalar and x.is_constant:
             if x.const == 0:
@@ -561,7 +572,7 @@ class SimplePrune(PeepholeGraphPass):
             self.replace_op(op, rep)
 
     @visit.on_type(Add)
-    def visit(self, op):
+    def visit(self, op, x, y):
         """
         TODO.
 
@@ -571,7 +582,6 @@ class SimplePrune(PeepholeGraphPass):
         Returns:
           TODO
         """
-        x, y = op.args
         rep = None
         if x.is_scalar and x.is_constant:
             if x.const == 0:
@@ -583,7 +593,7 @@ class SimplePrune(PeepholeGraphPass):
             self.replace_op(op, rep)
 
     @visit.on_type(Sum)
-    def visit(self, op):
+    def visit(self, op, x):
         """
         TODO.
 
@@ -593,13 +603,12 @@ class SimplePrune(PeepholeGraphPass):
         Returns:
           TODO
         """
-        x, = op.args
         if x.is_scalar and x.is_constant:
             val = x.const * op.reduction_axes.size
             self.replace_op(op, constant(val))
 
     @visit.on_type(Prod)
-    def visit(self, op):
+    def visit(self, op, x):
         """
         TODO.
 
@@ -609,13 +618,12 @@ class SimplePrune(PeepholeGraphPass):
         Returns:
           TODO
         """
-        x, = op.args
         if x.is_scalar and x.is_constant:
             val = power(x.const, op.reduction_axes.size)
             self.replace_op(op, constant(val))
 
     @visit.on_type(LogOp)
-    def visit(self, op):
+    def visit(self, op, x):
         """
         TODO.
 
@@ -625,12 +633,11 @@ class SimplePrune(PeepholeGraphPass):
         Returns:
           TODO
         """
-        x, = op.args
         if isinstance(x, Divide):
-            num, denom = x.args
+            num, denom = self.op_args(x)
             if isinstance(num, ExpOp):
                 exp_x, = num.args
                 self.replace_op(op, exp_x - type(op)(denom))
         elif isinstance(x, ExpOp):
-            exp_x, = x.args
+            exp_x, = self.op_args(x)
             self.replace_op(op, exp_x)

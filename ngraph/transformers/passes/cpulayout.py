@@ -13,18 +13,17 @@ def is_contiguous(op):
 class CPUTensorLayout(PeepholeGraphPass):
     """TODO."""
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         Base case.
         """
         pass
 
     @visit.on_type(ConvolutionOp)
-    def visit(self, op):
+    def visit(self, op, inputs, filters):
         """
         Convolution implementation requires contiguous layout.
         """
-        inputs, filters = op.args
 
         replace = False
         if not isinstance(inputs, ContiguousOp):
@@ -39,9 +38,7 @@ class CPUTensorLayout(PeepholeGraphPass):
             self.replace_op(op, ConvolutionOp(op.conv_params, inputs, filters, axes=op.axes))
 
     @visit.on_type(update_conv)
-    def visit(self, op):
-
-        inputs = op.args[1]
+    def visit(self, op, delta, inputs):
 
         replace = False
         if not isinstance(inputs, ContiguousOp):
@@ -49,15 +46,14 @@ class CPUTensorLayout(PeepholeGraphPass):
             replace = True
 
         if replace:
-            self.replace_op(op, update_conv(op.args[0], inputs, op.fprop.args[1], op.fprop))
+            self.replace_op(op, update_conv(delta, inputs, self.op_arg(op.fprop, 1), op.fprop))
 
     @visit.on_type(CTCOp)
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         Warp-CTC requires all args to be contiguous
         """
         replace = False
-        args = list(op.args)
         for ii, arg in enumerate(args):
             if not is_contiguous(arg):
                 args[ii] = ContiguousOp(arg)
@@ -67,9 +63,8 @@ class CPUTensorLayout(PeepholeGraphPass):
             self.replace_op(op, CTCOp(*args, axes=op.axes))
 
     @visit.on_type(Add)
-    def visit(self, op):
+    def visit(self, op, input1, input2):
 
-        input1, input2 = op.args
         replace = False
 
         if not isinstance(input1, ContiguousOp):
@@ -84,11 +79,10 @@ class CPUTensorLayout(PeepholeGraphPass):
             self.replace_op(op, Add(input1, input2))
 
     @visit.on_type(PoolingOp)
-    def visit(self, op):
+    def visit(self, op, inputs):
         """
         MKLDNN Pooling implementation requires contiguous layout.
         """
-        inputs = op.args[0]
         if not isinstance(inputs, ContiguousOp):
             new_op = PoolingOp(op.pool_params, ContiguousOp(inputs), axes=op.axes)
             self.replace_op(op, new_op)

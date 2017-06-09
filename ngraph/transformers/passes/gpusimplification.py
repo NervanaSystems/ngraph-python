@@ -21,17 +21,15 @@ from ngraph.op_graph.op_graph import Op, SetItemOp, tensor_slice, Fill, AssignOp
 class GPUSubstitution(PeepholeGraphPass):
     """TODO."""
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         Base case.
         """
         pass
 
     @visit.on_type(SetItemOp)
-    def visit(self, op):
+    def visit(self, op, tensor, value):
         # PyCuda cannot copy in opposite directions
-        tensor = op.args[0]
-        value = op.args[1]
         slices = op.item
         new_slices = []
         copy_slices = []
@@ -51,7 +49,7 @@ class GPUSubstitution(PeepholeGraphPass):
                                           tensor_slice(value, copy_slices)))
 
     @visit.on_type(Fill)
-    def visit(self, op):
+    def visit(self, op, tensor):
         # Fill op must operate on contiguous tensor
-        if not op.args[0].tensor_description().c_contiguous:
-            self.replace_op(op, AssignOp(op.args[0], op.scalar))
+        if not tensor.tensor_description().c_contiguous:
+            self.replace_op(op, AssignOp(tensor, op.scalar))

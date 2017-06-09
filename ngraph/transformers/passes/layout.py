@@ -100,12 +100,12 @@ class PruneContiguousPass(PeepholeGraphPass):
     TODO: stop inserting contiguous ops? Need to handle other transformer reqs though
     """
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         pass
 
     @visit.on_type(ContiguousOp)
-    def visit(self, op):
-        self.replace_op(op, op.args[0])
+    def visit(self, op, x):
+        self.replace_op(op, x)
 
 
 def get_device_op(op):
@@ -139,7 +139,7 @@ class GenerateLayoutDomains(PeepholeGraphPass):
         self.domains = dict()
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         if op.is_device_op:
             self.domains[op] = self.transformer.get_layouts(op)
         elif isinstance(op, TensorValueOp) and op.tensor not in self.domains:
@@ -161,7 +161,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
         self.users = dict()
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *op_args):
         if op.is_device_op:
             # Generate unary constraint by getting the cost function for this op
             self.unary_constraints[op] = self.transformer.get_layout_cost_function(op)
@@ -169,7 +169,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
             # Find all args that are device ops and generate binary constraints
             # Binary constraints map each op to a list of tuples storing (argument, constraint)
             self.binary_constraints[op] = []
-            for arg in op.args:
+            for arg in op_args:
                 arg_op = get_device_op(arg)
                 if arg_op:
                     self.binary_constraints[op].append(
@@ -402,7 +402,7 @@ class AddLayoutConversions(PeepholeGraphPass):
         return bprop_lut(args[0], args[1], op.fprop.args[1], op.fprop)
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         This pass visits every op with a layout assigned and checks the args against constraints
         to determine whether a layout conversion is needed between the arg and the op. If a
@@ -416,7 +416,7 @@ class AddLayoutConversions(PeepholeGraphPass):
             elif "layout" in op.metadata and "nolayout" not in op.metadata:
                 self.visited.add(op)
                 new_args = []
-                for arg in op.args:
+                for arg in args:
                     b_constraint = None
                     dev_op = get_device_op(arg)
                     orig_arg_op = None
@@ -443,7 +443,7 @@ class AddLayoutConversions(PeepholeGraphPass):
                         new_args.append(arg)
 
                 # Replace op if any inputs need to be transformed
-                if any(a is not b for a, b in zip(new_args, list(op.args))):
+                if any(a is not b for a, b in zip(new_args, list(args))):
                     new_op = self.op_from_args(op, new_args)
                     new_op.metadata["layout"] = op.metadata["layout"]
                     self.replace_op(op, new_op)
