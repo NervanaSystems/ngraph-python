@@ -484,6 +484,7 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
     rnn2(out)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length_enc", [1])
 @pytest.mark.parametrize("sequence_length_dec", [3])
