@@ -192,16 +192,13 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
         # the termination. if we are getting reset because alive was lost,
         # just take a normal step and pretend it was a reset.
         if self.needs_reset:
-            print('real reset')
             self.needs_reset = False
             observation = self.env.reset()
         else:
-            print('fake reset')
             observation, _, self.needs_reset, _ = self.env.step(0)
             assert self.needs_reset != True
 
         self.last_lives = self.env.unwrapped.ale.lives()
-        print('lives', self. last_lives)
 
         return observation
 
