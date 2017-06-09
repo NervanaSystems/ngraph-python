@@ -28,6 +28,8 @@ def ctc_cpu(acts, lbls, utt_lens, lbl_lens, grads, costs, n_threads=8):
     grads.fill(0.)
     max_t, bsz, nout = acts.shape
     utt_lens = (utt_lens * max_t / 100).astype(np.int32)
+    lbls = lbls.astype(np.int32)
+    lbl_lens = lbl_lens.astype(np.int32)
     warp_ctc.bind_to_cpu(acts,
                          lbls,
                          utt_lens,
