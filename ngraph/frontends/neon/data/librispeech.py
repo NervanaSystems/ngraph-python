@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
 import os
 import glob
 import fnmatch
@@ -35,7 +36,7 @@ class Librispeech(object):
     Librispeech data set from http://www.openslr.org/resources/12
 
     Arguments:
-        manifest_file (str): Path to existing manifest file or 
+        manifest_file (str): Path to existing manifest file or
                              desired output manifest file
         path (str): Data directory to find the data. If it doesn't exist,
                     it will be downloaded.
@@ -58,14 +59,13 @@ class Librispeech(object):
         self.version = version
         self.manifest_file = manifest_file
 
-
     def load_data(self, data_directory=None, manifest_file=None):
         """
-        Create a manifest file for the requested dataset. First downloads the 
+        Create a manifest file for the requested dataset. First downloads the
         dataset and extracts it, if necessary.
-        
+
         Arguments:
-            data_directory (str): Path to data directory. Defaults to <path>/<version> 
+            data_directory (str): Path to data directory. Defaults to <path>/<version>
             manifest_file (str): Path to manifest file. Defaults to <data_directory>/manifest.tsv
 
         Returns:

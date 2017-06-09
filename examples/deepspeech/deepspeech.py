@@ -14,13 +14,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import time
-import numpy as np
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import (GaussianInit, GlorotInit, ConstantInit, Convolution, Rectlin, Rectlinclip,
-                                   BiRNN, GradientDescentMomentum, Affine, Softmax, Sequential,
-                                   Layer)
+from ngraph.frontends.neon import (GaussianInit, GlorotInit, ConstantInit, Convolution, Rectlin,
+                                   Rectlinclip, BiRNN, GradientDescentMomentum, Affine, Softmax,
+                                   Sequential, Layer)
 from ngraph.frontends.neon import ax
 from ngraph.frontends.neon.data import Librispeech
 from data import SpeechTranscriptionLoader
@@ -114,8 +113,8 @@ class Deepspeech(Sequential):
         # TODO: This should be handled in a graph pass
         if self.to_ctc is True:
             warp_axes = ng.make_axes([output.axes.recurrent_axis(),
-                                      output.axes.batch_axis()]) | \
-                        output.axes.feature_axes()
+                                      output.axes.batch_axis()])
+            warp_axes = warp_axes | output.axes.feature_axes()
             output = ng.axes_with_order(output, warp_axes)
             output = ng.ContiguousOp(output)
 
@@ -124,8 +123,8 @@ class Deepspeech(Sequential):
 
 def decode_outputs(probs, inds, decoder):
     """
-    Decode 
-    Args:
+    Decode from network probabilities and compute CER
+    Arguments:
         probs: Tensor of character probabilities
         inds: List of character indices for ground truth
         decoder: instance of a Decoder
@@ -140,11 +139,11 @@ def decode_outputs(probs, inds, decoder):
 
     return ground_truth, decoded_string, cer
 
+
 if __name__ == "__main__":
     import logging
     from ngraph.frontends.neon.logging import ProgressBar, PBStreamHandler
     from ngraph.frontends.neon import NgraphArgparser
-
 
     parser = NgraphArgparser()
     structure = parser.add_argument_group("Network Structure")
@@ -167,8 +166,8 @@ if __name__ == "__main__":
 
     learning = parser.add_argument_group("Learning Hyperparameters")
     learning.add_argument('--lr', type=float,
-                           help='learning rate',
-                           default=2e-5)
+                          help='learning rate',
+                          default=2e-5)
     learning.add_argument('--momentum', type=float,
                           help='momentum',
                           default=0.99)
@@ -269,7 +268,6 @@ if __name__ == "__main__":
                   ng.flatten(inputs["audio_length"]),
                   ng.flatten(inputs["char_map_length"]))
 
-
     optimizer = GradientDescentMomentum(args.lr,
                                         momentum_coef=args.momentum,
                                         gradient_clip_norm=args.gradient_clip_norm,
@@ -330,7 +328,8 @@ if __name__ == "__main__":
                         flat_labels = eval_sample["char_map"].ravel()
                         start = batch_cost = 0
                         for ii in range(args.batch_size):
-                            inds = flat_labels[start: start + eval_sample["char_map_length"].squeeze()[ii]]
+                            stop = start + eval_sample["char_map_length"].squeeze()[ii]
+                            inds = flat_labels[start: stop]
                             ground_truth, decoded_string, cer = decode_outputs(p_out[:, ii, :].T,
                                                                                inds,
                                                                                decoder)
@@ -338,7 +337,8 @@ if __name__ == "__main__":
                         eval_total_cost += batch_cost / args.batch_size
 
                     eval_set.reset()
-                    logger.info("Validation Avg. CER: {}".format(eval_total_cost / (eval_step + 1)))
+                    eval_total_cost = eval_total_cost / (eval_step + 1)
+                    logger.info("Validation Avg. CER: {}".format(eval_total_cost))
                 else:
                     flat_labels = sample["char_map"].ravel()
                     inds = flat_labels[:sample["char_map_length"].squeeze()[0]]
@@ -348,5 +348,3 @@ if __name__ == "__main__":
                 logger.info("Example decodings")
                 logger.info("\tGround truth: {}".format(ground_truth))
                 logger.info("\tPredicted:    {}".format(decoded_string))
-
-

@@ -9,10 +9,10 @@ class SpeechTranscriptionLoader(AeonDataLoader):
                 sample_freq_hz=16000, frame_length=.025, frame_stride=.01,
                 feature_type='mfsc', num_filters=13,
                 alphabet="_'ABCDEFGHIJKLMNOPQRSTUVWXYZ ",
-                batch_size=32, cache_root=None, num_batches=None, 
+                batch_size=32, cache_root=None, num_batches=None,
                 single_iteration=False, seed=None):
         """
-        Custom dataloader for speech transcription.    
+        Custom dataloader for speech transcription.
 
         Arguments:
             manifest_filename (str): Path to manifest file
@@ -28,9 +28,9 @@ class SpeechTranscriptionLoader(AeonDataLoader):
             cache_root (str): Path to dataloader cache directory
             num_batches (int): Number of batches to load. Defaults to infinite
             single_iteration (bool): Sets "iteration_mode" to "ONCE"
-            seed (int): Random seed for dataloader. Also turns off shuffling. 
+            seed (int): Random seed for dataloader. Also turns off shuffling.
         """
-        
+
         if cache_root is None:
             cache_root = get_data_cache_or_nothing('deepspeech2-cache/')
 
@@ -43,7 +43,7 @@ class SpeechTranscriptionLoader(AeonDataLoader):
                             num_filters=num_filters,
                             emit_length=True)
 
-        # Transcript transformation parameters    
+        # Transcript transformation parameters
         transcripts_config = dict(type="char_map",
                                   alphabet=alphabet,
                                   max_length=transcript_length,
@@ -72,20 +72,19 @@ class SpeechTranscriptionLoader(AeonDataLoader):
         sample = super(SpeechTranscriptionLoader, self).next()
         return self._preprocess(sample)
 
-
     def _preprocess(self, sample):
-        """ 
+        """
         Preprocess samples to pack char_map for ctc, ensure dtypes,
         and convert audio length to percent of max.
-       
+
         Arguments:
             sample (dict): A single sample dictionary with keys of
                            "audio", "audio_length", "char_map", and
                            "char_map_length"
         """
 
-        sample_rate = self.config["etl"][0]["sample_freq_hz"]
-        max_duration = float(self.config["etl"][0]["max_duration"].split()[0])
+        sr = self.config["etl"][0]["sample_freq_hz"]
+        dur = float(self.config["etl"][0]["max_duration"].split()[0])
 
         def pack_for_ctc(arr, trans_lens):
 
@@ -97,8 +96,10 @@ class SpeechTranscriptionLoader(AeonDataLoader):
 
             return np.reshape(packed, arr.shape)
 
-        sample["audio_length"] = np.clip(100 * sample["audio_length"].astype("float32") / (sample_rate * max_duration), 0, 100).astype(np.int32)
-        sample["char_map"] = pack_for_ctc(sample["char_map"], sample["char_map_length"].ravel()).astype(np.int32)
+        sample["audio_length"] = 100 * sample["audio_length"].astype("float32") / (sr * dur)
+        sample["audio_length"] = np.clip(sample["audio_length"], 0, 100).astype(np.int32)
+        sample["char_map"] = pack_for_ctc(sample["char_map"],
+                                          sample["char_map_length"].ravel()).astype(np.int32)
         sample["char_map_length"] = sample["char_map_length"].astype(np.int32)
         sample["audio"] = sample["audio"].astype(np.float32)
 
