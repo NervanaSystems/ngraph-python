@@ -574,8 +574,7 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
         ng.testing.assert_allclose(np.squeeze(output), np.squeeze(hs_return_dec))
 
         # check gradient computations
-        for ii, (update_fun, (_, deriv_ref_val)) in enumerate(zip(update_funs, params)):
-            print ii
+        for update_fun, (_, deriv_ref_val) in zip(update_funs, params):
             grad_neon = update_fun(input_value_enc, input_value_dec)
             ng.testing.assert_allclose(grad_neon,
                                        deriv_ref_val.squeeze(),
