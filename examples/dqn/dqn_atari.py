@@ -101,51 +101,59 @@ class ClipRewardWrapper(gym.Wrapper):
         return observation, reward, done, info
 
 
-def RepeatWrapper(frames=4):
+class LazyStack(object):
+    """docstring for LazyStack."""
+
+    def __init__(self, history, axis=None):
+        self.history = history
+        self.axis = axis
+
+    def __array__(self, dtype=None):
+        array = np.stack(history, axis=axis)
+        if dtype is not None:
+            array = array.astype(dtype)
+        return array
+
+
+class RepeatWrapper(gym.Wrapper):
     """
-    Generate an wrapper class. I am not sure why open ai gym thinks this
-    is a good pattern to use instead of passing frames as a argument to
-    the constructor.
+    Send multiple steps of observations to agent at each step
     """
 
-    class RepeatWrapper(gym.Wrapper):
-        """
-        Send multiple steps of observations to agent at each step
-        """
+    def __init__(self, env, frames=4):
+        super(RepeatWrapper, self).__init__(env)
+        self.frames = frames
 
-        def __init__(self, env):
-            super(RepeatWrapper, self).__init__(env)
-            self.frames = frames
+        # todo: this shouldn't always be a box, low and high aren't
+        #       always 0 and 1
+        self.observation_space = gym.spaces.Box(
+            low=0,
+            high=1,
+            shape=(frames, ) + self.observation_space.shape,
+        )
 
-            # todo: this shouldn't always be a box, low and high aren't
-            #       always 0 and 1
-            self.observation_space = gym.spaces.Box(
-                low=0,
-                high=1,
-                shape=(frames, ) + self.observation_space.shape,
-            )
+    def _reset(self):
+        self.history = deque([super(RepeatWrapper, self)._reset()],
+                             maxlen=self.frames)
 
-        def _reset(self):
-            self.history = deque([super(RepeatWrapper, self)._reset()],
-                                 maxlen=self.frames)
-
-            # take random actions to start and fill frame buffer
-            for _ in range(self.frames - 1):
-                action = self.env.action_space.sample()
-                observation, reward, done, info = self.env._step(action)
-                self.history.append(observation)
-                assert done != True
-
-            return np.stack(self.history, axis=0)
-
-        def _step(self, action):
+        # take random actions to start and fill frame buffer
+        for _ in range(self.frames - 1):
+            action = self.env.action_space.sample()
             observation, reward, done, info = self.env._step(action)
-
             self.history.append(observation)
+            assert done != True
 
-            return np.stack(self.history, axis=0), reward, done, info
+        return self._get_observation()
 
-    return RepeatWrapper
+    def _step(self, action):
+        observation, reward, done, info = self.env._step(action)
+
+        self.history.append(observation)
+
+        return self._get_observation(), reward, done, info
+
+    def _get_observation(self):
+        return LazyStack(self.history, axis=0)
 
 
 def main():
@@ -155,7 +163,7 @@ def main():
     environment = gym.make('BreakoutDeterministic-v4')
     environment = ReshapeWrapper(environment)
     environment = ClipRewardWrapper(environment)
-    environment = RepeatWrapper(frames=4)(environment)
+    environment = RepeatWrapper(environment, frames=4)
 
     # todo: perhaps these should be defined in the environment itself
     state_axes = ng.make_axes([
@@ -171,11 +179,7 @@ def main():
         epsilon=dqn.linear_generator(start=1.0, end=0.1, steps=1000000),
         gamma=0.99,
         learning_rate=0.00025,
-        memory=dqn.RepeatMemory(
-            frames_per_observation=4,
-            maxlen=1000000,
-            observation_shape=(84, 84),
-        ),
+        memory=dqn.Memory(maxlen=1000000),
         target_network_update_frequency=1000,
     )
 
