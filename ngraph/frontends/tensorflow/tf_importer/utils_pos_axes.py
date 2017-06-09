@@ -148,6 +148,7 @@ def reorder_pos_axes(x, prefix=POS_AXIS_PREFIX):
         map_pos_length[pos] = length
 
     # get shape after reordering
-    new_shapes = [map_pos_length[pos] for pos in reversed(list(range(num_axes)))]
+    new_shapes = [map_pos_length[pos] for pos in
+                  reversed(list(range(num_axes)))]
 
     return ng.axes_with_order(x, axes=make_pos_axes(new_shapes))
