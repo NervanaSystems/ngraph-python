@@ -53,6 +53,7 @@ class CPUTensorLayout(PeepholeGraphPass):
         """
         Warp-CTC requires all args to be contiguous
         """
+        args = list(args)
         replace = False
         for ii, arg in enumerate(args):
             if not is_contiguous(arg):
