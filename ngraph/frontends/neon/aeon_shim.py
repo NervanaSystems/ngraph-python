@@ -18,7 +18,7 @@ import ngraph as ng
 from ngraph.frontends.neon import ax
 
 try:
-    from aeon import Dataloader
+    from aeon import DataLoader
 except ImportError:
     print(
         "\n"
@@ -32,14 +32,19 @@ except ImportError:
     sys.exit(1)
 
 
-class AeonDataloader(Dataloader):
+class AeonDataLoader(DataLoader):
 
-    def __init__(self, config, *args, **kwargs):
+    def __new__(cls, config):
 
         if isinstance(config, dict):
+            input_config = config.copy()
             config = json.dumps(config)
+        elif isinstance(config, str):
+            input_config = json.loads(config)
 
-        super(AeonDataloader, self).__init__(config, *args, **kwargs)
+        obj = DataLoader.__new__(cls, config)
+        obj.config = input_config
+        return obj
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
