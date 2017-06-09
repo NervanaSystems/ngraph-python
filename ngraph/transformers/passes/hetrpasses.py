@@ -30,7 +30,7 @@ class DeviceAssignPass(GraphBuildingPass):
 
     def visit(self, op):
         device = op.metadata.setdefault('device', self.default_device)
-        if len(op.metadata['device_id']) == 1:
+        if 'device_id' in op.metadata and isinstance(op.metadata['device_id'], (list, tuple)) and len(op.metadata['device_id']) == 1:
             op.metadata['device_id'] = '1'
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
