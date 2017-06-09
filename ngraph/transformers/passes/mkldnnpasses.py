@@ -597,8 +597,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(DotLowDimension)
     def visit(self, op):
-        x = op.args[0]
-        y = op.args[1]
+        x = op.args[1]
+        y = op.args[0]
+        bias = op.bias
 
         # Sanity check tensor shapes
         if (len(x.axes.lengths) != 2) or (len(y.axes.lengths) != 2):
@@ -609,17 +610,22 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         # if not x.name in self.mkldnn.op_layouts:
         #  return
-
-        x_shape = get_size_mkl_order(x.axes, [0, 1])
-        y_shape = get_size_mkl_order(y.axes, [1, 0])
-        o_shape = get_size_mkl_order(op.axes, [0, 1])
+        x_shape = get_size_mkl_order(x.axes, [1, 0])
+        y_shape = get_size_mkl_order(y.axes, [0, 1])
+        bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
+        o_shape = get_size_mkl_order(op.axes, [1, 0])
+        # print("src shape ", x_shape)
+        # print("weights shape ", y_shape)
+        # print("bias shape ", bias_shape)
+        # print("dst shape ", o_shape)
 
         x_shape_arg = ((ct.c_int) * len(x_shape))(*x_shape)
         y_shape_arg = ((ct.c_int) * len(y_shape))(*y_shape)
+        bias_shape_arg = ((ct.c_int) * len(bias_shape))(*bias_shape) if bias else None
         o_shape_arg = ((ct.c_int) * len(o_shape))(*o_shape)
-
-        (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [0, 1], True)
-        (y_layout, _) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
+        (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [1, 0], True)
+        (y_layout, _) = get_mkl_layout(self.mkldnn, y, [0, 1], False)
+        bias_layout = None
         data_type = self.mkldnn.datatype[op.dtype.type]
 
         op_id = len(self.mkldnn.kernels)
@@ -627,11 +633,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.innerproduct_fprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(x_shape), len(y_shape), 1, len(o_shape),
-            x_shape_arg, y_shape_arg, None, o_shape_arg,
-            x_layout, y_layout, None,
+            x_shape_arg, y_shape_arg, bias_shape_arg, o_shape_arg,
+            x_layout, y_layout, bias_layout,
             data_type, self.mkldnn.kernels[op.name])
 
-        out_axes = get_axes_mkl_order(op.axes, [0, 1])
+        out_axes = get_axes_mkl_order(op.axes, [1, 0])
         self.set_mkl_layout_data(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 

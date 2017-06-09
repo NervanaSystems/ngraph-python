@@ -3067,10 +3067,11 @@ class ContiguousOp(TensorOp):
 
 class DotOp(TensorOp):
 
-    def __init__(self, x, y, **kwargs):
+    def __init__(self, x, y, bias=None, **kwargs):
         self.reduction_axes = x.axes & y.axes
         self.x_out_axes = x.axes - self.reduction_axes
         self.y_out_axes = y.axes - self.reduction_axes
+        self.bias = bias
 
         axes = self.x_out_axes + self.y_out_axes
 
@@ -3142,8 +3143,9 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
-    def __init__(self, x, y, axes, **kwargs):
+    def __init__(self, x, y, axes, bias=None, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        self.bias = bias
 
 
 class SoftmaxOp(ValueOp):
