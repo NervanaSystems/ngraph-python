@@ -22,6 +22,7 @@ class ReluOp(UnaryElementWiseOp):
 
     def generate_adjoints(self, adjoints, delta, inputs):
         bprop_relu_op = BpropReluOp(delta, inputs, self)
+        bprop_relu_op.add_control_dep(self)
         inputs.generate_add_delta(adjoints, bprop_relu_op)
 
 
@@ -33,5 +34,5 @@ class BpropReluOp(ElementWiseOp):
         fprop: The original relu.
     """
     def __init__(self, delta, inputs, fprop, **kwargs):
-        super(BpropReluOp, self).__init__(args=(delta, fprop, inputs), axes=delta.axes, **kwargs)
+        super(BpropReluOp, self).__init__(args=(delta, inputs), axes=delta.axes, **kwargs)
         self.fprop = fprop
