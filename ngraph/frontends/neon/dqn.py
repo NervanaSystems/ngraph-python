@@ -50,8 +50,6 @@ class ModelWrapper(object):
         super(ModelWrapper, self).__init__()
 
         self.axes = Namespace()
-        # todo: standardize axis pattern
-        # todo: how to specify which of the axes are which?
         self.axes.state = make_axes(state_axes, name='state')
         self.axes.action = ng.make_axis(name='action', length=action_size)
         self.axes.n = ng.make_axis(name='N', length=batch_size)
@@ -170,7 +168,11 @@ class ModelWrapper(object):
         return self.inference_target_function(state)
 
     def train(self, states, targets):
-        # todo: check shape
+        if states.shape != self.state.axes.lengths:
+            raise ValueError((
+                'predict received states with wrong shape. found {}, expected {} '
+            ).format(states.shape, self.state.axes.lengths))
+
         self.train_function(states, targets)
 
     def update(self):
@@ -330,8 +332,6 @@ class Agent(object):
 
             targets[sample['action'], i] = target
 
-        # print('states', states)
-        # print('targets', targets)
         self.model_wrapper.train(states, targets)
 
 
