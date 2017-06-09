@@ -221,7 +221,7 @@ class RefSeq2Seq(object):
         # encoder
         for t in range(seq_len_enc):
             xs_enc[t] = np.matrix(inputs_enc[t])
-            a = np.dot(self.Wxh_enc, xs_enc[t]) + np.dot(self.Whh_enc, hs_enc[t-1]) + self.bh_enc
+            a = np.dot(self.Wxh_enc, xs_enc[t]) + np.dot(self.Whh_enc, hs_enc[t - 1]) + self.bh_enc
             if self.encoder_activation == 'identity':
                 hs_enc[t] = a
             elif self.encoder_activation == 'tanh':
@@ -244,7 +244,9 @@ class RefSeq2Seq(object):
         for t in range(seq_len_dec):
             xs_dec[t] = np.matrix(inputs_dec[t])
             hs_dec[t] = decoder_activation_fun(
-                np.dot(self.Wxh_dec, xs_dec[t]) + np.dot(self.Whh_dec, hs_dec[t-1]) + self.bh_dec)
+                np.dot(self.Wxh_dec, xs_dec[t]) +
+                np.dot(self.Whh_dec, hs_dec[t - 1]) +
+                self.bh_dec)
             hs_list_dec[:, t] = hs_dec[t].flatten()
 
         hs_return_dec = hs_list_dec if self.return_sequence else hs_list_dec[:, -1].reshape(-1, 1)

@@ -490,8 +490,8 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("return_sequence", [True])
-def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec, input_size, hidden_size,
-                           return_sequence, weight_initializer, bias_initializer,
+def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec, input_size,
+                           hidden_size, return_sequence, weight_initializer, bias_initializer,
                            transformer_factory):
 
     # TODO: are these assumptions true?
@@ -506,22 +506,22 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
 
     # Construct encoder weights
     W_in_enc, W_rec_enc, b_enc, _, _ = make_weights(input_placeholder_enc,
-                                                 hidden_size,
-                                                 weight_initializer,
-                                                 bias_initializer,
-                                                 init_state=False)
+                                                    hidden_size,
+                                                    weight_initializer,
+                                                    bias_initializer,
+                                                    init_state=False)
 
     # Construct decoder weights
     W_in_dec, W_rec_dec, b_dec, _, _ = make_weights(input_placeholder_dec,
-                                                 hidden_size,
-                                                 weight_initializer,
-                                                 bias_initializer,
-                                                 init_state=False)
+                                                    hidden_size,
+                                                    weight_initializer,
+                                                    bias_initializer,
+                                                    init_state=False)
 
     # Reference numpy seq2seq
     seq2seq_ref = RefSeq2Seq(input_size, hidden_size, return_sequence=return_sequence)
-    seq2seq_ref.set_weights(W_in_enc, W_rec_enc, b_enc.reshape(seq2seq_ref.bh_enc.shape), \
-                            W_in_dec, W_rec_dec, b_dec.reshape(seq2seq_ref.bh_dec.shape))  # TODO: reshape bias?
+    seq2seq_ref.set_weights(W_in_enc, W_rec_enc, b_enc.reshape(seq2seq_ref.bh_enc.shape),
+                            W_in_dec, W_rec_dec, b_dec.reshape(seq2seq_ref.bh_dec.shape))
 
     # Prepare deltas for gradient check
     output_shape = (hidden_size, sequence_length_dec, batch_size)
@@ -534,8 +534,8 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
     # output_shape: (seq_len, hidden_size, batch_size)
     dW_in_enc, dW_rec_enc, db_enc, dW_in_dec, dW_rec_dec, db_dec, encoding_ref, hs_return_dec = \
         seq2seq_ref.lossFun(input_value_enc.transpose([1, 0, 2]),
-                        input_value_dec.transpose([1, 0, 2]),
-                        deltas.copy().transpose([1, 0, 2]))
+                            input_value_dec.transpose([1, 0, 2]),
+                            deltas.copy().transpose([1, 0, 2]))
 
     # Generate ngraph Seq2Seq
     rnn_enc_ng = Recurrent(hidden_size, init=W_in_enc, init_inner=W_rec_enc, activation=Tanh(),
@@ -548,19 +548,19 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
     output_ng = rnn_dec_ng(input_placeholder_dec, init_state=encoding_ng)
 
     deltas_constant = ng.constant(deltas, axes=output_ng.axes)
-    params = [
-              (rnn_dec_ng.b, db_dec),
+    params = [(rnn_dec_ng.b, db_dec),
               (rnn_dec_ng.W_input, dW_in_dec),
               (rnn_dec_ng.W_recur, dW_rec_dec),
               (rnn_enc_ng.b, db_enc),
               (rnn_enc_ng.W_input, dW_in_enc),
-              (rnn_enc_ng.W_recur, dW_rec_enc),
-             ]
+              (rnn_enc_ng.W_recur, dW_rec_enc)]
 
     with ExecutorFactory() as ex:
 
         # fprop computations
-        fprop_fun = ex.executor([encoding_ng, output_ng], input_placeholder_enc, input_placeholder_dec)
+        fprop_fun = ex.executor([encoding_ng, output_ng],
+                                input_placeholder_enc,
+                                input_placeholder_dec)
 
         # gradient computations
         update_funs = []
