@@ -62,10 +62,18 @@ class ReshapeWrapper(gym.Wrapper):
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(84, 84))
 
     def _modify_observation(self, observation):
-        # convert color to grayscale
-        observation = np.mean(observation, axis=2)
-        # resize image to 84, 84
-        observation = cv2.resize(observation, (84, 84))
+        # convert color to grayscale using luma component
+        observation = (
+            observation[:, :, 0] * 0.299 + observation[:, :, 1] * 0.587 +
+            observation[:, :, 2] * 0.114
+        )
+
+        observation = cv2.resize(
+            observation, (84, 110), interpolation=cv2.INTER_AREA
+        )
+        observation = observation[18:102, :]
+        assert observation.shape == (84, 84)
+
         # convert to values between 0 and 1
         observation = observation / 256.
 
@@ -109,7 +117,7 @@ class LazyStack(object):
         self.axis = axis
 
     def __array__(self, dtype=None):
-        array = np.stack(history, axis=axis)
+        array = np.stack(self.history, axis=self.axis)
         if dtype is not None:
             array = array.astype(dtype)
         return array
