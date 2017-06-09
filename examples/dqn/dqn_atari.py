@@ -164,11 +164,51 @@ class RepeatWrapper(gym.Wrapper):
         return LazyStack(self.history, axis=0)
 
 
+class TerminateOnEndOfLifeWrapper(gym.Wrapper):
+    """
+    treat the end-of-life the same as termination.
+    """
+
+    def __init__(self, env):
+        super(TerminateOnEndOfLifeWrapper, self).__init__(env)
+
+        self.last_lives = 0
+        self.needs_reset = False
+
+    def _step(self, action):
+        observation, reward, done, info = self.env._step(action)
+        self.needs_reset = done
+
+        lives = self.env.unwrapped.ale.lives()
+        if lives < self.last_lives:
+            done = True
+
+        self.last_lives = lives
+
+        return observation, reward, done, info
+
+    def _reset(self):
+        # only reset the parent environment if the parent environment triggered
+        # the termination. if we are getting reset because alive was lost,
+        # just take a normal step and pretend it was a reset.
+        if self.needs_reset:
+            self.needs_reset = False
+            observation = super(RepeatWrapper, self)._reset()
+        else:
+            observation, _, self.needs_reset, _ = self.env._step(0)
+            assert self.needs_reset != True
+
+        self.last_lives = self.env.unwrapped.ale.lives()
+
+        return observation
+
+
 def main():
     # deterministic version 4 results in a frame skip of 4 and no repeat action probability
     # todo: total_reward isn't always greater than 95 even with a working implementation
     # environment = gym.make('SpaceInvaders-v0')
     environment = gym.make('BreakoutDeterministic-v4')
+    environment = TerminateOnEndOfLifeWrapper(environment)
     environment = ReshapeWrapper(environment)
     environment = ClipRewardWrapper(environment)
     environment = RepeatWrapper(environment, frames=4)
