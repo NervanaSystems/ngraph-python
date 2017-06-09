@@ -253,17 +253,22 @@ class Agent(object):
             learning_rate=learning_rate,
         )
 
-    def act(self, state, training=True):
+    def act(self, state, training=True, epsilon=None):
         """
         given a state, return the index of the action that should be taken
 
         if training is true, occasionally return a randomly sampled action
         from the action space instead
         """
-        if training:
-            epsilon = self.epsilon.next()
-            if np.random.rand() <= epsilon:
-                return self.action_space.sample()
+        if epsilon is None:
+            if training:
+                epsilon = self.epsilon.next()
+            else:
+                epsilon = 0
+
+        # rand() samples from the distribution over [0, 1)
+        if np.random.rand() < epsilon:
+            return self.action_space.sample()
 
         return np.argmax(self.model_wrapper.predict_single(state))
 

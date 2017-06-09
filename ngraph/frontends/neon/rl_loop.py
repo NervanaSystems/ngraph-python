@@ -35,12 +35,13 @@ def rl_loop(environment, agent, episodes, render=False):
                 trigger_evaluation = True
 
         agent.end_of_episode()
-        print(
-            'episode: {}, total_steps: {}, steps: {}, last_reward: {}, '
-            'sum(reward): {}'.format(
-                episode, total_steps, step, reward, total_reward
-            )
-        )
+        print({
+            'type': 'training episode',
+            'episode': episode,
+            'total_steps': total_steps,
+            'steps': step,
+            'total_reward': total_reward,
+        })
 
         # we would like to evaluate the model at a consistent time measured
         # in update steps, but we can't start an evaluation in the middle of an
@@ -49,15 +50,20 @@ def rl_loop(environment, agent, episodes, render=False):
         # the episode.
         if trigger_evaluation:
             trigger_evaluation = False
-            print(
-                'evaluation episode. total_steps: {}, total reward: {}'.format(
-                    total_steps,
-                    evaluate_single_episode(environment, agent, render)
+            for epsilon in (0, 0.01, 0.05, 0.1):
+                total_reward = evaluate_single_episode(
+                    environment, agent, render, epsilon
                 )
-            )
+
+                print({
+                    'type': 'evaluation episode',
+                    'epsilon': epsilon,
+                    'total_steps': total_steps,
+                    'total_reward': total_reward,
+                })
 
 
-def evaluate_single_episode(environment, agent, render=False):
+def evaluate_single_episode(environment, agent, render=False, epsilon=None):
     """
     evaluate a single episode of agent operating inside of an environment
     """
@@ -69,7 +75,7 @@ def evaluate_single_episode(environment, agent, render=False):
         if render:
             environment.render()
 
-        action = agent.act(state, training=False)
+        action = agent.act(state, training=False, epsilon=epsilon)
         next_state, reward, done, _ = environment.step(action)
 
         state = next_state
