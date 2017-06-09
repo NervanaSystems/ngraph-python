@@ -150,7 +150,7 @@ if __name__ == "__main__":
     structure = parser.add_argument_group("Network Structure")
     structure.add_argument('--nfilters', type=int,
                            help='Number of convolutional filters in the first layer',
-                           default=1152)
+                           default=256)
     structure.add_argument('--filter_width', type=int,
                            help='Width of 1D convolutional filters',
                            default=11)
@@ -159,10 +159,10 @@ if __name__ == "__main__":
                            default=3)
     structure.add_argument('--depth', type=int,
                            help='Number of RNN layers',
-                           default=9)
+                           default=3)
     structure.add_argument('--hidden_size', type=int,
                            help='Number of hidden units in the RNN and affine layers',
-                           default=1152)
+                           default=256)
     structure.add_argument('--batch_norm', action='store_true')
 
     learning = parser.add_argument_group("Learning Hyperparameters")
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     data_params = parser.add_argument_group("Data Parameters")
     data_params.add_argument('--max_length', type=float,
                              help="max duration for each audio sample",
-                             default=10)
+                             default=7.5)
     data_params.add_argument("--manifest_train",
                              help="Path to training manifest file")
     data_params.add_argument("--manifest_val",
@@ -258,7 +258,6 @@ if __name__ == "__main__":
     ax.Y.name = "characters"
 
     # Create the network
-    # TODO: lay out the arguments better
     logger.debug("Creating deepspeech2 model")
     ds2 = Deepspeech(args.nfilters, args.filter_width, args.str_w, nbands,
                      args.depth, args.hidden_size, batch_norm=args.batch_norm)
