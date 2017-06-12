@@ -115,8 +115,8 @@ def get_files(directory, pattern, recursive=True):
     # If we want to recurse, use os.walk instead
     matches = list()
     for root, dirnames, filenames in os.walk(directory):
-        matches.extend(map(lambda ss: os.path.join(root, ss),
-                           fnmatch.filter(filenames, pattern)))
+        matches.extend([os.path.join(root, ss) for ss in
+                        fnmatch.filter(filenames, pattern)])
 
     return matches
 
