@@ -136,7 +136,7 @@ class ModelWrapper(object):
 
     def predict_single(self, state):
         """run inference on the model for a single input state"""
-        state = np.asarray(state)
+        state = np.asarray(state, dtype=np.float32)
 
         # add a batch axis of 1 if it doesn't already exist
         if state.shape == self.state_single.axes.lengths[:-1]:
@@ -150,6 +150,8 @@ class ModelWrapper(object):
         return self.inference_function_single(state)
 
     def predict(self, state):
+        state = np.asarray(state, dtype=np.float32)
+
         if state.shape != self.state.axes.lengths:
             raise ValueError((
                 'predict received state with wrong shape. found {}, expected {} '
@@ -158,6 +160,8 @@ class ModelWrapper(object):
         return self.inference_function(state)
 
     def predict_target(self, state):
+        state = np.asarray(state, dtype=np.float32)
+
         if state.shape != self.state.axes.lengths:
             raise ValueError((
                 'predict received state with wrong shape. found {}, expected {} '
@@ -166,6 +170,9 @@ class ModelWrapper(object):
         return self.inference_target_function(state)
 
     def train(self, states, targets):
+        states = np.asarray(states, dtype=np.float32)
+        targets = np.asarray(targets, dtype=np.float32)
+
         if states.shape != self.state.axes.lengths:
             raise ValueError((
                 'predict received states with wrong shape. found {}, expected {} '
