@@ -37,7 +37,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
+    Subtract, TanhOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
@@ -61,7 +61,7 @@ from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvU
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, \
     RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
     CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -242,10 +242,6 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(AssignOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
-
     @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
@@ -393,6 +389,10 @@ class GPUKernelGroup(object):
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
 
+    @add_kernel.on_type(AssignOp)
+    def add_kernel(self, op):
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
+
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
         self.kernels.append(ConvFpropKernel(self.transformer, op))
@@ -439,10 +439,6 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(BpropPoolOp)
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
-
-    @add_kernel.on_type(SetItemOp)
-    def add_kernel(self, op):
-        self.kernels.append(SetItemKernel(self.transformer, op))
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):

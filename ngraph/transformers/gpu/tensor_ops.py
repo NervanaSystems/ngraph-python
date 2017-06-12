@@ -19,7 +19,9 @@ from builtins import range
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
+from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.op_graph.axes import TensorDescription
+from ngraph.op_graph.op_graph import AssignOp
 from queue import Empty
 import numpy as np
 import pycuda.driver as drv
@@ -167,19 +169,28 @@ class DimShuffleKernel(GPUKernel):
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
-        out = TensorDescriptionWrapper(self.transformer, op.tensor_description())
-        (arg, ) = (_ for _ in op.call_info())
-        in_tensor = TensorDescriptionWrapper(self.transformer, arg, ignore_layout=True)
+        if isinstance(op, DimshuffleOp):
+            out = TensorDescriptionWrapper(self.transformer, op.tensor_description())
+            (arg, ) = (_ for _ in op.call_info())
+            in_tensor = TensorDescriptionWrapper(self.transformer, arg, ignore_layout=True)
 
-        # Reshape the tensors in place with dimshuffle views
-        in_tensor.shape = tuple(op.in_view.shape)
-        in_tensor.strides = tuple(op.in_view.strides)
-        out.shape = tuple(op.out_view.shape)
-        out.strides = tuple(op.out_view.strides)
+            # Reshape the tensors in place with dimshuffle views
+            in_tensor.shape = tuple(op.in_view.shape)
+            in_tensor.strides = tuple(op.in_view.strides)
+            out.shape = tuple(op.out_view.shape)
+            out.strides = tuple(op.out_view.strides)
 
-        dtype = out.dtype
-        shape = in_tensor.shape
-        axes = op.axis_order
+            dtype = out.dtype
+            shape = in_tensor.shape
+            axes = op.axis_order
+        elif isinstance(op, AssignOp):
+            (larg, rarg) = (_ for _ in op.call_info())
+            out = TensorDescriptionWrapper(self.transformer, larg)
+            in_tensor = TensorDescriptionWrapper(self.transformer, rarg)
+
+            dtype = out.dtype
+            shape = in_tensor.shape
+            axes = tuple(range(len(shape)))
 
         self.kernel, self.params = get_dimshuffle(dtype, shape, axes, in_tensor, out)
 
@@ -667,69 +678,18 @@ class RngFillKernel(GPUKernel):
             self.out[:] = self.out * self.params['scale'] + self.params['loc']
 
 
-class SetItemKernel(GPUKernel):
-    """
-    Kernel used set all or part of a tensor with a value. Value can be
-    a scalar, another tensor, or a numpy array
-
-    Arguments:
-        transformer (GPUTransformer): GPU transformer containing instance of
-            NervanaGPU
-        op (SetItemOneDOp): Graph op being transformed into this kernel
-
-    Attributes:
-        tensor (GPUTensor): Dest tensor
-        value: Source scalar, numpy array, or tensor
-        item (slice): Slice to apply to dest tensor
-    """
-
-    def __init__(self, transformer, op):
-        super(SetItemKernel, self).__init__(transformer)
-
-        self.tensor, self.value = (_ for _ in op.call_info())
-        self.item = op.item
-
-        # Use copy transpose kernel for unsupported cases
-        if len(self.tensor.strides) > 0 and np.min(self.tensor.strides) < 0 and self.item is None:
-            dtype = self.tensor.dtype
-            shape = self.tensor.shape
-            axes = range(len(self.tensor.shape))
-
-            self.kernel, self.params = \
-                get_dimshuffle(dtype, shape, tuple(axes),
-                               TensorDescriptionWrapper(self.transformer, self.value),
-                               TensorDescriptionWrapper(self.transformer, self.tensor))
-        else:
-            self.kernel = None
-
-    def bind_buffers(self):
-        """
-        Get allocated GPU tensor for output and potentially source value
-        """
-        if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor_view_from_td(self.tensor)
-        if isinstance(self.value, TensorDescription):
-            self.value = self.tensor_view_from_td(self.value).tensor
-
-        if self.kernel is not None:
-            for index in range(len(self.params)):
-                if isinstance(self.params[index], TensorDescription):
-                    self.params[index] = self.pointer_from_td(self.params[index])
-
-        super(SetItemKernel, self).bind_buffers()
+class FlexAssignKernel(GPUKernel):
+    def __init__(self, transformer, tensor, value, **kwargs):
+        super(FlexAssignKernel, self).__init__(transformer, **kwargs)
+        self.tensor = self.tensor_view_from_td(tensor)
+        self.value = self.tensor_view_from_td(value)
+        self.output_flex_ids = []
 
     def execute(self):
-        """
-        Run kernel to copy into tensor
-        Temporarily using the neon GPUTensor implementation
-        """
-        if self.kernel is not None:
-            self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
-                                            None, *self.params)
-        elif self.tensor.shape == ():
-            self.tensor.tensor.fill(self.value)
-        else:
-            self.tensor.__setitem__(self.item, self.value)
+        self.tensor[...] = self.value.get(None)
+
+    def bind_flex_scales(self):
+        pass
 
 
 class FlexFillKernel(FillKernel):
