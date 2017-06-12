@@ -5,6 +5,7 @@ import cv2
 from ngraph.frontends.neon import dqn, rl_loop
 from ngraph.frontends import neon
 import ngraph as ng
+from baselines.common.atari_wrappers_deprecated import wrap_dqn
 
 # factory = ng.transformers.make_transformer_factory('gpu')
 # mg.transformers.set_transformer_factory(factory)
@@ -207,10 +208,13 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
 def main():
     # deterministic version 4 results in a frame skip of 4 and no repeat action probability
     environment = gym.make('BreakoutDeterministic-v4')
-    environment = TerminateOnEndOfLifeWrapper(environment)
-    environment = ReshapeWrapper(environment)
-    environment = ClipRewardWrapper(environment)
-    environment = RepeatWrapper(environment, frames=4)
+    if False:
+        environment = TerminateOnEndOfLifeWrapper(environment)
+        environment = ReshapeWrapper(environment)
+        environment = ClipRewardWrapper(environment)
+        environment = RepeatWrapper(environment, frames=4)
+    else:
+        environment = wrap_dqn(environment)
 
     # todo: perhaps these should be defined in the environment itself
     state_axes = ng.make_axes([
