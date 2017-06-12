@@ -1,4 +1,3 @@
-import ngraph as ng
 import pytest
 import numpy as np
 from ngraph.frontends.neon import dqn
@@ -34,7 +33,7 @@ def test_model_predict_wrong_shape():
 
     # missing axis is assumed to be a single length batch access
     with pytest.raises(ValueError):
-        result = model.predict(np.zeros((1, )))
+        model.predict(np.zeros((1, )))
 
 
 def test_model_predict_single_shape():

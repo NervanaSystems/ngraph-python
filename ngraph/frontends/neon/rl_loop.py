@@ -1,5 +1,3 @@
-import gym
-from ngraph.frontends.neon.dqn import Agent
 
 
 def rl_loop(environment, agent, episodes, render=False):

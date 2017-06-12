@@ -2,10 +2,8 @@ import numpy as np
 import random
 from collections import deque
 
-import gym
 from gym import spaces
 
-from contextlib import closing
 import ngraph as ng
 from ngraph.frontends import neon
 
@@ -247,7 +245,7 @@ class Agent(object):
         self.learning_starts = learning_starts
         self.target_network_update_frequency = target_network_update_frequency
 
-        if memory == None:
+        if memory is None:
             self.memory = Memory(maxlen=1000000)
         else:
             self.memory = memory
