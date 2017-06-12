@@ -597,8 +597,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(DotLowDimension)
     def visit(self, op):
-        x = op.args[1]
-        y = op.args[0]
+        x = op.args[0]
+        y = op.args[1]
         bias = op.bias
 
         # Sanity check tensor shapes
@@ -610,21 +610,18 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         # if not x.name in self.mkldnn.op_layouts:
         #  return
-        x_shape = get_size_mkl_order(x.axes, [1, 0])
-        y_shape = get_size_mkl_order(y.axes, [0, 1])
+        # TODO Make references to axis based on input.
+        x_shape = get_size_mkl_order(x.axes, [0, 1])
+        y_shape = get_size_mkl_order(y.axes, [1, 0])
         bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
         o_shape = get_size_mkl_order(op.axes, [1, 0])
-        # print("src shape ", x_shape)
-        # print("weights shape ", y_shape)
-        # print("bias shape ", bias_shape)
-        # print("dst shape ", o_shape)
 
         x_shape_arg = ((ct.c_int) * len(x_shape))(*x_shape)
         y_shape_arg = ((ct.c_int) * len(y_shape))(*y_shape)
         bias_shape_arg = ((ct.c_int) * len(bias_shape))(*bias_shape) if bias else None
         o_shape_arg = ((ct.c_int) * len(o_shape))(*o_shape)
-        (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [1, 0], True)
-        (y_layout, _) = get_mkl_layout(self.mkldnn, y, [0, 1], False)
+        (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [0, 1], True)
+        (y_layout, _) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
         bias_layout = None
         data_type = self.mkldnn.datatype[op.dtype.type]
 

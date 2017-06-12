@@ -335,6 +335,9 @@ class CPUCodeGenerator(PyGen):
         input_axes = op.args[0].axes
         reduction_axes = op.reduction_axes
         # TODO: Nishant (figure a better way to deal with reduction axes after fusion)
+        # The reduction axis for the Max Op is Axis_0. The fusion introduces Axis_NG_SHADOW.
+        # So when it tries to index on Axis_0 is gives an exception. This is a hack.
+        # Thats why the TODO.
         try:
             np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
         except ValueError:
