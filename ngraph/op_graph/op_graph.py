@@ -787,7 +787,7 @@ def set_item(tensor, item, value):
             sl = slice(sl)
         start, end, step = sl.indices(l)
         if step <= 0:
-            raise ValueError('Invalid slice in item {}'.format(item))
+            raise ValueError('Invalid slice (negative step) in item {}'.format(item))
     return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
 
