@@ -97,7 +97,8 @@ class GraphBuildingPass(GraphPass):
             replacement: new op.
 
         """
-        self.replacement_list.append((op, replacement))
+        if replacement is not op:
+            self.replacement_list.append((op, replacement))
 
 # How to use the graph rewrite pass
 #

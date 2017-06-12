@@ -26,9 +26,9 @@ class CPUTensorLayout(PeepholeGraphPass):
         """
 
         replace = False
-        if not isinstance(inputs, ContiguousOp):
-            inputs = ContiguousOp(inputs)
-            replace = True
+        # if not isinstance(inputs, ContiguousOp):
+        #    inputs = ContiguousOp(inputs)
+        #    replace = True
 
         if not isinstance(filters, ContiguousOp):
             filters = ContiguousOp(filters)
@@ -41,9 +41,13 @@ class CPUTensorLayout(PeepholeGraphPass):
     def visit(self, op, delta, inputs):
 
         replace = False
-        if not isinstance(inputs, ContiguousOp):
-            inputs = ContiguousOp(inputs)
+        if not isinstance(delta, ContiguousOp):
+            delta = ContiguousOp(delta)
             replace = True
+
+        # if not isinstance(inputs, ContiguousOp):
+        #    inputs = ContiguousOp(inputs)
+        #    replace = True
 
         if replace:
             self.replace_op(op, update_conv(delta, inputs, self.op_arg(op.fprop, 1), op.fprop))
