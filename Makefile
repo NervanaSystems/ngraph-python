@@ -148,7 +148,7 @@ test_gpu: gpu_prepare test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	not separate_execution" \
-	--boxed -n auto --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
+	--boxed -n 4 --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	separate_execution" \
