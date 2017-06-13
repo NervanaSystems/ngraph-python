@@ -326,10 +326,12 @@ class Mkldnn(object):
                     raise NotImplementedError
                 arrD[patch_in] = sliceB.reshape((clen, dlen, hlen, wlen, N))
 
-    def innerproduct_fprop(self, name, x, y, out):
+    def innerproduct_fprop(self, name, x, y, bias, out):
         if (self.enabled and name in self.kernels):
             self.set_input_tensor(self.kernels[name], x.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], y.ctypes.data, 1)
+            if bias:
+                self.set_input_tensor(self.kernels[name], bias.ctypes.data, 2)
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
