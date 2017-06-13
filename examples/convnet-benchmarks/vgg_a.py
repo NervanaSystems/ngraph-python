@@ -25,6 +25,7 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 from tqdm import tqdm
+from contextlib import closing
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import GaussianInit, UniformInit
@@ -107,28 +108,28 @@ train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_computation = ng.computation(batch_cost, "all")
 
-transformer = ngt.make_transformer()
-train_function = transformer.add_computation(train_computation)
+with closing(ngt.make_transformer()) as transformer:
+    train_function = transformer.add_computation(train_computation)
 
-if args.no_progress_bar:
-    ncols = 0
-else:
-    ncols = 100
+    if args.no_progress_bar:
+        ncols = 0
+    else:
+        ncols = 100
 
-tpbar = tqdm(unit="batches", ncols=ncols, total=args.num_iterations)
-interval_cost = 0.0
+    tpbar = tqdm(unit="batches", ncols=ncols, total=args.num_iterations)
+    interval_cost = 0.0
 
-for step, data in enumerate(train_set):
-    data['iteration'] = step
-    feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
-    output = train_function(feed_dict=feed_dict)
+    for step, data in enumerate(train_set):
+        data['iteration'] = step
+        feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
+        output = train_function(feed_dict=feed_dict)
 
-    tpbar.update(1)
-    tpbar.set_description("Training {:0.4f}".format(output[()]))
-    interval_cost += output[()]
-    if (step + 1) % args.iter_interval == 0 and step > 0:
-        tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                   "Avg Train Cost {cost:0.4f}".format(
-                       interval=step // args.iter_interval,
-                       iteration=step,
-                       cost=interval_cost / args.iter_interval))
+        tpbar.update(1)
+        tpbar.set_description("Training {:0.4f}".format(output[()]))
+        interval_cost += output[()]
+        if (step + 1) % args.iter_interval == 0 and step > 0:
+            tqdm.write("Interval {interval} Iteration {iteration} complete. "
+                       "Avg Train Cost {cost:0.4f}".format(
+                           interval=step // args.iter_interval,
+                           iteration=step,
+                           cost=interval_cost / args.iter_interval))
