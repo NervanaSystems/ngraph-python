@@ -479,16 +479,15 @@ class RequiredTensorShaping(PeepholeGraphPass):
             y = flatten_at(y, len(reduction_axes))
 
             if len(out_axes) == 0:
-                out = DotLowDimension(x, y, axes=())
+                out = DotLowDimension(x, y, axes=(), bias=op.bias)
             elif len(x.axes) == 1:
                 y = Transpose(y)
-                out = DotLowDimension(y, x, axes=y.axes[0])
+                out = DotLowDimension(y, x, axes=y.axes[0], bias=op.bias)
             elif len(y.axes) == 1:
-                out = DotLowDimension(x, y, axes=x.axes[0])
+                out = DotLowDimension(x, y, axes=x.axes[0], bias=op.bias)
             else:
                 out = DotLowDimension(x, y, axes=([op.x_out_axes.flatten(True),
-                                                   op.y_out_axes.flatten(True)]))
-
+                                                   op.y_out_axes.flatten(True)]), bias=op.bias)
             out = unflatten(out)
             out = ReorderAxes(out, out_axes)
 
