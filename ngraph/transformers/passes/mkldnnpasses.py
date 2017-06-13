@@ -29,7 +29,7 @@ import numpy as np
 import collections
 from operator import itemgetter
 from orderedset import OrderedSet
-
+import re
 
 class MklReorderOp(TensorOp):
     '''
@@ -775,9 +775,16 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
+        if isinstance(op, BatchnormOp):
+            pass
+
         if op.name in self.mkldnn.kernels or op.name in self.mkldnn.op_layouts:
             # MKL Op or an MKL layout pass-through op
             return
+        if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
+                metadata = op.metadata["neon_layer"].split("/")
+                if re.search("BatchNorm(_\d+)", metadata[-1]):
+                    return
         replace = False
         new_args = []
         for arg in op.args:
