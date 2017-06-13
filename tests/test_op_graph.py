@@ -90,7 +90,7 @@ def test_slice_nop():
 
     s = ng.tensor_slice(x, [
         slice(None, None, None),
-        slice(None, None, -1),
+        slice(None, None, 1),
     ])
 
     assert s.axes[0] == x.axes[0]

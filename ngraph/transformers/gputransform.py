@@ -20,7 +20,6 @@ from six import itervalues
 from weakref import WeakSet
 
 from ngraph.transformers.base import UnsupportedTransformerException
-from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
     import pycuda.driver as drv
@@ -38,11 +37,12 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
+    Subtract, TanhOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
-from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
+from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv, \
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
@@ -61,7 +61,7 @@ from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvU
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, \
     RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
     CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
@@ -242,10 +242,6 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(AssignOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
-
     @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
@@ -393,6 +389,10 @@ class GPUKernelGroup(object):
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
 
+    @add_kernel.on_type(AssignOp)
+    def add_kernel(self, op):
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
+
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
         self.kernels.append(ConvFpropKernel(self.transformer, op))
@@ -404,6 +404,14 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(update_conv)
     def add_kernel(self, op):
         self.kernels.append(ConvUpdateKernel(self.transformer, op))
+
+    @add_kernel.on_type(DeconvolutionOp)
+    def add_kernel(self, op):
+        self.kernels.append(ConvBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(DeconvDerivOp)
+    def add_kernel(self, op):
+        self.kernels.append(ConvFpropKernel(self.transformer, op))
 
     @add_kernel.on_type(DotOp)
     def add_kernel(self, op):
@@ -431,10 +439,6 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(BpropPoolOp)
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
-
-    @add_kernel.on_type(SetItemOp)
-    def add_kernel(self, op):
-        self.kernels.append(SetItemKernel(self.transformer, op))
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
@@ -1061,7 +1065,7 @@ class GPUTransformer(ComputationGraphTransformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
-        self.graph_passes = [FlexFusion(), SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
+        self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass]  # , VizPass(show_metadata="layout")]
 

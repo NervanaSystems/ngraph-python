@@ -24,8 +24,7 @@ from ngraph.frontends.neon.activation import (Identity, Rectlin, Rectlinclip,
                                               Softmax, Tanh, Logistic)
 from ngraph.testing import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent
 
 
 class ActivationPair(object):
@@ -189,6 +188,12 @@ def test_activation(all_inputs, activation_pair, transformer_factory):
 def test_derivative(all_inputs, activation_pair, transformer_factory):
     if (all_inputs.shape[1] != 1 and isinstance(activation_pair, TanhPair)):
         pytest.xfail('Expected tolerance issues for tanh on large-ish values')
+
+    # X-FAIL for Flex's known issue
+    if isinstance(activation_pair, LogisticPair) and \
+            np.array_equal(np.array([[4, 0], [-2, 5]]), all_inputs):
+            if "flexgpu" == transformer_factory.name:
+                pytest.xfail('Failing test for Flex: mixed_2d-Logistic')
 
     ng.testing.assert_allclose(activation_pair.baseline_derivative(all_inputs),
                                activation_pair.reference_derivative(all_inputs),

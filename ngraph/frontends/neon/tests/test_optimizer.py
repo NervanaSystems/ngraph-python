@@ -19,11 +19,10 @@ Test of the optimizers
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import GradientDescentMomentum, LearningRateOptimizer
+from ngraph.frontends.neon import GradientDescentMomentum, Adam, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
 
 class GDMReference(object):
@@ -59,6 +58,74 @@ class GDMReference(object):
         return weights
 
 
+class AdamReference(object):
+    '''
+    Simple numpy reference for computing variations of gradient descent for a
+    loss = sum(target - weight x input) function
+    '''
+    def __init__(self, learning_rate, beta_1, beta_2, epsilon):
+        self.learning_rate = learning_rate
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.epsilon = epsilon
+        self.m = None
+        self.v = None
+        self.t = 0
+
+    def __call__(self, input_data, weights):
+        '''
+        input_data in this case is a numpy array with batch_size on axis 1
+        and weights is a matrix with 1 column
+        '''
+        if self.m is None:
+            self.m = np.zeros_like(weights)
+            self.v = np.zeros_like(weights)
+
+        self.t += 1
+        gradient = -input_data.mean(axis=1)
+        self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
+        self.v = self.beta_2 * self.v + (1 - self.beta_2) * gradient * gradient
+        m_hat = self.m / (1 - self.beta_1 ** self.t)
+        v_hat = self.v / (1 - self.beta_2 ** self.t)
+        weights = weights - self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+        return weights
+
+
+def compare_optimizer(opt_ng, opt_ref):
+
+    # Set up data placeholders
+    C = ng.make_axis(20)
+    N = ng.make_axis(32, name='N')
+
+    data = ng.placeholder([C, N])
+    target = ng.placeholder([N])
+
+    # params to be updated using GDM
+    np_W = np.random.rand(C.length)
+    W = ng.variable([C], initial_value=np_W)
+
+    # Set up op graph
+    cost = ng.sum(target - ng.dot(W, data), out_axis=())
+    updated_weights = ng.sequential([opt_ng(cost), W])
+
+    def data_generator(iteration_count):
+        for i in range(iteration_count):
+            yield (np.random.rand(C.length, N.length).astype('float32'),
+                   np.random.rand(N.length).astype('float32'))
+
+    # Set up the computation and run the "train" loop
+    with ExecutorFactory() as ex:
+        opt_test = ex.transformer.computation(updated_weights, data, target)
+        mock_dataset = data_generator(20)
+
+        for x, y in mock_dataset:
+            ng_W = opt_test(x, y)  # updated weights for ngraph optimizer
+            np_W = opt_ref(x, np_W)  # updated weights for reference optimizer
+
+            ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
+
+
 # generate fixtures this way so that collection names are deterministic and can
 # be run in parallel:
 # https://github.com/pytest-dev/pytest/issues/594
@@ -85,38 +152,37 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, trans
     gdm_reference = GDMReference(**gdm_args)
     gdm = GradientDescentMomentum(**gdm_args)
 
-    # Set up data placeholders
-    C = ng.make_axis(20)
-    N = ng.make_axis(32, name='N')
-
-    data = ng.placeholder([C, N])
-    target = ng.placeholder([N])
-
-    # params to be updated using GDM
-    np_W = np.random.rand(C.length)
-    W = ng.variable([C], initial_value=np_W)
-
-    # Set up op graph
-    cost = ng.sum(target - ng.dot(W, data), out_axis=())
-    updated_weights = ng.sequential([gdm(cost), W])
-
-    def data_generator(iteration_count):
-        for i in range(iteration_count):
-            yield (np.random.rand(C.length, N.length).astype('float32'),
-                   np.random.rand(N.length).astype('float32'))
-
-    # Set up the computation and run the "train" loop
-    with ExecutorFactory() as ex:
-        gdm_baseline = ex.transformer.computation(updated_weights, data, target)
-        mock_dataset = data_generator(20)
-
-        for x, y in mock_dataset:
-            ng_W = gdm_baseline(x, y)  # updated weights for ngraph optimizer
-            np_W = gdm_reference(x, np_W)  # updated weights for reference optimizer
-
-            ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
+    # test baseline against reference
+    compare_optimizer(gdm, gdm_reference)
 
 
+@pytest.fixture(params=[0, 1])
+def random_beta_1():
+    return np.random.uniform(low=0.0, high=1.0)
+
+
+@pytest.fixture(params=[0, 1])
+def random_beta_2():
+    return np.random.uniform(low=0.0, high=1.0)
+
+
+@pytest.mark.parametrize("epsilon", [1e-8])
+def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
+
+    # Setup the baseline and reference optimizers to be tested
+    adam_args = {'learning_rate': random_learning_rate,
+                 'beta_1': random_beta_1,
+                 'beta_2': random_beta_2,
+                 'epsilon': epsilon}
+
+    adam_reference = AdamReference(**adam_args)
+    adam = Adam(**adam_args)
+
+    # test baseline against reference
+    compare_optimizer(adam, adam_reference)
+
+
+@pytest.mark.flex_disabled
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
     drop_factor = 0.1

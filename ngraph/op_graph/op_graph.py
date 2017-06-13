@@ -781,32 +781,14 @@ def assign(lvalue, rvalue):
 
 
 def set_item(tensor, item, value):
-    return SetItemOp(tensor, item, value)
-
-
-class SetItemOp(Op):
-    """
-    tensor[item] = val
-
-    This is a stub and has no frontend support at this time.
-
-    Arguments:
-        tensor (AssignableTensorOp): An assignable tensor.
-        item: An index into the tensor.
-        val (TensorOp): A value to assign.
-    """
-
-    def __init__(self, tensor, item, val, **kwargs):
-        super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
-        self.item = tuple(item)
-
-    @property
-    def states_written(self):
-        return self.args[0].states_read
-
-    @property
-    def states_read(self):
-        return self.args[0].states_read | self.args[1].states_read
+    shape = tensor.tensor_description().shape
+    for sl, l in zip(item, shape):
+        if not isinstance(sl, slice):
+            sl = slice(sl)
+        start, end, step = sl.indices(l)
+        if step <= 0:
+            raise ValueError('Invalid slice (negative step) in item {}'.format(item))
+    return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
 
 class ControlBlockOp(Op):
@@ -1897,6 +1879,11 @@ class TensorSliceOp(IndexOp):
                 tensor_dim=len(x.shape),
                 slices_len=len(slices),
             ))
+        for s in slices:
+            if not isinstance(s, slice):
+                continue
+            if s.step is not None and s.step < 0:
+                raise ValueError("Negative slice steps are not supported.")
 
         if axes is None:
             axes = []
@@ -2468,6 +2455,7 @@ class ConcatOp(SequentialOp):
 
         slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
+        sets = []
         ops = []
         for ii, (x, ax) in enumerate(zip(self.x_list, axis_list)):
             if len(x.axes - common_axes) > 1:
@@ -2475,11 +2463,14 @@ class ConcatOp(SequentialOp):
                                    " other tensors".format(ii))
             if ax.length is None:
                 raise RuntimeError("Tensor {} axis must have a specified length".format(ii))
-            ops.append(set_item(self.storage,
-                                [slice(start, start + ax.length)] + slices,
-                                axes_with_order(x, [ax] + list(storage_axes[1:]))))
+            sets.append(
+                ([slice(start, start + ax.length)] + slices,
+                 axes_with_order(x, [ax] + list(storage_axes[1:])))
+            )
             start += ax.length
         concat_axis.length = start
+        for item, value in sets:
+            ops.append(set_item(self.storage, item, value))
         self.ops = [
             doall(ops),
             axes_with_order(self.storage, result_axes)
@@ -3651,7 +3642,7 @@ class CrossEntropyMultiOp(ValueOp):
     def __init__(self, y, t, usebits=False, out_axes=None,
                  enable_softmax_opt=True,
                  enable_diff_opt=True, **kwargs):
-        if y.axes != t.axes:
+        if y.axes.is_not_equal_set(t.axes):
             raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
                                                                                          t.axes))
         super(CrossEntropyMultiOp, self).__init__(**kwargs)
@@ -3720,7 +3711,7 @@ class CrossEntropyBinaryInnerOp(ValueOp):
         UnmatchedAxesError: If y and t do not have matching axes
     """
     def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
-        if y.axes != t.axes:
+        if y.axes.is_not_equal_set(t.axes):
             raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
                                                                                          t.axes))
         super(CrossEntropyBinaryInnerOp, self).__init__(**kwargs)

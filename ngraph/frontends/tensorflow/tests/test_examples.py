@@ -24,8 +24,11 @@ from ngraph.frontends.tensorflow.tests.utils import FakeMNIST
 import argparse
 
 import pytest
-from ngraph.frontends.tensorflow.examples.logistic_regression import logistic_regression
+from ngraph.frontends.tensorflow.examples.logistic_regression import \
+    logistic_regression
 from ngraph.frontends.tensorflow.examples.mnist_mlp import mnist_mlp
+from ngraph.frontends.tensorflow.examples.mnist_mlp_shaped import \
+    mnist_mlp_ns, mnist_mlp_tf
 
 
 @pytest.mark.transformer_dependent
@@ -64,4 +67,23 @@ class TestExamples(ImporterTester):
         # check
         assert ng.testing.allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
+            np.asarray(tf_cost_vals).astype(np.float32))
+
+    def test_mnist_mlp_shaped(self):
+        # args
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-d', '--data_dir', default=None)
+        parser.add_argument('-i', '--max_iter', type=int, default=10)
+        parser.add_argument('-l', '--lrate', type=float, default=0.1,
+                            help="Learning rate")
+        parser.add_argument('-b', '--batch_size', type=int, default=128)
+        parser.add_argument('--random_data', default=FakeMNIST())
+        args = parser.parse_args("")
+
+        # comupte
+        ns_cost_vals, tf_cost_vals = mnist_mlp_ns(args), mnist_mlp_tf(args)
+
+        # check
+        assert ng.testing.allclose(
+            np.asarray(ns_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))

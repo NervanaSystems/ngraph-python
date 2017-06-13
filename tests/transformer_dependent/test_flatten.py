@@ -22,7 +22,6 @@ rng = RandomTensorGenerator(0, np.float32)
 pytestmark = pytest.mark.transformer_dependent
 
 
-@pytest.mark.flex_disabled
 def test_flatten_deriv_simplified(transformer_factory):
     """
     Test derivative with dot and flatten

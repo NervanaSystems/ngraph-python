@@ -13,11 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
 
 
-class OpsUnary(OpsBase):
+class OpsUnary():
     """
     Mix-in class for unary ops
     """

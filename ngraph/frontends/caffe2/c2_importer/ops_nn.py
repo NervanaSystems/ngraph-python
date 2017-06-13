@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 from ngraph.frontends.common.utils import common_conv2d_pool_padding
 import ngraph as ng
 import numpy as np
@@ -62,7 +61,7 @@ def _c2_padding(c2_op, in_NHWC, kernel_HWIO, stride_NHWC):
     return padding
 
 
-class OpsNN(OpsBase):
+class OpsNN():
     """
     Mix-in class for NN ops:
     """
