@@ -19,7 +19,7 @@ from future.utils import with_metaclass
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SetItemOp, SequentialOp, ReorderAxes, Flatten, TensorSliceOp, TensorSizeOp
+    SequentialOp, ReorderAxes, Flatten, TensorSliceOp, TensorSizeOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
     DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
@@ -379,10 +379,6 @@ class AddLayoutConversions(PeepholeGraphPass):
         op_type = type(op)
         new_op = op_type(*args, reduction_axes=op.reduction_axes)
         return new_op
-
-    @op_from_args.on_type(SetItemOp)
-    def op_from_args(self, op, args):
-        return SetItemOp(args[0], op.item, args[1])
 
     @op_from_args.on_type(CTCOp)
     def op_from_args(self, op, args):
