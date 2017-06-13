@@ -19,14 +19,16 @@ from future.utils import with_metaclass
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SetItemOp, SequentialOp
+    SequentialOp, ReorderAxes, Flatten, TensorSliceOp, TensorSizeOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
     DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
+from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.op_graph.ctc import CTCOp
-from ngraph.op_graph.comm_nodes import GPUCudaScatterSendOp, GPUCudaGatherSendOp, \
-    GPUCudaAllReduceOp
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUCudaScatterSendOp, \
+    GPUCudaGatherSendOp, GPUCudaAllReduceOp, CPUQueueSendOp, CPUQueueScatterSendOp, \
+    CPUQueueGatherSendOp, CPUQueueAllReduceOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -328,6 +330,11 @@ class AddLayoutConversions(PeepholeGraphPass):
 
     # We cannot create new ops with new layouts for GPUCudaScatterSendOp and GPUCudaGatherSendOp.
     # The information available at this point is not sufficient to create them (issue #1410).
+    @op_from_args.on_type(GPUQueueSendOp)
+    def op_from_args(self, op, args):
+        op._Op__args = args
+        return op
+
     @op_from_args.on_type(GPUCudaScatterSendOp)
     def op_from_args(self, op, args):
         op._Op__args = args
@@ -343,6 +350,26 @@ class AddLayoutConversions(PeepholeGraphPass):
         op._Op__args = args
         return op
 
+    @op_from_args.on_type(CPUQueueSendOp)
+    def op_from_args(self, op, args):
+        op._Op__args = args
+        return op
+
+    @op_from_args.on_type(CPUQueueScatterSendOp)
+    def op_from_args(self, op, args):
+        op._Op__args = args
+        return op
+
+    @op_from_args.on_type(CPUQueueGatherSendOp)
+    def op_from_args(self, op, args):
+        op._Op__args = args
+        return op
+
+    @op_from_args.on_type(CPUQueueAllReduceOp)
+    def op_from_args(self, op, args):
+        op._Op__args = args
+        return op
+
     @op_from_args.on_type(OneHotOp)
     def op_from_args(self, op, args):
         return OneHotOp(*args, axis=op.axis)
@@ -352,10 +379,6 @@ class AddLayoutConversions(PeepholeGraphPass):
         op_type = type(op)
         new_op = op_type(*args, reduction_axes=op.reduction_axes)
         return new_op
-
-    @op_from_args.on_type(SetItemOp)
-    def op_from_args(self, op, args):
-        return SetItemOp(args[0], op.item, args[1])
 
     @op_from_args.on_type(CTCOp)
     def op_from_args(self, op, args):
@@ -400,6 +423,30 @@ class AddLayoutConversions(PeepholeGraphPass):
     @op_from_args.on_type(bprop_lut)
     def op_from_args(self, op, args):
         return bprop_lut(args[0], args[1], op.fprop.args[1], op.fprop)
+
+    @op_from_args.on_type(ReluOp)
+    def op_from_args(self, op, args):
+        return ReluOp(args[0], op.slope)
+
+    @op_from_args.on_type(BpropReluOp)
+    def op_from_args(self, op, args):
+        return BpropReluOp(args[0], args[1], op.fprop)
+
+    @op_from_args.on_type(ReorderAxes)
+    def op_from_args(self, op, args):
+        return ReorderAxes(args[0], axes=op.axes)
+
+    @op_from_args.on_type(Flatten)
+    def op_from_args(self, op, args):
+        return Flatten(args[0], axes=op.axes)
+
+    @op_from_args.on_type(TensorSliceOp)
+    def op_from_args(self, op, args):
+        return TensorSliceOp(args[0], op.slices, op.axes)
+
+    @op_from_args.on_type(TensorSizeOp)
+    def op_from_args(self, op, args):
+        return TensorSizeOp(args[0], op.reduction_axes)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op):
