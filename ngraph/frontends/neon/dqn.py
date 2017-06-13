@@ -1,3 +1,5 @@
+from __future__ import division
+
 import numpy as np
 import random
 from collections import deque
@@ -21,7 +23,7 @@ def make_axes(lengths, name=None):
     if isinstance(lengths, ng.Axes):
         return lengths
 
-    if isinstance(lengths, (int, long)):
+    if isinstance(lengths, int):
         lengths = [lengths]
 
     def make_name(i):
@@ -274,7 +276,7 @@ class Agent(object):
         """
         if epsilon is None:
             if training:
-                epsilon = self.epsilon.next()
+                epsilon = next(self.epsilon)
             else:
                 epsilon = 0
 
