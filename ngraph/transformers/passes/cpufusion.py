@@ -5,12 +5,50 @@ from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
 from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorValueOp, ContiguousOp
+from ngraph.op_graph.convolution import ConvolutionOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import GraphRewritePass
 
 
 class CPUFusion(GraphRewritePass):
+
+    def construct_conv_and_bias_pattern(self):
+        """
+        Pattern - Add(Convolution, Bias).
+        Returns:
+            Single pattern that matches Add(DotLowDimension, Bias) pattern.
+        """
+
+        self.conv_bias_label = "B"
+        self.conv_op_label = "C"
+
+        bias_label_op = PatternLabelOp(self.conv_bias_label,
+                                       (lambda op: op.is_scalar) and
+                                       (lambda op: isinstance(op, TensorValueOp)))
+        bias = PatternSkipOp(bias_label_op,
+                             (lambda op: isinstance(op, BroadcastOp)) or
+                             (lambda op: isinstance(op, ContiguousOp)))
+
+        conv_label_op = PatternLabelOp(self.conv_op_label,
+                                       (lambda op: isinstance(op, ConvolutionOp)))
+
+        conv_op = PatternSkipOp(conv_label_op,
+                                (lambda op: isinstance(op, MapRolesOp)))
+
+        add_op = Add(conv_op, bias)
+        return add_op
+
+    def fuse_conv_and_bias_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for Innerproduct + bias  pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            conv_op = label_map[self.conv_op_label]
+            bias = label_map[self.conv_bias_label]
+            conv_new_op = ConvolutionOp(conv_op.conv_params, conv_op.args[0],
+                                        conv_op.args[1], bias, axes=conv_op.axes)
+            self.replace_op(op, conv_new_op)
 
     def construct_innerproduct_and_bias_pattern(self):
         """
@@ -337,6 +375,10 @@ class CPUFusion(GraphRewritePass):
         # Register Batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
         self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
+
+        # Register Conv + Bias  pattern
+        pattern_conv_bias = self.construct_conv_and_bias_pattern()
+        self.register_pattern(pattern_conv_bias, self.fuse_conv_and_bias_callback)
 
         # Register Inner + Bias  pattern
         pattern_inner_bias = self.construct_innerproduct_and_bias_pattern()

@@ -401,7 +401,7 @@ class CPUCodeGenerator(PyGen):
         pass
 
     @allocate_op.on_type(ConvolutionOp)
-    def allocate_op(self, op, outputs, inputs, filters):
+    def allocate_op(self, op, outputs, inputs, filters, bias=None):
         self.conv_params[op.name] = op.conv_params
         self.conv_slices[op.name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
@@ -448,9 +448,9 @@ class CPUCodeGenerator(PyGen):
         self.append("np.ndarray.argmin({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(ConvolutionOp)
-    def generate_op(self, op, outputs, inputs, filters):
-        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                    op.name, op.name, inputs, filters, outputs)
+    def generate_op(self, op, outputs, inputs, filters, bias=None):
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, B={}, O={})",
+                    op.name, op.name, inputs, filters, bias, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):

@@ -298,7 +298,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ConvolutionOp)
-    def visit(self, op, input, filter):
+    def visit(self, op, input, filter, bias=None):
+
         # Only 2D convolution supported in MKLDNN for now
         if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -310,6 +311,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # Assumes (C, D, H, W, N) for convolution axes
         input_shape = get_size_mkl_order(input.axes, [4, 0, 2, 3])
         filter_shape = get_size_mkl_order(filter.axes, [4, 0, 2, 3])
+        bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         pad_d, pad_h, pad_w = itemgetter(
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
@@ -319,6 +321,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         stride = [str_h, str_w]
         input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
         filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
+        bias_shape_arg = ((ct.c_int) * len(bias_shape))(*bias_shape) if bias else None
         output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
         stride_arg = ((ct.c_int) * len(stride))(*stride)
         pad_arg = ((ct.c_int) * len(pad))(*pad)
@@ -328,8 +331,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.conv_fprop_kernel(
             self.mkldnn.mkldnn_engine,
-            len(input_shape), len(filter_shape), len(output_shape),
-            input_shape_arg, filter_shape_arg, output_shape_arg,
+            len(input_shape), len(filter_shape), 1, len(output_shape),
+            input_shape_arg, filter_shape_arg, bias_shape_arg, output_shape_arg,
             stride_arg, pad_arg,
             input_layout, filter_layout,
             data_type,

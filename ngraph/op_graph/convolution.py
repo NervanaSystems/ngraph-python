@@ -40,8 +40,11 @@ class ConvolutionOp(TensorOp):
     Return:
     """
 
-    def __init__(self, conv_params, inputs, filters, **kwargs):
-        super(ConvolutionOp, self).__init__(args=(inputs, filters), **kwargs)
+    def __init__(self, conv_params, inputs, filters, bias=None, **kwargs):
+        if bias is None:
+            super(ConvolutionOp, self).__init__(args=(inputs, filters), **kwargs)
+        else:
+            super(ConvolutionOp, self).__init__(args=(inputs, filters, bias), **kwargs)
 
         if len(inputs.shape) != 5:
             raise ValueError((
@@ -73,11 +76,11 @@ class ConvolutionOp(TensorOp):
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
 
-    def generate_adjoints(self, adjoints, delta, inputs, filters):
+    def generate_adjoints(self, adjoints, delta, inputs, filters, bias=None):
         """
         TODO
         """
-        # requires conv's forward to be completed before backward
+        # requires conv's forward to be completed before backward:
         update_conv_op = update_conv(delta, inputs, filters, self)
         update_conv_op.add_control_dep(self)
         bprop_conv_op = bprop_conv(delta, inputs, filters, self)

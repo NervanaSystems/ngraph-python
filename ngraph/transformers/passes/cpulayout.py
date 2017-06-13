@@ -20,7 +20,7 @@ class CPUTensorLayout(PeepholeGraphPass):
         pass
 
     @visit.on_type(ConvolutionOp)
-    def visit(self, op, inputs, filters):
+    def visit(self, op, inputs, filters, bias=None):
         """
         Convolution implementation requires contiguous layout.
         """
@@ -35,7 +35,7 @@ class CPUTensorLayout(PeepholeGraphPass):
             replace = True
 
         if replace:
-            self.replace_op(op, ConvolutionOp(op.conv_params, inputs, filters, axes=op.axes))
+            self.replace_op(op, ConvolutionOp(op.conv_params, inputs, filters, bias, axes=op.axes))
 
     @visit.on_type(update_conv)
     def visit(self, op, delta, inputs):
