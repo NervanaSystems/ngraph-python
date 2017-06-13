@@ -54,6 +54,9 @@ class PoolingOp(TensorOp):
 
         self.pool_params = pool_params
 
+    def with_args(self, args):
+        return type(self)(self.pool_params, args[0], axes=self.axes)
+
     def generate_adjoints(self, adjoints, delta, inputs):
         # requires pooling's forward to be completed before backward
         bprop_pool_op = BpropPoolOp(delta, inputs, self)
@@ -72,6 +75,9 @@ class BpropPoolOp(TensorOp):
         super(BpropPoolOp, self).__init__(args=(delta,), axes=inputs.axes, **kwargs)
         self.fprop = fprop
         self.inputs = inputs
+
+    def with_arg(self, args):
+        return type(self)(args[0], self.fprop.args[0], self.fprop)
 
     @property
     def pool_params(self):

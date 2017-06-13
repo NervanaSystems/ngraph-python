@@ -752,7 +752,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             else:
                 new_args.append(arg)
         if replace:
-            new_op = self.layoutpass.op_from_args(op, new_args)
+            new_op = op.with_args(new_args)
             self.replace_op(op, new_op)
 
     @visit.on_type(ContiguousOp)
