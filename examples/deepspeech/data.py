@@ -82,11 +82,7 @@ class SpeechTranscriptionLoader(AeonDataLoader):
 
         audio_config = config["etl"][config_types.index("audio")]
         self.sample_rate = audio_config["sample_freq_hz"]
-        duration = audio_config["audio_length"]
-        if isinstance(duration, str):
-            self.duration = float(duration.split(" ")[0])
-        else:
-            self.duration = duration
+        self.duration = float(audio_config["max_duration"].split(" ")[0])
 
     def __next__(self):
 
