@@ -334,7 +334,14 @@ class CPUCodeGenerator(PyGen):
             raise ValueError("Op %s must be an instance of ReductionOp" % op)
         input_axes = op.args[0].axes
         reduction_axes = op.reduction_axes
-        np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
+        # TODO: Nishant (figure a better way to deal with reduction axes after fusion)
+        # The reduction axis for the Max Op is Axis_0. The fusion introduces Axis_NG_SHADOW.
+        # So when it tries to index on Axis_0 is gives an exception. This is a hack.
+        # Thats why the TODO.
+        try:
+            np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
+        except ValueError:
+            np_axis = tuple([0, ])
         return np_axis[0] if len(np_axis) == 1 else np_axis
 
     @property
@@ -521,8 +528,9 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y):
-        self.append("mkldnn.innerproduct_fprop('{}', {}, {}, out={})",
-                    op.name, x, y, out)
+        bias = op.bias.tensor.const if op.bias else None
+        self.append("mkldnn.innerproduct_fprop('{}', {}, {}, {}, out={})",
+                    op.name, x, y, bias, out)
 
     @generate_op.on_type(BatchnormOp)
     def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
