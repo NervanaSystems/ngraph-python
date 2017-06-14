@@ -104,7 +104,13 @@ def get_files(directory, pattern, recursive=True):
     """ Return the full path to all files in directory matching the specified
     pattern.
 
-    pattern should be a glob style pattern (e.g. "*.wav")
+    Arguments:
+        directory (str): Directory path in which to look
+        pattern (str): A glob pattern for filenames
+        recursive (bool): Searches recursively if True
+
+    Returns:
+        A list of matching file paths
     """
 
     # This yields an iterator which really speeds up looking through large, flat directories
@@ -126,8 +132,8 @@ def ingest_librispeech(input_directory, manifest_file=None, absolute_paths=True)
     compatible manifest file.
 
     Arguments:
-        input_directory (string): Path to librispeech directory
-        manifest_file (string): Path to manifest file to output.
+        input_directory (str): Path to librispeech directory
+        manifest_file (str): Path to manifest file to output.
         absolute_paths (bool): Whether audio file paths should be absolute or
                                relative to input_directory.
     """

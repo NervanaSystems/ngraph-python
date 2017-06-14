@@ -22,7 +22,7 @@ from ngraph.frontends.neon import (GaussianInit, GlorotInit, ConstantInit, Convo
                                    Sequential, Layer)
 from ngraph.frontends.neon import ax
 from ngraph.frontends.neon.data import Librispeech
-from data import SpeechTranscriptionLoader
+from data import make_aeon_dataloader
 from decoder import ArgMaxDecoder
 
 
@@ -225,30 +225,30 @@ if __name__ == "__main__":
     train_manifest = Librispeech(manifest_file=args.manifest_train, path=args.data_dir,
                                  version="dev-clean").load_data()
 
-    train_set = SpeechTranscriptionLoader(train_manifest,
-                                          args.max_length,
-                                          max_lbl_len,
-                                          frame_stride=frame_stride,
-                                          num_filters=nbands,
-                                          alphabet=alphabet,
-                                          batch_size=args.batch_size,
-                                          num_batches=args.num_iterations,
-                                          seed=args.rng_seed)
+    train_set = make_aeon_dataloader(train_manifest,
+                                     args.max_length,
+                                     max_lbl_len,
+                                     frame_stride=frame_stride,
+                                     num_filters=nbands,
+                                     alphabet=alphabet,
+                                     batch_size=args.batch_size,
+                                     num_batches=args.num_iterations,
+                                     seed=args.rng_seed)
 
     inference = False
     if args.manifest_val is not None:
         eval_manifest = Librispeech(manifest_file=args.manifest_val, path=args.data_dir,
                                     version="test-clean").load_data()
 
-        eval_set = SpeechTranscriptionLoader(train_manifest,
-                                             args.max_length,
-                                             max_lbl_len,
-                                             frame_stride=frame_stride,
-                                             num_filters=nbands,
-                                             alphabet=alphabet,
-                                             batch_size=args.batch_size,
-                                             single_iteration=True,
-                                             seed=args.rng_seed)
+        eval_set = make_aeon_dataloader(eval_manifest,
+                                        args.max_length,
+                                        max_lbl_len,
+                                        frame_stride=frame_stride,
+                                        num_filters=nbands,
+                                        alphabet=alphabet,
+                                        batch_size=args.batch_size,
+                                        single_iteration=True,
+                                        seed=args.rng_seed)
         inference = True
 
     inputs = train_set.make_placeholders()

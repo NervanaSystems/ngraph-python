@@ -15,7 +15,11 @@
 # ----------------------------------------------------------------------------
 
 import numpy as np
-import Levenshtein as Lev
+try:
+    import Levenshtein as Lev
+except ImportError:
+    raise ImportError("To use the decoder, you must first install the package "
+                      "python-Levenshtein")
 
 
 class Decoder(object):
@@ -27,17 +31,21 @@ class Decoder(object):
         alphabet (string): mapping from integers to characters.
         blank_index (int, optional): index for the blank '_' character. Defaults to 0.
         space_index (int, optional): index for the space ' ' character. Defaults to 28.
+
+    Example:
+        alphabet = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ "
+        decoder = Decoder(alphabet, alphabet.index("_"), alphabet.index(" "))
+        output = decoder.decode(character_probs)
     """
 
     def __init__(self, alphabet, blank_index=0, space_index=1):
-        # e.g. alphabet = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ#"
         self.alphabet = alphabet
         self.int_to_char = dict([(i, c) for (i, c) in enumerate(alphabet)])
         self.blank_index = blank_index
         self.space_index = space_index
 
     def convert_to_string(self, sequence):
-        "Given a numeric sequence, returns the corresponding string"
+        """Given a numeric sequence, returns the corresponding string"""
         return ''.join([self.int_to_char[i] for i in sequence])
 
     def process_string(self, sequence, remove_repetitions=False):
@@ -53,12 +61,12 @@ class Decoder(object):
         string = ''
 
         for i, char in enumerate(sequence):
-            if(char != self.int_to_char[self.blank_index]):
+            if char != self.int_to_char[self.blank_index]:
                 # if this char is a repetition and remove_repetitions=true,
                 # skip.
-                if(remove_repetitions and i != 0 and char == sequence[i - 1]):
+                if remove_repetitions and (i != 0) and (char == sequence[i - 1]):
                     pass
-                elif(char == self.alphabet[self.space_index]):
+                elif char == self.alphabet[self.space_index]:
                     string = string + ' '
                 else:
                     string = string + char

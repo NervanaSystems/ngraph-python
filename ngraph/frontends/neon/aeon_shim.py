@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
-import json
 import ngraph as ng
 from ngraph.frontends.neon import ax
 
@@ -33,18 +32,6 @@ except ImportError:
 
 
 class AeonDataLoader(DataLoader):
-
-    def __new__(cls, config):
-
-        if isinstance(config, dict):
-            input_config = config.copy()
-            config = json.dumps(config)
-        elif isinstance(config, str):
-            input_config = json.loads(config)
-
-        obj = DataLoader.__new__(cls, config)
-        obj.config = input_config
-        return obj
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
