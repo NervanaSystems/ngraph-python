@@ -3494,7 +3494,7 @@ class OneHotOp(TensorOp):
         )
 
     def with_args(self, args):
-        return type(self)(*args, axes=self.axis)
+        return type(self)(*args, axis=self.axis)
 
     def as_two_dim(self):
         """

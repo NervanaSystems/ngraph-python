@@ -76,7 +76,7 @@ class BpropPoolOp(TensorOp):
         self.fprop = fprop
         self.inputs = inputs
 
-    def with_arg(self, args):
+    def with_args(self, args):
         return type(self)(args[0], self.fprop.args[0], self.fprop)
 
     @property
