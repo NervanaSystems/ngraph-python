@@ -503,6 +503,8 @@ ax_D = ng.make_axis(24)
     },
 ])
 def test_gpu_graph(config):
+    pytest.xfail("Multi-GPU testing not enabled yet")
+
     if 'gpu' not in ngt.transformer_choices():
         pytest.skip('GPUTransformer not available!')
 
