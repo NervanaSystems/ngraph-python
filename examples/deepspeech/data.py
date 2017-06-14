@@ -1,5 +1,4 @@
 from __future__ import division
-import json
 import numpy as np
 from ngraph.frontends.neon.aeon_shim import AeonDataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
@@ -66,21 +65,32 @@ def make_aeon_dataloader(manifest_filename, audio_length, transcript_length,
     elif single_iteration is True:
         config["iteration_mode"] = "ONCE"
 
-    loader = SpeechTranscriptionLoader(json.dumps(config))
-    # These are needed for processing the data that comes out of aeon
-    # See the SpeechTranscriptionLoader._process method
-    loader.sample_rate = sample_freq_hz
-    loader.duration = audio_length
-
-    return loader
+    return SpeechTranscriptionLoader(config)
 
 
 class SpeechTranscriptionLoader(AeonDataLoader):
     """custom dataloader for speech transcription."""
 
-    def next(self):
+    def __init__(self, config, *args, **kwargs):
 
-        sample = super(SpeechTranscriptionLoader, self).next()
+        config_types = [etl["type"] for etl in config["etl"]]
+        for etl_type in ("audio", "char_map"):
+            if etl_type not in config_types:
+                raise ValueError("SpeechTranscriptionLoader must have an etl configuration "
+                                 "with type '{}'".format(etl_type))
+        super(SpeechTranscriptionLoader, self).__init__(config, *args, **kwargs)
+
+        audio_config = config["etl"][config_types.index("audio")]
+        self.sample_rate = audio_config["sample_freq_hz"]
+        duration = audio_config["audio_length"]
+        if isinstance(duration, str):
+            self.duration = float(duration.split(" ")[0])
+        else:
+            self.duration = duration
+
+    def __next__(self):
+
+        sample = super(SpeechTranscriptionLoader, self).__next__()
         return self._preprocess(sample)
 
     def _preprocess(self, sample):

@@ -13,6 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
+from builtins import object
+import json
 import ngraph as ng
 from ngraph.frontends.neon import ax
 
@@ -31,12 +33,22 @@ except ImportError:
     sys.exit(1)
 
 
-class AeonDataLoader(DataLoader):
+class AeonDataLoader(object):
+
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
+        self._dataloader = DataLoader(json.dumps(config))
+
+    def __next__(self):
+        return next(self._dataloader)
+
+    def __iter__(self):
+        return self
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
-        ax.N.length = self.batch_size
-        for placeholder_name, axis_info in self.axes_info.items():
+        ax.N.length = self._dataloader.batch_size
+        for placeholder_name, axis_info in self._dataloader.axes_info.items():
             p_axes = ng.make_axes([ax.N])
             for nm, sz in axis_info.items():
                 nm = "C" if nm == "channels" else nm
