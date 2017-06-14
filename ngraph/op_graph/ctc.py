@@ -86,6 +86,9 @@ class CTCOp(TensorOp):
                                     axes=axes,
                                     **kwargs)
 
+    def with_args(self, args):
+        return type(self)(*args, axes=self.axes)
+
     def generate_adjoints(self, adjoints, delta,
                           activations, labels, activation_lens, label_lens, grads):
         """

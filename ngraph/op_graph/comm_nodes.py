@@ -13,7 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes
+from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes, \
+    CopyModifyArgsOp
 from orderedset import OrderedSet
 import multiprocessing
 
@@ -229,10 +230,10 @@ class GatherRecvOp(RecvOp):
         return self.send_nodes
 
 
-class GPUQueueSendOp(SendOp):
+class GPUQueueSendOp(SendOp, CopyModifyArgsOp):
 
     def __init__(self, from_node):
-        super(GPUQueueSendOp, self).__init__(from_node)
+        super(GPUQueueSendOp, self).__init__(from_node=from_node)
         self._queue = multiprocessing.Queue()
 
     @property
@@ -251,10 +252,10 @@ class GPUQueueRecvOp(RecvOp):
         return self._queue
 
 
-class GPUCudaScatterSendOp(ScatterSendOp):
+class GPUCudaScatterSendOp(ScatterSendOp, CopyModifyArgsOp):
 
     def __init__(self, from_node, to_node):
-        super(GPUCudaScatterSendOp, self).__init__(from_node, to_node)
+        super(GPUCudaScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
         self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
         self.metadata['parallel'] = to_node.metadata['parallel']
 
@@ -275,10 +276,10 @@ class GPUCudaScatterRecvOp(ScatterRecvOp):
         return self._shared_queues
 
 
-class GPUCudaGatherSendOp(GatherSendOp):
+class GPUCudaGatherSendOp(GatherSendOp, CopyModifyArgsOp):
 
     def __init__(self, from_node):
-        super(GPUCudaGatherSendOp, self).__init__(from_node)
+        super(GPUCudaGatherSendOp, self).__init__(from_node=from_node)
         self.idx = 0
         self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
         self.metadata['parallel'] = from_node.metadata['parallel']
@@ -299,10 +300,10 @@ class GPUCudaGatherRecvOp(GatherRecvOp):
         return self._shared_queues
 
 
-class CPUQueueSendOp(SendOp):
+class CPUQueueSendOp(SendOp, CopyModifyArgsOp):
 
     def __init__(self, from_node):
-        super(CPUQueueSendOp, self).__init__(from_node)
+        super(CPUQueueSendOp, self).__init__(from_node=from_node)
         self._queue = multiprocessing.Queue()
 
     @property
@@ -321,10 +322,10 @@ class CPUQueueRecvOp(RecvOp):
         return self._queue
 
 
-class CPUQueueScatterSendOp(ScatterSendOp):
+class CPUQueueScatterSendOp(ScatterSendOp, CopyModifyArgsOp):
 
     def __init__(self, from_node, to_node):
-        super(CPUQueueScatterSendOp, self).__init__(from_node, to_node)
+        super(CPUQueueScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
         self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
 
     @property
@@ -344,10 +345,10 @@ class CPUQueueScatterRecvOp(ScatterRecvOp):
         return self._shared_queues
 
 
-class CPUQueueGatherSendOp(GatherSendOp):
+class CPUQueueGatherSendOp(GatherSendOp, CopyModifyArgsOp):
 
     def __init__(self, from_node):
-        super(CPUQueueGatherSendOp, self).__init__(from_node)
+        super(CPUQueueGatherSendOp, self).__init__(from_node=from_node)
         self.idx = 0
         self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
 
@@ -389,7 +390,7 @@ class AllReduceOp(CommunicationOp):
                 'Reduce function {} is not supported!'.format(self.reduce_func))
 
 
-class CPUQueueAllReduceOp(AllReduceOp):
+class CPUQueueAllReduceOp(AllReduceOp, CopyModifyArgsOp):
     """
     Represents CPU-based queue implementation for AllReduce op. Sets reduction function and creates
     shared queues.
@@ -411,7 +412,7 @@ class CPUQueueAllReduceOp(AllReduceOp):
         return self._shared_queues
 
 
-class GPUCudaAllReduceOp(AllReduceOp):
+class GPUCudaAllReduceOp(AllReduceOp, CopyModifyArgsOp):
     """
     Represents GPU implementation for AllReduce op. Sets reduction function and creates
     shared queues.

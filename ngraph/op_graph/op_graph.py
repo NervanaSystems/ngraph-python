@@ -309,7 +309,8 @@ class Op(NameableValue):
                  trainable=False,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
-        self._args = tuple(as_op(arg) for arg in args)
+        self._args = None
+        self._set_args(args)
         self.metadata = dict()
 
         if metadata is not None:
@@ -339,6 +340,25 @@ class Op(NameableValue):
         self._forward = None
 
         self.scope = None
+
+    def with_args(self, args):
+        """
+        This method creates a new op given an original op and new args. The purpose here
+        is to replace args for an op with layout conversions as needed but keep the op the same
+        otherwise.
+        """
+        return (type(self))(*args)
+
+    def _set_args(self, args):
+        """
+        Internal function. Changes args.
+
+
+        Args:
+            args: The new arguments.
+
+        """
+        self._args = tuple(as_op(arg) for arg in args)
 
     @property
     def tensor(self):
@@ -670,6 +690,20 @@ class Op(NameableValue):
         self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
+
+
+class CopyModifyArgsOp(object):
+    """
+    We cannot create new ops with new layouts for GPUCudaScatterSendOp and GPUCudaGatherSendOp.
+    The information available at this point is not sufficient to create them (issue #1410).
+
+    """
+    def __init__(self, **kwargs):
+        super(CopyModifyArgsOp, self).__init__(**kwargs)
+
+    def with_args(self, args):
+        self._set_args(args)
+        return self
 
 
 def as_op(x):
@@ -1833,6 +1867,9 @@ class ReorderAxes(IndexOp):
             x, axes=axes, **kwargs
         )
 
+    def with_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
     def transform_tensor_description(self, tensor_description):
         return tensor_description.reorder(self.axes)
 
@@ -1906,6 +1943,9 @@ class TensorSliceOp(IndexOp):
         )
 
         self.slices = slices
+
+    def with_args(self, args):
+        return type(self)(args[0], self.slices, self.axes)
 
     def transform_tensor_description(self, tensor_description):
         return tensor_description.slice(self.slices, self.axes)
@@ -2014,6 +2054,9 @@ class Flatten(IndexOp):
     def __init__(self, x, axes, **kwargs):
         x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
+
+    def with_args(self, args):
+        return type(self)(args[0], axes=self.axes)
 
     def transform_tensor_description(self, tensor_description):
         return tensor_description.flatten(self.axes)
@@ -3186,6 +3229,9 @@ class ReductionOp(TensorOp):
             dtype=dtype
         )
 
+    def with_args(self, args):
+        return type(self)(*args, reduction_axes=self.reduction_axes)
+
 
 def compute_reduction_axes(x, reduction_axes, out_axes):
     if reduction_axes is None and out_axes is None:
@@ -3347,6 +3393,9 @@ class TensorSizeOp(TensorOp):
         self.reduction_axes = reduction_axes
         super(TensorSizeOp, self).__init__(args=(x,), axes=())
 
+    def with_args(self, args):
+        return type(self)(args[0], self.reduction_axes)
+
 
 def tensor_size(x, reduction_axes=None, out_axes=None):
     """
@@ -3443,6 +3492,9 @@ class OneHotOp(TensorOp):
             axes=make_axes((axis,)) + x.axes,
             **kwargs
         )
+
+    def with_args(self, args):
+        return type(self)(*args, axis=self.axis)
 
     def as_two_dim(self):
         """
