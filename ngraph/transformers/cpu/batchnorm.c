@@ -61,7 +61,7 @@ void create_mkldnn_batchnorm_fprop_primitives(
     create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->inputs[0]));
   } else {
-    create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_nChw16c,
+    create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
                          engine, &(opkernel->inputs[0]));
   }
 
