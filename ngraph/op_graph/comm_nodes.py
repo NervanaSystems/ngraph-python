@@ -230,7 +230,7 @@ class GatherRecvOp(RecvOp):
         return self.send_nodes
 
 
-class GPUQueueSendOp(SendOp, CopyModifyArgsOp):
+class GPUQueueSendOp(CopyModifyArgsOp, SendOp):
 
     def __init__(self, from_node):
         super(GPUQueueSendOp, self).__init__(from_node=from_node)
@@ -252,7 +252,7 @@ class GPUQueueRecvOp(RecvOp):
         return self._queue
 
 
-class GPUCudaScatterSendOp(ScatterSendOp, CopyModifyArgsOp):
+class GPUCudaScatterSendOp(CopyModifyArgsOp, ScatterSendOp):
 
     def __init__(self, from_node, to_node):
         super(GPUCudaScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
@@ -276,7 +276,7 @@ class GPUCudaScatterRecvOp(ScatterRecvOp):
         return self._shared_queues
 
 
-class GPUCudaGatherSendOp(GatherSendOp, CopyModifyArgsOp):
+class GPUCudaGatherSendOp(CopyModifyArgsOp, GatherSendOp):
 
     def __init__(self, from_node):
         super(GPUCudaGatherSendOp, self).__init__(from_node=from_node)
@@ -300,7 +300,7 @@ class GPUCudaGatherRecvOp(GatherRecvOp):
         return self._shared_queues
 
 
-class CPUQueueSendOp(SendOp, CopyModifyArgsOp):
+class CPUQueueSendOp(CopyModifyArgsOp, SendOp):
 
     def __init__(self, from_node):
         super(CPUQueueSendOp, self).__init__(from_node=from_node)
@@ -322,7 +322,7 @@ class CPUQueueRecvOp(RecvOp):
         return self._queue
 
 
-class CPUQueueScatterSendOp(ScatterSendOp, CopyModifyArgsOp):
+class CPUQueueScatterSendOp(CopyModifyArgsOp, ScatterSendOp):
 
     def __init__(self, from_node, to_node):
         super(CPUQueueScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
@@ -345,7 +345,7 @@ class CPUQueueScatterRecvOp(ScatterRecvOp):
         return self._shared_queues
 
 
-class CPUQueueGatherSendOp(GatherSendOp, CopyModifyArgsOp):
+class CPUQueueGatherSendOp(CopyModifyArgsOp, GatherSendOp):
 
     def __init__(self, from_node):
         super(CPUQueueGatherSendOp, self).__init__(from_node=from_node)
@@ -390,7 +390,7 @@ class AllReduceOp(CommunicationOp):
                 'Reduce function {} is not supported!'.format(self.reduce_func))
 
 
-class CPUQueueAllReduceOp(AllReduceOp, CopyModifyArgsOp):
+class CPUQueueAllReduceOp(CopyModifyArgsOp, AllReduceOp):
     """
     Represents CPU-based queue implementation for AllReduce op. Sets reduction function and creates
     shared queues.
@@ -412,7 +412,7 @@ class CPUQueueAllReduceOp(AllReduceOp, CopyModifyArgsOp):
         return self._shared_queues
 
 
-class GPUCudaAllReduceOp(AllReduceOp, CopyModifyArgsOp):
+class GPUCudaAllReduceOp(CopyModifyArgsOp, AllReduceOp):
     """
     Represents GPU implementation for AllReduce op. Sets reduction function and creates
     shared queues.
