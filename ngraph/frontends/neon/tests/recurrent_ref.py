@@ -183,10 +183,12 @@ class RefBidirectional(object):
 class RefSeq2Seq(object):
 
     def __init__(self, in_size, hidden_size, encoder_activation='tanh',
-                 decoder_return_sequence=True):
+                 decoder_activation='tanh', decoder_return_sequence=True):
 
         assert encoder_activation in ('tanh', 'identity', ), "invalid encoder_activation"
         self.encoder_activation = encoder_activation
+        assert decoder_activation in ('tanh', 'identity', ), "invalid decoder_activation"
+        self.decoder_activation = decoder_activation
 
         self.hidden_size = hidden_size
         self.in_size = in_size
@@ -239,16 +241,15 @@ class RefSeq2Seq(object):
         seq_len_dec = len(inputs_dec)
         hs_list_dec = np.zeros((self.hidden_size, seq_len_dec))
 
-        decoder_activation = True
         for t in range(seq_len_dec):
             xs_dec[t] = np.matrix(inputs_dec[t])
             a = (np.dot(self.Wxh_dec, xs_dec[t]) +
                  np.dot(self.Whh_dec, hs_dec[t - 1]) +
                  self.bh_dec)
-            if decoder_activation:
-                hs_dec[t] = np.tanh(a)
-            else:
+            if self.decoder_activation == 'identity':
                 hs_dec[t] = a
+            elif self.decoder_activation == 'tanh':
+                hs_dec[t] = np.tanh(a)
             hs_list_dec[:, t] = hs_dec[t].flatten()
 
         hs_return_dec = hs_list_dec if self.decoder_return_sequence \
@@ -268,11 +269,11 @@ class RefSeq2Seq(object):
         # bprop through decoder
         for t in reversed(range(seq_len_dec)):
             dh = dh_list[t] + dhnext  # backprop into h
-            if decoder_activation:
+            if self.decoder_activation == 'identity':
+                dhraw = dh
+            elif self.decoder_activation == 'tanh':
                 # backprop through tanh nonlinearity
                 dhraw = np.multiply(dh, (1 - np.square(hs_dec[t])))
-            else:
-                dhraw = dh
             dbh_dec += dhraw
             dWxh_dec += np.dot(dhraw, xs_dec[t].T)
             dWhh_dec += np.dot(dhraw, hs_dec[t - 1].T)
