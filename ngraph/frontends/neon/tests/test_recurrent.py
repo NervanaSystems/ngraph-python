@@ -486,18 +486,16 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
 
 @pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("sequence_length_enc", [1])
+@pytest.mark.parametrize("sequence_length_enc", [5])
 @pytest.mark.parametrize("sequence_length_dec", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [True])
 def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec, input_size,
-                           hidden_size, return_sequence, weight_initializer, bias_initializer,
+                           hidden_size, weight_initializer, bias_initializer,
                            transformer_factory):
 
     # TODO: are these assumptions true?
     assert batch_size == 1, "the seq2seq reference implementation only support batch size 1"
-    assert return_sequence is True, "the reference seq2seq only supports sequences for deriv"
 
     # Get input placeholders and numpy arrays
     input_placeholder_enc, input_value_enc, = \
@@ -520,7 +518,7 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
                                                     init_state=False)
 
     # Reference numpy seq2seq
-    seq2seq_ref = RefSeq2Seq(input_size, hidden_size, return_sequence=return_sequence)
+    seq2seq_ref = RefSeq2Seq(input_size, hidden_size, decoder_return_sequence=True)
     seq2seq_ref.set_weights(W_in_enc, W_rec_enc, b_enc.reshape(seq2seq_ref.bh_enc.shape),
                             W_in_dec, W_rec_dec, b_dec.reshape(seq2seq_ref.bh_dec.shape))
 
@@ -580,4 +578,4 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
             ng.testing.assert_allclose(grad_neon,
                                        deriv_ref_val.squeeze(),
                                        rtol=bprop_rtol,
-                                       atol=bprop_atol)
+                                       atol=1e-4)
