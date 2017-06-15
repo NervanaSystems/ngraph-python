@@ -17,6 +17,7 @@ def model(action_axes):
     action axes for use by the dqn agent.
     """
     return neon.Sequential([
+        neon.Activation(lambda x: x / 255.0),
         neon.Convolution(
             (8, 8, 32),
             neon.XavierInit(),
@@ -100,11 +101,11 @@ class ClipRewardWrapper(gym.Wrapper):
 
         # clip reward to -1, 0, or 1
         if reward > 0:
-            reward = 1
+            reward = 1.0
         elif reward < 0:
-            reward = -1
+            reward = -1.0
         else:
-            reward = 0
+            reward = 0.0
 
         return observation, reward, done, info
 
