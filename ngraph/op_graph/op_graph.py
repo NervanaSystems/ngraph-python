@@ -1654,6 +1654,9 @@ class RoleCastOp(AxesCastOp):
                 .format(axes, x.axes)
             )
 
+    def copy_op_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_role(delta, x.axes))
 
