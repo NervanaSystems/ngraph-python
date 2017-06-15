@@ -54,7 +54,7 @@ class PoolingOp(TensorOp):
 
         self.pool_params = pool_params
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(self.pool_params, args[0], axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta, inputs):
@@ -76,7 +76,7 @@ class BpropPoolOp(TensorOp):
         self.fprop = fprop
         self.inputs = inputs
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], self.fprop)
 
     @property

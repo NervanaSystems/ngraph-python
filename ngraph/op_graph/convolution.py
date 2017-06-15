@@ -70,7 +70,7 @@ class ConvolutionOp(TensorOp):
 
         self.conv_params = conv_params
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
@@ -140,7 +140,7 @@ class DeconvolutionOp(TensorOp):
 
         self.conv_params = conv_params
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
@@ -188,7 +188,7 @@ class update_conv(ConvDerivOp):
             axes=filters.axes, **kwargs
         )
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)
 
 
@@ -205,7 +205,7 @@ class bprop_conv(ConvDerivOp):
             axes=inputs.axes, **kwargs
         )
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
 
 
@@ -224,5 +224,5 @@ class DeconvDerivOp(ConvDerivOp):
             axes=inputs.axes, **kwargs
         )
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)

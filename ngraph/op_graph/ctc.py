@@ -86,7 +86,7 @@ class CTCOp(TensorOp):
                                     axes=axes,
                                     **kwargs)
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         return type(self)(*args, axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta,
