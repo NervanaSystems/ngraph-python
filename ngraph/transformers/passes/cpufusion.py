@@ -4,12 +4,49 @@ from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
+from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorValueOp, ContiguousOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import GraphRewritePass
 
 
 class CPUFusion(GraphRewritePass):
+
+    def construct_innerproduct_and_bias_pattern(self):
+        """
+        Pattern - Add(DotLowDimension, Bias).
+        Returns:
+            Single pattern that matches Add(DotLowDimension, Bias) pattern.
+        """
+
+        self.dot_x_label = "X"
+        self.dot_y_label = "Y"
+        self.bias_label = "B"
+        x = PatternLabelOp(self.dot_x_label)
+        y = PatternLabelOp(self.dot_y_label)
+
+        bias_label_op = PatternLabelOp(self.bias_label,
+                                       (lambda op: op.is_scalar) and
+                                       (lambda op: isinstance(op, TensorValueOp)))
+        bias = PatternSkipOp(bias_label_op,
+                             (lambda op: isinstance(op, BroadcastOp)) or
+                             (lambda op: isinstance(op, ContiguousOp)))
+
+        dot_op = PatternSkipOp(DotOp(x, y, None),
+                               (lambda op: isinstance(op, MapRolesOp)))
+        add_op = Add(dot_op, bias)
+        return add_op
+
+    def fuse_innerproduct_and_bias_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for Innerproduct + bias  pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            x = label_map[self.dot_x_label]
+            y = label_map[self.dot_y_label]
+            bias = label_map[self.bias_label]
+            dot_new_op = DotOp(x, y, bias)
+            self.replace_op(op, dot_new_op)
 
     def construct_relu_fprop_pattern(self):
         """
@@ -299,3 +336,7 @@ class CPUFusion(GraphRewritePass):
         # Register Batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
         self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
+
+        # Register Inner + Bias  pattern
+        pattern_inner_bias = self.construct_innerproduct_and_bias_pattern()
+        self.register_pattern(pattern_inner_bias, self.fuse_innerproduct_and_bias_callback)

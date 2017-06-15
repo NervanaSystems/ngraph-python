@@ -237,23 +237,25 @@ class StridedBinaryLayoutConstraint(BinaryLayoutConstraint):
                         new_axis_index = pred_arg_axes.index(pred_axes[self.sliced_out[i][0]])
                         self.sliced_out[i] = (new_axis_index, self.sliced_out[i][1])
             elif isinstance(predecessor_op, TensorSliceOp):
+                old_index = 0
                 new_indexes = []
-                for index, axis in enumerate(pred_axes):
-                    new_index = pred_arg_axes.index(axis)
-                    if predecessor_op.slices[new_index] != slice(None, None, None):
-                        new_index = ("slice", new_index, predecessor_op.slices[new_index])
-                    if new_index != index:
+                for index, axis in enumerate(pred_arg_axes):
+                    if isinstance(predecessor_op.slices[index], int):
+                        self.sliced_out.append((index, predecessor_op.slices[index]))
+                    else:
+                        if predecessor_op.slices[index] != slice(None, None, None):
+                            new_index = ("slice", index, predecessor_op.slices[index])
+                        else:
+                            new_index = index
+
+                        # Remap this axis
                         for a, p in self.mappings.items():
-                            if isinstance(p, int) and p == index:
+                            if isinstance(p, int) and p == old_index:
                                 new_indexes.append((a, new_index))
+                        old_index += 1
 
                 for a, p in new_indexes:
                     self.mappings[a] = p
-
-                # Find any axes that are sliced out and add these to offset calculations
-                rem_axes = [pred_arg_axes.index(a) for a in pred_arg_axes if a not in pred_axes]
-                for rm_axis in rem_axes:
-                    self.sliced_out.append((rm_axis, predecessor_op.slices[rm_axis]))
             elif isinstance(predecessor_op, (ReorderAxes, Transpose)):
                 new_indexes = []
                 for a, p in self.mappings.items():
