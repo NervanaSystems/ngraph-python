@@ -204,17 +204,50 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
 
         return observation
 
+class DimShuffleWrapper(gym.Wrapper):
+    """
+    Reshape the observation provided by open ai gym atari environment to match
+    the deepmind dqn paper.
+    """
+
+    def __init__(self, environment):
+        super(DimShuffleWrapper, self).__init__(environment)
+
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(4, 84, 84))
+
+    def _modify_observation(self, observation):
+        observation = np.asarray(observation)
+
+        observation = observation.transpose((2, 0, 1))
+        observation = np.ascontiguousarray(observation)
+
+        return observation
+
+    def _step(self, action):
+        observation, reward, done, info = self.env.step(action)
+
+        observation = self._modify_observation(observation)
+
+        return observation, reward, done, info
+
+    def _reset(self):
+        return self._modify_observation(self.env.reset())
+
+
+
 
 def main():
     # deterministic version 4 results in a frame skip of 4 and no repeat action probability
-    environment = gym.make('BreakoutDeterministic-v4')
     if False:
+        environment = gym.make('BreakoutDeterministic-v4')
         environment = TerminateOnEndOfLifeWrapper(environment)
         environment = ReshapeWrapper(environment)
         environment = ClipRewardWrapper(environment)
         environment = RepeatWrapper(environment, frames=4)
     else:
+        environment = gym.make('BreakoutNoFrameskip-v4')
         environment = wrap_dqn(environment)
+        environment = DimShuffleWrapper(environment)
 
     # todo: perhaps these should be defined in the environment itself
     state_axes = ng.make_axes([
