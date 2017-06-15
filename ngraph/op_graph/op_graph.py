@@ -310,7 +310,7 @@ class Op(NameableValue):
                  **kwargs):
         super(Op, self).__init__(**kwargs)
         self._args = None
-        self._set_args(args)
+        self._set_args(as_op(arg) for arg in args)
         self.metadata = dict()
 
         if metadata is not None:
@@ -358,7 +358,9 @@ class Op(NameableValue):
             args: The new arguments.
 
         """
-        self._args = tuple(as_op(arg) for arg in args)
+        self._args = tuple(args)
+        self.invalidate_property_cache('all_deps')
+        self.invalidate_property_cache('call_info')
 
     @property
     def tensor(self):
