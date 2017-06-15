@@ -18,17 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SequentialOp, ReorderAxes, Flatten, TensorSliceOp, TensorSizeOp
-from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
-    DeconvolutionOp, DeconvDerivOp
-from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
-from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
-from ngraph.op_graph.ctc import CTCOp
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUCudaScatterSendOp, \
-    GPUCudaGatherSendOp, GPUCudaAllReduceOp, CPUQueueSendOp, CPUQueueScatterSendOp, \
-    CPUQueueGatherSendOp, CPUQueueAllReduceOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, SequentialOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -317,7 +307,6 @@ class AddLayoutConversions(PeepholeGraphPass):
         self.binary_constraints = self.assign_pass.binary_constraints
         super(AddLayoutConversions, self).do_pass(ops, transformer)
 
-    
     def visit(self, op, *args):
         """
         This pass visits every op with a layout assigned and checks the args against constraints
@@ -360,7 +349,7 @@ class AddLayoutConversions(PeepholeGraphPass):
 
                 # Replace op if any inputs need to be transformed
                 if any(a is not b for a, b in zip(new_args, list(op.args))):
-                    new_op = op.with_args(new_args)
+                    new_op = op.copy_with_new_args(new_args)
                     new_op.metadata["layout"] = op.metadata["layout"]
                     self.replace_op(op, new_op)
                     self.visited.add(new_op)

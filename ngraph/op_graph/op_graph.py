@@ -341,7 +341,7 @@ class Op(NameableValue):
 
         self.scope = None
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         """
         This method creates a new op given an original op and new args. The purpose here
         is to replace args for an op with layout conversions as needed but keep the op the same
@@ -692,16 +692,16 @@ class Op(NameableValue):
         return list(tensor_descriptions(self.args))
 
 
-class CopyModifyArgsOp(object):
+class MutateInsteadOfCopyWithNewArgsMixin(object):
     """
     We cannot create new ops with new layouts for GPUCudaScatterSendOp and GPUCudaGatherSendOp.
     The information available at this point is not sufficient to create them (issue #1410).
 
     """
     def __init__(self, **kwargs):
-        super(CopyModifyArgsOp, self).__init__(**kwargs)
+        super(MutateInsteadOfCopyWithNewArgsMixin, self).__init__(**kwargs)
 
-    def with_args(self, args):
+    def copy_with_new_args(self, args):
         self._set_args(args)
         return self
 
