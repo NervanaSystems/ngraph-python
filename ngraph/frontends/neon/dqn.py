@@ -243,6 +243,7 @@ class Agent(object):
             learning_rate=0.0001,
             learning_starts=0,
             target_network_update_frequency=500,
+            training_frequency=4,
     ):
         super(Agent, self).__init__()
 
@@ -253,6 +254,7 @@ class Agent(object):
         self.action_space = action_space
         self.learning_starts = learning_starts
         self.target_network_update_frequency = target_network_update_frequency
+        self.training_frequency = training_frequency
 
         if memory is None:
             self.memory = Memory(maxlen=1000000)
@@ -303,7 +305,8 @@ class Agent(object):
 
         if not self.update_after_episode:
             if total_steps >= self.learning_starts:
-                self._update()
+                if total_steps % self.training_frequency == 0:
+                    self._update()
 
                 if total_steps % self.target_network_update_frequency == 0:
                     self.model_wrapper.update()
