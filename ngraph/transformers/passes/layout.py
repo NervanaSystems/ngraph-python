@@ -18,7 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, SequentialOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):

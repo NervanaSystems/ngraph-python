@@ -36,7 +36,6 @@ class GraphPass(with_metaclass(abc.ABCMeta, DelegateOpAccessor)):
         pass
 
 
-
 class GraphBuildingPass(GraphPass):
     """
     Base class for passes that build new graph, primarily derivatives

@@ -311,7 +311,7 @@ class CPUFusion(GraphRewritePass):
             beta = label_map[self.batchnorm_fprop_beta_label]
             variance = label_map[self.batchnorm_fprop_variance_label]
             mean = label_map[self.batchnorm_fprop_mean_label]
-            epsilon = self.op_arg(label_map[self.batchnorm_fprop_epsilon_label],0).tensor.const
+            epsilon = self.op_arg(label_map[self.batchnorm_fprop_epsilon_label], 0).tensor.const
             batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
 
             # book keep the fprop batchnorm op to use during back propogation

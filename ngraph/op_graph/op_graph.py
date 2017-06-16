@@ -143,6 +143,9 @@ class DebugInfo(object):
 class OpAccessor(with_metaclass(abc.ABCMeta, object)):
     """
     Provides access to some op properties when they may have been modified during passes.
+
+    This is currently used so that the same pass can be used with op-graph and exec-graph if
+    the pass uses the OpAccessor methods to access the components of the Op.
     """
     def op_arg(self, op, n):
         """
@@ -187,6 +190,7 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
             The op providing actual storage for op's value.
 
         """
+
 
 class OpGraphOpAccessor(OpAccessor):
     """
@@ -252,7 +256,6 @@ class OpGraphOpAccessor(OpAccessor):
                 return dev_op
 
         return None
-
 
 
 op_graph_op_accessor = OpGraphOpAccessor()
@@ -3240,6 +3243,13 @@ class CommutativeBinaryElementWiseOp(BinaryElementWiseOp):
 
 
 class Add(CommutativeBinaryElementWiseOp):
+    """
+    Add two tensors.
+
+    Arguments:
+        x: A tensor
+        y: A tensor
+    """
     def __init__(self, x, y, **kwargs):
         super(Add, self).__init__(x, y, **kwargs)
 
@@ -3249,10 +3259,29 @@ class Add(CommutativeBinaryElementWiseOp):
 
 
 def add(x, y, dtype=None):
+    """
+    Adds two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The type of the result.
+
+    Returns:
+        An Op for x + y.
+
+    """
     return Add(x, y, dtype=dtype)
 
 
 class Subtract(BinaryElementWiseOp):
+    """
+    Subtracts two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Subtract, self).__init__(x, y, **kwargs)
 
@@ -3260,11 +3289,31 @@ class Subtract(BinaryElementWiseOp):
         x.generate_add_delta(adjoints, delta)
         y.generate_add_delta(adjoints, -delta)
 
+
 def subtract(x, y, dtype=None):
+    """
+    Subtracts two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The type of the result.
+
+    Returns:
+        An Op for x - y.
+
+    """
     return Subtract(x, y, dtype=dtype)
 
 
 class Multiply(CommutativeBinaryElementWiseOp):
+    """
+    Multiplies two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Multiply, self).__init__(x, y, **kwargs)
 
@@ -3274,10 +3323,29 @@ class Multiply(CommutativeBinaryElementWiseOp):
 
 
 def multiply(x, y, dtype=None):
+    """
+    Multiplies two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x * y.
+
+    """
     return Multiply(x, y, dtype=dtype)
 
 
 class Divide(BinaryElementWiseOp):
+    """
+    Divides two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Divide, self).__init__(x, y, **kwargs)
 
@@ -3287,10 +3355,29 @@ class Divide(BinaryElementWiseOp):
 
 
 def divide(x, y, dtype=None):
+    """
+    Divides two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x / y.
+
+    """
     return Divide(x, y, dtype=dtype)
 
 
 class FloorDivide(BinaryElementWiseOp):
+    """
+    Floor of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(FloorDivide, self).__init__(x, y, **kwargs)
 
@@ -3300,10 +3387,29 @@ class FloorDivide(BinaryElementWiseOp):
 
 
 def floordivide(x, y, dtype=None):
+    """
+    Floor of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for floor(x, y).
+
+    """
     return FloorDivide(x, y, dtype=dtype)
 
 
 class Mod(BinaryElementWiseOp):
+    """
+    Mod of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Mod, self).__init__(x, y, **kwargs)
 
@@ -3311,10 +3417,30 @@ class Mod(BinaryElementWiseOp):
 
 
 def mod(x, y, dtype=None):
+    """
+    Mod of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for mod(x, y).
+
+    """
     return Mod(x, y, dtype=dtype)
 
 
 class Maximum(CommutativeBinaryElementWiseOp):
+    """
+    Maximum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+
+    """
     def __init__(self, x, y, **kwargs):
         super(Maximum, self).__init__(x, y, **kwargs)
 
@@ -3324,10 +3450,30 @@ class Maximum(CommutativeBinaryElementWiseOp):
 
 
 def maximum(x, y, dtype=None):
+    """
+    Maximum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for max(x, y).
+
+    """
     return Maximum(x, y, dtype=dtype)
 
 
 class Minimum(CommutativeBinaryElementWiseOp):
+    """
+    Minimum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+
+    """
     def __init__(self, x, y, **kwargs):
         super(Minimum, self).__init__(x, y, **kwargs)
 
@@ -3337,10 +3483,29 @@ class Minimum(CommutativeBinaryElementWiseOp):
 
 
 def minimum(x, y, dtype=None):
+    """
+    Minimum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for max(x, y).
+
+    """
     return Minimum(x, y, dtype=dtype)
 
 
 class Power(BinaryElementWiseOp):
+    """
+    Raise one tensor two the power of another.
+
+    Arguments:
+        x: A tensor for the base.
+        y: A tensor for the exponent.
+    """
     def __init__(self, x, y, **kwargs):
         super(Power, self).__init__(x, y, **kwargs)
 
@@ -3350,60 +3515,182 @@ class Power(BinaryElementWiseOp):
 
 
 def power(x, y, dtype=None):
+    """
+    Raise one tensor two the power of another.
+
+    Arguments:
+        x: A tensor for the base.
+        y: A tensor for the exponent.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x ** y.
+    """
     return Power(x, y, dtype=dtype)
 
 
 class Equal(CommutativeBinaryElementWiseOp):
+    """
+    Compares two tensors for element equality..
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Equal, self).__init__(x, y, **kwargs)
 
 
 def equal(x, y, dtype=None):
+    """
+    Compares two tensors for element equality.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x == y.
+    """
     return Equal(x, y, dtype=dtype)
 
 
 class NotEqual(CommutativeBinaryElementWiseOp):
+    """
+    Compares two tensors for element non-equality..
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(NotEqual, self).__init__(x, y, **kwargs)
 
 
 def not_equal(x, y, dtype=None):
+    """
+    Compares two tensors for element non-equality.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x != y.
+    """
     return NotEqual(x, y, dtype=dtype)
 
 
 class Greater(BinaryElementWiseOp):
+    """
+    Compares two tensors for element greater.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Greater, self).__init__(x, y, **kwargs)
 
 
 def greater(x, y, dtype=None):
+    """
+    Compares two tensors for element greater.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x > y.
+
+    """
     return Greater(x, y, dtype=dtype)
 
 
 class Less(BinaryElementWiseOp):
+    """
+    Compares two tensors for element less.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(Less, self).__init__(x, y, **kwargs)
 
 
 def less(x, y, dtype=None):
+    """
+    Compares two tensors for element less.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x < y.
+
+    """
     return Less(x, y, dtype=dtype)
 
 
 class GreaterEqual(BinaryElementWiseOp):
+    """
+    Compares two tensors for element greater equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(GreaterEqual, self).__init__(x, y, **kwargs)
 
 
 def greater_equal(x, y, dtype=None):
+    """
+    Compares two tensors for element greater equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x >= y.
+
+    """
     return GreaterEqual(x, y, dtype=dtype)
 
 
 class LessEqual(BinaryElementWiseOp):
+    """
+    Compares two tensors for element less equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
     def __init__(self, x, y, **kwargs):
         super(LessEqual, self).__init__(x, y, **kwargs)
 
 
 def less_equal(x, y, dtype=None):
+    """
+    Compares two tensors for element less equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x <= y.
+    """
     return LessEqual(x, y, dtype=dtype)
 
 
