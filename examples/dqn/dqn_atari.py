@@ -252,9 +252,9 @@ def main():
 
     # todo: perhaps these should be defined in the environment itself
     state_axes = ng.make_axes([
-        ng.make_axis(environment.observation_space.shape[0], name='feature'),
-        ng.make_axis(environment.observation_space.shape[1], name='width'),
-        ng.make_axis(environment.observation_space.shape[2], name='height'),
+        ng.make_axis(environment.observation_space.shape[0], name='C'),
+        ng.make_axis(environment.observation_space.shape[1], name='H'),
+        ng.make_axis(environment.observation_space.shape[2], name='W'),
     ])
 
     agent = dqn.Agent(
@@ -266,6 +266,7 @@ def main():
         learning_rate=0.00025,
         memory=dqn.Memory(maxlen=1000000),
         target_network_update_frequency=1000,
+        learning_starts=10000,
     )
 
     rl_loop.rl_loop(environment, agent, episodes=200000)
