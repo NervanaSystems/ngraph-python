@@ -20,12 +20,53 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='ngraph/op_graph/hetr_grpc/hetr.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n$ngraph/op_graph/hetr_grpc/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"(\n\x0c\x42uildRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"\x1c\n\nBuildReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"b\n\x12\x43omputationRequest\x12\x1b\n\x08subgraph\x18\x01 \x01(\x0b\x32\t.GraphDef\x12\x14\n\x07returns\x18\x02 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x03 \x03(\x0b\x32\x03.Op\"#\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\"b\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x1d\n\rscalar_values\x18\x02 \x03(\x0e\x32\x06.DTYPE\x12\x1e\n\rtensor_values\x18\x03 \x03(\x0b\x32\x07.Tensor\" \n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\"*\n\x0fGetResultsReply\x12\x17\n\x07results\x18\x01 \x03(\x0e\x32\x06.DTYPE2\xda\x01\n\x04Hetr\x12\x30\n\x10\x42uildTransformer\x12\r.BuildRequest\x1a\x0b.BuildReply\"\x00\x12\x37\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n$ngraph/op_graph/hetr_grpc/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"(\n\x0c\x42uildRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"\x1c\n\nBuildReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"b\n\x12\x43omputationRequest\x12\x1b\n\x08subgraph\x18\x01 \x01(\x0b\x32\t.GraphDef\x12\x14\n\x07returns\x18\x02 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x03 \x03(\x0b\x32\x03.Op\"#\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\" \n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\":\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x17\n\x07results\x18\x02 \x03(\x0b\x32\x06.Value2\xda\x01\n\x04Hetr\x12\x30\n\x10\x42uildTransformer\x12\r.BuildRequest\x1a\x0b.BuildReply\"\x00\x12\x37\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x62\x06proto3')
   ,
   dependencies=[ngraph_dot_op__graph_dot_serde_dot_ops__pb2.DESCRIPTOR,])
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 
+
+
+_VALUE = _descriptor.Descriptor(
+  name='Value',
+  full_name='Value',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='scalar', full_name='Value.scalar', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='tensor', full_name='Value.tensor', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+    _descriptor.OneofDescriptor(
+      name='value', full_name='Value.value',
+      index=0, containing_type=None, fields=[]),
+  ],
+  serialized_start=73,
+  serialized_end=143,
+)
 
 
 _BUILDREQUEST = _descriptor.Descriptor(
@@ -54,8 +95,8 @@ _BUILDREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=73,
-  serialized_end=113,
+  serialized_start=145,
+  serialized_end=185,
 )
 
 
@@ -85,8 +126,8 @@ _BUILDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=115,
-  serialized_end=143,
+  serialized_start=187,
+  serialized_end=215,
 )
 
 
@@ -130,8 +171,8 @@ _COMPUTATIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=145,
-  serialized_end=243,
+  serialized_start=217,
+  serialized_end=315,
 )
 
 
@@ -161,8 +202,8 @@ _COMPUTATIONREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=245,
-  serialized_end=280,
+  serialized_start=317,
+  serialized_end=352,
 )
 
 
@@ -181,15 +222,8 @@ _FEEDINPUTREQUEST = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='scalar_values', full_name='FeedInputRequest.scalar_values', index=1,
-      number=2, type=14, cpp_type=8, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='tensor_values', full_name='FeedInputRequest.tensor_values', index=2,
-      number=3, type=11, cpp_type=10, label=3,
+      name='values', full_name='FeedInputRequest.values', index=1,
+      number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -206,8 +240,8 @@ _FEEDINPUTREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=282,
-  serialized_end=380,
+  serialized_start=354,
+  serialized_end=413,
 )
 
 
@@ -237,8 +271,8 @@ _FEEDINPUTREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=382,
-  serialized_end=414,
+  serialized_start=415,
+  serialized_end=447,
 )
 
 
@@ -268,8 +302,8 @@ _GETRESULTSREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=416,
-  serialized_end=452,
+  serialized_start=449,
+  serialized_end=485,
 )
 
 
@@ -281,8 +315,15 @@ _GETRESULTSREPLY = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='results', full_name='GetResultsReply.results', index=0,
-      number=1, type=14, cpp_type=8, label=3,
+      name='status', full_name='GetResultsReply.status', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='results', full_name='GetResultsReply.results', index=1,
+      number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -299,16 +340,24 @@ _GETRESULTSREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=454,
-  serialized_end=496,
+  serialized_start=487,
+  serialized_end=545,
 )
 
+_VALUE.fields_by_name['scalar'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._SCALAR
+_VALUE.fields_by_name['tensor'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._TENSOR
+_VALUE.oneofs_by_name['value'].fields.append(
+  _VALUE.fields_by_name['scalar'])
+_VALUE.fields_by_name['scalar'].containing_oneof = _VALUE.oneofs_by_name['value']
+_VALUE.oneofs_by_name['value'].fields.append(
+  _VALUE.fields_by_name['tensor'])
+_VALUE.fields_by_name['tensor'].containing_oneof = _VALUE.oneofs_by_name['value']
 _COMPUTATIONREQUEST.fields_by_name['subgraph'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._GRAPHDEF
 _COMPUTATIONREQUEST.fields_by_name['returns'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
 _COMPUTATIONREQUEST.fields_by_name['placeholders'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
-_FEEDINPUTREQUEST.fields_by_name['scalar_values'].enum_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._DTYPE
-_FEEDINPUTREQUEST.fields_by_name['tensor_values'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._TENSOR
-_GETRESULTSREPLY.fields_by_name['results'].enum_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._DTYPE
+_FEEDINPUTREQUEST.fields_by_name['values'].message_type = _VALUE
+_GETRESULTSREPLY.fields_by_name['results'].message_type = _VALUE
+DESCRIPTOR.message_types_by_name['Value'] = _VALUE
 DESCRIPTOR.message_types_by_name['BuildRequest'] = _BUILDREQUEST
 DESCRIPTOR.message_types_by_name['BuildReply'] = _BUILDREPLY
 DESCRIPTOR.message_types_by_name['ComputationRequest'] = _COMPUTATIONREQUEST
@@ -317,6 +366,13 @@ DESCRIPTOR.message_types_by_name['FeedInputRequest'] = _FEEDINPUTREQUEST
 DESCRIPTOR.message_types_by_name['FeedInputReply'] = _FEEDINPUTREPLY
 DESCRIPTOR.message_types_by_name['GetResultsRequest'] = _GETRESULTSREQUEST
 DESCRIPTOR.message_types_by_name['GetResultsReply'] = _GETRESULTSREPLY
+
+Value = _reflection.GeneratedProtocolMessageType('Value', (_message.Message,), dict(
+  DESCRIPTOR = _VALUE,
+  __module__ = 'ngraph.op_graph.hetr_grpc.hetr_pb2'
+  # @@protoc_insertion_point(class_scope:Value)
+  ))
+_sym_db.RegisterMessage(Value)
 
 BuildRequest = _reflection.GeneratedProtocolMessageType('BuildRequest', (_message.Message,), dict(
   DESCRIPTOR = _BUILDREQUEST,

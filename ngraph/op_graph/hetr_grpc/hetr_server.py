@@ -4,7 +4,8 @@ import grpc
 import hetr_pb2
 import hetr_pb2_grpc
 from ngraph.op_graph.op_graph import Op
-from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, _deserialize_graph
+from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, _deserialize_graph,\
+    tensor_to_protobuf, assign_scalar, protobuf_scalar_to_python, is_scalar_type
 from ngraph.transformers.hetrtransform import build_transformer
 
 
@@ -28,6 +29,8 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
         return hetr_pb2.BuildReply(status=True)
 
     def Computation(self, request, context):
+        if not self.transformer:
+            return hetr_pb2.ComputationReply(comp_id=-1)
         comp_id = self.new_comp_id()
         subgraph = _deserialize_graph(request.subgraph)
         returns = []
@@ -38,11 +41,12 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             placeholders.append(protobuf_to_op(pb_op))
         return_list = []
         placeholder_list = []
-        for op in Op.ordered_ops(subgraph):
+        ops = Op.ordered_ops(subgraph)
+        for op in ops:
             for r in returns:
                 if op.uuid == r.uuid:
                     return_list.append(op)
-        for op in Op.ordered_ops(subgraph):
+        for op in ops:
             for p in placeholders:
                 if op.uuid == p.uuid:
                     placeholder_list.append(op)
@@ -51,19 +55,31 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
         return hetr_pb2.ComputationReply(comp_id=comp_id)
 
     def FeedInput(self, request, context):
+        if request.comp_id >= len(self.computations):
+            return hetr_pb2.FeedInputReply(status=False)
         values = []
-        # TODO do we need to support both scalars and non-scalars in one request?
-        for v in request.scalar_values:
-            values.append(v)
-        for v in request.tensor_values:
-            values.append(pb_to_tensor(v))
+        for v in request.values:
+            if v.HasField('scalar'):
+                values.append(protobuf_scalar_to_python(v.scalar))
+            else:
+                values.append(pb_to_tensor(v.tensor))
         computation = self.computations[request.comp_id]
         outputs = computation(*values)
         self.results[request.comp_id] = outputs
         return hetr_pb2.FeedInputReply(status=True)
 
     def GetResults(self, request, context):
-        return hetr_pb2.GetResultsReply(results=self.results[request.comp_id])
+        if request.comp_id >= len(self.results):
+            return hetr_pb2.GetResultsReply(status=False)
+        pb_results = []
+        for r in self.results[request.comp_id]:
+            pb_val = hetr_pb2.Value()
+            if is_scalar_type(r):
+                assign_scalar(pb_val.scalar, r)
+            else:
+                pb_val.tensor.CopyFrom(tensor_to_protobuf(r))
+            pb_results.append(pb_val)
+        return hetr_pb2.GetResultsReply(status=True, results=pb_results)
 
 
 def serve():

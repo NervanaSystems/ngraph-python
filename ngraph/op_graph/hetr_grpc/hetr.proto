@@ -9,6 +9,13 @@ service Hetr {
     rpc GetResults (GetResultsRequest) returns (GetResultsReply) {}
 }
 
+message Value {
+    oneof value {
+        Scalar scalar = 1;
+        Tensor tensor = 2;
+    }
+}
+
 message BuildRequest {
     string transformer_type = 1;
 }
@@ -29,8 +36,7 @@ message ComputationReply {
 
 message FeedInputRequest {
     int32 comp_id = 1;
-    repeated DTYPE scalar_values = 2;
-    repeated Tensor tensor_values = 3;
+    repeated Value values = 2; 
 }
 
 message FeedInputReply {
@@ -42,6 +48,6 @@ message GetResultsRequest {
 }
 
 message GetResultsReply {
-    repeated DTYPE results = 1;
+    bool status = 1;
+    repeated Value results = 2;
 }
-
