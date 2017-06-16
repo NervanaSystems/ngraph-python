@@ -181,6 +181,7 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                        orig_ops[arg_op.uuid].metadata['clones'].get(str(clone_id)):
                         args_list[arg_idx] = \
                             orig_ops[arg_op.uuid].metadata['clones'].get(str(clone_id))
+            op.invalidate_property_cache('all_deps')
             op._args = tuple(args_list)
             if op != new_root:
                 if orig_ops[op.uuid].metadata.get('clones') is None:

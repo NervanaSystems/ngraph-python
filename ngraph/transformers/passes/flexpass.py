@@ -7,7 +7,7 @@ from ngraph.flex import gpuflex16
 
 class FlexDtypePass(PeepholeGraphPass):
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         # TODO currently hard coded gpuflex16
         op.dtype = gpuflex16
 
@@ -18,7 +18,7 @@ class FlexDECPass(PeepholeGraphPass):
         self.propagate_flex_entry = False
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         # copy flex entry for any op followed by dimshuffle op
         if self.propagate_flex_entry:
             if isinstance(op, DimshuffleOp):

@@ -16,7 +16,7 @@ import os
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
-from ngraph.frontends.neon.aeon_shim import AeonDataloader
+from ngraph.frontends.neon.aeon_shim import AeonDataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
 from ngraph.frontends.neon import CIFAR10
 
@@ -91,7 +91,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0):
     valid_config['iteration_mode'] = "ONCE"
 
     import json
-    train_loader = AeonDataloader(json.dumps(train_config))
-    valid_loader = AeonDataloader(json.dumps(valid_config))
+    train_loader = AeonDataLoader(json.dumps(train_config))
+    valid_loader = AeonDataLoader(json.dumps(valid_config))
 
     return (train_loader, valid_loader)
