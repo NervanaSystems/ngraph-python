@@ -150,16 +150,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.op_layouts[op.name] = (mkl_layout, mkl_axes)
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         pass
 
     @visit.on_type(BatchnormOp)
-    def visit(self, op):
-        inputs = op.args[0]
-        gamma = op.args[1]
-        bias = op.args[2]
-        mean = op.args[4]
-        variance = op.args[5]
+    def visit(self, op, inputs, gamma, bias, epsilon, mean, variance):
         # unflatten the inputs and extract C H W N params
         if isinstance(inputs, Flatten):
             unflatten_inputs = unflatten(inputs)
@@ -221,11 +216,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropBatchnormOp)
-    def visit(self, op):
-        gamma = op.args[2]
-        bias = op.args[3]
-        mean = op.args[4]
-        variance = op.args[5]
+    def visit(self, op, delta, fprop_src, gamma, bias, mean, variance):
         axis_len_5d = False
         # Only single precision float supported for now
         if op.dtype != np.float32:
@@ -243,8 +234,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             else:
                 return
         data_type = self.mkldnn.datatype[op.dtype.type]
-        fprop_src = op.args[1]
-        delta = op.args[0]
         mean_dims = 1
         variance_dims = 1
         mean_size = mean.axes.lengths[0]
@@ -308,11 +297,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ConvolutionOp)
-    def visit(self, op):
-        input = op.args[0]
-        filter = op.args[1]
+    def visit(self, op, input, filter):
         # Only 2D convolution supported in MKLDNN for now
-        if (op.args[0].axes.find_by_name('__NG_DEPTH').size != 1):
+        if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
         # Only single precision float supported for now
         if (op.dtype.type != np.float32):
@@ -352,11 +339,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(bprop_conv)
-    def visit(self, op):
-        input = op.args[0]
-        filter = op.args[1]
+    def visit(self, op, input, filter):
         # Only 2D convolution supported in MKLDNN for now
-        if (op.args[0].axes.find_by_name('__NG_DEPTH').size != 1):
+        if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
         # Only single precision float supported for now
         if (op.dtype.type != np.float32):
@@ -397,9 +382,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(update_conv)
-    def visit(self, op):
-        delta = op.args[0]
-        inputs = op.args[1]
+    def visit(self, op, delta, inputs):
         # Only 2D convolution supported in MKLDNN for now
         if (delta.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -441,14 +424,13 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ReluOp)
-    def visit(self, op):
+    def visit(self, op, input):
         if (op.dtype.type != np.float32):
             return
         if (len(op.axes) != 5 and len(op.axes) != 2):
             # if (len(op.axes) != 5):
             return
         data_type = self.mkldnn.datatype[op.dtype.type]
-        input = op.args[0]
         if len(op.axes) == 5:
             (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
         elif len(op.axes) == 2:
@@ -468,15 +450,13 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropReluOp)
-    def visit(self, op):
+    def visit(self, op, delta, fprop_src):
         if (op.dtype.type != np.float32):
             return
         if (len(op.axes) != 5 and len(op.axes) != 2):
             # if (len(op.axes) != 5):
             return
         data_type = self.mkldnn.datatype[op.dtype.type]
-        delta = op.args[0]
-        fprop_src = op.args[1]
         if len(op.axes) == 5:
             (delta_layout, mkl_axes) = get_mkl_layout(self.mkldnn, delta, [4, 0, 2, 3], True)
         elif len(op.axes) == 2:
@@ -500,8 +480,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(PoolingOp)
-    def visit(self, op):
-        input = op.args[0]
+    def visit(self, op, input):
         # Only 2D pooling supported in MKLDNN for now
         if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -547,8 +526,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropPoolOp)
-    def visit(self, op):
-        input = op.args[0]
+    def visit(self, op, input):
         # Only 2D pooling supported in MKLDNN for now
         if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -596,9 +574,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(DotLowDimension)
-    def visit(self, op):
-        x = op.args[0]
-        y = op.args[1]
+    def visit(self, op, x, y):
         bias = op.bias
 
         # Sanity check tensor shapes
@@ -639,11 +615,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(Add)
-    def visit(self, op):
+    def visit(self, op, I_array1, I_array2):
         # Disable for now since we are seeing perf slowdowns
         return
-        I_array1 = op.args[0]
-        I_array2 = op.args[1]
 
         # Sanity check for tensor shapes
         if (op.dtype.type != np.float32):
@@ -678,14 +652,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ContiguousOp)
-    def visit(self, op):
-        arg = op.args[0]
+    def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
 
     @visit.on_type(MapRolesOp)
-    def visit(self, op):
-        arg = op.args[0]
+    def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             (mkl_layout, mkl_axes) = self.mkldnn.op_layouts[arg.name]
             order = get_order_from_axes(arg.axes, mkl_axes)
@@ -693,8 +665,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.op_layouts[op.name] = (mkl_layout, new_axes)
 
     @visit.on_type(ReorderAxes)
-    def visit(self, op):
-        arg = op.args[0]
+    def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
 
@@ -741,13 +712,13 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             return reorder_op
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         if op.name in self.mkldnn.kernels or op.name in self.mkldnn.op_layouts:
             # MKL Op or an MKL layout pass-through op
             return
         replace = False
         new_args = []
-        for arg in op.args:
+        for arg in args:
             if arg.name in self.mkldnn.op_layouts:
                 reorder_op = self.get_reorder_op(arg)
                 new_args.append(reorder_op)
@@ -755,26 +726,25 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             else:
                 new_args.append(arg)
         if replace:
-            new_op = self.layoutpass.op_from_args(op, new_args)
+            new_op = op.copy_with_new_args(new_args)
             self.replace_op(op, new_op)
 
     @visit.on_type(ContiguousOp)
-    def visit(self, op):
-        arg = op.args[0]
+    def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             # Input in MKL layout.
             # Expect downstream ops to handle MKL layout or insert explicit conversions
-            self.replace_op(op, op.args[0])
+            self.replace_op(op, arg)
         elif isinstance(arg, MklReorderOp):
             # TODO(jbobba) - Can we eliminate ContiguousOp here?
             pass
 
     @visit.on_type(MapRolesOp)
-    def visit(self, op):
+    def visit(self, op, arg):
         pass
 
     @visit.on_type(MklReorderOp)
-    def visit(self, op):
+    def visit(self, op, arg):
         pass
 
     @visit.on_type(ComputationOp)

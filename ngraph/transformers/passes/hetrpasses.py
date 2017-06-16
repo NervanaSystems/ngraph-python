@@ -28,7 +28,7 @@ class DeviceAssignPass(GraphBuildingPass):
         self.default_device = default_device
         self.default_device_id = default_device_id
 
-    def visit(self, op):
+    def visit(self, op, *args):
         device = op.metadata.setdefault('device', self.default_device)
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
@@ -51,9 +51,9 @@ class CommunicationPass(GraphBuildingPass):
         super(CommunicationPass, self).__init__()
         self.send_nodes = send_nodes
 
-    def visit(self, op):
+    def visit(self, op, *op_args):
         args = list()
-        for arg in op.args:
+        for arg in op_args:
             comm_pattern = get_comm_pattern(from_node=arg, to_node=op)
             if comm_pattern:
                 pair = CommNodePair(from_node=arg, to_node=op, node_type=comm_pattern)
