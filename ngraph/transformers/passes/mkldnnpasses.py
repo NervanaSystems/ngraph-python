@@ -140,7 +140,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     """
 
-    def __init__(self, mkldnn):
+    def __init__(self, mkldnn, **kwargs):
+        super(MklCreateOpDescriptors, self).__init__(**kwargs)
         assert mkldnn.enabled
         self.mkldnn = mkldnn
 

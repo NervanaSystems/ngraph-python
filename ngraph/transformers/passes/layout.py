@@ -104,7 +104,8 @@ class GenerateLayoutDomains(PeepholeGraphPass):
     """
     This pass generates possible layouts (domain) for each op in the graph
     """
-    def __init__(self, transformer):
+    def __init__(self, transformer, **kwargs):
+        super(GenerateLayoutDomains, self).__init__(**kwargs)
         self.transformer = transformer
         self.domains = dict()
 
@@ -124,7 +125,8 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
     that maps from a layout choice to a cost. Binary constraints are generated for (op, arg) pairs
     when visiting the op.
     """
-    def __init__(self, transformer):
+    def __init__(self, transformer, **kwargs):
+        super(GenerateLayoutConstraints, self).__init__(**kwargs)
         self.transformer = transformer
         self.unary_constraints = dict()
         self.binary_constraints = dict()
@@ -163,7 +165,8 @@ class AssignLayouts(GraphPass):
     and needs to be implemented as one or more heuristics since branch-and-bound min cost
     search has exponential running time.
     """
-    def __init__(self, domain_pass, constraint_pass):
+    def __init__(self, domain_pass, constraint_pass, **kwargs):
+        super(AssignLayouts, self).__init__(**kwargs)
         self.domain_pass = domain_pass
         self.constraint_pass = constraint_pass
 
@@ -276,7 +279,8 @@ class AddLayoutConversions(PeepholeGraphPass):
     assignment for the op and a layout assignment for the arg. If a conversion is needed
     the constraint implementation will generate it.
     """
-    def __init__(self, assign_pass):
+    def __init__(self, assign_pass, **kwargs):
+        super(AddLayoutConversions, self).__init__(**kwargs)
         self.assign_pass = assign_pass
         self.binary_constraints = None
         self.visited = set()

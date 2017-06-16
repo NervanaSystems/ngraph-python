@@ -14,7 +14,8 @@ class FlexDtypePass(PeepholeGraphPass):
 
 class FlexDECPass(PeepholeGraphPass):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        super(FlexDECPass, self).__init__(**kwargs)
         self.propagate_flex_entry = False
 
     @generic_method(dispatch_base_type=Op)

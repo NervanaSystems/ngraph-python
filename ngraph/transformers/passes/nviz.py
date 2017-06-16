@@ -30,8 +30,8 @@ class JSONPass(GraphPass):
     """
     Example of a graphpass that dumps a JSON version of the graph to disk
     """
-    def __init__(self):
-        super(JSONPass, self).__init__()
+    def __init__(self, **kwargs):
+        super(JSONPass, self).__init__(**kwargs)
 
     def do_pass(self, ops, init):
         nodes = dict()
