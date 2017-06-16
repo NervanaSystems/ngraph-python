@@ -140,6 +140,179 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
+class OpAccessor(with_metaclass(abc.ABCMeta, object)):
+    """
+    Provides access to some op properties when they may have been modified during passes.
+    """
+    def op_arg(self, op, n):
+        """
+        Returns the nth argument of an op-graph Op op as an op-graph Op.
+
+        Overridden by the exec graph to reflect modifications made to the graph.
+
+        Args:
+            op: The op-graph op we want an args for.
+            n: The arg number.
+
+        Returns:
+            The arg's op.
+
+        """
+
+    def op_args(self, op):
+        """
+        Returns all the arguments of an op-graph Op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The args for op.
+
+        """
+
+    def get_device_op(self, op):
+        """
+        Helper function that traverses through any reshape ops or value ops
+        to return the tensor op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The op providing actual storage for op's value.
+
+        """
+
+class OpGraphOpAccessor(OpAccessor):
+    """
+    Provides access to some op properties when they may have been modified during passes.
+    """
+    def op_arg(self, op, n):
+        """
+        Returns the nth argument of an op-graph Op op as an op-graph Op.
+
+        Overridden by the exec graph to reflect modifications made to the graph.
+
+        Args:
+            op: The op-graph op we want an args for.
+            n: The arg number.
+
+        Returns:
+            The arg's op.
+
+        """
+        return self.op_args(op)[n]
+
+    def op_args(self, op):
+        """
+        Returns all the arguments of an op-graph Op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The args for op.
+
+        """
+        return op.args
+
+    def get_device_op(self, op):
+        """
+        Helper function that traverses through any reshape ops or value ops
+        to return the tensor op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The op providing actual storage for op's value.
+
+        """
+        while isinstance(op, SequentialOp):
+            op = op.value_tensor
+
+        if op.is_device_op:
+            return op
+
+        if isinstance(op, TensorValueOp):
+            return op.tensor
+
+        for arg in op.args:
+            dev_op = self.get_device_op(arg)
+            if dev_op:
+                return dev_op
+
+        return None
+
+
+
+op_graph_op_accessor = OpGraphOpAccessor()
+
+
+class DelegateOpAccessor(OpAccessor):
+    """
+    Delegates access to Op properties to op_accessor, which defaults to the op-graph accessor.
+    """
+    def __init__(self, op_accessor=op_graph_op_accessor):
+        self.op_accessor = op_accessor
+
+    def op_arg(self, op, n):
+        """
+        Returns the nth argument of an op-graph Op op as an op-graph Op.
+
+        Overridden by the exec graph to reflect modifications made to the graph.
+
+        Args:
+            op: The op-graph op we want an args for.
+            n: The arg number.
+
+        Returns:
+            The arg's op.
+
+        """
+        return self.op_accessor.op_arg(op, n)
+
+    def op_args(self, op):
+        """
+        Returns all the arguments of an op-graph Op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The args for op.
+
+        """
+        return self.op_accessor.op_args(op)
+
+    def get_device_op(self, op):
+        """
+        Helper function that traverses through any reshape ops or value ops
+        to return the tensor op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The op providing actual storage for op's value.
+
+        """
+        return self.op_accessor.get_device_op(op)
+
+
 class Op(NameableValue):
     """
     Any operation that can be in an AST.
@@ -692,6 +865,78 @@ class Op(NameableValue):
         self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
+
+    @property
+    def is_commutative(self):
+        """
+
+        Returns: True if the Op is commutative.
+
+        """
+        return False
+
+
+class OpDelegate(with_metaclass(abc.ABCMeta, object)):
+    def op_arg(self, op, n):
+        """
+        Returns the nth argument of an op-graph Op op as an op-graph Op.
+
+        Overridden by the exec graph to reflect modifications made to the graph.
+
+        Args:
+            op: The op-graph op we want an args for.
+            n: The arg number.
+
+        Returns:
+            The arg's op.
+
+        """
+        return self.op_args(op)[n]
+
+    def op_args(self, op):
+        """
+        Returns all the arguments of an op-graph Op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The args for op.
+
+        """
+        return op.args
+
+    def get_device_op(self, op):
+        """
+        Helper function that traverses through any reshape ops or value ops
+        to return the tensor op.
+
+        Overridden by the exec graph to reflect modification made to the graph.
+
+        Args:
+            op: An op-graph Op.
+
+        Returns:
+            The op providing actual storage for op's value.
+
+        """
+        while isinstance(op, SequentialOp):
+            op = op.value_tensor
+
+        if op.is_device_op:
+            return op
+
+        if isinstance(op, TensorValueOp):
+            return op.tensor
+
+        for arg in op.args:
+            dev_op = self.get_device_op(arg)
+            if dev_op:
+                return dev_op
+
+        return None
 
 
 class MutateInsteadOfCopyWithNewArgsMixin(object):
@@ -2984,105 +3229,182 @@ class BinaryElementWiseOp(ElementWiseOp):
         return len(x.axes) == 0 and len(y.axes) == 0
 
 
-def create_binary_elementwise(name,
-                              func_name=None,
-                              generate_adjoints=None):
-    d = {}
-    if generate_adjoints is not None:
-        d['generate_adjoints'] = generate_adjoints
-    BinClass = type(name, (BinaryElementWiseOp,), d)
+class CommutativeBinaryElementWiseOp(BinaryElementWiseOp):
 
-    def func(*args, **kwargs):
-        return BinClass(*args, **kwargs)
-    func.__name__ = func_name
+    def __init__(self, x, y, **kwargs):
+        super(CommutativeBinaryElementWiseOp, self).__init__(x, y, **kwargs)
 
-    return BinClass, func
+    @property
+    def is_commutative(self):
+        return True
 
 
-def add_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta)
-    y.generate_add_delta(adjoints, delta)
+class Add(CommutativeBinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Add, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, delta)
 
 
-Add, add = create_binary_elementwise('Add', 'add', add_adjoints)
+def add(x, y, dtype=None):
+    return Add(x, y, dtype=dtype)
 
 
-def subtract_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta)
-    y.generate_add_delta(adjoints, -delta)
+class Subtract(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Subtract, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, -delta)
+
+def subtract(x, y, dtype=None):
+    return Subtract(x, y, dtype=dtype)
 
 
-Subtract, subtract = create_binary_elementwise('Subtract', 'subtract', subtract_adjoints)
+class Multiply(CommutativeBinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Multiply, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * y)
+        y.generate_add_delta(adjoints, x * delta)
 
 
-def multiply_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * y)
-    y.generate_add_delta(adjoints, x * delta)
+def multiply(x, y, dtype=None):
+    return Multiply(x, y, dtype=dtype)
 
 
-Multiply, multiply = create_binary_elementwise('Multiply', 'multiply', multiply_adjoints)
+class Divide(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Divide, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * self / x)
+        y.generate_add_delta(adjoints, -delta * self / y)
 
 
-def divide_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * self / x)
-    y.generate_add_delta(adjoints, -delta * self / y)
+def divide(x, y, dtype=None):
+    return Divide(x, y, dtype=dtype)
 
 
-Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
+class FloorDivide(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(FloorDivide, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * self // x)
+        y.generate_add_delta(adjoints, -delta * self // y)
 
 
-def floordivide_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * self // x)
-    y.generate_add_delta(adjoints, -delta * self // y)
+def floordivide(x, y, dtype=None):
+    return FloorDivide(x, y, dtype=dtype)
 
 
-FloorDivide, floordivide = create_binary_elementwise(
-    'FloorDivide', 'floordivide', floordivide_adjoints)
+class Mod(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Mod, self).__init__(x, y, **kwargs)
+
+    pass
 
 
-Mod, mod = create_binary_elementwise('Mod', 'mod')
+def mod(x, y, dtype=None):
+    return Mod(x, y, dtype=dtype)
 
 
-def maximum_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, greater(x, y) * delta)
-    y.generate_add_delta(adjoints, greater(y, x) * delta)
+class Maximum(CommutativeBinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Maximum, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, greater(x, y) * delta)
+        y.generate_add_delta(adjoints, greater(y, x) * delta)
 
 
-Maximum, maximum = create_binary_elementwise('Maximum', 'maximum', maximum_adjoints)
+def maximum(x, y, dtype=None):
+    return Maximum(x, y, dtype=dtype)
 
 
-def minimum_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, less(x, y) * delta)
-    y.generate_add_delta(adjoints, less(y, x) * delta)
+class Minimum(CommutativeBinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Minimum, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, less(x, y) * delta)
+        y.generate_add_delta(adjoints, less(y, x) * delta)
 
 
-Minimum, minimum = create_binary_elementwise('Minimum', 'minimum', minimum_adjoints)
+def minimum(x, y, dtype=None):
+    return Minimum(x, y, dtype=dtype)
 
 
-def power_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * y * self / x)
-    y.generate_add_delta(adjoints, delta * self * log(x))
+class Power(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Power, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * y * self / x)
+        y.generate_add_delta(adjoints, delta * self * log(x))
 
 
-Power, power = create_binary_elementwise('Power', 'power', power_adjoints)
+def power(x, y, dtype=None):
+    return Power(x, y, dtype=dtype)
 
 
-Equal, equal = create_binary_elementwise('Equal', 'equal')
+class Equal(CommutativeBinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Equal, self).__init__(x, y, **kwargs)
 
 
-NotEqual, not_equal = create_binary_elementwise('NotEqual', 'not_equal')
+def equal(x, y, dtype=None):
+    return Equal(x, y, dtype=dtype)
 
 
-Greater, greater = create_binary_elementwise('Greater', 'greater')
+class NotEqual(CommutativeBinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(NotEqual, self).__init__(x, y, **kwargs)
 
 
-Less, less = create_binary_elementwise('Less', 'less')
+def not_equal(x, y, dtype=None):
+    return NotEqual(x, y, dtype=dtype)
 
 
-GreaterEqual, greater_equal = create_binary_elementwise('GreaterEqual', 'greater_equal')
+class Greater(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Greater, self).__init__(x, y, **kwargs)
 
 
-LessEqual, less_equal = create_binary_elementwise('LessEqual', 'less_equal')
+def greater(x, y, dtype=None):
+    return Greater(x, y, dtype=dtype)
+
+
+class Less(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(Less, self).__init__(x, y, **kwargs)
+
+
+def less(x, y, dtype=None):
+    return Less(x, y, dtype=dtype)
+
+
+class GreaterEqual(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(GreaterEqual, self).__init__(x, y, **kwargs)
+
+
+def greater_equal(x, y, dtype=None):
+    return GreaterEqual(x, y, dtype=dtype)
+
+
+class LessEqual(BinaryElementWiseOp):
+    def __init__(self, x, y, **kwargs):
+        super(LessEqual, self).__init__(x, y, **kwargs)
+
+
+def less_equal(x, y, dtype=None):
+    return LessEqual(x, y, dtype=dtype)
 
 
 class ContiguousOp(TensorOp):

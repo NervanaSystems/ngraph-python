@@ -100,28 +100,6 @@ class PruneContiguousPass(PeepholeGraphPass):
         self.replace_op(op, x)
 
 
-def get_device_op(op):
-    """
-    Helper function that traverses through any reshape ops or value ops
-    to return the tensor op
-    """
-    while isinstance(op, SequentialOp):
-        op = op.value_tensor
-
-    if op.is_device_op:
-        return op
-
-    if isinstance(op, TensorValueOp):
-        return op.tensor
-
-    for arg in op.args:
-        dev_op = get_device_op(arg)
-        if dev_op:
-            return dev_op
-
-    return None
-
-
 class GenerateLayoutDomains(PeepholeGraphPass):
     """
     This pass generates possible layouts (domain) for each op in the graph
@@ -162,7 +140,7 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
             # Binary constraints map each op to a list of tuples storing (argument, constraint)
             self.binary_constraints[op] = []
             for arg in op_args:
-                arg_op = get_device_op(arg)
+                arg_op = self.get_device_op(arg)
                 if arg_op:
                     self.binary_constraints[op].append(
                         (arg_op, self.transformer.get_layout_change_cost_function(op, arg)))
@@ -323,7 +301,7 @@ class AddLayoutConversions(PeepholeGraphPass):
                 new_args = []
                 for arg in args:
                     b_constraint = None
-                    dev_op = get_device_op(arg)
+                    dev_op = self.get_device_op(arg)
                     orig_arg_op = None
                     if dev_op is None:
                         new_args.append(arg)
