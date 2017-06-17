@@ -102,7 +102,7 @@ def pickle_load(filepath):
         return pickle.load(filepath)
 
 
-def fetch_file(url, sourcefile, destfile, totalsz):
+def fetch_file(url, sourcefile, destfile, totalsz=None):
     """
     Download the file specified by the given URL.
 
@@ -117,10 +117,18 @@ def fetch_file(url, sourcefile, destfile, totalsz):
                        stream=True)
 
     chunksz = 1024**2
-    nchunks = totalsz // chunksz
+    if totalsz is None:
+        if "Content-length" in req.headers:
+            totalsz = int(req.headers["Content-length"])
+            nchunks = totalsz // chunksz
+        else:
+            print("Unable to determine total file size.")
+            nchunks = None
+    else:
+        nchunks = totalsz // chunksz
 
     print("Downloading file to: {}".format(destfile))
     with open(destfile, 'wb') as f:
-        for data in tqdm(req.iter_content(chunksz), total=nchunks):
+        for data in tqdm(req.iter_content(chunksz), total=nchunks, unit="MB"):
             f.write(data)
     print("Download Complete")
