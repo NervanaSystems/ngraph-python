@@ -45,7 +45,7 @@ def model(action_axes):
         neon.Affine(
             weight_init=neon.XavierInit(),
             bias_init=neon.ConstantInit(),
-            activation=neon.Rectlin(),
+            activation=None,
             axes=(action_axes, )
         ),
     ])
