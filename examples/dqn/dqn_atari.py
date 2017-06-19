@@ -205,6 +205,7 @@ class TerminateOnEndOfLifeWrapper(gym.Wrapper):
 
         return observation
 
+
 class DimShuffleWrapper(gym.Wrapper):
     """
     Reshape the observation provided by open ai gym atari environment to match
@@ -214,7 +215,9 @@ class DimShuffleWrapper(gym.Wrapper):
     def __init__(self, environment):
         super(DimShuffleWrapper, self).__init__(environment)
 
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(4, 84, 84))
+        self.observation_space = gym.spaces.Box(
+            low=0, high=1, shape=(4, 84, 84)
+        )
 
     def _modify_observation(self, observation):
         observation = np.asarray(observation)
@@ -233,8 +236,6 @@ class DimShuffleWrapper(gym.Wrapper):
 
     def _reset(self):
         return self._modify_observation(self.env.reset())
-
-
 
 
 def main():
