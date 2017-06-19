@@ -19,7 +19,7 @@ import ngraph.transformers as transformers
 from ngraph.op_graph.axes import make_axis, make_axes
 from ngraph.transformers.base import UnsupportedTransformerException
 
-from ngraph.op_graph.convolution import convolution
+from ngraph.op_graph.convolution import convolution, deconvolution
 from ngraph.op_graph.pooling import pooling
 from ngraph.op_graph.lookuptable import lookuptable
 from ngraph.op_graph.ctc import ctc
@@ -49,6 +49,7 @@ __all__ = [
     'constant',
     'convolution',
     'cos',
+    'deconvolution',
     'exp',
     'log',
     'lookuptable',

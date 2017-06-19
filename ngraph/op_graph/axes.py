@@ -811,6 +811,14 @@ class DuplicateAxisNames(ValueError):
         self.duplicate_axis_names = duplicate_axis_names
 
 
+class IncompatibleAxesError(ValueError):
+    pass
+
+
+class UnmatchedAxesError(IncompatibleAxesError):
+    pass
+
+
 class AxesMap(frozendict):
     """
     AxesMap provides a way to define a axis name mapping: {Axis.name: Axis.name} and
@@ -1096,7 +1104,8 @@ class TensorDescription(NameableValue):
         self.__is_persistent = is_persistent
         self.__is_input = is_input
         self.__is_placeholder = is_placeholder
-
+        if not isinstance(self.name, str):
+            raise ValueError()
         for axis in axes:
             if axis.length is None:
                 raise ValueError((
@@ -1163,6 +1172,10 @@ class TensorDescription(NameableValue):
         """
         return (self.shape, self.dtype, self.offset, self.strides, self.layout)
 
+    @property
+    def axes_key(self):
+        return (self.axes, self.shape, self.dtype, self.offset, self.strides, self.layout)
+
     def flatten(self, new_axes):
         """
         Flattens a tensor description to give it the Axes in new_axes.
@@ -1201,7 +1214,8 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rFlatten',
         )
 
     def unflatten(self, new_axes):
@@ -1282,7 +1296,8 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rUnflatten',
         )
 
     def transpose(self):
@@ -1302,7 +1317,8 @@ class TensorDescription(NameableValue):
             full_strides=tuple(full_strides),
             full_sizes=tuple(full_sizes),
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rTranspose',
         )
 
     def clone(self):
@@ -1319,7 +1335,8 @@ class TensorDescription(NameableValue):
             full_strides=self.full_strides,
             full_sizes=self.full_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self.next_tensor_description,
+            name=self.name + 'cView',
         )
 
     def broadcast(self, new_axes):
@@ -1399,7 +1416,8 @@ class TensorDescription(NameableValue):
             full_strides=new_strides,
             full_sizes=new_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rReorderBroadcast',
         )
 
     def cast(self, new_axes):
@@ -1426,7 +1444,8 @@ class TensorDescription(NameableValue):
             full_strides=full_strides,
             full_sizes=full_sizes,
             offset=self.offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + 'rCast',
         )
 
     def slice(self, slices, new_axes):
@@ -1497,7 +1516,8 @@ class TensorDescription(NameableValue):
             full_strides=tuple(full_strides),
             full_sizes=tuple(full_sizes),
             offset=offset,
-            next_tensor_description=self
+            next_tensor_description=self,
+            name=self.name + "rSlice",
         )
 
     @property
@@ -1586,38 +1606,12 @@ class TensorDescription(NameableValue):
         self.__layout = value
 
     @property
-    def buffer(self):
-        """The description of the underlying storage."""
-        return self.base.__buffer
-
-    @buffer.setter
-    def buffer(self, value):
-        """
-        Sets the backend-specific memory to be used by the tensor.
-
-        Arguments:
-          value: the buffer to use
-
-        Returns:
-        """
-        self.base.__buffer = value
-
-    @property
     def register(self):
         return self.base.__register
 
     @register.setter
     def register(self, value):
         self.base.__register = value
-
-    @property
-    def value(self):
-        """A device handle to the value."""
-        return self.__value
-
-    @value.setter
-    def value(self, value):
-        self.__value = value
 
     def is_base(self):
         """This tensor provides its own storage."""

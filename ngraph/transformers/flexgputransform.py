@@ -18,20 +18,21 @@ from __future__ import division
 import numpy as np
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
     from ngraph.flex import GPUFlexManager, GPUFlex
 except ImportError:
     raise UnsupportedTransformerException("autoflex package not installed")
 
-from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp
+from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp, AssignOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
-from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel
+from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel, FlexAssignKernel
 from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
@@ -81,6 +82,7 @@ class FlexGPUTransformer(GPUTransformer):
         self.fixed_point = fixed_point
 
         # flex passes for setting Op dtypes to flex
+        self.register_graph_pass(FlexFusion(), 0)
         self.register_graph_pass(ClearTensorDescriptions())
         self.register_graph_pass(FlexDtypePass())
 
@@ -99,8 +101,9 @@ class FlexGPUTransformer(GPUTransformer):
 
         FlexDECPass().do_pass(self.ops, self)
 
-    def transform_ordered_ops(self, ordered_ops, name):
-        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
+            computation, ordered_ops, name)
 
         # device memory allocation after drv init
         self.flex_manager.allocate()
@@ -175,9 +178,8 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
         self.flex_entry = self.transformer.flex_manager.make_flex_entry(name=self.name)
 
     def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return FlexGPUDeviceTensor(self.transformer, self, tensor_description,
-                                   name="v_" + tensor_description.name + "_" + shape_str)
+        name = self.get_tensor_name(tensor_description)
+        return FlexGPUDeviceTensor(self.transformer, self, tensor_description, name=name)
 
 
 class FlexGPUKernelGroup(GPUKernelGroup):
@@ -196,6 +198,11 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     @generic_method(Op)
     def add_kernel(self, op):
         super(FlexGPUKernelGroup, self).add_kernel(op)
+
+    @add_kernel.on_type(AssignOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexAssignKernel(self.transformer,
+                                             op.call_info()[0], op.call_info()[1]))
 
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):

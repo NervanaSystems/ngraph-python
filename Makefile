@@ -28,9 +28,10 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
-TEST_OPTS := --timeout=300 --cov=ngraph
-TEST_DIRS := tests/ ngraph/frontends/tensorflow/tests/ ngraph/frontends/neon/tests
-TEST_DIRS_FLEX := flex_tests/ tests/
+TEST_OPTS := --timeout=300 --cov=ngraph --timeout_method=thread
+TEST_DIRS := tests/
+TEST_DIRS_NEON := ngraph/frontends/neon/tests
+TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
@@ -67,6 +68,14 @@ examples_prepare:
 doc_prepare:
 	pip install -r doc_requirements.txt > /dev/null 2>&1
 
+# for internal use only
+# the private autoflex repo is expected to be installed in ../autoflex
+# update the pip install command below to reference the path to the autoflex directory
+autoflex_prepare:
+	@echo
+	@echo Attempting to update autoflex to the latest version in ../autoflex
+	pip install ../autoflex --upgrade
+
 uninstall:
 	pip uninstall -y ngraph
 	pip uninstall -r requirements.txt
@@ -80,44 +89,80 @@ clean:
 	find . -name "__pycache__" -type d -delete
 	rm -f .coverage .coverage.*
 	rm -rf ngraph.egg-info
-	echo
+	@echo
 
 test_all_transformers: test_cpu test_hetr test_gpu test_flex
 
-test_flex: test_prepare clean
-	echo Running flex unit tests...
-	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled" \
-	--junit-xml=testout_test_flex_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS_FLEX)
+test_flex: gpu_prepare test_prepare clean
+	@echo
+	@echo The autoflex package is required for flex testing ...
+	@echo WARNING: flex tests will report the following message if autoflex has not been installed:
+	@echo
+	@echo "     argument --transformer: invalid choice: 'flexgpu' (choose from 'cpu', 'gpu', \
+	'hetr')"
+
+	@echo
+	@echo "In case of test failures, clone the private autoflex repo in ../autoflex and execute \
+	make autoflex_prepare"
+	@echo
+	@echo Running flex unit tests...
+	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
+	and not hetr_only or flex_only" \
+	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
+	$(TEST_DIRS) $(TEST_DIRS_NEON)
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
+test_mkldnn: export PYTHONHASHSEED=0
 test_mkldnn: export MKL_TEST_ENABLE=1
-test_mkldnn: export LD_PRELOAD=./mkldnn_engine.so
-test_mkldnn: test_prepare clean test_cpu test_hetr
+test_mkldnn: export LD_PRELOAD+=:./mkldnn_engine.so
+test_mkldnn: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
+test_mkldnn: test_prepare clean
+test_mkldnn:
+	@echo Running unit tests for core and cpu transformer tests...
+	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
+	--junit-xml=testout_test_cpu_$(PY).xml \
+	$(TEST_OPTS) $(TEST_DIRS)
+	@echo Running unit tests for hetr dependent transformer tests...
+	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
+	--junit-xml=testout_test_hetr_$(PY).xml \
+	--cov-append \
+	$(TEST_OPTS) $(TEST_DIRS)
+	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
+test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
-	py.test -m "not hetr_only" --boxed -n auto \
+	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
+test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
+test_gpu: export PYTHONHASHSEED=0
 test_gpu: gpu_prepare test_prepare clean
 	echo Running unit tests for gpu dependent transformer tests...
 	py.test --transformer hetr -m "hetr_gpu_only" \
+	--boxed \
 	--junit-xml=testout_test_gpu_hetr_only_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
-	py.test --transformer gpu -m "transformer_dependent" --boxed -n auto \
-	--junit-xml=testout_test_gpu_tx_dependent_$(PY).xml \
-	--cov-append \
+	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
+	not separate_execution" \
+	--boxed -n auto --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
+	separate_execution" \
+	--boxed --junit-xml=testout_test_gpu_tx_dependent_separate_execution_$(PY).xml --cov-append \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_gpu_$(PY).xml
 
+test_hetr: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
+test_hetr: export PYTHONHASHSEED=0
 test_hetr: test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
-	py.test --transformer hetr -m "transformer_dependent or hetr_only" --boxed -n auto \
+	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mxnet: test_prepare clean
@@ -144,18 +189,18 @@ examples: examples_prepare
 gpu_examples: examples_prepare gpu_prepare
 	for file in `find examples -type f -executable | grep -v hetr`; do echo Running $$file... ; ./$$file -b gpu; done
 
-style:
+style: test_prepare
 	flake8 --output-file style.txt --tee $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS)
 	pylint --reports=n --output-format=colorized --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
-lint:
+lint: test_prepare
 	pylint --output-format=colorized ngraph
 
 lint3k:
 	pylint --py3k $(PYLINT3K_ARGS) --ignore=.venv *
 
-check:
-	echo "Running style checks.  Number of style errors is... "
+check: test_prepare
+	echo "Running style checks.  Number of style faults is... "
 	-flake8 --count $(STYLE_CHECK_OPTS) $(STYLE_CHECK_DIRS) \
 	 > /dev/null
 	echo

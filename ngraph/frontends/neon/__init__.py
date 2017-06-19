@@ -26,3 +26,4 @@ from ngraph.frontends.neon.layer import *
 from ngraph.frontends.neon.model import *
 from ngraph.frontends.neon.optimizer import *
 from ngraph.frontends.neon.initializer import *
+from ngraph.frontends.neon.data import *

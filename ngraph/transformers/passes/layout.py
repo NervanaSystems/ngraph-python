@@ -18,12 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SetItemOp, SequentialOp
-from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv
-from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
-from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.op_graph.ctc import CTCOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, SequentialOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -97,12 +92,12 @@ class PruneContiguousPass(PeepholeGraphPass):
     TODO: stop inserting contiguous ops? Need to handle other transformer reqs though
     """
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         pass
 
     @visit.on_type(ContiguousOp)
-    def visit(self, op):
-        self.replace_op(op, op.args[0])
+    def visit(self, op, x):
+        self.replace_op(op, x)
 
 
 def get_device_op(op):
@@ -113,8 +108,11 @@ def get_device_op(op):
     while isinstance(op, SequentialOp):
         op = op.value_tensor
 
-    if op.is_device_op or isinstance(op, TensorValueOp):
+    if op.is_device_op:
         return op
+
+    if isinstance(op, TensorValueOp):
+        return op.tensor
 
     for arg in op.args:
         dev_op = get_device_op(arg)
@@ -133,8 +131,12 @@ class GenerateLayoutDomains(PeepholeGraphPass):
         self.domains = dict()
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
-        if op.is_device_op or isinstance(op, TensorValueOp):
+    def visit(self, op, *args):
+        if op.is_device_op:
+            self.domains[op] = self.transformer.get_layouts(op)
+        elif isinstance(op, TensorValueOp) and op.tensor not in self.domains:
+            # Tensor value ops share layout with underlying assignable tensor op
+            op = op.tensor
             self.domains[op] = self.transformer.get_layouts(op)
 
 
@@ -151,15 +153,15 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
         self.users = dict()
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
-        if op.is_device_op or isinstance(op, TensorValueOp):
+    def visit(self, op, *op_args):
+        if op.is_device_op:
             # Generate unary constraint by getting the cost function for this op
             self.unary_constraints[op] = self.transformer.get_layout_cost_function(op)
 
             # Find all args that are device ops and generate binary constraints
             # Binary constraints map each op to a list of tuples storing (argument, constraint)
             self.binary_constraints[op] = []
-            for arg in op.args:
+            for arg in op_args:
                 arg_op = get_device_op(arg)
                 if arg_op:
                     self.binary_constraints[op].append(
@@ -170,6 +172,10 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
                         self.users[arg_op] = [op]
                     else:
                         self.users[arg_op].append(op)
+        elif isinstance(op, TensorValueOp):
+            self.unary_constraints[op.tensor] = \
+                self.transformer.get_layout_cost_function(op.tensor)
+            self.binary_constraints[op.tensor] = []
 
 
 class AssignLayouts(GraphPass):
@@ -301,108 +307,50 @@ class AddLayoutConversions(PeepholeGraphPass):
         self.binary_constraints = self.assign_pass.binary_constraints
         super(AddLayoutConversions, self).do_pass(ops, transformer)
 
-    @generic_method(dispatch_base_type=Op)
-    def op_from_args(self, op, args):
-        """
-        This generic method creates a new op given an original op and new args. The purpose here
-        is to replace args for an op with layout conversions as needed but keep the op the same
-        otherwise.
-        """
-        op_type = type(op)
-        new_op = op_type(*args)
-        return new_op
-
-    @op_from_args.on_type(OneHotOp)
-    def op_from_args(self, op, args):
-        return OneHotOp(*args, axis=op.axis)
-
-    @op_from_args.on_type(ReductionOp)
-    def op_from_args(self, op, args):
-        op_type = type(op)
-        new_op = op_type(*args, reduction_axes=op.reduction_axes)
-        return new_op
-
-    @op_from_args.on_type(SetItemOp)
-    def op_from_args(self, op, args):
-        return SetItemOp(args[0], op.item, args[1])
-
-    @op_from_args.on_type(CTCOp)
-    def op_from_args(self, op, args):
-        return CTCOp(*args, axes=op.axes)
-
-    @op_from_args.on_type(ConvolutionOp)
-    def op_from_args(self, op, args):
-        return ConvolutionOp(op.conv_params, *args, axes=op.axes)
-
-    @op_from_args.on_type(bprop_conv)
-    def op_from_args(self, op, args):
-        return bprop_conv(args[0], op.fprop.args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(update_conv)
-    def op_from_args(self, op, args):
-        return update_conv(args[0], args[1], op.fprop.args[1], op.fprop)
-
-    @op_from_args.on_type(PoolingOp)
-    def op_from_args(self, op, args):
-        return PoolingOp(op.pool_params, args[0], axes=op.axes)
-
-    @op_from_args.on_type(BpropPoolOp)
-    def op_from_args(self, op, args):
-        return BpropPoolOp(args[0], op.fprop.args[0], op.fprop)
-
-    @op_from_args.on_type(LookupTableOp)
-    def op_from_args(self, op, args):
-        return LookupTableOp(args[0], args[1], op.axes, op.update, op.pad_idx)
-
-    @op_from_args.on_type(update_lut)
-    def op_from_args(self, op, args):
-        return update_lut(args[0], op.fprop.args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(bprop_lut)
-    def op_from_args(self, op, args):
-        return bprop_lut(args[0], args[1], op.fprop.args[1], op.fprop)
-
-    @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         This pass visits every op with a layout assigned and checks the args against constraints
         to determine whether a layout conversion is needed between the arg and the op. If a
         conversion is needed, it is generated by the constraint and the op is replaced by a new
         op whose args are the converted args.
         """
-        if "layout" in op.metadata and op not in self.visited:
-            self.visited.add(op)
-            new_args = []
-            for arg in op.args:
-                b_constraint = None
-                dev_op = get_device_op(arg)
-                orig_arg_op = None
-                if dev_op is None:
-                    new_args.append(arg)
-                    continue
+        if op not in self.visited:
+            if isinstance(op, TensorValueOp):
+                op.metadata["layout"] = op.tensor.metadata["layout"]
+                self.visited.add(op)
+            elif "layout" in op.metadata and "nolayout" not in op.metadata:
+                self.visited.add(op)
+                new_args = []
+                for arg in args:
+                    b_constraint = None
+                    dev_op = get_device_op(arg)
+                    orig_arg_op = None
+                    if dev_op is None:
+                        new_args.append(arg)
+                        continue
 
-                # Find matching constraint
-                for arg_op, constraint in self.binary_constraints[op]:
-                    if arg_op.forwarded is dev_op:
-                        b_constraint = constraint
-                        orig_arg_op = arg_op
-                        break
+                    # Find matching constraint
+                    for arg_op, constraint in self.binary_constraints[op]:
+                        if arg_op.forwarded is dev_op and constraint.arg is arg:
+                            b_constraint = constraint
+                            orig_arg_op = arg_op
+                            break
 
-                # Get layout conversion ops for this arg
-                if b_constraint is not None:
-                    new_arg = b_constraint.get_layout_transform(orig_arg_op.metadata["layout"],
-                                                                op.metadata["layout"],
-                                                                arg)
-                    new_args.append(new_arg)
-                    if new_arg is not arg:
-                        self.visited.add(new_arg)
-                else:
-                    new_args.append(arg)
+                    # Get layout conversion ops for this arg
+                    if b_constraint is not None:
+                        new_arg = b_constraint.get_layout_transform(orig_arg_op.metadata["layout"],
+                                                                    op.metadata["layout"],
+                                                                    arg)
+                        new_args.append(new_arg)
+                        if new_arg is not arg:
+                            self.visited.add(new_arg)
+                    else:
+                        new_args.append(arg)
 
-            # Replace op if any inputs need to be transformed
-            if any(a is not b for a, b in zip(new_args, list(op.args))):
-                new_op = self.op_from_args(op, new_args)
-                new_op.metadata["layout"] = op.metadata["layout"]
-                self.replace_op(op, new_op)
-                self.visited.add(new_op)
-                self.binary_constraints[new_op] = self.binary_constraints[op]
+                # Replace op if any inputs need to be transformed
+                if any(a is not b for a, b in zip(new_args, list(op.args))):
+                    new_op = op.copy_with_new_args(new_args)
+                    new_op.metadata["layout"] = op.metadata["layout"]
+                    self.replace_op(op, new_op)
+                    self.visited.add(new_op)
+                    self.binary_constraints[new_op] = self.binary_constraints[op]

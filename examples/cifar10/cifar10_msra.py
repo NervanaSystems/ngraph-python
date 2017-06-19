@@ -49,7 +49,7 @@ if args.use_aeon:
     train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size, args.num_iterations)
 else:
     from ngraph.frontends.neon import ArrayIterator  # noqa
-    from cifar10 import CIFAR10  # noqa
+    from ngraph.frontends.neon import CIFAR10  # noqa
     train_data, valid_data = CIFAR10(args.data_dir).load_data()
     train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
     valid_set = ArrayIterator(valid_data, args.batch_size)
@@ -128,7 +128,7 @@ class residual_network(Sequential):
         layers.append(Affine(axes=ax.Y,
                              weight_init=KaimingInit(),
                              activation=Softmax()))
-        self.layers = layers
+        super(residual_network, self).__init__(layers=layers)
 
 
 def loop_eval(dataset, computation, metric_names):

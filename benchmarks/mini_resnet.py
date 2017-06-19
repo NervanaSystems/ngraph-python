@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from __future__ import print_function
-from benchmark import fill_feed_dict, run_benchmark, print_benchmark_results
-from fake_cifar_generator import FakeCIFAR
+from benchmark import Benchmark
+from fake_data_generator import generate_data
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
@@ -23,8 +23,7 @@ from ngraph.frontends.neon import ax
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
 import numpy as np
-
-ax.Y.length = 10
+import argparse
 
 
 # TODO: Need to refactor and make it shareable with Alex's tests
@@ -45,7 +44,7 @@ def conv_params(fsize, nfm, strides=1, relu=False, batch_norm=False):
 
 
 class f_module(object):
-    def __init__(self, nfm, first=False, strides=1):
+    def __init__(self, nfm, first=False, strides=1, batch_norm=False):
 
         self.trunk = None
         self.side_path = None
@@ -57,56 +56,68 @@ class f_module(object):
             self.side_path = Convolution(
                 **conv_params(1, nfm * 4, strides=strides, relu=False, batch_norm=False))
         else:
-            main_path = [BatchNorm(), Activation(Rectlin())] + main_path
+            if batch_norm:
+                main_path = [BatchNorm(), Activation(Rectlin())] + main_path
+            else:
+                main_path = [Activation(Rectlin())] + main_path
 
         if strides == 2:
-            self.trunk = Sequential([BatchNorm(), Activation(Rectlin())])
+            if batch_norm:
+                self.trunk = Sequential([BatchNorm(), Activation(Rectlin())])
+            else:
+                self.trunk = Sequential([Activation(Rectlin())])
 
         self.main_path = Sequential(main_path)
 
     def __call__(self, x):
-        with ng.metadata(device_id=('1', '2'), parallel=ax.N):
-            t_x = self.trunk(x) if self.trunk else x
-            s_y = self.side_path(t_x) if self.side_path else t_x
-            m_y = self.main_path(t_x)
-            return s_y + m_y
+        t_x = self.trunk(x) if self.trunk else x
+        s_y = self.side_path(t_x) if self.side_path else t_x
+        m_y = self.main_path(t_x)
+        return s_y + m_y
 
 
 class mini_residual_network(Sequential):
-    def __init__(self, inputs, stage_depth, batch_norm=True, activation=True, preprocess=True):
+    def __init__(self, inputs, dataset, stage_depth,
+                 batch_norm=False, activation=False, preprocess=False):
         nfms = [2**(stage + 4) for stage in sorted(list(range(3)) * stage_depth)]
         strides = [1 if cur == prev else 2 for cur, prev in zip(nfms[1:], nfms[:-1])]
         layers = []
-        if preprocess:
+        if preprocess and dataset == 'cifar10':
             layers = Preprocess(functor=cifar_mean_subtract)
-        parallel_axis = inputs['image'].axes.batch_axes()
-        with ng.metadata(device_id=('1', '2'), parallel=parallel_axis[0]):
-            layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
-            layers.append(f_module(nfms[0], first=True))
+        layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
+        layers.append(f_module(nfms[0], first=True, batch_norm=batch_norm))
 
-            for nfm, stride in zip(nfms[1:], strides):
-                layers.append(f_module(nfm, strides=stride))
+        for nfm, stride in zip(nfms[1:], strides):
+            layers.append(f_module(nfm, strides=stride, batch_norm=batch_norm))
 
         if batch_norm:
             layers.append(BatchNorm())
         if activation:
             layers.append(Activation(Rectlin()))
         layers.append(Pool2D(8, strides=2, op='avg'))
-        layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                             batch_norm=batch_norm, activation=Softmax()))
-        self.layers = layers
+        if dataset == 'cifar10':
+            ax.Y.length = 10
+            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
+                                 batch_norm=batch_norm, activation=Softmax()))
+        elif dataset == 'i1k':
+            ax.Y.length = 1000
+            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
+                                 batch_norm=batch_norm, activation=Softmax()))
+        else:
+            raise ValueError("Incorrect dataset provided")
+        super(mini_residual_network, self).__init__(layers=layers)
 
 
-def get_mini_resnet(inputs, stage_depth=1, batch_norm=False, activation=False, preprocess=False):
-    return mini_residual_network(inputs, stage_depth, batch_norm, activation, preprocess)
+def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
+                    activation=True, preprocess=False):
+    model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
+    with ng.metadata(device_id=device_id, parallel=ax.N):
+        model_out = model(inputs['image'])
+    return model_out
 
 
-def get_fake_cifar(batch_size, n_iter):
-    cifar = FakeCIFAR()
-    cifar.reset(0)
-    batch_xs, batch_ys = cifar.train.next_batch(batch_size)
-    x_train = np.vstack(batch_xs).reshape(-1, 3, 32, 32)
-    y_train = np.vstack(batch_ys).ravel()
+def get_fake_data(dataset, batch_size, n_iter):
+    x_train, y_train = generate_data(dataset, batch_size)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'height', 'width')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
@@ -116,24 +127,57 @@ def get_fake_cifar(batch_size, n_iter):
     return inputs, train_data, train_set
 
 
-def run_cifar_benchmark(n_iter=10, n_skip=5, batch_size=4,
-                        transformer_type='cpu'):
-    inputs, data, train_set = get_fake_cifar(batch_size, n_iter)
-    model = get_mini_resnet(inputs)
-    optimizer = GradientDescentMomentum(0.01, 0.9)
+def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
+                         transformer_type, device, bprop=False, visualize=False):
+    inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
+    model_out = get_mini_resnet(inputs, dataset, device_id)
 
-    train_loss = ng.cross_entropy_multi(model(inputs['image']),
-                                        ng.one_hot(inputs['label'], axis=ax.Y))
+    # Running forward propagation
+    fprop_computation_op = ng.computation(model_out, 'all')
+    benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type, device)
+    Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
+                                                           dataset + '_msra_fprop', visualize))
 
-    batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-    batch_cost_computation_op = ng.computation(batch_cost, "all")
+    # Running back propagation
+    if bprop:
+        optimizer = GradientDescentMomentum(0.01, 0.9)
+        train_loss = ng.cross_entropy_multi(model_out,
+                                            ng.one_hot(inputs['label'], axis=ax.Y))
 
-    feed_dict = fill_feed_dict(train_set, inputs)
-    benchmarks = dict()
-    benchmarks['cifar_msra_fprop'] = run_benchmark(batch_cost_computation_op, transformer_type,
-                                                   feed_dict, n_skip, n_iter)
-    print_benchmark_results(benchmarks)
+        batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+        batch_cost_computation_op = ng.computation(batch_cost, "all")
+
+        benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
+                              transformer_type, device)
+        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
+                                          dataset + '_msra_bprop', visualize))
 
 
 if __name__ == "__main__":
-    run_cifar_benchmark()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-data', '--data_set', default='cifar10',
+                        choices=['cifar10', 'i1k'], help="data set name")
+    parser.add_argument('-v', '--visualize', action="store_true",
+                        help="enable graph visualization")
+    parser.add_argument('-bs', '--batch_size', type=int, default=128, help="batch size")
+    parser.add_argument('-i', '--max_iter', type=int, default=10, help="max number of iterations")
+    parser.add_argument('-s', '--skip_iter', type=int, default=1,
+                        help="number of iterations to skip")
+    parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
+                        help="number of devices to run the benchmark on")
+    parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
+    parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
+                        help="device to run on")
+    args = parser.parse_args()
+
+    device_ids = [[str(device) for device in range(num_devices)]
+                  for num_devices in args.num_devices]
+    for device_id in device_ids:
+        run_resnet_benchmark(dataset=args.data_set,
+                             n_iter=args.max_iter,
+                             n_skip=args.skip_iter,
+                             batch_size=args.batch_size,
+                             device_id=device_id,
+                             transformer_type=args.transformer,
+                             device=args.device,
+                             visualize=args.visualize)

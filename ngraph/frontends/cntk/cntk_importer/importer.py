@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function
+from __future__ import division
 
 import inspect
 
@@ -24,17 +25,60 @@ import ngraph as ng
 from ngraph.frontends.cntk.cntk_importer.ops_bridge import OpsBridge
 
 
+def cross_entropy_with_softmax(model, labels):
+    """
+    Auxiliary function to add cross entropy and softmax (loss function)
+    to imported model for training.
+
+    Arguments:
+        model - imported CNTK model
+        labels - placeholder for one-hot labels array
+
+    Returns:
+        Loss function (mean for batch)
+    """
+    if model.axes.lengths != labels.axes.lengths:
+        model = ng.Transpose(model)
+    assert model.axes.lengths == labels.axes.lengths
+    model = ng.cast_axes(model, axes=labels.axes)
+
+    loss = ng.cross_entropy_multi(ng.softmax(model), labels)
+    return ng.mean(loss, out_axes=())
+
+
+def classification_error(model, labels):
+    """
+    Auxiliary function to add classification error function to
+    imported model for testing.
+
+    Arguments:
+        model - imported CNTK model
+        labels - placeholder for one-hot labels array
+
+    Returns:
+        Classification error function (mean for batch)
+    """
+    if labels.axes.batch_axis():
+        errors = ng.not_equal(
+            ng.argmax(model, out_axes=[labels.axes.batch_axis()]),
+            ng.argmax(labels, out_axes=[labels.axes.batch_axis()])
+        )
+    else:
+        errors = ng.not_equal(ng.argmax(model), ng.argmax(labels))
+    return ng.mean(errors, out_axes=())
+
+
 class CNTKImporter:
     """
     Importer for CNTK graph's definition
     """
 
-    def __init__(self, debug=False, block_input=None):
+    def __init__(self, batch_size=1, debug=False):
         self.uid_op_map = dict()
         self.placeholders = []
         self.ops_bridge = OpsBridge()
+        self.batch_size = batch_size
         self.debug = debug
-        self.block_input = block_input
 
     def load_operations(self, cntk_model):
         """
@@ -93,10 +137,8 @@ class CNTKImporter:
         inputs = []
         for i in cntk_op.inputs:
             axes = [
-                ng.make_axis(length=dim) for dim in i.shape
+                ng.make_axis(dim) for dim in i.shape
             ]
-            axes = ng.make_axes(axes)
-
             dtype = np.dtype(i.dtype)
 
             if i.is_output:
@@ -113,19 +155,22 @@ class CNTKImporter:
                             print("Finished importing: " +
                                   uid + str(cntk_op.shape) + " -> " +
                                   temp.name + str(temp.shape.full_lengths))
+                        if len(temp.axes) == 1:
+                            if temp.axes[0].length == 1:
+                                temp = ng.sum(temp, out_axes=())
                         self.uid_op_map[uid] = temp
                 inputs.append(temp)
             elif i.is_input:
-                temp = ng.placeholder(axes=axes, dtype=dtype).named(i.uid)
+                if self.batch_size > 1:
+                    axes.append(ng.make_axis(self.batch_size, 'N'))
+                temp = ng.placeholder(axes, dtype).named(i.uid)
                 inputs.append(temp)
                 self.placeholders.append(temp)
-            elif i.is_placeholder:
-                if self.block_input is not None:
-                    inputs.append(self.block_input)
-                else:
-                    raise ValueError("Unknown input: " + i.uid)
             else:
-                input_value = C.plus(i, np.zeros(i.shape)).eval()
+                try:
+                    input_value = i.value
+                except AttributeError:
+                    input_value = C.plus(i, np.zeros(i.shape)).eval()
                 if i.is_constant:
                     inputs.append(ng.constant(input_value, axes, dtype))
                 elif i.is_parameter:

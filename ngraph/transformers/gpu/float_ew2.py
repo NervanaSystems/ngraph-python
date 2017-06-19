@@ -145,7 +145,7 @@ _red_template = r"""
     }
     if (!(threadIdx.x & 0x1f))
     {
-        %(shared_buffer)s[threadIdx.x >> 5] = %(out)s;
+        %(shared_buffer)s[(threadIdx.x >> 5) + reduction_offset] = %(out)s;
     }
 
     __syncthreads();
@@ -153,7 +153,7 @@ _red_template = r"""
     // Reduce between warps (max of 32 warps since block has max 1024 threads)
     if (threadIdx.x < 32)
     {
-        %(out)s = %(shared_buffer)s[threadIdx.x];
+        %(out)s = %(shared_buffer)s[threadIdx.x + reduction_offset];
 
         #pragma unroll
         for (int i = 16; i > 0; i >>= 1)
@@ -164,22 +164,27 @@ _red_template = r"""
 
     if (threadIdx.x == 0)
     {
-        %(shared_buffer)s[0] = %(out)s;
+        %(shared_buffer)s[reduction_offset] = %(out)s;
     }
 
     __syncthreads();
 
-    %(out)s = %(shared_buffer)s[0];
+    %(out)s = %(shared_buffer)s[reduction_offset];
 """
 
 _reg_decl_template = r"""
     %(type)s %(regname)s = %(initval)s;"""
 
+_shared_size_template1 = r"""1"""
+_shared_size_template2 = r"""ITEMS_PER_BLOCK1_%(id)s"""
+_shared_size_template3 = r"""(ITEMS_PER_BLOCK1_%(id)s * ITEMS_PER_BLOCK2_%(id)s)"""
+
 _smem_decl_template = r"""
-    __shared__ float %(sbuf)s[32];"""
+    __shared__ float %(sbuf)s[32 * %(shared_size)s];
+    int reduction_offset = 32 * (threadIdx.y + (blockDim.y * threadIdx.z));"""
 
 _smem_init_template = r"""
-        %(sbuf)s[threadIdx.x] = 0.0f;"""
+        %(sbuf)s[threadIdx.x + reduction_offset] = 0.0f;"""
 
 _thread_index_template1 = r"""
     unsigned int idx0 = threadIdx.%(dim0)s + blockIdx.%(dim0)s * ITEMS_PER_BLOCK0_%(id)s;
@@ -284,8 +289,9 @@ class TensorDescriptionWrapper:
     Wraps a TensorDescription and handles broadcasting dimensions by altering
     shape and strides.
     """
-    def __init__(self, tensor_description, kernel_axes=None, ignore_layout=False,
+    def __init__(self, transformer, tensor_description, kernel_axes=None, ignore_layout=False,
                  missing_axis=None):
+        self.transformer = transformer
         self.dtype = tensor_description.dtype
         self.td = tensor_description
 
@@ -315,11 +321,19 @@ class TensorDescriptionWrapper:
     def is_trans(self):
         return (len(self.shape) == 2 and self.strides[0] < self.strides[1])
 
+    @property
+    def tensor(self):
+        return self.transformer.get_tensor_description_tensor(self.td)
+
+    @property
+    def has_tensor(self):
+        return self.transformer.has_tensor_description_tensor(self.td)
+
     def is_flex(self):
-        return hasattr(self.td.buffer, 'flex_entry')
+        return hasattr(self.tensor, 'flex_entry')
 
     def flex_entry(self):
-        return self.td.buffer.flex_entry
+        return self.tensor.flex_entry
 
 
 class GenerationContext:
@@ -369,7 +383,7 @@ def _is_buffer(value):
 
     Returns: True if the input is a buffer in memory
     """
-    if isinstance(value, TensorDescriptionWrapper) and value.td.buffer is not None:
+    if isinstance(value, TensorDescriptionWrapper) and value.has_tensor:
         return True
 
     return False
@@ -625,7 +639,7 @@ def _get_register_type(dtype, memory=False):
         raise TypeError("Unsupported type")
 
 
-def _wrap_tensor_descriptions(ops):
+def _wrap_tensor_descriptions(transformer, ops):
     max_dims = 1
     for op in ops:
         new_op = list(op)
@@ -643,7 +657,8 @@ def _wrap_tensor_descriptions(ops):
             if isinstance(new_op[index], TensorDescription):
                 if op[0] == "take" and (index == 1):
                     missing_axis = 1 if op[4] == 0 else 0
-                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                    new_op[index] = TensorDescriptionWrapper(transformer,
+                                                             new_op[index],
                                                              max_dims,
                                                              missing_axis=missing_axis)
                 else:
@@ -655,7 +670,8 @@ def _wrap_tensor_descriptions(ops):
                         missing_axis = op[4]
                     else:
                         missing_axis = None
-                    new_op[index] = TensorDescriptionWrapper(new_op[index],
+                    new_op[index] = TensorDescriptionWrapper(transformer,
+                                                             new_op[index],
                                                              max_dims,
                                                              missing_axis=missing_axis)
 
@@ -839,8 +855,8 @@ def _generate_stage_code(broadcast_loads, loop_loads, loop_stores, op_statements
 
 
 def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
-                          kernel_name, argstring, axes_mapping, loop_axis,
-                          kernel_identifier):
+                          _shared_size_template, kernel_name, argstring, axes_mapping,
+                          loop_axis, kernel_identifier):
     """
     Generates entire kernel code which can be passed to the CUDA C compiler.
     Takes care of function header, defines, and initialization code.
@@ -912,8 +928,12 @@ def _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
     smem_decls = ""
     smem_inits = ""
     for sbuf in ctx.shared_buffers:
+        shared_size = _shared_size_template % {
+            "id": kernel_identifier
+        }
         smem_decls = smem_decls + _smem_decl_template % {
-            "sbuf": sbuf
+            "sbuf": sbuf,
+            "shared_size": shared_size
         }
         smem_inits = smem_inits + _smem_init_template % {
             "sbuf": sbuf
@@ -1136,6 +1156,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
         _index_template = _index_template1
         _thread_index_template = _thread_index_template1
         _take_index_template = _take_index_template1
+        _shared_size_template = _shared_size_template1
     elif dims == 2:
         _defines_template = _defines_template2
         if loop_axis == 0:
@@ -1144,6 +1165,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
             _index_template = _index_template21
         _thread_index_template = _thread_index_template2
         _take_index_template = _take_index_template2
+        _shared_size_template = _shared_size_template2
     elif dims == 3:
         _defines_template = _defines_template3
         if loop_axis == 0:
@@ -1154,6 +1176,7 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
             _index_template = _index_template32
         _thread_index_template = _thread_index_template3
         _take_index_template = _take_index_template3
+        _shared_size_template = _shared_size_template3
     else:
         assert False
 
@@ -1398,13 +1421,13 @@ def _get_compound_kernel(ops, axes_mapping, dims, kernel_identifier=''):
     # Construct header and join with code
     ctx.shared_buffers = shared_buffers
     code = _generate_kernel_code(ctx, code, _defines_template, _thread_index_template,
-                                 kernel_name, argstring, axes_mapping, loop_axis,
-                                 kernel_identifier)
+                                 _shared_size_template, kernel_name, argstring, axes_mapping,
+                                 loop_axis, kernel_identifier)
 
     return (code, kernel_name, arg_desc, params)
 
 
-def _prepare_compound_kernel(ops):
+def _prepare_compound_kernel(transformer, ops):
     """
     Generate and return a kernel given a set of ops.
 
@@ -1412,7 +1435,7 @@ def _prepare_compound_kernel(ops):
         should be of the format (op_name, input0, input1, output, axis)
     """
     # Take care tensor dimensionality
-    ops = _wrap_tensor_descriptions(ops)
+    ops = _wrap_tensor_descriptions(transformer, ops)
 
     # Generate kernel source code and block/grid mapping
     (axes_mapping, dims) = _get_axes_mapping(ops)
@@ -1447,14 +1470,14 @@ def _prepare_compound_kernel(ops):
     return (kernel, params, 128)
 
 
-def _call_compound_kernel(ops):
+def _call_compound_kernel(transformer, ops):
     """
     Generate and call a kernel given a set of ops.
 
     ops (list): List of tuples describing ops to execute in kernel. Each tuple
         should be of the format (op_name, input0, input1, output, axis)
     """
-    kernel, params, shared_size = _prepare_compound_kernel(ops)
+    kernel, params, shared_size = _prepare_compound_kernel(transformer, ops)
     kernel.prepared_async_call(*params, shared_size=shared_size)
 
 
@@ -1525,10 +1548,10 @@ class CudaSourceFile:
         if gen_flex:
             self.buffer.write(_flex_includes_template)
 
-    def add_kernel(self, ops):
+    def add_kernel(self, transformer, ops):
         assert not self.compiled
         # Take care tensor dimensionality
-        ops = _wrap_tensor_descriptions(ops)
+        ops = _wrap_tensor_descriptions(transformer, ops)
 
         # Generate kernel source code and block/grid mapping or find cached equivalent kernel
         (axes_mapping, dims) = _get_axes_mapping(ops)

@@ -13,8 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
-    CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, \
-    CPUQueueScatterSendOp, CPUQueueScatterRecvOp
+    CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
+    CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
+    CPUQueueBroadcastRecvOp, GPUCudaGatherSendOp, GPUCudaGatherRecvOp, \
+    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaAllReduceOp
+
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
@@ -93,6 +96,26 @@ class CommNodePair(object):
                 from_node=from_node,
                 to_node=to_node,
                 send_node=self.send_node)
+        elif node_type == 'broadcast':
+            self.send_node = send_node_factory.build(
+                node_type='broadcast_send',
+                comm_type=comm_type,
+                from_node=from_node,
+                to_node=to_node)
+            self.recv_node = recv_node_factory.build(
+                node_type='broadcast_recv',
+                comm_type=comm_type,
+                from_node=from_node,
+                to_node=to_node,
+                send_node=self.send_node)
+        elif node_type == 'allreduce':
+            self.send_node = None
+            # send_node_factory is used here since for allreduce,
+            # the hint is gotten from the from_node
+            self.recv_node = send_node_factory.build(
+                node_type=node_type,
+                comm_type=comm_type,
+                from_node=from_node)
         elif node_type == 'direct':
             self.send_node = send_node_factory.build(
                 node_type='send',
@@ -104,8 +127,11 @@ class CommNodePair(object):
                 to_node=to_node,
                 send_node=self.send_node)
 
-    def get_nodes(self):
-        return self.send_node, self.recv_node
+    def get_send_node(self):
+        return self.send_node
+
+    def get_recv_node(self):
+        return self.recv_node
 
 
 class CommNodeFactory(object):
@@ -137,8 +163,8 @@ class GPUCommNodeFactory(CommNodeFactory):
     def send_recv_types(self, location):
         types = [
             ('remote', 'mpi'),
-            ('local', 'queue'),
-            ('local', 'cuda')
+            ('local', 'cuda'),
+            ('local', 'queue')
         ]
 
         send_recv_types = defaultdict(list)
@@ -157,6 +183,31 @@ class GPUCommNodeFactory(CommNodeFactory):
                 return GPUQueueRecvOp(
                     to_node=to_node,
                     send_node=send_node)
+        elif node_type == 'scatter_send':
+            if comm_type == 'cuda':
+                return GPUCudaScatterSendOp(
+                    from_node=from_node,
+                    to_node=to_node)
+        elif node_type == 'scatter_recv':
+            if comm_type == 'cuda':
+                return GPUCudaScatterRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'gather_send':
+            if comm_type == 'cuda':
+                return GPUCudaGatherSendOp(
+                    from_node=from_node)
+        elif node_type == 'gather_recv':
+            if comm_type == 'cuda':
+                return GPUCudaGatherRecvOp(
+                    from_node=from_node,
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'allreduce':
+            if comm_type == 'cuda':
+                return GPUCudaAllReduceOp(
+                    input_node=from_node,
+                    func=from_node.metadata['reduce_func'])
         else:
             assert False, "Not supported!!!"
 
@@ -211,25 +262,66 @@ class CPUCommNodeFactory(CommNodeFactory):
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
+        elif node_type == 'broadcast_send':
+            if comm_type == 'queue':
+                return CPUQueueBroadcastSendOp(
+                    from_node=from_node,
+                    to_node=to_node)
+        elif node_type == 'broadcast_recv':
+            if comm_type == 'queue':
+                return CPUQueueBroadcastRecvOp(
+                    to_node=to_node,
+                    send_node=send_node)
+        elif node_type == 'allreduce':
+            if comm_type == 'queue':
+                return CPUQueueAllReduceOp(
+                    input_node=from_node,
+                    func=from_node.metadata['reduce_func'])
         else:
             assert False, "Not supported!!!"
 
 
-def get_node_type(from_node, to_node):
-    if isinstance(to_node.metadata['device_id'], (list, tuple)):
-        if isinstance(from_node, BroadcastOp):
-            if from_node.args[0].is_constant:
+def get_comm_pattern(from_node, to_node):
+    """
+    determine type of communication based on from_node and to_node
+    """
+    if not from_node or not to_node:
+        return None
+
+    if from_node.is_constant is True:
+        return None
+
+    if isinstance(from_node, BroadcastOp) and from_node.args[0].is_constant:
+        return None
+
+    # todo check 'host_transformer' or consolidate metadata #
+    from_node_transformer = from_node.metadata['transformer']
+    to_node_transformer = to_node.metadata['transformer']
+
+    if from_node_transformer == to_node_transformer:
+        if isinstance(from_node_transformer, (list, tuple)):
+            if 'reduce_func' in from_node.metadata and 'reduce_func' not in to_node.metadata:
+                return 'allreduce'
+            else:
                 return None
-        elif not from_node.is_constant:
-            from_node.metadata['marker'] = 'scatter'
-            return 'scatter'
         else:
             return None
-    elif isinstance(from_node.metadata['device_id'], (list, tuple)):
+
+    if isinstance(to_node_transformer, (list, tuple)):
+        if to_node.metadata['parallel']:
+            # todo check if metadata['device_id'] and 'parallel' co-exists
+            if to_node.metadata['parallel'] in from_node.axes:
+                from_node.metadata['marker'] = 'scatter'
+                return 'scatter'
+            else:
+                return 'broadcast'
+        else:
+            return 'broadcast'
+
+    if isinstance(from_node_transformer, (list, tuple)):
         return 'gather'
-    elif from_node.metadata['device_id'] != to_node.metadata['device_id']:
+
+    if from_node_transformer != to_node_transformer:
         return 'direct'
-    elif from_node.metadata['device'] != to_node.metadata['device']:
-        return 'direct'
-    else:
-        return None
+
+    return None

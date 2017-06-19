@@ -56,7 +56,7 @@ class CTCOp(TensorOp):
 
         # verify shapes
         if len(activations.shape) != 3:
-            raise ValueError(('activations must have 3 dimensions, ',
+            raise ValueError(('activations must have 3 dimensions, '
                               'found {}').format(len(activations.shape)))
 
         if activations.axes.batch_axis() is None:
@@ -66,15 +66,15 @@ class CTCOp(TensorOp):
             raise ValueError('activations must have a recurrent axis')
 
         if len(labels.shape) != 1:
-            raise ValueError(('labels 1must have 1 dimension, ',
+            raise ValueError(('labels must have 1 dimension, '
                               'found {}').format(len(labels.shape)))
 
         if len(activation_lens.shape) != 1:
-            raise ValueError(('activation_lens must have 1 dimension, ',
+            raise ValueError(('activation_lens must have 1 dimension, '
                               'found {}').format(len(activation_lens.shape)))
 
         if len(label_lens.shape) != 1:
-            raise ValueError(('label_lens must have 1 dimension, ',
+            raise ValueError(('label_lens must have 1 dimension, '
                               'found {}').format(len(label_lens.shape)))
 
         if axes is None:
@@ -85,6 +85,9 @@ class CTCOp(TensorOp):
                                           grads),
                                     axes=axes,
                                     **kwargs)
+
+    def copy_with_new_args(self, args):
+        return type(self)(*args, axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta,
                           activations, labels, activation_lens, label_lens, grads):

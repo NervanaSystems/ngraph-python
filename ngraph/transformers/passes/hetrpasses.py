@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.transformers.passes.passes import GraphBuildingPass
-from ngraph.factory.comm_node_factory import get_node_type, CommNodePair
+from ngraph.factory.comm_node_factory import get_comm_pattern, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone_graph
 from orderedset import OrderedSet
@@ -21,23 +21,22 @@ import socket
 
 
 class DeviceAssignPass(GraphBuildingPass):
+
     def __init__(self, hetr, default_device, default_device_id):
         super(DeviceAssignPass, self).__init__()
         self.hetr = hetr
         self.default_device = default_device
         self.default_device_id = default_device_id
 
-    def visit(self, op):
+    def visit(self, op, *args):
         device = op.metadata.setdefault('device', self.default_device)
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
-        host_transformer = socket.gethostname()
-        op.metadata['host_transformer'] = host_transformer
+        op.metadata['host_transformer'] = socket.gethostname()
         if isinstance(op.metadata['device_id'], (list, tuple)):
-            op.metadata['transformer'] = op.metadata['device'] + op.metadata['device_id'][0]
-            for id in op.metadata['device_id']:
-                transformer = op.metadata['device'] + str(id)
-                self.hetr.register_transformer(transformer)
+            op.metadata['transformer'] = \
+                [op.metadata['device'] + str(i) for i in op.metadata['device_id']]
+            [self.hetr.register_transformer(tname) for tname in op.metadata['transformer']]
         else:
             op.metadata['transformer'] = transformer
             self.hetr.register_transformer(transformer)
@@ -47,19 +46,21 @@ class DeviceAssignPass(GraphBuildingPass):
 
 
 class CommunicationPass(GraphBuildingPass):
+
     def __init__(self, send_nodes):
         super(CommunicationPass, self).__init__()
         self.send_nodes = send_nodes
 
-    def visit(self, op):
+    def visit(self, op, *op_args):
         args = list()
-        for arg in op.args:
-            node_type = get_node_type(from_node=arg, to_node=op)
-            if node_type:
-                pair = CommNodePair(from_node=arg, to_node=op, node_type=node_type)
-                send_node, recv_node = pair.get_nodes()
-                self.send_nodes.add(send_node)
-                args.append(recv_node)
+        for arg in op_args:
+            comm_pattern = get_comm_pattern(from_node=arg, to_node=op)
+            if comm_pattern:
+                pair = CommNodePair(from_node=arg, to_node=op, node_type=comm_pattern)
+                if pair.get_send_node():
+                    self.send_nodes.add(pair.get_send_node())
+                if pair.get_recv_node():
+                    args.append(pair.get_recv_node())
             else:
                 args.append(arg)
 
@@ -97,17 +98,29 @@ class DistributedPass(GraphBuildingPass):
                 # op is GatherRecvOp
                 self.parallel_axes = op.metadata['parallel']
 
-                gather_send_op = op.send_node()
+                gather_send_op = op.send_nodes[0]
 
                 # clone nodes for each device_id
+                replaced_send_ops = OrderedSet()
+                new_gather_send_nodes = OrderedSet()
                 for i, id in enumerate(op.from_id):
-                    new_gather_send_op = clone_graph(root=gather_send_op, clone_id=id,
-                                                     shared_queues_idx=i,
-                                                     parallel_axis=self.parallel_axes,
-                                                     num_clones=len(op.from_id))
-                    self.send_nodes.add(new_gather_send_op)
+                    new_gather_send_op, new_sends, replaced_sends = clone_graph(
+                        root=gather_send_op,
+                        clone_id=id,
+                        shared_queues_idx=i,
+                        parallel_axis=self.parallel_axes,
+                        num_clones=len(op.from_id))
 
-                self.send_nodes.remove(gather_send_op)
-                # how to make sure this part of the graph is not working?
-                for o in Op.ordered_ops([gather_send_op]):
-                    o.metadata['transformer'] = None
+                    new_gather_send_nodes.add(new_gather_send_op)
+
+                    new_sends.add(new_gather_send_op)
+                    for o in new_sends:
+                        self.send_nodes.add(o)
+
+                    replaced_send_ops |= replaced_sends
+
+                op.send_nodes = new_gather_send_nodes
+
+                replaced_send_ops.add(gather_send_op)
+                for o in replaced_send_ops:
+                    self.send_nodes.remove(o)

@@ -35,7 +35,7 @@ from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_d
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
-from mnist import MNIST
+from ngraph.frontends.neon import MNIST
 import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
@@ -51,6 +51,7 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 inputs = train_set.make_placeholders()
 ax.Y.length = 10
 
+
 ######################
 # Model specification
 seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
@@ -60,6 +61,7 @@ seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
 optimizer = GradientDescentMomentum(0.1, 0.9)
 train_prob = seq1(inputs['image'])
 train_loss = ng.cross_entropy_binary(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_outputs = dict(batch_cost=batch_cost)
 

@@ -85,7 +85,12 @@ class ImporterTester(object):
 
         # assert
         assert tf_result.shape == ng_result.shape
-        assert ng.testing.allclose(tf_result, ng_result, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(tf_result,
+                                   ng_result,
+                                   rtol=rtol,
+                                   atol=atol,
+                                   err_msg='Tensorflow.Importer.Tester.run',
+                                   verbose=True)
 
     def ng_run(self,
                tf_target_node,
@@ -121,7 +126,8 @@ class ImporterTester(object):
 
         # evaluate ngraph
         with ExecutorFactory() as ex:
-            ng_result_comp = ex.transformer.computation(ng_target_node, *ng_feed_dict.keys())
+            ng_result_comp = ex.transformer.computation(ng_target_node,
+                                                        *ng_feed_dict.keys())
 
             if tf_init_op:
                 ex.transformer.computation(importer.get_op_handle(tf_init_op))()

@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-from ngraph.op_graph import op_graph
+from ngraph.op_graph.op_graph import TensorOp
 
 
 def pooling(poolparams, inputs, axes, docstring=None):
@@ -31,8 +31,7 @@ def pooling(poolparams, inputs, axes, docstring=None):
     return PoolingOp(poolparams, inputs, axes=axes, docstring=docstring)
 
 
-class PoolingOp(op_graph.TensorOp):
-    _index = 0
+class PoolingOp(TensorOp):
 
     def __init__(self, pool_params, inputs, *args, **kwargs):
         """
@@ -41,6 +40,7 @@ class PoolingOp(op_graph.TensorOp):
 
         Return:
         """
+        super(PoolingOp, self).__init__(args=(inputs,), **kwargs)
         if len(inputs.shape) != 5:
             raise ValueError((
                 'pooling input shape must be length 5, found {}'
@@ -53,13 +53,9 @@ class PoolingOp(op_graph.TensorOp):
                 "currently supported. ").format(pooltype=pooltype))
 
         self.pool_params = pool_params
-        self.index = PoolingOp._index
 
-        PoolingOp._index += 1
-
-        super(PoolingOp, self).__init__(
-            args=(inputs,), *args, **kwargs
-        )
+    def copy_with_new_args(self, args):
+        return type(self)(self.pool_params, args[0], axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta, inputs):
         # requires pooling's forward to be completed before backward
@@ -68,25 +64,20 @@ class PoolingOp(op_graph.TensorOp):
         inputs.generate_add_delta(adjoints, bprop_pool_op)
 
 
-class PoolDerivOp(op_graph.TensorOp):
+class BpropPoolOp(TensorOp):
     """
     Maintains index and pool_params through forwarding of the original PoolingOp.
 
     Arguments:
         fprop: The original PoolingOp.
     """
-    def __init__(self, fprop, **kwargs):
-        super(PoolDerivOp, self).__init__(**kwargs)
+    def __init__(self, delta, inputs, fprop, **kwargs):
+        super(BpropPoolOp, self).__init__(args=(delta,), axes=inputs.axes, **kwargs)
         self.fprop = fprop
+        self.inputs = inputs
 
-    @property
-    def index(self):
-        """
-
-        Returns:
-            The argmax tensor index of the pooling op.
-        """
-        return self.fprop.forwarded.index
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.fprop.args[0], self.fprop)
 
     @property
     def pool_params(self):
@@ -97,19 +88,3 @@ class PoolDerivOp(op_graph.TensorOp):
 
         """
         return self.fprop.forwarded.pool_params
-
-
-class BpropPoolOp(PoolDerivOp):
-    def __init__(self, delta, inputs, fprop, *args, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-        """
-        super(BpropPoolOp, self).__init__(
-            args=(delta,),
-            fprop=fprop,
-            axes=inputs.axes,
-            *args, **kwargs
-        )
-
-        self.inputs = inputs
