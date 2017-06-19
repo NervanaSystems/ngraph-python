@@ -26,18 +26,15 @@ def test_model_predict():
 
 
 def test_model_predict_wrong_shape():
-    # todo: this should now raise an exception
     model = dqn.ModelWrapper(
         state_axes=1, action_size=2, batch_size=3, model=small_model
     )
 
-    # missing axis is assumed to be a single length batch access
     with pytest.raises(ValueError):
         model.predict(np.zeros((1, )))
 
 
 def test_model_predict_single_shape():
-    # todo: this should now raise an exception
     model = dqn.ModelWrapper(
         state_axes=1, action_size=2, batch_size=3, model=small_model
     )
@@ -49,7 +46,6 @@ def test_model_predict_single_shape():
 
 
 def test_model_predict_single_shape_after_predict():
-    # todo: this should now raise an exception
     model = dqn.ModelWrapper(
         state_axes=1, action_size=2, batch_size=3, model=small_model
     )

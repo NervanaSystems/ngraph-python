@@ -60,7 +60,7 @@ class ModelWrapper(object):
         self.state_single = ng.placeholder(self.axes.state + [self.axes.n1])
         self.target = ng.placeholder([self.axes.action, self.axes.n])
 
-        # these cue functions have the same structure but different variables
+        # these q functions have the same structure but different variables
         self.q_function = model(self.axes.action)
         self.q_function_target = model(self.axes.action)
 
@@ -282,7 +282,7 @@ class Agent(object):
             else:
                 epsilon = 0
 
-        # rand() samples from the distribution over [0, 1)
+        # rand() samples from the distribution [0, 1)
         if np.random.rand() < epsilon:
             return self.action_space.sample()
 
