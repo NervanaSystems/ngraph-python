@@ -1,5 +1,10 @@
 from __future__ import print_function
 
+import numpy as np
+from collections import deque
+
+from ngraph.frontends.neon.callbacks import CallbackPhase
+
 
 def rl_loop(environment, agent, episodes, render=False):
     """
@@ -9,6 +14,7 @@ def rl_loop(environment, agent, episodes, render=False):
     # neon.loop_train used for supervised learning.
     """
     total_steps = 0
+    rewards = deque(maxlen=100)
     for episode in range(episodes):
         state = environment.reset()
         done = False
@@ -34,12 +40,14 @@ def rl_loop(environment, agent, episodes, render=False):
                 trigger_evaluation = True
 
         agent.end_of_episode()
+        rewards.append(total_reward)
         print({
             'type': 'training episode',
             'episode': episode,
             'total_steps': total_steps,
             'steps': step,
             'total_reward': total_reward,
+            'running_average_reward': np.mean(rewards),
         })
 
         # we would like to evaluate the model at a consistent time measured
