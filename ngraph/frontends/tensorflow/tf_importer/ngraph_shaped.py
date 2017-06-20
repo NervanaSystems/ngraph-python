@@ -24,10 +24,6 @@ from ngraph.frontends.tensorflow.tf_importer.utils_broadcast import \
 
 # Placeholder op
 def placeholder(dtype=None, shape=None, name=None):
-    """
-    TF's signature: placeholder(dtype, shape=None, name=None), here we match
-    ngraph's signature more closely.
-    """
     shape = () if shape is None else shape
     axes = make_pos_axes(shape)
     return ng.placeholder(axes, dtype=dtype).named(name)
@@ -45,20 +41,28 @@ def add(x, y, name=None):
     return _element_wise_binary(x, y, ng.add, name=name)
 
 
-def subtract(x, y, name=None):
-    return _element_wise_binary(x, -y, ng.add, name=name)
-
-
-def multiply(x, y, name=None):
-    return _element_wise_binary(x, y, ng.multiply, name=name)
-
-
 def divide(x, y, name=None):
     return _element_wise_binary(x, y, ng.divide, name=name)
 
 
-def mod(x, y, name=None):
-    return _element_wise_binary(x, y, ng.mod, name=name)
+def equal(x, y, name=None):
+    return _element_wise_binary(x, y, ng.equal, name=name)
+
+
+def greater_equal(x, y, name=None):
+    return _element_wise_binary(x, y, ng.greater_equal, name=name)
+
+
+def greater(x, y, name=None):
+    return _element_wise_binary(x, y, ng.greater, name=name)
+
+
+def less_equal(x, y, name=None):
+    return _element_wise_binary(x, y, ng.less_equal, name=name)
+
+
+def less(x, y, name=None):
+    return _element_wise_binary(x, y, ng.less, name=name)
 
 
 def maximum(x, y, name=None):
@@ -69,7 +73,35 @@ def minimum(x, y, name=None):
     return _element_wise_binary(x, y, ng.minimum, name=name)
 
 
+def multiply(x, y, name=None):
+    return _element_wise_binary(x, y, ng.multiply, name=name)
+
+
+def not_equal(x, y, name=None):
+    return _element_wise_binary(x, y, ng.not_equal, name=name)
+
+
+def pow(x, y, name=None):
+    return _element_wise_binary(x, y, ng.power, name=name)
+
+
+def mod(x, y, name=None):
+    return _element_wise_binary(x, y, ng.mod, name=name)
+
+
+def subtract(x, y, name=None):
+    return _element_wise_binary(x, -y, ng.add, name=name)
+
+
 # Unary element wise ops
+def abs(x, name=None):
+    return ng.absolute(x).named(name)
+
+
+def exp(x, name=None):
+    return ng.exp(x).named(name)
+
+
 def tanh(x, name=None):
     return ng.tanh(x).named(name)
 
@@ -92,6 +124,10 @@ def negative(x, name=None):
 
 def square(x, name=None):
     return ng.square(x).named(name)
+
+
+def sign(x, name=None):
+    return ng.sign(x).named(name)
 
 
 # Reduction ops
