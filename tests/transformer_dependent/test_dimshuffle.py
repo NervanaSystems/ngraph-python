@@ -19,6 +19,11 @@ import ngraph as ng
 from ngraph.testing import check_derivative, RandomTensorGenerator, executor
 
 
+pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                               reason="Not supported by argon backend",
+                                               strict=True)
+
+
 rng = RandomTensorGenerator(0, np.float32)
 
 
@@ -45,6 +50,7 @@ def x(A, B):
 @pytest.mark.transformer_dependent
 class TestDimShuffleFpropBprop:
 
+    @pytest.mark.argon_disabled  # TODO triage
     def test_dimshuffle_fprop(self, transformer_factory, x, A, B):
         """
         dimshuffle a 2d array and make sure fprop works
@@ -62,6 +68,7 @@ class TestDimShuffleFpropBprop:
 
         ng.testing.assert_allclose(result, x_value.T)
 
+    @pytest.mark.argon_disabled  # TODO triage
     def test_dimshuffle_bprop(self, transformer_factory, x, A, B):
         """
         dimshuffle a 2d array and make sure bprop works

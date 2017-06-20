@@ -19,11 +19,17 @@ from ngraph.testing import ExecutorFactory, RandomTensorGenerator
 import pytest
 
 
+pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                               reason="Not supported by argon backend",
+                                               strict=True)
+
+
 delta = 1e-3
 rtol = atol = 1e-2
 
 
 @pytest.mark.flex_disabled  # Allowed to fail until PR2
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 def test_stack(transformer_factory):
     W = ng.make_axis(length=4)

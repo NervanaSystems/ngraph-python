@@ -22,9 +22,12 @@ from ngraph.frontends.neon import ax
 from third_party.warp_ctc.ctc import CTC
 import pytest
 
+pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                               reason="Not supported by argon backend",
+                                               strict=True)
 pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
-
+              pytest.mark.flex_disabled("module"),
+              pytest.mark.argon_disabled("module")]
 
 rng = RandomTensorGenerator(0, np.float32)
 

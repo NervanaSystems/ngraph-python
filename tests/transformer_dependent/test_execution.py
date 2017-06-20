@@ -23,6 +23,12 @@ from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
 pytestmark = pytest.mark.transformer_dependent
+pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                                  reason="Not supported by argon backend",
+                                                  strict=False)
+pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                               reason="Not supported by argon backend",
+                                               strict=True)
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -156,6 +162,8 @@ def sub_axes(request):
     return request.param
 
 
+# TODO this is a non-strict disable since not all parametrizations fail argon
+@pytest.mark.argon_disab_loose  # TODO Triage
 def test_reduction(transformer_factory, reduction, sub_axes):
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=4),
@@ -179,6 +187,7 @@ def test_reduction(transformer_factory, reduction, sub_axes):
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO Triage
 def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     if reduction in ('max', 'min'):
         pytest.skip("max/min needed to be tested differently")
@@ -202,6 +211,7 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO Triage
 def test_prod_constant(transformer_factory):
     """
     Test reduce product of constants
@@ -247,6 +257,7 @@ def test_prod_constant(transformer_factory):
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO Triage
 def test_prod_deriv(transformer_factory):
     """
     Test reduce product's gradient
@@ -738,6 +749,7 @@ def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_softmax(transformer_factory, input_tensor):
     """TODO."""
     p_x = input_tensor
@@ -1047,6 +1059,7 @@ def test_argmax(transformer_factory):
         ng.testing.assert_allclose(baseline, expected)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_fill_slice(transformer_factory):
     axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=8)])
     a = ng.placeholder(axes=axes)
@@ -1077,6 +1090,7 @@ def test_tensor_derivative():
         ng.deriv(p, p)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_mean(transformer_factory, input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1094,6 +1108,7 @@ def test_mean(transformer_factory, input_tensor):
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_variance_wgrad(transformer_factory, input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1116,6 +1131,7 @@ def test_variance_wgrad(transformer_factory, input_tensor):
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_variance_sqrt_inverse(transformer_factory, input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1183,6 +1199,7 @@ def test_wrong_placeholders(transformer_factory):
         assert c(1) == 1
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_broadcast_deriv_reorder(transformer_factory):
     H = ng.make_axis(2)
     W = ng.make_axis(3)

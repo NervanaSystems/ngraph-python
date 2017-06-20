@@ -39,6 +39,9 @@ from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
 pytestmark = pytest.mark.transformer_dependent
+pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                               reason="Not supported by argon backend",
+                                               strict=True)
 
 
 rng = RandomTensorGenerator()
@@ -114,6 +117,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -172,6 +176,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -244,6 +249,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -300,6 +306,7 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -359,6 +366,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -484,6 +492,7 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
     rnn2(out)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length_enc", [5])

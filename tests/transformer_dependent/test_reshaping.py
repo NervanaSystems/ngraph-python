@@ -20,12 +20,16 @@ from ngraph.op_graph.axes import TensorDescription
 from ngraph.testing import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
+pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                               reason="Not supported by argon backend",
+                                               strict=True)
 
 
 delta = 1e-3
 rtol = atol = 1e-2
 
 
+@pytest.mark.argon_disabled  # TODO triage
 def test_expand_dims(transformer_factory):
     """TODO."""
     C = ng.make_axis()
@@ -94,6 +98,7 @@ def test_expand_dims(transformer_factory):
                     )
 
 
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 def test_slice(transformer_factory):
     """TODO."""
@@ -183,6 +188,7 @@ def test_reverse_slice(transformer_factory):
         ng.set_item(x, [0, slice(None, None, -1)], 0)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 def test_multiple_slices(transformer_factory):
     C = ng.make_axis(length=2)
@@ -225,6 +231,7 @@ def test_multiple_slices(transformer_factory):
         assert ng.testing.allclose(f2_num, f2_sym, rtol=rtol, atol=atol)
 
 
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 def test_padding(transformer_factory):
     """TODO."""
@@ -293,6 +300,7 @@ def test_padding(transformer_factory):
             )
 
 
+@pytest.mark.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 def test_cast_axes(transformer_factory):
     C = ng.make_axis(length=2)
