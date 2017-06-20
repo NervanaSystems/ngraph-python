@@ -76,7 +76,7 @@ class ReshapeWrapper(gym.Wrapper):
         assert observation.shape == (84, 84)
 
         # convert to values between 0 and 1
-        observation = observation / 256.
+        observation = np.array(observation, dtype=np.uint8)
 
         return observation
 
@@ -236,6 +236,8 @@ class DimShuffleWrapper(gym.Wrapper):
 
     def _reset(self):
         return self._modify_observation(self.env.reset())
+
+
 
 
 def main():
