@@ -22,7 +22,7 @@ import cachetools
 import numpy as np
 from builtins import object
 from functools import wraps
-from collections import defaultdict
+from collections import defaultdict, Iterable
 import abc
 from future.utils import with_metaclass
 
@@ -147,6 +147,7 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
     This is currently used so that the same pass can be used with op-graph and exec-graph if
     the pass uses the OpAccessor methods to access the components of the Op.
     """
+    @abc.abstractmethod
     def op_arg(self, op, n):
         """
         Returns the nth argument of an op-graph Op op as an op-graph Op.
@@ -162,6 +163,7 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
 
         """
 
+    @abc.abstractmethod
     def op_args(self, op):
         """
         Returns all the arguments of an op-graph Op.
@@ -176,6 +178,7 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
 
         """
 
+    @abc.abstractmethod
     def get_device_op(self, op):
         """
         Helper function that traverses through any reshape ops or value ops
@@ -191,8 +194,46 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
 
         """
 
+    @abc.abstractmethod
+    def run_pass(self, process_op):
+        """
+        Runs a pass to completion, calling process_op on each relevant op.
+
+        """
+
+    @abc.abstractmethod
+    def begin_batch(self):
+        """
+        Called before beginning processing on a pass.
+        """
+
+    @abc.abstractmethod
+    def replace_op(self, op, replacement):
+        """
+        Queue op-graph Op op to be replaced by replacement at the end of the batch.
+
+        Args:
+            op: The op-graph Op being replaced.
+            replacement: The replacement op-graph Op fro old_op.
+
+        """
+
+    @abc.abstractmethod
+    def end_batch(self):
+        """
+        Called after a pass has been processed.
+
+        Returns:
+            True if the graph was changed.
+        """
+
 
 class OpGraphOpAccessor(OpAccessor):
+
+    def __init__(self, **kwargs):
+        super(OpGraphOpAccessor, self).__init__(**kwargs)
+        self.replacement_list = []
+
     """
     Provides access to some op properties when they may have been modified during passes.
     """
@@ -257,6 +298,31 @@ class OpGraphOpAccessor(OpAccessor):
 
         return None
 
+    def run_pass(self, process_op, min_ops):
+        has_work = True
+        while has_work:
+            self.begin_batch()
+
+            # pass through the ops in an execution order collecting things to do
+            ops = Op.ordered_ops(op.forwarded for op in min_ops)
+            for op in ops:
+                op.update_forwards()
+                process_op(op)
+
+            has_work = self.end_batch()
+            min_ops = list(op.forwarded for op in min_ops)
+
+    def begin_batch(self):
+        self.replacement_list = []
+
+    def replace_op(self, op, replacement):
+        self.replacement_list.append((op, replacement))
+
+    def end_batch(self):
+        for old, rep in self.replacement_list:
+            old.forwarded.replace_self(rep.forwarded)
+        return len(self.replacement_list) > 0
+
 
 op_graph_op_accessor = OpGraphOpAccessor()
 
@@ -314,6 +380,18 @@ class DelegateOpAccessor(OpAccessor):
 
         """
         return self.op_accessor.get_device_op(op)
+
+    def run_pass(self, process_op, **kwargs):
+        self.op_accessor.run_pass(process_op, **kwargs)
+
+    def begin_batch(self):
+        self.op_accessor.begin_batch()
+
+    def replace_op(self, op, replacement):
+        self.op_accessor.replace_op(op, replacement)
+
+    def end_batch(self):
+        return self.op_accessor.end_batch()
 
 
 class Op(NameableValue):

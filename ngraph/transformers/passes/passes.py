@@ -30,58 +30,34 @@ from ngraph.util.generics import generic_method
 
 
 class GraphPass(with_metaclass(abc.ABCMeta, DelegateOpAccessor)):
-
     @abc.abstractmethod
-    def do_pass(self, ops, transformer):
+    def do_pass(self, min_ops, transformer):
         pass
 
 
-class GraphBuildingPass(GraphPass):
-    """
-    Base class for passes that build new graph, primarily derivatives
-    and other macro-like things.
-    """
+class ProcessOpGraphPass(GraphPass):
     def do_pass(self, min_ops, transformer):
-        """
-        Visit the ops until nothing changes.
-
-        Args:
-            min_ops: The set of ops that must be computed.
-            transformer: An InitGraph object.
-
-        """
         assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
-        self.transformer = transformer
-        has_work = True
-        while True:
-            if not has_work:
-                return
+        self.run_pass(self.process_op, min_ops=min_ops)
 
-            self.replacement_list = []
-
-            # pass through the ops in an execution order collecting things to do
-            ops = Op.ordered_ops(op.forwarded for op in min_ops)
-            for op in ops:
-                op.update_forwards()
-                self.visit(op, *op.args)
-
-            # Perform the gathered replacements
-            for old, rep in self.replacement_list:
-                old.forwarded.replace_self(rep.forwarded)
-            has_work = len(self.replacement_list) > 0
-            min_ops = list(op.forwarded for op in min_ops)
-
-    def replace_op(self, op, replacement):
+    @abc.abstractmethod
+    def process_op(self, op):
         """
-        Replace op with replacement.
+        Called from run_pass to perform processing on an op-graph Op op.
 
         Args:
-            op: op to be replaced.
-            replacement: new op.
+            op: The op-graph Op to be
+
+        Returns:
 
         """
-        if replacement is not op:
-            self.replacement_list.append((op, replacement))
+
+
+class GraphBuildingPass(ProcessOpGraphPass):
+
+    def process_op(self, op):
+        self.visit(op, *op.args)
+
 
 # How to use the graph rewrite pass
 #
@@ -157,17 +133,19 @@ class GraphBuildingPass(GraphPass):
 #
 
 
-class GraphRewritePass(GraphPass):
+class GraphRewritePass(ProcessOpGraphPass):
     """
     A utility class for rewriting graph, including fusion
 
     """
-    registered_patterns = []
-    replacement_list = []
-
     # Return values for pattern matching
     found = True
     not_found = False
+
+    def __init__(self, **kwargs):
+        super(GraphRewritePass, self).__init__(**kwargs)
+        self.registered_patterns = []
+        self.replacement_list = []
 
     def match_pattern_label_op(self, op, pattern, label_map):
         """
@@ -323,62 +301,52 @@ class GraphRewritePass(GraphPass):
         """
         self.registered_patterns.append((pattern, callback_fn))
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, min_ops, transformer):
         """
         Visit the ops and do pattern matching and replacement until nothing changes.
 
         Args:
-            ops: The set of ops to be checked for pattern match
+            min_ops: The set of ops to be checked for pattern match
             transformer: An InitGraph object.
 
         """
-        assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
+        assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while has_work:
-            self.replacement_list = []
-
-            # For performing pattern match, we have 2 options:
-            # 1) for every graph node, check if any pattern match
-            # 2) for every pattern, check if any graph node match
-            # We choose 1st option. But we can also choose 2nd.
-            # TODO(nhasabni) Two issues that complicate above choice is:
-            #  1) A pattern may match multiple graph nodes
-            #  2) Multiple patterns may match single graph node
-            # These issues need to be discussed.
+            self.begin_batch()
 
             # pass through the ops in an execution order collecting things to do
-            ordered_ops = Op.ordered_ops(op.forwarded for op in ops)
-            for op in ordered_ops:
+            ops = Op.ordered_ops(op.forwarded for op in min_ops)
+            for op in ops:
                 op.update_forwards()
-                # Iterate over all registered patterns and check for pattern match
-                for pattern, callback_fn in self.registered_patterns:
-                    # list of (label_map, op) tuples that match pattern
-                    # Given pattern may match multiple times in the graph. For every
-                    # such match, we have label_map and the op that matches the
-                    # pattern. So we use list of tuples as return type.
-                    label_map_op_list = []
-                    label_map = dict()
-
-                    if self.match_pattern(op, pattern, label_map):
-                        label_map_op_list.append((label_map, op))
-                        callback_fn(op, label_map_op_list)
+                self.process_op(op)
 
             # Perform the gathered replacements
-            for old, rep in self.replacement_list:
-                old.forwarded.replace_self(rep.forwarded)
-            has_work = len(self.replacement_list) > 0
-            ops = list(_.forwarded for _ in ops)
+            has_work = self.end_batch()
+            min_ops = list(op.forwarded for op in min_ops)
 
-    def replace_op(self, op, replacement):
-        """
-        Replace op with replacement.
+    def process_op(self, op):
+        # For performing pattern match, we have 2 options:
+        # 1) for every graph node, check if any pattern match
+        # 2) for every pattern, check if any graph node match
+        # We choose 1st option. But we can also choose 2nd.
+        # TODO(nhasabni) Two issues that complicate above choice is:
+        #  1) A pattern may match multiple graph nodes
+        #  2) Multiple patterns may match single graph node
+        # These issues need to be discussed.
 
-        Args:
-            op: op to be replaced.
-            replacement: new op.
+        # Iterate over all registered patterns and check for pattern match
+        for pattern, callback_fn in self.registered_patterns:
+            # list of (label_map, op) tuples that match pattern
+            # Given pattern may match multiple times in the graph. For every
+            # such match, we have label_map and the op that matches the
+            # pattern. So we use list of tuples as return type.
+            label_map_op_list = []
+            label_map = dict()
 
-        """
-        self.replacement_list.append((op, replacement))
+            if self.match_pattern(op, pattern, label_map):
+                label_map_op_list.append((label_map, op))
+                callback_fn(op, label_map_op_list)
 
 
 class PeepholeGraphPass(GraphBuildingPass):
