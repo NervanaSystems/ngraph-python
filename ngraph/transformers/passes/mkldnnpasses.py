@@ -192,11 +192,13 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             # Sanity check tensor shapes
             if (len(unflatten_inputs.axes.lengths) != 5):
                 return
-
+        else:
+            if (len(inputs.axes.lengths)!=5):
+                return
         # Only single precision float supported for now
         if op.dtype != np.float32:
             return
-
+        #import pdb;pdb.set_trace()
         data_type = self.mkldnn.datatype[op.dtype.type]
         inputs_shape = get_size_mkl_order(unflatten(inputs).axes, [4, 0, 2, 3])
         mean_size = mean.axes.lengths[0]
@@ -215,7 +217,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
 
         (inputs_layout, mkl_axes) = get_mkl_layout(
-            self.mkldnn, unflatten_inputs, [4, 0, 2, 3], True)
+            self.mkldnn, inputs, [4, 0, 2, 3], True)
         mean_layout = None
         variance_layout = None
 
@@ -243,7 +245,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.kernels[
                 op.name])
 
-        self.set_mkl_layout_data(op, mkl_axes)
+        mkl_order = [4, 0, 2, 3]
+        out_axes = get_axes_mkl_order(unflatten(op).axes, mkl_order)
+        self.set_mkl_layout_data(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropBatchnormOp)

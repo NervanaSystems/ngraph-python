@@ -3,7 +3,7 @@ from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
 from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
-from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
+from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide, unflatten
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import GraphRewritePass
@@ -275,6 +275,7 @@ class CPUFusion(GraphRewritePass):
             variance = label_map[self.batchnorm_fprop_variance_label]
             mean = label_map[self.batchnorm_fprop_mean_label]
             epsilon = label_map[self.batchnorm_fprop_epsilon_label].args[0].tensor.const
+            #import pdb;pdb.set_trace()
             batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
 
             # book keep the fprop batchnorm op to use during back propogation
