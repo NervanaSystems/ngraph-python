@@ -14,12 +14,12 @@ class FlexDtypePass(PeepholeGraphPass):
 
 class FlexDECPass(PeepholeGraphPass):
 
-    def __init__(self, **kwargs):
+    def __init__(self, transformer, **kwargs):
         super(FlexDECPass, self).__init__(**kwargs)
+        self.transformer = transformer
         self.propagate_flex_entry = False
 
     def do_pass(self, min_ops, transformer):
-        self.transformer = transformer
         super(FlexDECPass, self).do_pass(min_ops, transformer)
 
     @generic_method(dispatch_base_type=Op)

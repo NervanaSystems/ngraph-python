@@ -99,7 +99,7 @@ class FlexGPUTransformer(GPUTransformer):
     def finish_transform_allocate(self):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
-        FlexDECPass().do_pass(self.ops, self)
+        FlexDECPass(self).do_pass(self.ops, transformer=self)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
