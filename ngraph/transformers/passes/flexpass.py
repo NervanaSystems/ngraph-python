@@ -20,7 +20,7 @@ class FlexDECPass(PeepholeGraphPass):
         self.propagate_flex_entry = False
 
     def do_pass(self, min_ops, transformer):
-        super(FlexDECPass, self).do_pass(min_ops, transformer)
+        super(FlexDECPass, self).do_pass(min_ops, self.transformer)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op, *args):
