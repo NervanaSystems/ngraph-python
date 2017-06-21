@@ -94,6 +94,7 @@ class mini_residual_network(Sequential):
             layers.append(BatchNorm())
         if activation:
             layers.append(Activation(Rectlin()))
+
         layers.append(Pool2D(8, strides=2, op='avg'))
         if dataset == 'cifar10':
             ax.Y.length = 10
@@ -111,7 +112,7 @@ class mini_residual_network(Sequential):
 def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
                     activation=True, preprocess=False):
     model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
-    with ng.metadata(device_id=device_id, parallel=ax.N):
+    with ng.metadata(device_id=device_id, parallel=ax.N, step='FProp'):
         model_out = model(inputs['image'])
     return model_out
 
@@ -123,34 +124,31 @@ def get_fake_data(dataset, batch_size, n_iter):
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
     train_set = ArrayIterator(train_data, batch_size, total_iterations=n_iter)
-    inputs = train_set.make_placeholders(include_iteration=True)
+    with ng.metadata(step='Inputs'):
+        inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 
 
 def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
-                         transformer_type, device, bprop=False, visualize=False):
+                         transformer_type, device, visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
-    model_out = get_mini_resnet(inputs, dataset, device_id)
 
     # Running forward propagation
-    fprop_computation_op = ng.computation(model_out, 'all')
-    benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type, device)
-    Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
-                                                           dataset + '_msra_fprop', visualize))
+    with ng.metadata(step='FProp'):
+        model_out = get_mini_resnet(inputs, dataset, device_id)
 
     # Running back propagation
-    if bprop:
+    with ng.metadata(device_id=device_id, parallel=ax.N, step='BProp'):
         optimizer = GradientDescentMomentum(0.01, 0.9)
         train_loss = ng.cross_entropy_multi(model_out,
                                             ng.one_hot(inputs['label'], axis=ax.Y))
 
         batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
         batch_cost_computation_op = ng.computation(batch_cost, "all")
-
-        benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
-                              transformer_type, device)
-        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                          dataset + '_msra_bprop', visualize))
+    benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
+                          transformer_type, device)
+    Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
+                                      dataset + '_msra_bprop', visualize, 'device_id'))
 
 
 if __name__ == "__main__":
@@ -173,6 +171,8 @@ if __name__ == "__main__":
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
     for device_id in device_ids:
+        if len(device_id) == 1:
+            device_id = device_id[0]
         run_resnet_benchmark(dataset=args.data_set,
                              n_iter=args.max_iter,
                              n_skip=args.skip_iter,

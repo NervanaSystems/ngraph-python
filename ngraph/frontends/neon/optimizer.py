@@ -199,6 +199,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
         updates = []
         velocity = ng.persistent_tensor(axes=variable.axes,
                                         initial_value=0.).named(variable.name + '_vel')
+        grad.metadata['reduce_func'] = 'sum'
         clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
         lr = - self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
         updates.append(ng.assign(velocity, velocity * self.momentum_coef + lr))
