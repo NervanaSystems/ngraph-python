@@ -22,7 +22,7 @@ import cachetools
 import numpy as np
 from builtins import object
 from functools import wraps
-from collections import defaultdict, Iterable
+from collections import defaultdict
 import abc
 from future.utils import with_metaclass
 
