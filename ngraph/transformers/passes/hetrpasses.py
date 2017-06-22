@@ -31,7 +31,7 @@ class DeviceAssignPass(GraphBuildingPass):
     def visit(self, op, *args):
         device = op.metadata.setdefault('device', self.default_device)
         if 'device_id' in op.metadata and isinstance(op.metadata['device_id'], (list, tuple)) and len(op.metadata['device_id']) == 1:
-            op.metadata['device_id'] = '1'
+            op.metadata['device_id'] = op.metadata['device_id'][0]
         device_id = op.metadata.setdefault('device_id', self.default_device_id)
         transformer = "{}{}".format(device, device_id)
         op.metadata['host_transformer'] = socket.gethostname()
