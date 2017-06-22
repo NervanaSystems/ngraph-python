@@ -14,9 +14,15 @@
 # ----------------------------------------------------------------------------
 
 import pytest
+import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Linear, Affine, Convolution, \
     BiRNN, LSTM, ConstantInit, Rectlin, Tanh
+from ngraph.frontends.neon.optimizer import RMSProp
+from ngraph.testing import ExecutorFactory, RandomTensorGenerator
+
+
+rng = RandomTensorGenerator(0, np.float32)
 
 
 class LayerClass(object):
@@ -31,7 +37,8 @@ class LayerClass(object):
         return (self.layer.W, )
 
     def get_input(self):
-        return ng.placeholder(axes=())
+        N = ng.make_axis(name='N', length=4)
+        return ng.placeholder(axes=ng.make_axes(N))
 
 
 class LinearLayer(LayerClass):
@@ -60,7 +67,7 @@ class ConvolutionLayer(LayerClass):
                                  ConstantInit(0.0),
                                  {'str_d': 1, 'str_h': 1, 'str_w': 1},
                                  {'pad_d': 0, 'pad_h': 0, 'pad_w': 0},
-                                 {'dil_d': 0, 'dil_h': 0, 'dil_w': 0},
+                                 {'dil_d': 1, 'dil_h': 1, 'dil_w': 1},
                                  bias_init=ConstantInit(0.0),
                                  batch_norm=True)
 
@@ -73,6 +80,7 @@ class ConvolutionLayer(LayerClass):
             ng.make_axis(name='C', length=1),
             ng.make_axis(name='H', length=8),
             ng.make_axis(name='W', length=8),
+            ng.make_axis(name='D', length=1),
             ng.make_axis(name='N', length=4)
         ])
         return ng.placeholder(axes=ax_i)
@@ -90,8 +98,8 @@ class LSTMLayer(LayerClass):
                      list(self.layer.b.values()))
 
     def get_input(self):
-        ax_i = ng.make_axes([ng.make_axis(name='M', length=8),
-                             ng.make_axis(name='REC', length=10),
+        ax_i = ng.make_axes([ng.make_axis(name='M', length=4),
+                             ng.make_axis(name='REC', length=4),
                              ng.make_axis(name='N', length=4)])
         return ng.placeholder(axes=ax_i)
 
@@ -100,7 +108,7 @@ class BiRNNLayer(LayerClass):
 
     def __init__(self):
         super(BiRNNLayer, self).__init__()
-        self.layer = BiRNN(nout=16, init=ConstantInit(0.0), activation=Tanh())
+        self.layer = BiRNN(nout=16, init=ConstantInit(0.0), activation=Tanh(), concat_out=True)
 
     def get_weights(self):
         def rnn_weights(rnn):
@@ -108,8 +116,8 @@ class BiRNNLayer(LayerClass):
         return rnn_weights(self.layer.fwd_rnn) + rnn_weights(self.layer.bwd_rnn)
 
     def get_input(self):
-        ax_i = ng.make_axes([ng.make_axis(name='M', length=8),
-                             ng.make_axis(name='REC', length=10),
+        ax_i = ng.make_axes([ng.make_axis(name='M', length=4),
+                             ng.make_axis(name='REC', length=4),
                              ng.make_axis(name='N', length=4)])
         return ng.placeholder(axes=ax_i)
 
@@ -133,27 +141,56 @@ def layer_cls(request):
     return request.param
 
 
-def test_scope(layer_cls):
-    """
-    Test that creating layer in and outside of scope behaves correctly
-    """
+# test for new "scope" implementation - Layers have associated subgraphs
+@pytest.fixture(scope='module',
+                params=['subgraph',
+                        'variables'])
+def optimizer_scope_keyword(request):
+    return request.param
 
-    scope1 = 's1'
-    layer0 = layer_cls()
-    with Layer.variable_scope(scope1):
-        assert Layer.active_scope == scope1
-        layer1 = layer_cls()
-    layer2 = layer_cls()
 
-    # have to call layers to initialize W
-    x = layer0.get_input()
-    layer0.get_layer()(x)
-    layer1.get_layer()(x)
-    layer2.get_layer()(x)
+def test_selective_optimization(transformer_factory, layer_cls,
+                                optimizer_scope_keyword):
 
-    for w in layer0.get_weights():
-        assert w.scope is None
-    for w in layer1.get_weights():
-        assert w.scope == scope1, "found scope {} instead of {}".format(w.scope, scope1)
-    for w in layer2.get_weights():
-        assert w.scope is None
+    def make_network():
+        # create layer
+        layer = layer_cls()
+
+        # fprop
+        x = layer.get_input()
+        y = layer.get_layer()(x)
+        t = ng.placeholder(axes=y.axes)
+        cost = ng.squared_L2(y - t)
+        return layer, cost, x, t
+
+    def make_optimizer():
+        return RMSProp()
+
+    with ExecutorFactory() as ex:
+
+        # optimization specifying subgraph or variables
+        layerA, costA, xA, tA = make_network()
+        optimizerA = make_optimizer()
+        if optimizer_scope_keyword == 'subgraph':
+            updatesA = optimizerA(costA, subgraph=[layerA.get_layer()])
+        elif optimizer_scope_keyword == 'variables':
+            updatesA = optimizerA(costA, variables=list(layerA.get_layer().variables))
+        compA = ex.executor(updatesA, xA, tA)
+
+        # optimization not specifying subgraph or variables
+        layerB, costB, xB, tB = make_network()
+        optimizerB = make_optimizer()
+        updatesB = optimizerB(costB)
+        compB = ex.executor(updatesB, xB, tB)
+
+        x_val = rng.uniform(-1.0, 1.0, xA.axes)
+        t_val = rng.uniform(-1.0, 1.0, tA.axes)
+
+        compA(x_val, t_val)
+        compB(x_val, t_val)
+
+        for wA, wB in zip(layerA.get_weights(), layerB.get_weights()):
+            wA_val = ex.get_tensor_view_value(wA)
+            wB_val = ex.get_tensor_view_value(wB)
+            #assert (wA_val == wB_val).all()
+            ng.testing.assert_allclose(wA_val, wB_val)

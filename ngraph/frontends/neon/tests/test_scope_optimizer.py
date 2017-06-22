@@ -19,7 +19,7 @@ from ngraph.frontends.neon.layer import Layer, Affine
 from ngraph.frontends.neon.model import Sequential
 from ngraph.frontends.neon.activation import Rectlin, Logistic
 from ngraph.frontends.neon.initializer import ConstantInit
-from ngraph.frontends.neon.optimizer import GradientDescentMomentum, RMSProp
+from ngraph.frontends.neon.optimizer import GradientDescentMomentum, RMSProp, Adam
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator
 
 
@@ -34,23 +34,33 @@ def rmsprop():
     return RMSProp()
 
 
+def adam():
+    return Adam()
+
+
 @pytest.fixture(scope='module',
                 params=[gradient_descent_momentum,
-                        rmsprop])
+                        rmsprop,
+                        adam])
 def optimizer_factory(request):
     return request.param
 
 
 @pytest.fixture(scope='module',
-                params=[
-                    ('s1', 's2'),
-                    ('s2', 's1')
-                ])
-def scope_pair(request):
+                params=['subgraph',
+                        'variables'])
+def optimizer_scope_keyword(request):
     return request.param
 
 
-def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
+@pytest.fixture(scope='module',
+                params=[0, 1])
+def update_layer(request):
+    return request.param
+
+
+def test_scope_2layer(optimizer_factory, optimizer_scope_keyword, update_layer,
+                      transformer_factory):
     """
     Two layer network with each layer in a different variable scope.
     Test that optimizing with respect to variables in one scope correctly
@@ -80,30 +90,26 @@ def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
     W_lin_init = [Wlin1, Wlin2]
     W_bias_init = [Wbias1, Wbias2]
 
-    def make_network(scope1=None, scope2=None):
+    def make_network():
         # 2 layer network, each layer has its own scope
         x = ng.placeholder(axes)  # inputs
         t = ng.placeholder(ng.make_axes([ng.make_axis(length=1), N]))  # targets
-        with Layer.variable_scope(scope1):
-            layer1 = Affine(ConstantInit(val=Wlin1), nout=nout1,
-                            bias_init=ConstantInit(val=Wbias1),
-                            activation=Rectlin(), batch_norm=False)
-        with Layer.variable_scope(scope2):
-            layer2 = Affine(ConstantInit(val=Wlin2), nout=1,
-                            bias_init=ConstantInit(val=Wbias2),
-                            activation=Logistic(), batch_norm=False)
+        layer1 = Affine(ConstantInit(val=Wlin1), nout=nout1,
+                        bias_init=ConstantInit(val=Wbias1),
+                        activation=Rectlin(), batch_norm=False)
+        layer2 = Affine(ConstantInit(val=Wlin2), nout=1,
+                        bias_init=ConstantInit(val=Wbias2),
+                        activation=Logistic(), batch_norm=False)
         seq = Sequential([layer1, layer2])
         p_t = seq(x)
         t_cast = ng.cast_axes(t, p_t.axes)  # TODO: how can this be avoided?
         loss = ng.cross_entropy_binary(p_t, t_cast)
         return seq, x, t, loss
 
-    update_scope, no_update_scope = scope_pair
     with ExecutorFactory() as ex:
 
         # layer indices
-        update_layer = int(update_scope[-1]) - 1
-        no_update_layer = int(no_update_scope[-1]) - 1
+        no_update_layer = 1 - update_layer
 
         # get all updates, without scope, for ground truth
         seq_all, x_all, t_all, loss_all = make_network()
@@ -115,7 +121,7 @@ def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
         network_all = ex.executor(result_list, x_all, t_all)
 
         # update only variables in one scope, for same network
-        seq_scope, x_scope, t_scope, loss_scope = make_network(scope1='s1', scope2='s2')
+        seq_scope, x_scope, t_scope, loss_scope = make_network()
         optimizer_scope = optimizer_factory()
         updates_scope = optimizer_scope(loss_scope, variable_scope=update_scope)
         result_list = [updates_scope]

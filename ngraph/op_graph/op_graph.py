@@ -342,8 +342,6 @@ class Op(NameableValue):
         self.style = {}
         self._forward = None
 
-        self.scope = None
-
     def copy_with_new_args(self, args):
         """
         This method creates a new op given an original op and new args. The purpose here
@@ -2265,7 +2263,6 @@ class AssignableTensorOp(TensorOp):
             is_trainable=False,
             is_placeholder=False,
             const=None,
-            scope=None,
             **kwargs):
         super(AssignableTensorOp, self).__init__(**kwargs)
         self._is_input = is_input
@@ -2275,7 +2272,6 @@ class AssignableTensorOp(TensorOp):
         self._is_placeholder = is_placeholder
         self._const = const
         self.initial_value = None
-        self.scope = scope
 
         if initial_value is not None:
             # convert callable initial value
@@ -2492,7 +2488,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
                               **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
+def variable(axes, dtype=None, initial_value=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2501,8 +2497,6 @@ def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
-        scope (optional): scope of variable, can be used to filter on when
-                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
@@ -2513,7 +2507,6 @@ def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
                               is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
-                              scope=scope,
                               **kwargs)
 
 

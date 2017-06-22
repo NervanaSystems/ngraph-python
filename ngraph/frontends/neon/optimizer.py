@@ -115,18 +115,55 @@ class LearningRateOptimizer(Optimizer):
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
     @ng.with_op_metadata
-    def __call__(self, cost_func, variable_scope=None):
+    def __call__(self, cost_func, subgraph=None, variables=None, warning=False):
+        """
+        Arguments:
+            subgraph (list of neon Layers or SubGraphs, optional)
+            variables (list of variables, optional)
+                only one of subgraph or variables should be specified
+            warning (bool, optional): for use with subgraph or variables,
+                if True displays warning message if any variables specified by
+                subgraph or variables do not participate in batch cost computation
+        """
+
+        # check valid args
+        error_msg = "only subgraph or variables keyword arg can be specified, not both"
+        if subgraph is not None:
+            assert variables is None, error_msg
+        elif variables is not None:
+            assert subgraph is None, error_msg
+
         self._pre_call_hook()
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
         batch_size = cost_func.axes.batch_axis().length
 
-        selected_variables = batch_cost.variables()
-        if variable_scope is not None:
-            selected_variables = [op for op in selected_variables if op.scope == variable_scope]
+        # determine variables to optimize
+        all_variables = batch_cost.variables()
+        if subgraph is not None:
+            selected_variables = set()
+            for sg in subgraph:
+                selected_variables.update(all_variables & sg.variables)
+        elif variables is not None:
+            selected_variables = all_variables & set(variables)
+        else:
+            selected_variables = all_variables
+
+        # warning if specified variables do not participate in batch cost computation
+        if warning and (subgraph or variables):
+            if subgraph:
+                num_specified = sum([len(sg) for sg in subgraph])
+            else:
+                num_specified = len(variables)
+            if len(selected_variables) < num_specified:
+                print("warning: not all selected variables participate in cost computation")
+
+        # gradients
+        selected_variables = list(selected_variables)
         grads = [ng.deriv(batch_cost, v) / batch_size for v in selected_variables]
         scale_factor = clip_gradient_norm(grads, self.gradient_clip_norm)
 
+        # updates
         for variable, grad in zip(selected_variables, grads):
             updates = self.variable_update(variable, grad, scale_factor)
             all_updates.append(updates)

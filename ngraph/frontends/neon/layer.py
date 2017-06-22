@@ -80,16 +80,13 @@ class Layer(NameableValue):
         inference_mode_on - Context manager for inference mode
         inference_mode_key - cachetools hashing function that accounts for the value of
                              inference mode
-        variable_scope - Context manager to set the variable scope of subsequently defined ops
     """
 
     inference_mode = False
-    active_scope = None
     metadata = {}
 
     def __init__(self, name=None):
         super(Layer, self).__init__(name=name, graph_label_type="neon_layer")
-        self.scope = Layer.active_scope
         self._subgraph = SubGraph()
 
     def __call__(self, in_obj, reuse=True):
@@ -142,16 +139,6 @@ class Layer(NameableValue):
         """
 
         return keys.hashkey(inference_mode=Layer.inference_mode, *args, **kwargs)
-
-    @staticmethod
-    @contextmanager
-    def variable_scope(name):
-        """
-        TODO: Document
-        """
-        Layer.active_scope = name
-        yield Layer.active_scope
-        Layer.active_scope = None
 
 
 class Preprocess(Layer):
@@ -258,7 +245,7 @@ class Linear(Layer):
         if not self.initialized:
             self.W = ng.variable(axes=(ng.make_axes(self.axes_map.keys()) +
                                        in_obj.axes.feature_axes()),
-                                 initial_value=self.init, scope=self.scope,
+                                 initial_value=self.init,
                                  metadata={"label": LABELS["weight"]},
                                  ).named('LinW')
 
@@ -336,7 +323,6 @@ class LookupTable(Layer):
             self.W = ng.variable(axes=self.w_axes,
                                  initial_value=self.lut_init(
                                      self.w_axes, self.lut_v_axis, self.pad_idx),
-                                 scope=self.scope,
                                  metadata={"label": LABELS["weight"]},
                                  ).named('LutW')
 
@@ -431,7 +417,6 @@ class ConvBase(Layer):
         if self.W is None:
             self.W = ng.variable(axes=filter_axes,
                                  initial_value=self.init,
-                                 scope=self.scope,
                                  metadata={"label": LABELS["weight"]}).named(self.W_name)
         else:
             if filter_axes != self.W.axes:
@@ -654,7 +639,7 @@ class Bias(Layer):
                 w_axes = in_obj.axes.sample_axes()
                 if self.shared and in_obj.axes.channel_axis() is not None:
                     w_axes = ng.make_axes(in_obj.axes.channel_axis())
-                self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
+                self.W = ng.variable(axes=w_axes, initial_value=self.init,
                                      metadata={"label": LABELS["bias"]}).named("bias")
             return in_obj + self.W
         else:
@@ -677,7 +662,6 @@ class Affine(Layer):
         self.bias = Bias(init=bias_init)
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
-        self.scope = Layer.active_scope  # only included so all Layers have scope attribute
 
     @wrap_layer()
     def __call__(self, in_obj):
@@ -762,7 +746,6 @@ class BatchNorm(Layer):
         self.beta = None
         self.gmean = None
         self.gvar = None
-        self.scope = Layer.active_scope
 
     @wrap_layer(cache_key=Layer.inference_mode_key)
     def __call__(self, in_obj):
@@ -781,11 +764,9 @@ class BatchNorm(Layer):
             self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0)
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,
-                                     scope=self.scope,
                                      metadata={"label": LABELS["weight"]}).named('gamma')
             self.beta = ng.variable(axes=out_axes,
                                     initial_value=self.init_beta,
-                                    scope=self.scope,
                                     metadata={"label": LABELS["bias"]}).named('beta')
 
         xmean = ng.mean(in_obj, out_axes=out_axes)
@@ -964,16 +945,13 @@ class Recurrent(Layer):
 
             self.W_input = ng.variable(axes=self.w_in_axes,
                                        initial_value=self.init,
-                                       scope=self.scope,
                                        metadata={"label": LABELS["weight"]},
                                        ).named("W_in")
             self.W_recur = ng.variable(axes=self.w_re_axes,
                                        initial_value=self.init_inner,
-                                       scope=self.scope,
                                        metadata={"label": LABELS["weight"]},
                                        ).named("W_re")
             self.b = ng.variable(axes=self.out_feature_axes, initial_value=0,
-                                 scope=self.scope,
                                  metadata={"label": LABELS["bias"]},
                                  ).named("bias")
 
@@ -1219,19 +1197,16 @@ class LSTM(Recurrent):
             gates = self.metadata["gates"]
             self.W_input = {k: ng.variable(axes=self.w_in_axes,
                                            initial_value=self.init,
-                                           scope=self.scope,
                                            metadata={"label": LABELS["weight"]},
                                            ).named("W_in_{}".format(k)) for k in gates}
 
             self.W_recur = {k: ng.variable(axes=self.w_re_axes,
                                            initial_value=self.init_inner,
-                                           scope=self.scope,
                                            metadata={"label": LABELS["weight"]},
                                            ).named("W_re_{}".format(k)) for k in gates}
 
             self.b = {k: ng.variable(axes=self.out_feature_axes,
                                      initial_value=0,
-                                     scope=self.scope,
                                      metadata={"label": LABELS["bias"]},
                                      ).named("bias_{}".format(k)) for k in gates}
 
