@@ -115,6 +115,10 @@ class Layer(NameableValue):
     def side_effects(self):
         return self._subgraph.side_effects
 
+    @property
+    def scope(self):
+        return self._subgraph.name
+
     @staticmethod
     @contextmanager
     def inference_mode_on():
