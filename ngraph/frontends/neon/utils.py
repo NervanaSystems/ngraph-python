@@ -64,7 +64,7 @@ def scope_ops(name=None, **metadata):
         
         Any additional key-value pairs are added as metadata on all captured ops
 
-    Returns:
+    Returns:  # RP: doesn't really "return" SubGraph; yielded by context manager
         instance of SubGraph
     """
 
@@ -94,7 +94,7 @@ class OpList(object):
         A connected subset of all ops in the computational graph
 
         Arguments:
-            ops (list): A list of ops
+            ops (OrderedSet): An OrderedSet of ops
         """
         self.ops = list()
         if ops is not None:
@@ -111,7 +111,7 @@ class OpList(object):
     @cached({}, key=_cache_if_initialized)
     def variables(self):
         """
-        An OrderedSet of all trainable variables created in this layer
+        An OpList of all trainable variables created in this layer
         """
         if len(self.ops):
             return OpList(OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable))
@@ -201,6 +201,9 @@ class OpList(object):
 
 
 class SubGraph(OpList):
+
+    def __init__(self, **kwargs):
+        super(SubGraph, self).__init__(**kwargs)
 
     @property
     @cached({}, key=_cache_if_initialized)
