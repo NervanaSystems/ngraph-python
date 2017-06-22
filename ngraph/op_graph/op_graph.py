@@ -1517,6 +1517,7 @@ class TensorOp(Op):
         """
         if "layout" in self.metadata:
             return TensorDescription(self.axes,
+                                     op=self,
                                      layout=self.metadata["layout"],
                                      dtype=self.dtype,
                                      is_persistent=self.is_persistent,
@@ -1524,6 +1525,7 @@ class TensorOp(Op):
                                      is_placeholder=self.is_placeholder)
         else:
             return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                     op=self,
                                      is_persistent=self.is_persistent,
                                      is_input=self.is_input,
                                      is_placeholder=self.is_placeholder)
