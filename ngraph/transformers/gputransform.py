@@ -29,7 +29,7 @@ except ImportError:
     raise UnsupportedTransformerException("No GPU")
 
 from ngraph.transformers.base import ComputationGraphTransformer, \
-    DeviceBufferStorage, DeviceBufferReference, DeviceTensor, \
+    DeviceBufferStorage, DeviceTensor, \
     PYCUDA_LOGIC_ERROR_CODE
 from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     Max, Min, OneHotOp, \
@@ -639,15 +639,6 @@ class GPURegister():
         self.name = name
 
 
-class GPUDeviceBufferReference(DeviceBufferReference):
-    """
-    Analogous to NumPyDeviceBufferReference.
-    """
-
-    def __init__(self, transformer, **kwargs):
-        super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
-
-
 class GPUDeviceBufferStorage(DeviceBufferStorage):
     """
     Used to transform device allocations. Analogous to NumPyDeviceBufferStorage.
@@ -1108,14 +1099,6 @@ class GPUTransformer(ComputationGraphTransformer):
         Returns: A DeviceBuffer.
         """
         return GPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
-
-    def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
-        """
-        return GPUDeviceBufferReference(self)
 
     def add_view_allocator(self, view_alloc):
         self.current_buffer.add_view_allocator(view_alloc)
