@@ -1,3 +1,18 @@
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+
 from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
@@ -14,8 +29,13 @@ class FlexDtypePass(PeepholeGraphPass):
 
 class FlexDECPass(PeepholeGraphPass):
 
-    def __init__(self):
+    def __init__(self, transformer, **kwargs):
+        super(FlexDECPass, self).__init__(**kwargs)
+        self.transformer = transformer
         self.propagate_flex_entry = False
+
+    def do_pass(self, min_ops, transformer):
+        super(FlexDECPass, self).do_pass(min_ops, self.transformer)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op, *args):
