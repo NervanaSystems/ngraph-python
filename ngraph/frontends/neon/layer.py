@@ -87,7 +87,7 @@ class Layer(NameableValue):
 
     def __init__(self, name=None):
         super(Layer, self).__init__(name=name, graph_label_type="neon_layer")
-        self._subgraph = SubGraph()
+        self._subgraph = SubGraph(name=self.name)
 
     def __call__(self, in_obj, reuse=True):
         raise NotImplementedError()

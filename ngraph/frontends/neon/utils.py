@@ -7,6 +7,7 @@ from builtins import object
 import functools
 from cachetools import cached, keys
 from contextlib import contextmanager
+from ngraph.util.names import NameableValue
 
 
 def make_convolution_placeholder(shape=None):
@@ -88,14 +89,15 @@ def _cache_if_initialized(subgraph):
     return keys.hashkey(subgraph, len(subgraph.ops) > 0)
 
 
-class OpList(object):
-    def __init__(self, ops=None):
+class OpList(NameableValue):
+    def __init__(self, ops=None, **kwargs):
         """
         A connected subset of all ops in the computational graph
 
         Arguments:
             ops (OrderedSet): An OrderedSet of ops
         """
+        super(OpList, self).__init__(**kwargs)
         self.ops = list()
         if ops is not None:
             self.ops.append(ops)
