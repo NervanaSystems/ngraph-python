@@ -47,7 +47,7 @@ def check_device_assign_pass(default_device, default_device_id,
             metadata {device_id, device} for each op
     :param: graph_op: list of ops to do the graph traversal
     """
-    with ExecutorFactory() as ex:
+    with ExecutorFactory():
         expected_transformers = set()
 
         class MockHetr(object):
@@ -61,7 +61,7 @@ def check_device_assign_pass(default_device, default_device_id,
         hetr = MockHetr()
         obj = DeviceAssignPass(hetr, default_device, default_device_id)
 
-        obj.do_pass(graph_op, ex.transformer)
+        obj.do_pass(graph_op)
 
         for op in graph_op_metadata.keys():
             assert op.metadata['device'] == graph_op_metadata[op][0]
