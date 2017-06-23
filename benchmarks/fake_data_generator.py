@@ -17,7 +17,6 @@ import numpy as np
 
 def generate_data(dataset, batch_size):
     rand_state = np.random.RandomState()
-    # rand_state.seed(0)
     if dataset == 'cifar10':
         batch_xs = rand_state.rand(batch_size, 3, 32, 32).astype(np.float32)
         labels = rand_state.randint(low=0, high=9, size=batch_size)

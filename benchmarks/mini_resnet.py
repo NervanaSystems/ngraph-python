@@ -112,7 +112,7 @@ class mini_residual_network(Sequential):
 def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
                     activation=True, preprocess=False):
     model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
-    with ng.metadata(device_id=device_id, parallel=ax.N, step='FProp'):
+    with ng.metadata(device_id=device_id, parallel=ax.N):
         model_out = model(inputs['image'])
     return model_out
 
@@ -124,31 +124,36 @@ def get_fake_data(dataset, batch_size, n_iter):
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
     train_set = ArrayIterator(train_data, batch_size, total_iterations=n_iter)
-    with ng.metadata(step='Inputs'):
-        inputs = train_set.make_placeholders(include_iteration=True)
+    inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 
 
 def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
-                         transformer_type, device, visualize=False):
+                         transformer_type, device, bprop=True, visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
 
     # Running forward propagation
-    with ng.metadata(step='FProp'):
-        model_out = get_mini_resnet(inputs, dataset, device_id)
+    model_out = get_mini_resnet(inputs, dataset, device_id)
 
     # Running back propagation
-    with ng.metadata(device_id=device_id, parallel=ax.N, step='BProp'):
-        optimizer = GradientDescentMomentum(0.01, 0.9)
-        train_loss = ng.cross_entropy_multi(model_out,
-                                            ng.one_hot(inputs['label'], axis=ax.Y))
+    if bprop:
+        with ng.metadata(device_id=device_id, parallel=ax.N):
+            optimizer = GradientDescentMomentum(0.01, 0.9)
+            train_loss = ng.cross_entropy_multi(model_out,
+                                                ng.one_hot(inputs['label'], axis=ax.Y))
 
-        batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-        batch_cost_computation_op = ng.computation(batch_cost, "all")
-    benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
-                          transformer_type, device)
-    Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                      dataset + '_msra_bprop', visualize, 'device_id'))
+            batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+            batch_cost_computation_op = ng.computation(batch_cost, "all")
+        benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
+                              transformer_type, device)
+        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
+                                          dataset + '_msra_bprop', visualize, 'device_id'))
+    else:
+        fprop_computation_op = ng.computation(model_out, 'all')
+        benchmark = Benchmark(fprop_computation_op, train_set, inputs,
+                              transformer_type, device)
+        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
+                                          dataset + '_msra_fprop', visualize))
 
 
 if __name__ == "__main__":
@@ -166,6 +171,7 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
     parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
+    parser.add_argument('-b', '--bprop', type=int, default=0, help="enable back propagation")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
@@ -180,4 +186,5 @@ if __name__ == "__main__":
                              device_id=device_id,
                              transformer_type=args.transformer,
                              device=args.device,
+                             bprop=args.bprop!=0,
                              visualize=args.visualize)
