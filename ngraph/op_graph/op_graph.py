@@ -3255,7 +3255,7 @@ def minimum(x, y, dtype=None):
         dtype: dtype of the result.
 
     Returns:
-        An Op for max(x, y).
+        An Op for min(x, y).
 
     """
     return Minimum(x, y, dtype=dtype)
@@ -3263,7 +3263,7 @@ def minimum(x, y, dtype=None):
 
 class Power(BinaryElementWiseOp):
     """
-    Raise one tensor two the power of another.
+    Raise one tensor to the power of another.
 
     Arguments:
         x: A tensor for the base.
@@ -3279,7 +3279,7 @@ class Power(BinaryElementWiseOp):
 
 def power(x, y, dtype=None):
     """
-    Raise one tensor two the power of another.
+    Raise one tensor to the power of another.
 
     Arguments:
         x: A tensor for the base.
