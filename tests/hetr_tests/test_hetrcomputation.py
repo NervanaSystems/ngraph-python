@@ -89,10 +89,10 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
     :param expected_recv_nodes: lits of ops where receive nodes are expected to
            be inserted after the communication pass
     """
-    with ExecutorFactory() as ex:
+    with ExecutorFactory():
         send_nodes = OrderedSet()
         obj = CommunicationPass(send_nodes)
-        obj.do_pass(ops_to_transform, ex.transformer)
+        obj.do_pass(ops_to_transform)
 
         op_list_instance_type = list()
         num_expected_sendnodes = len(expected_recv_nodes)

@@ -69,8 +69,8 @@ class CommunicationPass(GraphBuildingPass):
         # invalidate deps cache as op._args is updated
         op.invalidate_property_cache('all_deps')
 
-    def do_pass(self, ops, transformer):
-        super(CommunicationPass, self).do_pass(ops, transformer)
+    def do_pass(self, ops):
+        super(CommunicationPass, self).do_pass(ops)
         ops.update(self.send_nodes)
 
 
@@ -89,7 +89,7 @@ class DistributedPass(GraphBuildingPass):
         self.send_nodes = send_nodes
         self.num_devices = 0
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, ops):
 
         ops = OrderedSet(op.forwarded for op in ops)
 

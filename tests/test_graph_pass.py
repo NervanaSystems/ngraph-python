@@ -33,7 +33,6 @@ class StubTransformer(object):
 
 
 def test_simpleprune_graph_pass():
-    transformer = StubTransformer()
     base_op, simple_graph = get_simple_graph()
-    SimplePrune().do_pass([simple_graph], transformer)
+    SimplePrune().do_pass([simple_graph])
     assert simple_graph.forwarded is base_op

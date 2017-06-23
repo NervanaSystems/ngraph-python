@@ -255,7 +255,7 @@ class AssignLayouts(GraphPass):
 
         return self.branch_and_bound(cur_assignment, unassigned, 0, min_assignment, upper_bound)
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, ops):
         # Initialize data needed for layout optimization
         self.domains = self.domain_pass.domains
         self.unary_constraints = self.constraint_pass.unary_constraints
@@ -285,9 +285,9 @@ class AddLayoutConversions(PeepholeGraphPass):
         self.binary_constraints = None
         self.visited = set()
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, ops):
         self.binary_constraints = self.assign_pass.binary_constraints
-        super(AddLayoutConversions, self).do_pass(ops, transformer)
+        super(AddLayoutConversions, self).do_pass(ops)
 
     def visit(self, op, *args):
         """

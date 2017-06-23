@@ -501,7 +501,7 @@ class ComputationGraphTransformer(Transformer):
 
     def run_registered_graph_passes(self, ops):
         for graph_pass in self.graph_passes:
-            graph_pass.do_pass(ops, self)
+            graph_pass.do_pass(ops)
         return ops
 
     def initialize_allocations(self):

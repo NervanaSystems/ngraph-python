@@ -24,19 +24,20 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     ContiguousOp, DotLowDimension, \
     ExpOp, LogOp, NegativeOp, constant, \
     Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
-    PatternLabelOp, PatternSkipOp, DelegateOpAccessor
+    PatternLabelOp, PatternSkipOp
+from ngraph.transformers.passes.opdelegate import DelegateOpAccessor
 
 from ngraph.util.generics import generic_method
 
 
 class GraphPass(with_metaclass(abc.ABCMeta, DelegateOpAccessor)):
     @abc.abstractmethod
-    def do_pass(self, min_ops, transformer):
+    def do_pass(self, min_ops):
         pass
 
 
 class ProcessOpGraphPass(GraphPass):
-    def do_pass(self, min_ops, transformer):
+    def do_pass(self, min_ops):
         assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
         self.run_pass(self.process_op, min_ops=min_ops)
 
@@ -301,7 +302,7 @@ class GraphRewritePass(ProcessOpGraphPass):
         """
         self.registered_patterns.append((pattern, callback_fn))
 
-    def do_pass(self, min_ops, transformer):
+    def do_pass(self, min_ops):
         """
         Visit the ops and do pattern matching and replacement until nothing changes.
 
