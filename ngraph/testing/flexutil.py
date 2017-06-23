@@ -300,6 +300,6 @@ def execute_convolution(image_height, image_width, filter_height, filter_width, 
             reference_conv((channel, image_add_dim, image_height, image_width, batch_size),
                            (channel, filter_add_dim, filter_height, filter_width, filter_number),
                            (filter_number, M, P, Q, batch_size),
-                           conv_params,input_value, filter_value, error_value)
+                           conv_params, input_value, filter_value, error_value)
         return out, np_out
     return out
