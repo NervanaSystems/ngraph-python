@@ -242,9 +242,17 @@ def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], *
 
 
 def is_flex_transformer(transformer):
+    return is_flex(transformer.transformer_name)
+
+
+def is_flex_factory(transformer_factory):
+    return is_flex(transformer_factory.name)
+
+
+def is_flex(name):
     # Probably 'argon' also need to be added here
     flex_transformers = ['flexgpu']
-    if transformer.transformer_name in flex_transformers:
+    if name in flex_transformers:
         return True
     return False
 

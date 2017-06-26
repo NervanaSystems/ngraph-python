@@ -13,37 +13,20 @@ class FlexDtypePass(PeepholeGraphPass):
         op.dtype = gpuflex16
 
 
-class FlexDECPass(PeepholeGraphPass):
-
+class FlexPropagateEntryPass(PeepholeGraphPass):
     def __init__(self):
         self.propagate_flex_entry = False
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op, *args):
-        # copy flex entry for any op followed by dimshuffle op
+        # copy flex entry for any op followed by Dimshuffle op, PoolingOp or BpropPoolOp
         if self.propagate_flex_entry:
-            if isinstance(op, DimshuffleOp):
+            if isinstance(op, (DimshuffleOp, PoolingOp, BpropPoolOp)):
                 self.transformer.get_op_tensor(op).flex_entry = self.flex_entry
                 self.propagate_flex_entry = False
-        if op.tensor_description():
+        if op.is_tensor_op:
             self.propagate_flex_entry = True
             self.flex_entry = self.transformer.get_op_tensor(op).flex_entry
-
-
-class FlexPoolingPass(PeepholeGraphPass):
-
-    def __init__(self):
-        self.propagate_flex_entry = False
-
-    @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
-        if self.propagate_flex_entry:
-            if op.is_tensor_op:
-                op.tensor_description().buffer.flex_entry = self.flex_entry
-            self.propagate_flex_entry = False
-        if isinstance(op, (PoolingOp, BpropPoolOp)):
-            self.propagate_flex_entry = True
-            self.flex_entry = op.tensor_description().buffer.flex_entry
 
 
 class ClearTensorDescriptions(GraphPass):

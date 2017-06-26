@@ -78,7 +78,7 @@ __device__ __forceinline__ int msub16(int a, int b, int c)
 
 flex_prefix = "i"  # previously was "x" - TODO: investigate change
 flex_dtype = flex_prefix + "2"
-flex_arg_desc = "Pff"
+flex_arg_desc = "P"
 
 def prepare_template_vals(dtype, compute_capability, rounding=False):
     """
@@ -113,10 +113,9 @@ def prepare_template_vals(dtype, compute_capability, rounding=False):
         template_vals["common"] += _common_fp16_to_fp32
         template_vals["cvt_out"] = "fp32_to_fp16"
     elif dtype == flex_dtype:
-        template_vals["stats_args"] += ", int* maxabs, float scale0, float scale1"  # FLEX TODO: investigate why this is necessary even with pass setting out flex entry to in flex entry
+        template_vals["stats_args"] += ", int* maxabs"
         template_vals["cvt"] = "(float)"
         template_vals["cvt_out"] = "fp32_to_int16"
-        template_vals["mul_by_scale"] += "scale0 * 1/scale1 *"  # FLEX TODO: test other pooling kernels besides fprop_max, bprop_max_overlap
         template_vals["atomic_max"] += atomic_max
     elif dtype == "f4":
         pass

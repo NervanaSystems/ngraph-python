@@ -18,7 +18,7 @@ import pytest
 
 import ngraph as ng
 from ngraph.op_graph.pooling import BpropPoolOp
-from ngraph.testing import executor
+from ngraph.testing import executor, is_flex_factory
 from ngraph.frontends.neon.layer import output_dim
 
 
@@ -169,7 +169,6 @@ n2_c1_hw4_2x2_str2_avg = dict(
 
 
 @pytest.mark.transformer_dependent
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("pool_args",
                          [n4_c1_hw4_2x2_max,
                           n2_c1_hw5_3x3_str2_max,
@@ -178,6 +177,11 @@ n2_c1_hw4_2x2_str2_avg = dict(
                               'n2_c1_hw5_3x3_str2_max',
                               'n2_c1_hw4_2x2_str2_avg'])
 def test_gen_reference(transformer_factory, pool_args):
+    # X-FAIL for flex_disabled known issue
+    if pool_args == n4_c1_hw4_2x2_max:
+        if is_flex_factory(transformer_factory):
+            pytest.xfail('GitHub issue #0000, flex pooling does not work well when stride = 1')
+
     pf = PoolParams(**pool_args['settings'])
 
     output_ref = np.array(pool_args['output']).astype(np.float32).reshape(pf.dimO)
