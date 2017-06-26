@@ -216,6 +216,10 @@ class Op(NameableValue):
         This is more powerful than the ordered_ops method which only considers args and
         control_deps.
         """
+        # TODO: work around until #1790 is done, to get ds2 working
+        import sys
+        sys.setrecursionlimit(200000)
+
         op_set = OrderedSet(ops)
 
         def add_op(op):
