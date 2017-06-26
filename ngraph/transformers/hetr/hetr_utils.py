@@ -172,6 +172,8 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
                 op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
                                                            num_clones)
+            if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
+                op.tensor._axes = calculate_scatter_axes(op.tensor.axes, parallel_axis, num_clones)
 
             if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
                 op.tensor._axes = calculate_scatter_axes(op.tensor.axes, parallel_axis, num_clones)
