@@ -37,6 +37,22 @@ TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
+# Set parallel execution by setting the NUM_PROCS variable in the environment
+#	export NUM_PROCS=8
+#	make test_gpu
+# OR
+#	make test_gpu NUM_PROCS=8 
+#
+# If NUM_PROCS is unset, serial excution will be used
+# if NUM_PROCS = 0, serial execution will be used
+#
+PARALLEL_OPTS := ""
+ifdef NUM_PROCS
+ifneq ($(NUM_PROCS),0)
+	PARALLEL_OPTS=-n $(NUM_PROCS)
+endif
+endif
+
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
 DOC_PUB_RELEASE_PATH := $(DOC_PUB_PATH)/$(RELEASE)
@@ -120,6 +136,7 @@ test_mkldnn: test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
+	$(PARALLEL_OPTS) \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
@@ -134,6 +151,7 @@ test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only" --boxed \
+	$(PARALLEL_OPTS) \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
@@ -148,7 +166,7 @@ test_gpu: gpu_prepare test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	not separate_execution" \
-	--boxed -n 4 --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
+	--boxed $(PARALLEL_OPTS) --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	separate_execution" \
