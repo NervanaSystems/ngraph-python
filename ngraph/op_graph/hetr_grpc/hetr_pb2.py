@@ -23,7 +23,6 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   serialized_pb=_b('\n$ngraph/op_graph/hetr_grpc/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"(\n\x0c\x42uildRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"\x1c\n\nBuildReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"b\n\x12\x43omputationRequest\x12\x1b\n\x08subgraph\x18\x01 \x01(\x0b\x32\t.GraphDef\x12\x14\n\x07returns\x18\x02 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x03 \x03(\x0b\x32\x03.Op\"#\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\" \n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\":\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x17\n\x07results\x18\x02 \x03(\x0b\x32\x06.Value2\xda\x01\n\x04Hetr\x12\x30\n\x10\x42uildTransformer\x12\r.BuildRequest\x1a\x0b.BuildReply\"\x00\x12\x37\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x62\x06proto3')
   ,
   dependencies=[ngraph_dot_op__graph_dot_serde_dot_ops__pb2.DESCRIPTOR,])
-_sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 
 
@@ -366,6 +365,7 @@ DESCRIPTOR.message_types_by_name['FeedInputRequest'] = _FEEDINPUTREQUEST
 DESCRIPTOR.message_types_by_name['FeedInputReply'] = _FEEDINPUTREPLY
 DESCRIPTOR.message_types_by_name['GetResultsRequest'] = _GETRESULTSREQUEST
 DESCRIPTOR.message_types_by_name['GetResultsReply'] = _GETRESULTSREPLY
+_sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 Value = _reflection.GeneratedProtocolMessageType('Value', (_message.Message,), dict(
   DESCRIPTOR = _VALUE,
@@ -442,6 +442,8 @@ try:
 
 
   class HetrStub(object):
+    # missing associated documentation comment in .proto file
+    pass
 
     def __init__(self, channel):
       """Constructor.
@@ -472,23 +474,33 @@ try:
 
 
   class HetrServicer(object):
+    # missing associated documentation comment in .proto file
+    pass
 
     def BuildTransformer(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def Computation(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def FeedInput(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def GetResults(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
@@ -528,13 +540,23 @@ try:
     It is recommended to use the GA API (classes and functions in this
     file not marked beta) for all further purposes. This class was generated
     only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0."""
+    # missing associated documentation comment in .proto file
+    pass
     def BuildTransformer(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def Computation(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def FeedInput(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def GetResults(self, request, context):
+      # missing associated documentation comment in .proto file
+      pass
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
 
 
@@ -544,16 +566,26 @@ try:
     It is recommended to use the GA API (classes and functions in this
     file not marked beta) for all further purposes. This class was generated
     only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0."""
+    # missing associated documentation comment in .proto file
+    pass
     def BuildTransformer(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      # missing associated documentation comment in .proto file
+      pass
       raise NotImplementedError()
     BuildTransformer.future = None
     def Computation(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      # missing associated documentation comment in .proto file
+      pass
       raise NotImplementedError()
     Computation.future = None
     def FeedInput(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      # missing associated documentation comment in .proto file
+      pass
       raise NotImplementedError()
     FeedInput.future = None
     def GetResults(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      # missing associated documentation comment in .proto file
+      pass
       raise NotImplementedError()
     GetResults.future = None
 
