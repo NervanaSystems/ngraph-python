@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 import pytest
 import numpy as np
-from ngraph.testing.flexutil import execute_convolution
+from ngraph.testing.flexutil import execute_convolution, id_func
 
 pytestmark = pytest.mark.flex_only
 
@@ -38,6 +38,8 @@ test_data_execute_convolution = (
      "Image: 7x7, filter: 3x3, padding: 0, 3, 0, stride: 1"),
     (7, 7, 1, 3, 3, 1, (0, 0, 0), (3, 1, 1),
      "Image: 7x7, filter: 3x3, padding: 0, stride: 3, 1, 1"),
+    (7, 7, 1, 3, 3, 1, (0, 0, 0), (1, 2, 3),
+     "Image: 7x7, filter: 3x3, padding: 0, stride: 1, 2, 3"),
     bug_1805((7, 7, 1, 3, 3, 2, (0, 0, 0), (1, 1, 1), "Filter has more dimensions than image"))
 )
 
@@ -53,14 +55,14 @@ test_data_convolution_limitation = (
 @pytest.mark.parametrize("image_height, image_width, image_3rd_dim, "
                          "filter_height, filter_width, filter_3rd_dim, "
                          "padding, stride, description",
-                         test_data_execute_convolution)
+                         test_data_execute_convolution, ids=id_func)
 def test_execute_convolution(transformer_factory, image_height, image_width, image_3rd_dim,
                              filter_height, filter_width, filter_3rd_dim,
                              padding, stride, description):
     out, np_out = execute_convolution(image_height=image_height, image_width=image_width,
-                                      filter_height=filter_height, filter_width=filter_width,
+                                      image_3rd_dim=image_3rd_dim, filter_height=filter_height,
+                                      filter_width=filter_width, filter_3rd_dim=filter_3rd_dim,
                                       channel=16, batch_size=32, filter_number=8,
-                                      image_3rd_dim=image_3rd_dim, filter_3rd_dim=filter_3rd_dim,
                                       padding=padding, stride=stride, dilation=1,
                                       np_comparison=True)
     print("out: ", out)
@@ -69,7 +71,7 @@ def test_execute_convolution(transformer_factory, image_height, image_width, ima
 
 
 @pytest.mark.parametrize("filter_number, batch_size, dilation, description",
-                         test_data_convolution_limitation)
+                         test_data_convolution_limitation, ids=id_func)
 def test_convolution_limitation(transformer_factory, filter_number, batch_size, dilation,
                                 description):
     with pytest.raises(AssertionError) as excinfo:

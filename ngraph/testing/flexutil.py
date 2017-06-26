@@ -91,7 +91,11 @@ def id_func(param):
         if len(param) > 1:
             description += ")"
         return description
-    return " "
+    elif isinstance(param, tuple):
+        for i in param:
+            description += str(i)
+        return description
+    return " param: " + param
 
 
 def unpack_list(a, b, *c):
@@ -235,8 +239,8 @@ def template_dot_one_placeholder_and_scalar(row, col, scalar, flex_exceptions, i
 
 
 def execute_convolution(image_height, image_width, filter_height, filter_width, channel=16,
-                        batch_size=32, filter_number=8, image_3rd_dim=1,
-                        filter_3rd_dim=1, padding=(0, 0, 0), stride=(1, 1, 1),
+                        batch_size=32, filter_number=8, image_3rd_dim=1, filter_3rd_dim=1,
+                        padding=(0, 0, 0), stride=(1, 1, 1),
                         dilation=1, np_comparison=False):
 
     pad_h, pad_w, pad_d = padding
