@@ -182,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument('--nbands', type=int, default=13)
     parser.add_argument('--nout', type=int, default=29)
     parser.add_argument('--batch_norm', action='store_true')
-    parser.add_argument('--max_iter', type=int, help='Number of  iterations', default=2)
+    parser.add_argument('--max_iter', type=int, help='Number of  iterations', default=10)
     parser.add_argument('--skip_iter', type=int, help='Number of iterations to skip', default=1)
     parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
@@ -200,7 +200,6 @@ if __name__ == "__main__":
 
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
-
-    device_id=('1','2')
-    run_mini_ds2_benchmark(args.max_length, args.nbands, args.nout, args.str_w, args.batch_size, args.max_iter, args.skip_iter, args.nfilters, args.filter_width,
+    for device_id in device_ids:
+        run_mini_ds2_benchmark(args.max_length, args.nbands, args.nout, args.str_w, args.batch_size, args.max_iter, args.skip_iter, args.nfilters, args.filter_width,
                                args.depth, args.hidden_size, args.batch_norm, device_id, args.device, args.transformer, args.visualize)
