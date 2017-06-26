@@ -79,9 +79,8 @@ class FakeDataIterator(object):
         ax.N.length = batch_size
         batch_axes = ng.make_axes([ax.N])
         for name, info in dataset_info.items():
-            self.axis_names[name] = batch_axes + \
-                                    ng.make_axes([ng.make_axis(name=k,
-                                                               length=v) for k, v in info["axes"]])
+            self.axis_names[name] = batch_axes + ng.make_axes([ng.make_axis(name=k, length=v)
+                                                               for k, v in info["axes"]])
             self.randomizers[name] = info.get("random", lambda s: np.random.uniform(-1, 1, s))
             self.dtypes[name] = info.get("dtype", np.float32)
 

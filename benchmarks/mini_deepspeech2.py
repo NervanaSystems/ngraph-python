@@ -15,8 +15,8 @@
 # ----------------------------------------------------------------------------
 import ngraph as ng
 from benchmark import Benchmark
-from ngraph.frontends.neon import (GaussianInit, GlorotInit, ConstantInit, Convolution, Rectlin, Rectlinclip,
-                                   BiRNN, Affine, Softmax, Sequential)
+from ngraph.frontends.neon import (GaussianInit, GlorotInit, ConstantInit, Convolution, Rectlin,
+                                   Rectlinclip, BiRNN, Affine, Softmax, Sequential)
 
 from ngraph.frontends.neon import ax
 from fake_data_generator import generate_ds2_data
@@ -24,6 +24,7 @@ import argparse
 
 ax.Y.length = 29
 ax.Y.name = "characters"
+
 
 class DeepBiRNN(Sequential):
 
@@ -123,8 +124,7 @@ class Deepspeech(Sequential):
         # TODO: This should be handled in a graph pass
         if self.to_ctc is True:
             warp_axes = ng.make_axes([output.axes.recurrent_axis(),
-                                      output.axes.batch_axis()]) | \
-                        output.axes.feature_axes()
+                                      output.axes.batch_axis()]) | output.axes.feature_axes()
             output = ng.axes_with_order(output, warp_axes)
             output = ng.ContiguousOp(output)
 
@@ -141,15 +141,18 @@ class Deepspeech(Sequential):
         return params
 
 
-def get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands, depth, hidden_size, batch_norm, device_id):
-    model = Deepspeech(nfilters, filter_width, str_w, nbands, depth, hidden_size, batch_norm=batch_norm)
+def get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands,
+                 depth, hidden_size, batch_norm, device_id):
+    model = Deepspeech(nfilters, filter_width, str_w, nbands, depth,
+                       hidden_size, batch_norm=batch_norm)
     with ng.metadata(device_id=device_id, parallel=ax.N):
         model_out = model(inputs["audio"])
     return model_out
 
 
-def run_mini_ds2_benchmark(max_length, nbands, nout, str_w, batch_size, max_iter, skip_iter, nfilters,
-                           filter_width, depth, hidden_size, batch_norm, device_id, device, transformer, visualize=False):
+def run_mini_ds2_benchmark(max_length, nbands, nout, str_w, batch_size, max_iter, skip_iter,
+                           nfilters, filter_width, depth, hidden_size, batch_norm, device_id,
+                           device, transformer, visualize=False):
     inputs, train_set, eval_set = generate_ds2_data(max_length, nbands, nout, str_w,
                                                     batch_size, max_iter)
     model_out = get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands, depth, hidden_size,
@@ -164,21 +167,14 @@ def run_mini_ds2_benchmark(max_length, nbands, nout, str_w, batch_size, max_iter
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--nfilters', type=int,
-                           help='Number of convolutional filters in the first layer',
-                           default=2)
-    parser.add_argument('--filter_width', type=int,
-                           help='Width of 1D convolutional filters',
-                           default=11)
-    parser.add_argument('--str_w', type=int,
-                           help='Stride in time',
-                           default=3)
-    parser.add_argument('--depth', type=int,
-                           help='Number of RNN layers',
-                           default=1)
-    parser.add_argument('--hidden_size', type=int,
-                           help='Number of hidden units in the RNN and affine layers',
-                           default=1)
+    parser.add_argument('--nfilters', type=int, help='Number of convolutional filters in '
+                                                     'the first layer', default=2)
+    parser.add_argument('--filter_width', type=int, help='Width of 1D convolutional filters',
+                        default=11)
+    parser.add_argument('--str_w', type=int, help='Stride in time', default=3)
+    parser.add_argument('--depth', type=int, help='Number of RNN layers', default=1)
+    parser.add_argument('--hidden_size', type=int, help='Number of hidden units in the RNN '
+                                                        'and affine layers', default=1)
     parser.add_argument('--nbands', type=int, default=13)
     parser.add_argument('--nout', type=int, default=29)
     parser.add_argument('--batch_norm', action='store_true')
@@ -190,9 +186,8 @@ if __name__ == "__main__":
     parser.add_argument('--transformer', default='hetr', help='Type of Transformer')
     parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
-    parser.add_argument('--max_length', type=float,
-                             help="max duration for each audio sample",
-                             default=0.03)
+    parser.add_argument('--max_length', type=float, help="max duration for each audio sample",
+                        default=0.03)
     parser.add_argument('-v', '--visualize', action="store_true",
                         help="enable graph visualization")
 
@@ -201,5 +196,7 @@ if __name__ == "__main__":
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
     for device_id in device_ids:
-        run_mini_ds2_benchmark(args.max_length, args.nbands, args.nout, args.str_w, args.batch_size, args.max_iter, args.skip_iter, args.nfilters, args.filter_width,
-                               args.depth, args.hidden_size, args.batch_norm, device_id, args.device, args.transformer, args.visualize)
+        run_mini_ds2_benchmark(args.max_length, args.nbands, args.nout, args.str_w,
+                               args.batch_size, args.max_iter, args.skip_iter, args.nfilters,
+                               args.filter_width, args.depth, args.hidden_size, args.batch_norm,
+                               device_id, args.device, args.transformer, args.visualize)
