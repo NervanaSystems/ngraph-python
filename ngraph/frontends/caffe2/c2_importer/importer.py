@@ -91,7 +91,7 @@ class C2Importer:
                         raise e
 
                     c2_blob = c2_workspace.FetchBlob(e.message)
-                    external_input = ng.placeholder(
+                    external_input = ng.persistent_tensor(
                         axes=ng.make_axes([ng.make_axis(i) for i in c2_blob.shape]),
                         dtype=c2_blob.dtype,
                         initial_value=c2_blob).named(e.message)
@@ -226,6 +226,7 @@ class C2Importer:
         # get unimplemented ops
         unimplemented_ops = required_ops - set(self._get_supported_ops())
         return sorted(list(unimplemented_ops))
+
 
 if __name__ == '__main__':
     # get unimplemented ops

@@ -1,22 +1,38 @@
-from neon import NervanaObject  # noqa
-
+# ----------------------------------------------------------------------------
+# Copyright 2016 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 import signal
-import pytest
 import sys
 import os
 import time
+from six import itervalues, iteritems
 from multiprocessing import Process, Manager, Event
 from queue import Empty
 import collections
-from ngraph.util.ordered import OrderedSet
-from ngraph.util.hetr_utils import sort_ops_by_comm_deps
-from ngraph.op_graph.op_graph import TensorOp
-from ngraph.transformers.base import Transformer
+from orderedset import OrderedSet
+from ngraph.op_graph.op_graph import Op, TensorValueOp
+from ngraph.op_graph.comm_nodes import ResultOp
+# from ngraph.op_graph.hetr_grpc.rpc_client import RPCTransformerClient
+from ngraph.util.hetr_utils import update_comm_deps
+from ngraph.transformers.base import ComputationGraphTransformer
 from ngraph.transformers.base import make_transformer_factory
+from ngraph.transformers.base import Computation
+from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
-from ngraph.transformers.passes.hetrpasses import ChildTransformerPass
+import subprocess
 
 
 def build_transformer(name):
@@ -25,12 +41,12 @@ def build_transformer(name):
     :param results: the graph nodes that we care about, for the computation
     :return: the dictionary of transformers, with names matching the graph node hints
     """
-    if 'numpy' in name:
-        transformer = make_transformer_factory('numpy')()
+    if 'cpu' in name:
+        transformer = make_transformer_factory('cpu')()
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa
-            transformer = make_transformer_factory('gpu')()
+            transformer = make_transformer_factory('gpu', device_id=int(name[-1]))()
         except ImportError:
             assert False, "Fatal: Unable to initialize GPU, " \
                           "but GPU transformer was requested."
@@ -60,7 +76,6 @@ class AsyncTransformer(Process):
         self.started = False
         self.exit = Event()
         self.daemon = True
-        self.is_closed = False
         self.my_pid = os.getpid()
 
     def new_comp_id(self):
@@ -92,39 +107,45 @@ class AsyncTransformer(Process):
                 while True:
                     try:
                         q = self.async_transformer.results_qs[self.comp_id]
-                        return q.get(timeout=AsyncTransformer.SLEEP_S)
+                        return_list = q.get(timeout=AsyncTransformer.SLEEP_S)
+                        # TODO set self.returns somewhere cleaner
+                        return_dict = {op: return_list[mypos]
+                                       for (op, mypos) in iteritems(self.returns)}
+                        return return_dict
                     except Exception as e:
                         if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
                                 ecode = self.async_transformer.exitcode
                                 if sys.platform == 'darwin' and ecode == -signal.SIGSEGV:
+                                    import pytest
                                     pytest.xfail("Hetr: OSX blas fork-safety issue (#961)")
+                                elif ecode == PYCUDA_LOGIC_ERROR_CODE:
+                                    import pytest
+                                    pytest.xfail("Hetr: CUDA driver init in child issue (#1059)")
                                 raise RuntimeError("Child process unexpectedly exited with code ",
                                                    ecode)
                         else:
                             raise
 
-        self.child_ops = returns
-        self.child_args = placeholders
-
-        sort_ops_by_comm_deps(self.child_ops)
-
+        update_comm_deps(returns)
         c = AsyncComputation(self)
-
         self.results_qs[c.comp_id] = self.manager.Queue()
         self.computation_builds[c.comp_id] = (returns, placeholders)
         self.computation_q.put(c.comp_id)
         return c
 
     def close(self):
-        if self.is_closed:
-            return
         if self.my_pid != os.getpid():
             # Forked into another process
             return
-        self.is_closed = True
-        self.exit.set()
-        self.join()
+
+        # only join child thread if it has been started
+        if self.started:
+            self.started = False
+            self.exit.set()
+            self.join()
+
+        # safe to call manager shutdown more than once
         self.manager.shutdown()
 
     def run(self):
@@ -170,162 +191,97 @@ class AsyncTransformer(Process):
                     raise
 
 
-class ResultOp(TensorOp):
-
-    def __init__(self, device_id, args, **kwargs):
-        super(ResultOp, self).__init__(self)
-        self.args = tuple([args])
-        self.metadata['device_id'] = device_id
-
-# TODO
-# revisit making HetrComputation a Computation;
-# update it to not take results, *parameters, but instead a computation_op
-
-
-class HetrComputation(object):
+class HetrComputation(Computation):
     """
     Lightweight wrapper class for handling runtime execution of child computations for Hetr
     """
 
-    def __init__(self, hetr, results, *parameters, **kwargs):
-        # super(HetrComputation, self).__init__(hetr, results, *parameters, **kwargs)
+    def __init__(self, hetr, computation_op):
         self.child_computations = dict()
-        self.child_results_map = dict()
         self.transformer = hetr
-        self.transformer_name_list = hetr.transformer_list
         self.send_nodes = hetr.send_nodes
-        self.hetr_passes = hetr.hetr_passes
-        self.num_results = 0
-        self.num_send_nodes = dict()
-        self.is_distributed = False
-        self.parameters = parameters
+        self.computation_op = computation_op
 
-        orig_results = results
-        if not isinstance(results, OrderedSet):
-            if not isinstance(results, list):
-                results = [results] if results else []
-            results = OrderedSet(results)
-        for op in results:
+        # self.returns could be replaced by comp_op.returns if it were expressed as a set
+        self.returns = OrderedSet()
+        if isinstance(computation_op.returns, collections.Container):
+            self.returns.update(list(computation_op.returns))
+        elif isinstance(computation_op.returns, Op):
+            self.returns.update(list([computation_op.returns]))
+
+        # if one of the requested results is marked as distributed across devices,
+        # wrap it in a ResultOp to facilitate DistributedPass inserting a gather operation
+        new_returns = OrderedSet()
+        for op in self.returns:
             if 'device_id' in op.metadata and \
                     isinstance(op.metadata['device_id'], (list, tuple)):
                 op.metadata['is_split_op'] = True
-                new_result = ResultOp(device_id=0, args=op)
-                results.remove(op)
-                results.append(new_result)
+                new_result = ResultOp(device_id=0, args=tuple([op]))
+                op.metadata['hetr_replaced_by'] = new_result
+                new_result.metadata['replaces_op'] = op
+                new_returns.add(new_result)
+            else:
+                new_returns.add(op)
 
-        all_results = OrderedSet(results)
-        all_results.update(parameters)
-        # all res empty; hetr as no computations. where do these get assigned?
-        # previously, we used t.all_results, which went away.  when was that created?
-        #   - computation object used to update all_results of transformer
-        #   - transformer transform_ops used to use all_results but not update it,
-        #     and return a new copy
+        # Do Hetr passes
+        pass_ops = new_returns | OrderedSet(self.computation_op.parameters)
+        for graph_pass in self.transformer.graph_passes:
+            pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
+            graph_pass.do_pass(pass_ops, self.transformer)
 
-        if orig_results is not None:
-            # Do Hetr passes
-            for graph_pass in self.hetr_passes:
-                all_results = all_results + hetr.send_nodes
-                graph_pass.do_pass(all_results, self.transformer)
+        # hack around new TensorValueOp that wraps AssignableTensorOp
+        # autogenerated by creating a ComputationOp:
+        for p in self.computation_op.parameters:
+            if isinstance(p, TensorValueOp):
+                p.metadata.update(p.states_read[0].metadata)
 
-            # TODO replicate placeholders for nodes which got replicated;
-            # update the placeholder mapping below, so at __call__ time we know
-            # which transformers to pass copies of the provided placeholder value to
+        # simplify by already having asynctrans made by passes
+        for t_name, trans in iteritems(self.transformer.child_transformers):
+            my_params = [(g_pos, p)
+                         for g_pos, p in enumerate(self.computation_op.parameters)
+                         if p.metadata['transformer'] == t_name]
+            my_ops = [op for op in self.send_nodes | new_returns
+                      if op.metadata['transformer'] == t_name]
+            transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
 
-            if hetr.vizpass:
-                vis_results = all_results + hetr.send_nodes
-                hetr.vizpass.do_pass(vis_results, self)
+            comp = trans.computation(transform_ops, tuple([p for pos, p in my_params]))
+            comp.param_idx = [g_pos for g_pos, p in my_params]
 
-        self.transformer_to_node = {t: list() for t in self.transformer_name_list}
+            # when there is a ResultOp, hack around it
+            comp.returns = dict()
+            for i, op in enumerate(my_ops):
+                if op in self.returns and 'hetr_replaced_by' not in op.metadata:
+                    comp.returns[op] = i
+                elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
+                    comp.returns[op.metadata['replaces_op']] = i
+            self.child_computations[t_name] = comp
 
-        self.is_distributed = any(
-            'Gather_Send' in s.name or 'Scatter_Send' in s.name for s in self.send_nodes)
-
-        # update the transformer to send node mappings
-        for s in self.send_nodes:
-            tname = s.metadata['transformer']
-            self.transformer_to_node[tname].append(s)
-            self.num_send_nodes[tname] = self.num_send_nodes.get(tname, 0) + 1
-
-        self.num_results = len(results)
-
-        if orig_results is not None:
-            for pos, op in enumerate(results):
-                tname = op.metadata['transformer']
-                if self.is_distributed is True:
-                    if tname in self.num_send_nodes:
-                        for i in range(self.num_send_nodes[tname]):
-                            self.child_results_map.setdefault(tname, []).append(None)
-                if 'ResultOp' in op.name:
-                    self.transformer_to_node[tname].append(op.args[0])
-                else:
-                    self.transformer_to_node[tname].append(op)
-                self.child_results_map.setdefault(tname, []).append(pos)
-
-        self.placeholders = {t: list() for t in self.transformer_name_list}
-        self.placeholders_pos = {t: list() for t in self.transformer_name_list}
-        for i, p in enumerate(parameters):
-            tname = p.metadata['transformer']
-            assert isinstance(
-                tname, list) is False, "Fatal: multiple transformers cannot be handled!"
-            self.placeholders[tname].append(p)
-            self.placeholders_pos[tname].append(i)
-
-        self.child_computations = dict()
-        for tname in self.transformer_name_list:
-            # request asynctransformer from HT
-            # use it to build AsyncComputation
-            async_trans = hetr.transformer(tname)
-            async_comp = async_trans.computation(self.transformer_to_node[tname],
-                                                 tuple(self.placeholders[tname]))
-            self.child_computations[tname] = async_comp
-
-    def __call__(self, *params, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
         Executes child computations in parallel.
 
-        :param params: list of values to the placeholders specified in __init__ *args
+        :arg args: list of values to the placeholders specified in __init__ *args
 
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
-        return_list = [None for i in range(self.num_results)]
+        args = self.unpack_args_or_feed_dict(args, kwargs)
+        for child in itervalues(self.child_computations):
+            child.feed_input([args[i] for i in child.param_idx])
 
-        feed_dict = kwargs.pop('feed_dict', None)
-        if feed_dict is not None:
-            if len(params) != 0:
-                raise ValueError((
-                    'Can not supply both positional and mapped input arguments '
-                    'to Computation'
-                ))
-            params = tuple(feed_dict[param.tensor] for param in self.parameters)
-
-        # Map params to each child transformer
-        # Run each child in a separate process in process_helper
-        # Collect child results from multiprocess queue mapped by out_dict
-        for tname in self.transformer_name_list:
-            targs = [params[i] for i in self.placeholders_pos[tname]]
-            self.child_computations[tname].feed_input(targs)
-
-        # Reverse map child results to flattend list of results
-        # in order expected by parent caller.
-        for tname, result_map in self.child_results_map.items():
-            child_results = self.child_computations[tname].get_results()
-            for child_idx, parent_idx in enumerate(self.child_results_map[tname]):
-                if self.is_distributed is True:
-                    if parent_idx is not None:
-                        return_list[parent_idx] = child_results[child_idx]
-                else:
-                    return_list[parent_idx] = child_results[child_idx]
-
-        if isinstance(return_list, collections.Sequence):
-            if len(return_list) > 1:
-                return tuple(return_list)
-            elif len(return_list) == 1:
-                return return_list[0]
-            else:
-                return None
+        return_vals = dict()
+        for child in itervalues(self.child_computations):
+            return_vals.update(child.get_results())
+        if isinstance(self.computation_op.returns, Op):
+            return return_vals[self.computation_op.returns]
+        elif isinstance(self.computation_op.returns, collections.Set):
+            return return_vals
+        elif isinstance(self.computation_op.returns, collections.Sequence):
+            return tuple(return_vals[op] for op in self.computation_op.returns)
+        else:
+            return None
 
 
-class HetrTransformer(Transformer):
+class HetrTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
@@ -339,36 +295,31 @@ class HetrTransformer(Transformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    hetr_counter = 0
-
-    def __init__(self, **kwargs):
+    def __init__(self, device='cpu', **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
         self.my_pid = os.getpid()
         self.is_closed = False
         self.child_transformers = dict()
-        self.transformer_list = list()
-        self.transformers = set()
         self.send_nodes = OrderedSet()
-        self.scatter_shared_queues = list()
-        self.gather_shared_queues = list()
-        self.hetr_passes = [DeviceAssignPass(default_device='numpy',
-                                             default_device_id=0,
-                                             transformers=self.transformers),
-                            CommunicationPass(self.send_nodes,
-                                              self.scatter_shared_queues,
-                                              self.gather_shared_queues),
-                            DistributedPass(self.send_nodes,
-                                            self.scatter_shared_queues,
-                                            self.gather_shared_queues),
-                            ChildTransformerPass(self.transformer_list)]
-        self.vizpass = None
+        self.graph_passes = [DeviceAssignPass(hetr=self,
+                                              default_device=device,
+                                              default_device_id=0),
+                             CommunicationPass(self.send_nodes),
+                             DistributedPass(self.send_nodes)]
 
-        self.inits = OrderedSet()
-
-        HetrTransformer.hetr_counter += 1
-        assert HetrTransformer.hetr_counter <= 1
-        assert HetrTransformer.hetr_counter >= 0
+        hetr_server_path = os.path.dirname(os.path.realpath(__file__)) + "/cpu/hetr_server.py"
+        hetr_server_num = os.getenv('HETR_SERVER_NUM')
+        hetr_server_hostfile = os.getenv('HETR_SERVER_HOSTFILE')
+        # Assumption is that hydra_persist processes are started on remote nodes
+        # Otherwise, remove "-bootstrap persist" from the command line (it then uses ssh)
+        if (hetr_server_num is not None) & (hetr_server_hostfile is not None):
+            mpirun_str = "mpirun -n %s -ppn 1 -bootstrap persist -hostfile %s %s"\
+                % (hetr_server_num, hetr_server_hostfile, hetr_server_path)
+            subprocess.call(mpirun_str, shell=True)
+            self.use_mlsl = True
+        else:
+            self.use_mlsl = False
 
     def close(self):
         if self.is_closed:
@@ -376,54 +327,52 @@ class HetrTransformer(Transformer):
         if self.my_pid != os.getpid():
             # Only close once, and don't close if this is a copy in a child process
             return
-        if HetrTransformer.hetr_counter > 0:
-            HetrTransformer.hetr_counter -= 1
-            for t in self.child_transformers.values():
-                t.close()
+        for t in self.child_transformers.values():
+            t.close()
         super(HetrTransformer, self).close()
         self.is_closed = True
 
-    def transformer(self, tname):
+    def register_transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple
         if tname not in self.child_transformers:
-            at = AsyncTransformer(tname)
-            self.child_transformers[tname] = at
+            if 'cpu' in tname:
+                # trans_client = RPCTransformerClient(tname)
+                trans_client = AsyncTransformer(tname)  # TODO replace with RPC when ready
+            else:
+                trans_client = AsyncTransformer(tname)
+            self.child_transformers[tname] = trans_client
 
+    def transformer(self, tname):
+        assert tname in self.child_transformers, "register transformer {} before use".format(tname)
         return self.child_transformers[tname]
 
-    def computation(self, results, *parameters, **kwargs):
+    def add_computation(self, computation):
+        return self.make_computation(computation)
+
+    def make_computation(self, computation):
         """
         Build a heterogeneous computation object that implements
         communication and synchronization between subgraphs run
         on child transformers.
 
-        :param results: list of required result nodes
-        :param parameters: list of placeholder nodes
+        Arguments:
+            computation: A computation Op.
 
-        TODO
-        :param kwargs: - pass these on to child transformers or what?
-
-        :return: a HetrComputation object
+        Returns:
+            Callable.
         """
+        hetr_comp = HetrComputation(self, computation)
+        return hetr_comp
 
-        # Initialize computation
-        hc = HetrComputation(self, results, *parameters, **kwargs)
-
-        return hc
-
+    """
+    These APIs are internally used between regular transformers and
+    their computations.  HeTr has no use or need for them but is
+    required to provide the functions by the metaclass in order
+    to be a 'Transformer', which it wants to be in order to expose
+    the user-facing parts of the Transformer API.
+    """
     def initialize(self):
-        # print("Dummy Initialize, skipping")
         pass
-
-    def register_graph_pass(self, graph_pass):
-        from ngraph.transformers.passes.nviz import VizPass
-        if isinstance(graph_pass, VizPass):
-            # print("Ignoring vizpass")
-            # self.vizpass = graph_pass
-            pass
-        else:
-            # print("Ignoring unsupported graph pass in hetr", graph_pass)
-            pass
 
     def device_buffer_storage(self, bytes, dtype, name):
         assert False, "Should not be used, TODO cleanup"
@@ -434,12 +383,14 @@ class HetrTransformer(Transformer):
     def start_transform_allocate(self):
         assert False, "Should not be used, TODO cleanup"
 
+    def transform_allocate_ops(self, all_ops):
+        assert False, "Should not be used, TODO cleanup"
+
     def finish_transform_allocate(self):
         assert False, "Should not be used, TODO cleanup"
 
     def transform_ordered_ops(self, ordered_ops, name):
-        # print(name, ordered_ops)
-        return name + str(1)
+        pass
 
     def finish_transform(self):
         assert False, "Should not be used, TODO cleanup"
@@ -452,7 +403,3 @@ class HetrTransformer(Transformer):
 
     def state_initializations(self, states):
         pass
-
-# from ngraph.transformers.base import set_transformer_factory
-# set_transformer_factory(
-#    make_transformer_factory(HetrTransformer.transformer_name))

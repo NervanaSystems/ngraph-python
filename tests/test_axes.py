@@ -12,77 +12,146 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from builtins import range
-
 import numpy as np
 import pytest
 
 import ngraph as ng
 from ngraph.op_graph.axes import FlattenedAxis, TensorDescription, slice_axis
-from ngraph.testing import ExecutorFactory
+from ngraph.op_graph.axes import AxesMap, DuplicateAxisNames
 
 
-ax_A = ng.make_axis(10)
-ax_B = ng.make_axis(15)
-ax_C = ng.make_axis(20)
+def test_duplicate_axis():
+    a = ng.make_axis(name='X')
+    b = ng.make_axis(name='X')
+    with pytest.raises(ValueError):
+        ng.make_axes([a, b])
 
 
-def test_axes_equal():
-    """ Test axes == operator """
-    a1 = ng.make_axes([ax_A, ax_B, ax_C])
-    a2 = ng.make_axes([ax_A, ax_B, ax_C])
-    assert a1 == a2
+def test_duplicate_axis_different_length():
+    a = ng.make_axis(1, name='N')
+    b = ng.make_axis(2, name='N')
+    with pytest.raises(ValueError) as e:
+        ng.make_axes([a, b])
+
+    # ensure the name of the axis appears in the exception
+    assert 'N' in str(e)
 
 
-def to_nested_tuple(axes):
-    """
-    Recursively replace instances of FlattenedAxis with instances of type tuple.
+# axes for testing
+ax_A = ng.make_axis(2, name='A')
+ax_B = ng.make_axis(3, name='B')
+ax_C = ng.make_axis(4, name='C')
 
-    Arguments:
-        axes: Axes object or iterable of Axis objects
+# axes for testing name matching behavior
+ax_A_ = ng.make_axis(5, name='A')
+ax_B_ = ng.make_axis(6, name='B')
+ax_C_ = ng.make_axis(7, name='C')
 
-    Returns:
-        passes through axes objects with everything unchanged except
-        FlattenedAxis are replaced with tuple
-    """
-    return tuple(
-        to_nested_tuple(axis.axes) if axis.is_flattened else axis
-        for axis in axes
-    )
+# list of [axes_op_str, lhs_axes, rhs_axes, expected_res]
+# currently Axis matches on name, while lengths is ignored
+# so ax_A and ax_A_ is equivalent below
+axes_ops_test_cases = [
+    # add (list operation)
+    ['__add__', [], [], []],
+    ['__add__', [ax_A], [], [ax_A]],
+    ['__add__', [ax_A_], [], [ax_A]],
+    ['__add__', [ax_A], [ax_B], [ax_A, ax_B]],
+    ['__add__', [ax_A_], [ax_B_], [ax_A, ax_B]],
+    # add (list operation, test exception)
+    ['__add__', [ax_A], [ax_A], ValueError],
+    ['__add__', [ax_A], [ax_A_], ValueError],
+    ['__add__', [ax_A], [ax_A_, ax_B], ValueError],
+    # difference (set operation, ordered)
+    ['__sub__', [], [], []],
+    ['__sub__', [], [ax_A], []],
+    ['__sub__', [ax_A], [], [ax_A]],
+    ['__sub__', [ax_A, ax_B], [ax_B], [ax_A]],
+    ['__sub__', [ax_A, ax_B], [ax_B_], [ax_A]],
+    ['__sub__', [ax_A, ax_B], [ax_A], [ax_B]],
+    ['__sub__', [ax_A, ax_B], [ax_A_], [ax_B]],
+    ['__sub__', [ax_A, ax_B], [ax_B, ax_A], []],
+    ['__sub__', [ax_A, ax_B], [ax_B_, ax_A_], []],
+    # union (set operation, ordered)
+    ['__or__', [], [], []],
+    ['__or__', [], [ax_A], [ax_A]],
+    ['__or__', [ax_A], [], [ax_A]],
+    ['__or__', [ax_A], [ax_B], [ax_A, ax_B]],
+    ['__or__', [ax_A], [ax_A_], [ax_A]],
+    ['__or__', [ax_A], [ax_A_], [ax_A_]],
+    # intersection (set operation, ordered)
+    ['__and__', [], [], []],
+    ['__and__', [], [ax_A], []],
+    ['__and__', [ax_A], [], []],
+    ['__and__', [ax_A], [ax_B], []],
+    ['__and__', [ax_A, ax_B], [ax_B, ax_C], [ax_B]],
+    ['__and__', [ax_A, ax_B_], [ax_B, ax_C], [ax_B]],
+    # equal (list operation, ordered)
+    ['__eq__', [], [], True],
+    ['__eq__', [ax_A], [], False],
+    ['__eq__', [ax_A, ax_B], [ax_B, ax_A], False],
+    ['__eq__', [ax_A, ax_B], [ax_B_, ax_A_], False],
+    ['__eq__', [ax_A, ax_B], [ax_A_, ax_B], True],
+    ['__eq__', [ax_A, ax_B], [ax_A_, ax_B_], True],
+    # not equal (list operation, ordered)
+    ['__ne__', [], [], False],
+    ['__ne__', [ax_A], [], True],
+    ['__ne__', [ax_A, ax_B], [ax_B, ax_A], True],
+    ['__ne__', [ax_A, ax_B], [ax_B_, ax_A_], True],
+    ['__ne__', [ax_A, ax_B], [ax_A_, ax_B], False],
+    ['__ne__', [ax_A, ax_B], [ax_A_, ax_B_], False],
+    # subset
+    ['is_sub_set', [], [], True],
+    ['is_sub_set', [ax_A], [], False],
+    ['is_sub_set', [], [ax_A], True],
+    ['is_sub_set', [ax_A_], [ax_A], True],
+    ['is_sub_set', [ax_A, ax_B], [ax_B, ax_A], True],
+    ['is_sub_set', [ax_A, ax_B], [ax_B_, ax_A_], True],
+    # superset
+    ['is_super_set', [], [], False],
+    ['is_super_set', [ax_A], [], True],
+    ['is_super_set', [], [ax_A], False],
+    ['is_super_set', [ax_A_], [ax_A], False],
+    ['is_super_set', [ax_A, ax_B], [ax_B, ax_A], False],
+    ['is_super_set', [ax_A, ax_B], [ax_B_, ax_A_], False],
+    # set equal
+    ['is_equal_set', [], [], True],
+    ['is_equal_set', [ax_A], [], False],
+    ['is_equal_set', [ax_A], [ax_A], True],
+    ['is_equal_set', [ax_A], [ax_A_], True],
+    ['is_equal_set', [ax_A, ax_B], [ax_B_, ax_A_], True],
+    # set not equal
+    ['is_not_equal_set', [], [], False],
+    ['is_not_equal_set', [ax_A], [], True],
+    ['is_not_equal_set', [ax_A], [ax_A], False],
+    ['is_not_equal_set', [ax_A], [ax_A_], False],
+    ['is_not_equal_set', [ax_A, ax_B], [ax_B_, ax_A_], False],
+]
 
 
-def test_axes_ops():
-    """TODO."""
-    # Subtraction
-    def test_sub(axes1, axes2, target):
-        """
-        TODO.
+@pytest.mark.parametrize("test_cases", axes_ops_test_cases)
+def test_axes_ops(test_cases):
+    # unpack test case
+    axes_op_str, lhs_axes, rhs_axes, expected_res = test_cases
+    lhs_axes = ng.make_axes(lhs_axes)
+    rhs_axes = ng.make_axes(rhs_axes)
+    if isinstance(expected_res, list):
+        expected_res = ng.make_axes(expected_res)
 
-        Arguments:
-          axes1: TODO
-          axes2: TODO
-          target: TODO
-
-        Returns:
-
-        """
-        assert ng.make_axes(axes1) - ng.make_axes(axes2) == ng.make_axes(target)
-
-    test_sub([ax_A, ax_B], [ax_A], [ax_B])
-    test_sub([ax_A, ax_B], [ax_B], [ax_A])
-
-    # Combined axes length
-    assert FlattenedAxis([ax_A, ax_B]).length \
-        == ax_A.length * ax_B.length
-    assert ng.make_axes([ax_A, (ax_B, ax_C)]).lengths \
-        == (ax_A.length, ax_B.length * ax_C.length)
-    assert FlattenedAxis([ax_A, (ax_B, ax_C)]).length \
-        == ax_A.length * ax_B.length * ax_C.length
+    # check results against expected_res
+    if expected_res is ValueError:
+        with pytest.raises(ValueError):
+            getattr(lhs_axes, axes_op_str)(rhs_axes)
+    else:
+        res = getattr(lhs_axes, axes_op_str)(rhs_axes)
+        if res != expected_res:
+            raise ValueError("%s operation with %s and %s, "
+                             "expected result %s, but actually get %s"
+                             % (axes_op_str, lhs_axes, rhs_axes, expected_res, res))
 
 
 def random(tensor_description):
     """
-    return a ranom numpy array with dimension and dtype specified by
+    return a random numpy array with dimension and dtype specified by
     tensor_description.
 
     Arguments:
@@ -251,118 +320,60 @@ def test_sliced_batch_axis():
 
 def test_sliced_recurrent_axis():
     """ slicing a recurrent axis should result in a recurrent axis """
-    a = ng.make_axis(10, name='R')
+    a = ng.make_axis(10, name='REC')
     s = slice_axis(a, slice(0, 5))
     assert s.is_recurrent is True
 
 
-def test_sliced_axis_roles():
-    """ slicing an axis should result in the same roles as the parent axis """
-    role1 = ng.make_axis_role()
-    role2 = ng.make_axis_role()
-    a = ng.make_axis(10, roles=[role1, role2])
-    s = slice_axis(a, slice(0, 5))
-    assert all(r in s.roles for r in a.roles)
+def test_duplicate_axis_names():
+    with pytest.raises(DuplicateAxisNames) as e:
+        AxesMap({'aaa': 'zzz', 'bbb': 'zzz', 'ccc': 'yyy'})
+
+    assert e.value.duplicate_axis_names == {
+        'zzz': set(['aaa', 'bbb']),
+    }
 
 
-def test_idempotent_axes_a():
+def test_invalid_axes_map_message():
+    with pytest.raises(ValueError) as exc_info:
+        AxesMap({'aaa': 'zzz', 'bbb': 'zzz', 'ccc': 'yyy'})
+
+    e = exc_info.value
+
+    # check that offending names are listed in the error message
+    assert 'aaa' in str(e)
+    assert 'bbb' in str(e)
+    assert 'zzz' in str(e)
+
+    # check that non-offending names are not listed in the error message
+    assert 'ccc' not in str(e)
+    assert 'yyy' not in str(e)
+
+
+def test_axes_map():
     """
-    Test test axes transformations with autodiff, case a, reference test
+    map from Axes([aaa, bbb]) to Axes([zzz, bbb]) via AxesMap {aaa: zzz}
     """
-    with ExecutorFactory() as ex:
-        axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
+    a = ng.make_axis(1, name='aaa')
+    b = ng.make_axis(2, name='bbb')
+    z = ng.make_axis(1, name='zzz')
 
-        w = ng.variable(axes, initial_value=np.ones((3, 1)))
-        result = w + w
+    axes_before = ng.make_axes([a, b])
+    axes_after = ng.make_axes([z, b])
 
-        result = ng.cast_axes(result, axes)
-        cost = ng.sum(result, reduction_axes=axes)
-        grad = ng.deriv(cost, w)
+    axes_map = AxesMap({a.name: z.name})
 
-        grad_comp = ex.executor(grad)
-        cost_comp = ex.executor(cost)
-
-        assert cost_comp() == 6.0
-        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+    assert axes_after == axes_map.map_axes(axes_before)
 
 
-def test_idempotent_axes_b():
-    """
-    Test test axes transformations with autodiff, case b, with broadcast applied
-    to the same tensor
-    """
-    with ExecutorFactory() as ex:
-        axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
+def test_axes_map_immutable():
+    axes_map = AxesMap({})
 
-        w = ng.variable(axes, initial_value=np.ones((3, 1)))
-        l = ng.broadcast(w, axes)
-        r = ng.broadcast(w, axes)
-        result = ng.add(l, r)
-
-        result = ng.cast_axes(result, axes)
-        cost = ng.sum(result, reduction_axes=axes)
-        grad = ng.deriv(cost, w)
-
-        grad_comp = ex.executor(grad)
-        cost_comp = ex.executor(cost)
-
-        assert cost_comp() == 6.0
-        assert np.array_equal(grad_comp(), np.ones((3, 1)) * 2.)
+    with pytest.raises(TypeError):
+        axes_map['x'] = 'y'
 
 
-def test_idempotent_axes_c():
-    """
-    Test test axes transformations with autodiff, case c, with broadcast,
-    slice, cast and dim-shuffle
-    """
-    with ExecutorFactory() as ex:
-        axes = ng.make_axes([ng.make_axis(3), ng.make_axis(1)])
-        result_axes = [ng.make_axis(length=axis.length) for axis in axes]
+def test_axes_map_init_from_axes():
+    axes_map = AxesMap({ng.make_axis(1, name='aaa'): ng.make_axis(1, name='zzz')})
 
-        # variable
-        w = ng.variable(axes, initial_value=np.ones((3, 1)))
-
-        # broadcast l / r, introducing dummy length 1 axes
-        l = ng.broadcast(w, axes)
-        r = ng.broadcast(w, axes)
-
-        # slice
-        axes_slice = [slice(None, None, None), slice(None, None, None)]
-        l_sliced = ng.tensor_slice(l, axes_slice)
-        r_sliced = ng.tensor_slice(r, axes_slice)
-
-        # cast r
-        r_sliced_casted = ng.cast_axes(r_sliced, axes)
-
-        # perform add
-        result = ng.add(l_sliced, r_sliced_casted)
-
-        # cast / dimshuffle
-        result = ng.cast_axes(result, result_axes)
-        result = ng.axes_with_order(result, result_axes)
-
-        # cost and grad
-        cost = ng.sum(result, reduction_axes=result.axes)
-        grad = ng.deriv(cost, w)
-
-        grad_comp = ex.executor(grad)
-        cost_comp = ex.executor(cost)
-
-        cost_comp_ng = cost_comp()
-        grad_comp_ng = grad_comp()
-        grad_comp_np = np.ones((3, 1)) * 2.
-        assert cost_comp_ng == 6.0
-        assert np.array_equal(grad_comp_ng, grad_comp_np)
-
-
-def test_scalar_broadcast():
-    """
-    Test broadcasting a scalar into a tensor
-    """
-    with ExecutorFactory() as ex:
-        x_axes = ng.make_axes()
-        broadcast_axes = ng.make_axes([ng.make_axis(2), ng.make_axis(3)])
-        x = ng.constant(1., axes=x_axes)
-        z = ng.broadcast(x, axes=broadcast_axes)
-        z_comp = ex.executor(z)
-        assert np.array_equal(z_comp(), np.ones(broadcast_axes.lengths))
+    assert axes_map['aaa'] == 'zzz'

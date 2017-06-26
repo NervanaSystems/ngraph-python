@@ -20,9 +20,11 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
-from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
+from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape
+import pytest
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
     def test_matmul(self):
         # computation
@@ -31,8 +33,8 @@ class Tester(ImporterTester):
         c = tf.matmul(a, b)
 
         # value
-        a_val = np.random.rand(*tf_to_shape_tuple(a))
-        b_val = np.random.rand(*tf_to_shape_tuple(b))
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
 
         # test
         self.run(c, tf_feed_dict={a: a_val, b: b_val})
@@ -41,31 +43,31 @@ class Tester(ImporterTester):
         # case 1
         a = tf.placeholder(tf.float32, shape=(2, 3))
         b = tf.placeholder(tf.float32, shape=(3, 4))
-        a_val = np.random.rand(*tf_to_shape_tuple(a))
-        b_val = np.random.rand(*tf_to_shape_tuple(b))
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
         self.run(tf.matmul(a, b, transpose_a=False, transpose_b=False),
                  tf_feed_dict={a: a_val, b: b_val})
 
         # case 2
         a = tf.placeholder(tf.float32, shape=(3, 2))
         b = tf.placeholder(tf.float32, shape=(3, 4))
-        a_val = np.random.rand(*tf_to_shape_tuple(a))
-        b_val = np.random.rand(*tf_to_shape_tuple(b))
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
         self.run(tf.matmul(a, b, transpose_a=True, transpose_b=False),
                  tf_feed_dict={a: a_val, b: b_val})
 
         # case 3
         a = tf.placeholder(tf.float32, shape=(2, 3))
         b = tf.placeholder(tf.float32, shape=(4, 3))
-        a_val = np.random.rand(*tf_to_shape_tuple(a))
-        b_val = np.random.rand(*tf_to_shape_tuple(b))
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
         self.run(tf.matmul(a, b, transpose_a=False, transpose_b=True),
                  tf_feed_dict={a: a_val, b: b_val})
 
         # case 4
         a = tf.placeholder(tf.float32, shape=(3, 2))
         b = tf.placeholder(tf.float32, shape=(4, 3))
-        a_val = np.random.rand(*tf_to_shape_tuple(a))
-        b_val = np.random.rand(*tf_to_shape_tuple(b))
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
         self.run(tf.matmul(a, b, transpose_a=True, transpose_b=True),
                  tf_feed_dict={a: a_val, b: b_val})

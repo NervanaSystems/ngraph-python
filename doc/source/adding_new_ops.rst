@@ -23,7 +23,7 @@ To add a new op in ngraph, you'll need to :
 - Register the new op in ``op_graph``
 - Add adjoint function for computing gradients of the op (optional)
 - Register op in transformer passes
-- Add implementation in transformers (such as numpy and gpu)
+- Add implementation in transformers (such as cpu and gpu)
 - Add corresponding tests
 
 Example
@@ -66,25 +66,18 @@ instance ::
 
         class DotOp(TensorOp):
 
-            def __init__(self, x, y, **kwargs):
-                self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
-                self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
-                self.x_out_axes = x.axes - self.x_reduction_axes
-                self.y_out_axes = y.axes - self.y_reduction_axes
+              def __init__(self, x, y, **kwargs):
+                 self.x_reduction_axes = x.axes & y.axes
+                 self.y_reduction_axes = self.x_reduction_axes
+                 assert self.x_reduction_axes == self.y_reduction_axes
+                 self.x_out_axes = x.axes - self.x_reduction_axes
+                 self.y_out_axes = y.axes - self.y_reduction_axes
 
-                intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
-                if len(intersection_axes):
-                    raise ValueError(("Both arguments to a DotOp contained {axes}. "
-                                      "In order to dot two tensors with the same Axis together, one "
-                                      "of the Axes must be a dual. See: "
-                                      "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
-                                      ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+                 axes = self.x_out_axes | self.y_out_axes
 
-                axes = self.x_out_axes + self.y_out_axes
-
-                super(DotOp, self).__init__(
-                    args=(x, y), axes=axes, **kwargs
-                )
+                 super(DotOp, self).__init__(
+                     args=(x, y), axes=axes, **kwargs
+                 )
 
             ...
 
@@ -161,16 +154,11 @@ instance ::
              def generate_adjoints(self, adjoints, delta, x, y):
                  x.generate_add_delta(
                      adjoints,
-                     axes_with_order(
-                         dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                             dualed_axes(y, self.y_reduction_axes, -1, 0)),
-                         x.axes)
+                     axes_with_order(dot(delta, y), x.axes)
                  )
                  y.generate_add_delta(
                      adjoints,
-                     axes_with_order(
-                         dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
-                         y.axes)
+                     axes_with_order(dot(x, delta), y.axes)
                  )
 
 3. The next step is to register op in transformer passes. Transformer passes
@@ -220,13 +208,13 @@ instance ::
 4. Next, we need to add implementations of the op in transformers. Note that
    in the previous steps, we still haven't specified how the op shall be executed
    (forward computation). In current ngraph, the ops are implemented in
-   ``NumpyTransformer`` and ``GPUTransformer`` are done by code generation for
+   ``CPUTransformer`` and ``GPUTransformer`` are done by code generation for
    optimized performance.
 
-   In ``ngraph/transformers/nptransform.py``, add the following for numpy
+   In ``ngraph/transformers/cputransform.py``, add the following for cpu
    code generation ::
 
-        class NumPyCodeGenerator(PyGen):
+        class CPUCodeGenerator(PyGen):
             ...
 
             @generate_op.on_type(Prod)

@@ -19,8 +19,10 @@ Test of the optimizers
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import GradientDescentMomentum
+from ngraph.frontends.neon import GradientDescentMomentum, Adam, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
+
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
 
 class GDMReference(object):
@@ -28,6 +30,7 @@ class GDMReference(object):
     Simple numpy reference for computing variations of gradient descent for a
     loss = sum(target - weight x input) function
     '''
+
     def __init__(self, learning_rate, momentum_coef, wdecay, nesterov):
         self.learning_rate = learning_rate
         self.momentum_coef = momentum_coef
@@ -53,6 +56,74 @@ class GDMReference(object):
             weights[:] = weights + self.velocity
 
         return weights
+
+
+class AdamReference(object):
+    '''
+    Simple numpy reference for computing variations of gradient descent for a
+    loss = sum(target - weight x input) function
+    '''
+    def __init__(self, learning_rate, beta_1, beta_2, epsilon):
+        self.learning_rate = learning_rate
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.epsilon = epsilon
+        self.m = None
+        self.v = None
+        self.t = 0
+
+    def __call__(self, input_data, weights):
+        '''
+        input_data in this case is a numpy array with batch_size on axis 1
+        and weights is a matrix with 1 column
+        '''
+        if self.m is None:
+            self.m = np.zeros_like(weights)
+            self.v = np.zeros_like(weights)
+
+        self.t += 1
+        gradient = -input_data.mean(axis=1)
+        self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
+        self.v = self.beta_2 * self.v + (1 - self.beta_2) * gradient * gradient
+        m_hat = self.m / (1 - self.beta_1 ** self.t)
+        v_hat = self.v / (1 - self.beta_2 ** self.t)
+        weights = weights - self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+        return weights
+
+
+def compare_optimizer(opt_ng, opt_ref):
+
+    # Set up data placeholders
+    C = ng.make_axis(20)
+    N = ng.make_axis(32, name='N')
+
+    data = ng.placeholder([C, N])
+    target = ng.placeholder([N])
+
+    # params to be updated using GDM
+    np_W = np.random.rand(C.length)
+    W = ng.variable([C], initial_value=np_W)
+
+    # Set up op graph
+    cost = ng.sum(target - ng.dot(W, data), out_axis=())
+    updated_weights = ng.sequential([opt_ng(cost), W])
+
+    def data_generator(iteration_count):
+        for i in range(iteration_count):
+            yield (np.random.rand(C.length, N.length).astype('float32'),
+                   np.random.rand(N.length).astype('float32'))
+
+    # Set up the computation and run the "train" loop
+    with ExecutorFactory() as ex:
+        opt_test = ex.transformer.computation(updated_weights, data, target)
+        mock_dataset = data_generator(20)
+
+        for x, y in mock_dataset:
+            ng_W = opt_test(x, y)  # updated weights for ngraph optimizer
+            np_W = opt_ref(x, np_W)  # updated weights for reference optimizer
+
+            ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
 
 
 # generate fixtures this way so that collection names are deterministic and can
@@ -81,33 +152,112 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, trans
     gdm_reference = GDMReference(**gdm_args)
     gdm = GradientDescentMomentum(**gdm_args)
 
-    # Set up data placeholders
-    C = ng.make_axis(20)
-    N = ng.make_axis(32, name='N')
+    # test baseline against reference
+    compare_optimizer(gdm, gdm_reference)
 
-    data = ng.placeholder([C, N])
-    target = ng.placeholder([N])
 
-    # params to be updated using GDM
-    np_W = np.random.rand(C.length)
-    W = ng.variable([C - 1], initial_value=np_W)
+@pytest.fixture(params=[0, 1])
+def random_beta_1():
+    return np.random.uniform(low=0.0, high=1.0)
 
-    # Set up op graph
-    cost = ng.sum(target - ng.dot(W, data), out_axis=())
-    updated_weights = ng.sequential([gdm(cost), W])
 
-    def data_generator(iteration_count):
-        for i in range(iteration_count):
-            yield (np.random.rand(C.length, N.length).astype('float32'),
-                   np.random.rand(N.length).astype('float32'))
+@pytest.fixture(params=[0, 1])
+def random_beta_2():
+    return np.random.uniform(low=0.0, high=1.0)
 
-    # Set up the computation and run the "train" loop
+
+@pytest.mark.parametrize("epsilon", [1e-8])
+def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
+
+    # Setup the baseline and reference optimizers to be tested
+    adam_args = {'learning_rate': random_learning_rate,
+                 'beta_1': random_beta_1,
+                 'beta_2': random_beta_2,
+                 'epsilon': epsilon}
+
+    adam_reference = AdamReference(**adam_args)
+    adam = Adam(**adam_args)
+
+    # test baseline against reference
+    compare_optimizer(adam, adam_reference)
+
+
+@pytest.mark.flex_disabled
+def test_learning_policy_step(transformer_factory):
+    base_learning_rate = 1.0
+    drop_factor = 0.1
+    step = 20
+
+    lr_params = {'name': 'step',
+                 'base_lr': base_learning_rate,
+                 'gamma': drop_factor,
+                 'step': step}
+
+    iteration = ng.placeholder((), dtype=np.dtype(np.uint32))
+    lro = LearningRateOptimizer(learning_rate=lr_params, iteration=iteration)
+
     with ExecutorFactory() as ex:
-        gdm_baseline = ex.transformer.computation(updated_weights, data, target)
-        mock_dataset = data_generator(20)
+        stepped_learning_rate = ex.transformer.computation(lro.lrate, iteration)
 
-        for x, y in mock_dataset:
-            ng_W = gdm_baseline(x, y)  # updated weights for ngraph optimizer
-            np_W = gdm_reference(x, np_W)  # updated weights for reference optimizer
+        for iter_input in [10, 50, 90, 6, 15]:
+            baseline_value = stepped_learning_rate(iter_input)
+            reference_value = base_learning_rate * (drop_factor ** (iter_input // step))
 
-            ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
+            assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
+
+
+def test_learning_policy_fixed_with_input(transformer_factory):
+    base_learning_rate = 0.1
+
+    iteration = ng.placeholder((), dtype=np.dtype(np.uint32))
+    lro = LearningRateOptimizer(learning_rate=base_learning_rate, iteration=iteration)
+
+    with ExecutorFactory() as ex:
+        fixed_learning_rate = ex.transformer.computation(lro.lrate, iteration)
+
+        for iter_input in [10, 50, 90, 6, 15]:
+            baseline_value = fixed_learning_rate(iter_input)
+
+            assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
+
+
+def test_learning_policy_fixed_without_input(transformer_factory):
+    base_learning_rate = 0.1
+
+    lro = LearningRateOptimizer(learning_rate=base_learning_rate)
+
+    with ExecutorFactory() as ex:
+        fixed_learning_rate = ex.transformer.computation(lro.lrate)
+        baseline_value = fixed_learning_rate()
+        assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
+
+
+@pytest.mark.parametrize("drop_factor", [0.1,
+                                         [0.1, 0.2, 0.3, 0.4, 0.5]])
+def test_learning_policy_schedule(transformer_factory, drop_factor):
+    base_learning_rate = 1.0
+    schedule = [20, 100, 300, 750, 1000]
+
+    lr_params = {'name': 'schedule',
+                 'base_lr': base_learning_rate,
+                 'gamma': drop_factor,
+                 'schedule': schedule}
+
+    iteration = ng.placeholder((), dtype=np.dtype(np.uint32))
+    lro = LearningRateOptimizer(learning_rate=lr_params, iteration=iteration)
+
+    schedule.append(np.inf)
+    np_schedule = np.array(schedule)
+
+    with ExecutorFactory() as ex:
+        scheduled_learning_rate = ex.transformer.computation(lro.lrate, iteration)
+
+        for iter_input in np.random.randint(0, 1100, 5):
+            baseline_value = scheduled_learning_rate(iter_input)
+            max_step_ind = np.where(iter_input < np_schedule)[0][0]
+            if isinstance(drop_factor, list):
+                scale_factor = np.prod(drop_factor[:max_step_ind])
+            else:
+                scale_factor = drop_factor ** max_step_ind
+            reference_value = base_learning_rate * scale_factor
+            assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)

@@ -15,7 +15,10 @@
 
 from __future__ import division
 import ngraph as ng
+import numbers
 import math
+from ngraph.frontends.common import learning_rate_policies as lrp
+import numpy as np
 
 
 def common_conv2d_pool_output_shape(input_NHWC, filter_HWIO, stride_NHWC, padding):
@@ -94,8 +97,42 @@ def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
 
 
 class CommonSGDOptimizer(object):
-    def __init__(self, lrate=0.1):
-        self.lrate = lrate
+
+    def get_iter_buffer(self):
+        return self._iteration_buffer
+
+    def get_lr_subgraph(self):
+        return self.compute_lr_op
+
+    def __init__(self, lr_params):
+        self.compute_lr_op_creation = None
+
+        if hasattr(lr_params, '__call__'):
+            # If argument is a function, set it as a callback, which allows user to
+            # define a policy.
+            # This function should create subgraph for computing learning rate.
+            # Buffer containing current iteration number will be passed as parameter
+            self.compute_lr_op_creation = lr_params
+        else:
+            if isinstance(lr_params, numbers.Real):
+                # If argument is real number, set policy to fixed and use given value as base_lr
+                lr_params = {'name': 'fixed', 'base_lr': lr_params}
+            policies = lrp.lr_policies
+            if lr_params['name'] not in policies:
+                raise NotImplementedError('Unsupported learning rate policy: '
+                                          '\nGiven: ' + lr_params['name'] +
+                                          '\nSupported policies are: ' + str(policies.keys()))
+            else:
+                if all([x in lr_params.keys() for x in policies[lr_params['name']]['args']]):
+                    # Check if lr_params contains all required parameters for selected policy.
+                    self.compute_lr_op_creation = policies[lr_params['name']]['obj'](lr_params)
+                else:
+                    raise ValueError('Too few arguments passed to CommonSGDOptimizer'
+                                     '\nGiven: ' + str(lr_params.keys()) +
+                                     '\nExpected: ' + str(policies[lr_params['name']]['args']))
+
+        self._iteration_buffer = ng.placeholder(axes=(), dtype=np.dtype(np.uint32))
+        self.compute_lr_op = self.compute_lr_op_creation(self.get_iter_buffer())
 
     def minimize(self, cost, variables):
         """
@@ -112,5 +149,6 @@ class CommonSGDOptimizer(object):
         assert cost is not None
         assert variables is not None
 
-        return ng.doall((ng.assign(variable, variable - self.lrate * ng.deriv(cost, variable))
-                         for variable in variables))
+        return ng.doall([ng.assign(variable,
+                                   variable - self.compute_lr_op * ng.deriv(cost, variable))
+                         for variable in variables])

@@ -20,41 +20,48 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
-from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
+from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape, \
+    get_nested_attr
+import pytest
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
-    def test_sum_prod_mean(self):
+    @pytest.mark.parametrize("shape_and_reduction_indices", [
+        [(), None],
+        [(), ()],
+        [(1,), None],
+        [(1,), ()],
+        [(1,), (0,)],
+        [(3,), None],
+        [(3,), ()],
+        [(3,), (0,)],
+        [(3, 4), (0,)],
+        [(3, 4), (1,)],
+        [(3, 4), (0, 1)],
+        [(3, 4, 5), None],
+        [(3, 4, 5), ()],
+        [(3, 4, 5), (0,)],
+        [(3, 4, 5), (0, 1)],
+        [(3, 4, 5), (1, 2)],
+        [(3, 4, 5), (0, 1, 2)]
+    ])
+    @pytest.mark.parametrize("op_name", [
+        'reduce_sum',
+        'reduce_prod',
+        'reduce_mean'
+    ])
+    def test_reduction_ops(self, shape_and_reduction_indices, op_name):
         # test cases
-        reduction_indices_list = [None, [], [0, ], [0, 1], [1, 2], [0, 1, 2]]
+        shape, reduction_indices = shape_and_reduction_indices
+        tf_op = get_nested_attr(tf, op_name)
 
         # tf placeholder
-        a = tf.placeholder(tf.float32, shape=[3, 4, 5])
+        a = tf.placeholder(tf.float32, shape=shape)
 
         # value
-        feed_dict = {a: np.random.rand(*tf_to_shape_tuple(a))}
+        feed_dict = {a: np.random.rand(*tf_obj_shape(a))}
 
         # test
-        for reduction_indices in reduction_indices_list:
-            f_sum = tf.reduce_sum(a, reduction_indices=reduction_indices)
-            self.run(f_sum, tf_feed_dict=feed_dict)
-            f_prod = tf.reduce_prod(a, reduction_indices=reduction_indices)
-            self.run(f_prod, tf_feed_dict=feed_dict)
-            f_mean = tf.reduce_mean(a, reduction_indices=reduction_indices)
-            self.run(f_mean, tf_feed_dict=feed_dict)
-
-    def test_sum_prod_broadcast(self):
-        # placeholder
-        a = tf.placeholder(tf.float32, shape=[3, 4, 5, 6])
-        b = tf.placeholder(tf.float32, shape=[3, 4, 5])
-        a_sum = tf.reduce_sum(a, reduction_indices=[0, 3])  # shape (4, 5)
-        b_prod = tf.reduce_prod(b, reduction_indices=[0, 1])  # shape (5,)
-        f = a_sum + b_prod + b  # (4, 5) + (5,) + (3, 4, 5) -> (3, 4, 5)
-
-        # value
-        feed_dict = dict()
-        for x in [a, b]:
-            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
-
-        # test
+        f = tf_op(a, reduction_indices=reduction_indices)
         self.run(f, tf_feed_dict=feed_dict)

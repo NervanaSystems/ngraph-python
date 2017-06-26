@@ -21,8 +21,11 @@ from ngraph.flex.flexargparser import FlexNgraphArgparser
 
 
 parser = FlexNgraphArgparser(description='x + 1.5 example')
+parser.add_argument('--start', type=int, default=0)
+parser.add_argument('--end', type=int, default=5)
 args = parser.parse_args()
-transformer_name = args.backend
+start = args.start
+end = args.end
 
 transformer = ngt.make_transformer()
 
@@ -34,6 +37,6 @@ x_plus_one = x + 1.5
 plus_one = transformer.computation(x_plus_one, x)
 
 # Run the computation
-for i in range(5):
+for i in range(start, end):
     print(plus_one(i))
     print()

@@ -15,8 +15,11 @@
 from __future__ import division
 from builtins import object
 from contextlib import contextmanager
+from orderedset import OrderedSet
 
 import numpy as np
+from copy import deepcopy
+
 import ngraph as ng
 import ngraph.transformers as ngt
 
@@ -29,16 +32,50 @@ class ExecutorFactory(object):
 
     def __enter__(self):
         self.transformer = ngt.make_transformer()
+        if is_flex_transformer(self.transformer):
+            self.cpu_transformer = ngt.Transformer.transformers['cpu']()
         return self
 
     def __exit__(self, *args):
+        if is_flex_transformer(self.transformer):
+            self.cpu_transformer.close()
         self.transformer.close()
 
     def executor(self, results, *parameters):
         return self.transformer.computation(results, *parameters)
 
+    def get_tensor_view_value(self, op, host_tensor=None):
+        return self.transformer.get_tensor_view_value(op, host_tensor)
+
+    @staticmethod
+    def get_all_placeholders(graph):
+        placeholders = []
+        ops = [graph]
+        for op in ops:
+            for arg in op.args:
+                if isinstance(arg, ng.TensorValueOp):
+                    placeholders.append(arg)
+                else:
+                    ops.append(arg)
+        return placeholders
+
+    @staticmethod
+    def get_copied_params(graph, input_params):
+        placeholders = ExecutorFactory.get_all_placeholders(graph)
+        copied_params = OrderedSet()
+        for i in input_params:
+            for p in placeholders:
+                if i.name == p.tensor.name:
+                    copied_params.add(p.tensor)
+        return tuple(copied_params)
+
     def numeric_derivative(self, f, p_x, dx, *params):
-        comp = self.transformer.computation(f, p_x, *params)
+        if is_flex_transformer(self.transformer):
+            f_cpu = deepcopy(f)
+            copied_params = self.get_copied_params(f_cpu, (p_x,) + params)
+            comp = self.cpu_transformer.computation(f_cpu, *copied_params)
+        else:
+            comp = self.transformer.computation(f, p_x, *params)
 
         def helper(x, *args):
             def comp_helper(xx):
@@ -71,8 +108,6 @@ class ExecutorFactory(object):
         #     print '------'
         # print "============="
 
-        px.input = True
-
         if len(fshape) is 0:
             return self.transformer.computation(ng.deriv(f, px), px, *parameters)
         else:
@@ -95,6 +130,9 @@ class ExecutorFactory(object):
                     dfdxiter[...] = 1
 
                     df = comp(adjoint, x, *args)
+
+                    if is_flex_transformer(comp.transformer):
+                        reset_flex_entries(comp)
 
                     # import pytest; pytest.set_trace()
                     # with open("code_sum.py", "w") as f: f.write(comp.transformer.code.code)
@@ -201,3 +239,17 @@ def check_derivative(f, x, delta, x_value, parameters=[], parameter_values=[], *
             dfdx_symbolic(x_value, *parameter_values),
             **kwargs
         )
+
+
+def is_flex_transformer(transformer):
+    # Probably 'argon' also need to be added here
+    flex_transformers = ['flexgpu']
+    if transformer.transformer_name in flex_transformers:
+        return True
+    return False
+
+
+def reset_flex_entries(comp):
+    for flex_id in comp.executor.output_flex_ids:
+        flex_entry = comp.transformer.flex_manager.flex_entries[flex_id]
+        flex_entry.reset_entry()

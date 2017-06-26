@@ -41,6 +41,8 @@ from ngraph.frontends.neon import LSTM, GaussianInit, Tanh, Logistic
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
+
 rng = RandomTensorGenerator()
 
 delta = 1e-3
@@ -62,8 +64,6 @@ def pytest_generate_tests(metafunc):
 
 
 def test_ref_compare_rand(transformer_factory, reflstmargs):
-        if transformer_factory.name == 'hetr':
-            pytest.xfail("Hetr is expected to fail with code that checks side-effects")
         # run comparison with reference code
         # for Gaussian random init
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
@@ -73,12 +73,22 @@ def test_ref_compare_rand(transformer_factory, reflstmargs):
 
 
 def test_ref_stacked(transformer_factory, reflstmargs):
-        if transformer_factory.name == 'hetr':
-            pytest.xfail("Hetr is expected to fail with code that checks side-effects")
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,
                            GaussianInit(0.0, 0.1), reset_cells=reset_cells,
                            num_iter=num_iter)
+
+
+def copier(f):
+    def copy(x):
+        return type(x)(_.copy() for _ in x)
+    return lambda *args, **kwargs: copy(f(*args, **kwargs))
+
+
+def copier_T(f):
+    def copy(x):
+        return type(x)(_.copy().T for _ in x)
+    return lambda *args, **kwargs: copy(f(*args, **kwargs))
 
 
 # compare ngraph LSTM to reference LSTM implementation
@@ -86,8 +96,8 @@ def check_lstm(seq_len, input_size, hidden_size,
                batch_size, init_func, return_seq=True, backward=False,
                reset_cells=False, num_iter=2):
 
-    Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, name='R')
+    Cin = ng.make_axis(input_size, name='Feature')
+    REC = ng.make_axis(seq_len, name='REC')
     N = ng.make_axis(batch_size, name='N')
 
     with ExecutorFactory() as ex:
@@ -101,7 +111,12 @@ def check_lstm(seq_len, input_size, hidden_size,
 
         out_ng = lstm_ng(inp_ng)
 
-        fprop_neon_fun = ex.executor(out_ng, inp_ng)
+        fprop_neon_fun = copier(ex.executor((out_ng, lstm_ng.h_init), inp_ng))
+
+        gates = ['i', 'f', 'o', 'g']
+        Wxh_neon_fun = copier_T(ex.executor(list(lstm_ng.W_input[k] for k in gates)))
+        Whh_neon_fun = copier_T(ex.executor(list(lstm_ng.W_recur[k] for k in gates)))
+        bh_neon_fun = copier(ex.executor(list(lstm_ng.b[k] for k in gates)))
 
         fprop_neon_list = []
         input_value_list = []
@@ -109,7 +124,7 @@ def check_lstm(seq_len, input_size, hidden_size,
         for i in range(num_iter):
             # fprop on random inputs
             input_value = rng.uniform(-1, 1, inp_ng.axes)
-            fprop_neon = fprop_neon_fun(input_value).copy()
+            fprop_neon, h_init_neon = fprop_neon_fun(input_value)
 
             if return_seq is True:
                 fprop_neon = fprop_neon[:, :, 0]
@@ -120,16 +135,15 @@ def check_lstm(seq_len, input_size, hidden_size,
             if reset_cells is False:
                 # look at the last hidden states
                 assert ng.testing.allclose(fprop_neon[:, -1].reshape(-1, 1),
-                                           lstm_ng.h_init.value.get(None),
+                                           h_init_neon,
                                            rtol=rtol, atol=atol)
 
         # after the rnn graph has been executed, can get the W values. Get copies so
         # shared values don't confuse derivatives
         # concatenate weights to i, f, o, g together (in this order)
-        gates = ['i', 'f', 'o', 'g']
-        Wxh_neon = [lstm_ng.W_input[k].value.get(None).copy().T for k in gates]
-        Whh_neon = [lstm_ng.W_recur[k].value.get(None).copy().T for k in gates]
-        bh_neon = [lstm_ng.b[k].value.get(None).copy() for k in gates]
+        Wxh_neon = Wxh_neon_fun()
+        Whh_neon = Whh_neon_fun()
+        bh_neon = bh_neon_fun()
 
         # reference numpy LSTM
         lstm_ref = RefLSTM()
@@ -167,8 +181,8 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                        batch_size, init_func, return_seq=True, backward=False,
                        reset_cells=False, num_iter=2):
 
-    Cin = ng.make_axis(input_size)
-    REC = ng.make_axis(seq_len, name='R')
+    Cin = ng.make_axis(input_size, name='Feature')
+    REC = ng.make_axis(seq_len, name='REC')
     N = ng.make_axis(batch_size, name='N')
 
     with ExecutorFactory() as ex:
@@ -176,17 +190,27 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
         inp_ng = ng.placeholder([Cin, REC, N])
 
-        lstm_ng_1 = LSTM(hidden_size, init_func, activation=Tanh(), gate_activation=Logistic(),
-                         reset_cells=reset_cells, return_sequence=return_seq,
-                         backward=backward)
-        lstm_ng_2 = LSTM(hidden_size, init_func, activation=Tanh(), gate_activation=Logistic(),
-                         reset_cells=reset_cells, return_sequence=return_seq,
-                         backward=backward)
+        lstm_ng_1 = LSTM(hidden_size, init_func, activation=Tanh(),
+                         gate_activation=Logistic(), reset_cells=reset_cells,
+                         return_sequence=return_seq, backward=backward)
+        lstm_ng_2 = LSTM(hidden_size + 1, init_func, activation=Tanh(),
+                         gate_activation=Logistic(), reset_cells=reset_cells,
+                         return_sequence=return_seq, backward=backward)
 
         out_ng_1 = lstm_ng_1(inp_ng)
         out_ng_2 = lstm_ng_2(out_ng_1)
 
         fprop_neon_fun_2 = ex.executor(out_ng_2, inp_ng)
+
+        gates = ['i', 'f', 'o', 'g']
+        Wxh_neon_1_fun = copier_T(ex.executor(list(lstm_ng_1.W_input[k] for k in gates)))
+        Whh_neon_1_fun = copier_T(ex.executor(list(lstm_ng_1.W_recur[k] for k in gates)))
+        bh_neon_1_fun = copier(ex.executor(list(lstm_ng_1.b[k] for k in gates)))
+        Wxh_neon_2_fun = copier_T(ex.executor(list(lstm_ng_2.W_input[k] for k in gates)))
+        Whh_neon_2_fun = copier_T(ex.executor(list(lstm_ng_2.W_recur[k] for k in gates)))
+        bh_neon_2_fun = copier(ex.executor(list(lstm_ng_2.b[k] for k in gates)))
+
+        h_init_fun = ex.executor(lstm_ng_2.h_init)
 
         # fprop on random inputs for multiple iterations
         fprop_neon_2_list = []
@@ -205,32 +229,26 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
             if reset_cells is False:
                 # look at the last hidden states
-                assert ng.testing.allclose(fprop_neon_2[:, -1].reshape(-1, 1),
-                                           lstm_ng_2.h_init.value.get(None),
-                                           rtol=rtol, atol=atol)
+                h_init_neon = fprop_neon_2[:, -1].reshape(-1, 1)
+                h_init_ng = h_init_fun()
+                assert ng.testing.allclose(h_init_neon, h_init_ng, rtol=rtol, atol=atol)
 
         # after the rnn graph has been executed, can get the W values. Get copies so
         # shared values don't confuse derivatives
         # concatenate weights to i, f, o, g together (in this order)
         gates = ['i', 'f', 'o', 'g']
-        Wxh_neon_1 = \
-            np.concatenate([lstm_ng_1.W_input[k].value.get(None).copy().T for k in gates], 1)
-        Whh_neon_1 = \
-            np.concatenate([lstm_ng_1.W_recur[k].value.get(None).copy().T for k in gates], 1)
-        bh_neon_1 =  \
-            np.concatenate([lstm_ng_1.b[k].value.get(None).copy() for k in gates])
-        Wxh_neon_2 = \
-            np.concatenate([lstm_ng_2.W_input[k].value.get(None).copy().T for k in gates], 1)
-        Whh_neon_2 = \
-            np.concatenate([lstm_ng_2.W_recur[k].value.get(None).copy().T for k in gates], 1)
-        bh_neon_2 = \
-            np.concatenate([lstm_ng_2.b[k].value.get(None).copy() for k in gates])
+        Wxh_neon_1 = np.concatenate(Wxh_neon_1_fun(), 1)
+        Whh_neon_1 = np.concatenate(Whh_neon_1_fun(), 1)
+        bh_neon_1 = np.concatenate(bh_neon_1_fun())
+        Wxh_neon_2 = np.concatenate(Wxh_neon_2_fun(), 1)
+        Whh_neon_2 = np.concatenate(Whh_neon_2_fun(), 1)
+        bh_neon_2 = np.concatenate(bh_neon_2_fun())
 
         # reference numpy LSTM
         lstm_ref_1 = RefLSTM()
         lstm_ref_2 = RefLSTM()
         WLSTM_1 = lstm_ref_1.init(input_size, hidden_size)
-        WLSTM_2 = lstm_ref_2.init(hidden_size, hidden_size)
+        WLSTM_2 = lstm_ref_2.init(hidden_size, hidden_size + 1)
 
         # make ref weights and biases the same with neon model
         WLSTM_1[0, :] = bh_neon_1
@@ -259,7 +277,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                 h0_2 = hprev_2
 
             # the output needs transpose as well
-            Hout_ref_2 = Hout_ref_2.reshape(seq_len * batch_size, hidden_size).T
+            Hout_ref_2 = Hout_ref_2.reshape(seq_len * batch_size, hidden_size + 1).T
 
             fprop_ref_2_list.append(Hout_ref_2)
 
@@ -269,7 +287,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
 
 
 if __name__ == '__main__':
-    seq_len, input_size, hidden_size, batch_size = (8, 5, 16, 1)
+    seq_len, input_size, hidden_size, batch_size, reset_cells = (8, 5, 16, 1, True)
     init = GaussianInit(0.0, 1)
-    check_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=False)
-    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=False)
+    check_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=reset_cells)
+    check_stacked_lstm(seq_len, input_size, hidden_size, batch_size, init, reset_cells=reset_cells)

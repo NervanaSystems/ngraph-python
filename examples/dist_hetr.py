@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import print_function
+from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.transformers.passes.nviz
@@ -34,17 +36,14 @@ with ng.metadata(device_id=('1', '2'), parallel=W):
 x_plus_two = x_plus_one + 1
 
 # Select a transformer
-hetr = ngt.make_transformer_factory('hetr')()
+with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+    # Visualize the graph
+    if args.visualize:
+        hetr.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
 
-# Visualize the graph
-if args.visualize:
-    hetr.vizpass = ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True, show_axes=True)
+    # Define a computation
+    plus_two = hetr.computation(x_plus_two, x)
 
-# Define a computation
-plus_two = hetr.computation(x_plus_two, x)
-
-# Run the computation
-for i in range(args.iter_count):
-    print(plus_two(i))
-
-hetr.close()
+    # Run the computation
+    for i in range(args.iter_count):
+        print(plus_two(i))

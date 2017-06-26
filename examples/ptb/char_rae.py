@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +20,7 @@ The model uses a sequence from the PTB dataset as input, and learns to output
 the same sequence in reverse order.
 """
 
+from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import Preprocess, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
@@ -27,12 +29,12 @@ from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_
 from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
-from ptb import PTB
+from ngraph.frontends.neon import PTB
 
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
-parser.set_defaults(gen_be=False)
+parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
@@ -93,15 +95,15 @@ loss_outputs = dict(cross_ent_loss=loss)
 # Train Loop
 
 # Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+with closing(ngt.make_transformer()) as transformer:
+    train_computation = make_bound_computation(transformer, train_outputs, inputs)
+    loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
 
-cbs = make_default_callbacks(output_file=args.output_file,
-                             frequency=args.iter_interval,
-                             train_computation=train_computation,
-                             total_iterations=args.num_iterations,
-                             loss_computation=loss_computation,
-                             use_progress_bar=args.progress_bar)
+    cbs = make_default_callbacks(output_file=args.output_file,
+                                 frequency=args.iter_interval,
+                                 train_computation=train_computation,
+                                 total_iterations=args.num_iterations,
+                                 loss_computation=loss_computation,
+                                 use_progress_bar=args.progress_bar)
 
-loop_train(train_set, train_computation, cbs)
+    loop_train(train_set, train_computation, cbs)

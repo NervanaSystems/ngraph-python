@@ -20,30 +20,17 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
+import pytest
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
     def test_constant(self):
         # computation
         a = tf.constant(10.)
-        b = tf.constant(20.)
-        c = a + b
-        d = c * a
 
         # test
-        self.run(d)
-
-    def test_constant_broadcast(self):
-        # computation
-        a = tf.constant([1, 2, 3.])
-        b = tf.constant(20.)
-        c = tf.ones([2, 3])
-        d = tf.ones([10, 2, 3])
-        e = tf.ones([1, 2, 3])
-        f = a + b + c + d + e
-
-        # test
-        self.run(f)
+        self.run(a)
 
     def test_fill(self):
         # computation

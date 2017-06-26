@@ -15,8 +15,9 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from __future__ import print_function
+from contextlib import closing
 import ngraph as ng
-from ngraph.frontends.neon import (Sequential, BiRNN, Recurrent, Affine,
+from ngraph.frontends.neon import (Layer, Sequential, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
@@ -24,14 +25,14 @@ from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph.transformers as ngt
 
-from imdb import IMDB
+from ngraph.frontends.neon import IMDB
 
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='rnn', choices=['rnn', 'birnn'],
                     help='type of recurrent layer to use (rnn or birnn)')
-parser.set_defaults(gen_be=False)
+parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
@@ -72,26 +73,30 @@ seq1 = Sequential([LookupTable(vocab_size, embed_size, init, update=True, pad_id
 optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 
-output_prob = seq1.train_outputs(inputs['review'])
-loss = ng.cross_entropy_multi(output_prob, ng.one_hot(inputs['label'], axis=ax.Y), usebits=True)
-mean_cost = ng.mean(loss, out_axes=[])
-updates = optimizer(loss)
+train_prob = seq1(inputs['review'])
+train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y),
+                                    usebits=True)
+batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+train_outputs = dict(batch_cost=batch_cost)
 
-
-train_outputs = dict(batch_cost=mean_cost, updates=updates)
-loss_outputs = dict(cross_ent_loss=loss)
+with Layer.inference_mode_on():
+    inference_prob = seq1(inputs['review'])
+eval_loss = ng.cross_entropy_multi(inference_prob,
+                                   ng.one_hot(inputs['label'], axis=ax.Y),
+                                   usebits=True)
+eval_outputs = dict(cross_ent_loss=eval_loss)
 
 # Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
+with closing(ngt.make_transformer()) as transformer:
+    train_computation = make_bound_computation(transformer, train_outputs, inputs)
+    loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
-cbs = make_default_callbacks(output_file=args.output_file,
-                             frequency=args.iter_interval,
-                             train_computation=train_computation,
-                             total_iterations=args.num_iterations,
-                             eval_set=valid_set,
-                             loss_computation=loss_computation,
-                             use_progress_bar=args.progress_bar)
+    cbs = make_default_callbacks(output_file=args.output_file,
+                                 frequency=args.iter_interval,
+                                 train_computation=train_computation,
+                                 total_iterations=args.num_iterations,
+                                 eval_set=valid_set,
+                                 loss_computation=loss_computation,
+                                 use_progress_bar=args.progress_bar)
 
-loop_train(train_set, train_computation, cbs)
+    loop_train(train_set, train_computation, cbs)

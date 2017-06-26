@@ -1,27 +1,37 @@
-# tensorflow & protobuf
-tensorflow==0.12.1
-# scipy (temporary add)
-scipy==0.18.1
-# autopep8 (temporary add)
-autopep8==1.2.4
-# other requirements
-tqdm==4.8.4
-enum34==1.1.6
-future==0.15.2
-configargparse==0.11.0
+# These come over from neon
+numpy==1.11.1
 h5py==2.6.0
+appdirs==1.4.0
+
+# tensorflow & protobuf
+six==1.10.0
+tensorflow==0.12.1
+scipy==0.18.1
+
+# other requirements
+requests==2.13.0
+frozendict==1.2
+cached-property==1.3.0
+orderedset==2.0
+tqdm==4.11.2
+enum34==1.1.6
+future==0.16.0
+configargparse==0.11.0
 cachetools==2.0.0
-decorator==4.0.10
-requests==2.12.4
-# aeon (for examples using aeon only without neon)
-#-e git://github.com/NervanaSystems/aeon.git@e759638574bfbd431ce23d044a90daed18a57cd0#egg=nervana-aeon
+decorator==4.0.11
+pynvrtc==7.5
+
 # notebooks
 jupyter==1.0.0
-nbconvert==5.0.0
-nbformat==4.2.0
-setuptools>=18.5
-flake8==3.2.1
-pytest-cov
-pytest-xdist
-pytest-timeout
-pynvrtc==7.5
+nbconvert==5.1.1
+nbformat==4.3.0
+
+# setuptools is autoflex's requirement, but it is here for now
+setuptools==18.5
+
+# cffi is required to wrap warp-ctc
+cffi>=1.0
+
+# grpc
+grpcio>=1.0.0
+grpcio-tools>=1.0.0

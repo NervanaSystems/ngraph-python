@@ -1,0 +1,37 @@
+FROM ngraph_test_base
+
+# MXNet dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    libatlas-base-dev \
+    libopencv-dev && \
+	apt-get clean autoclean && apt-get autoremove -y
+
+# Required Python packages
+RUN pip install --upgrade pip && pip install \
+    numpy
+
+# Copy MXNet
+WORKDIR /root/ngraph-test
+ADD contrib/docker/ngraph-mxnet /root/ngraph-mxnet
+
+WORKDIR /root/ngraph-mxnet/
+
+# Build MXNet core (C++)
+RUN cd /root/ngraph-mxnet && cp ./make/config.mk . && \
+    echo "USE_BLAS=atlas" >>config.mk && \
+    echo "ADD_LDFLAGS += -lopencv_core -lopencv_imgproc" >>config.mk && \
+    make -j$(nproc)
+
+# Install python package for MXNet
+RUN cd python && \
+    python setup.py install
+
+# Go into the ngraph directory
+WORKDIR /root/ngraph-test
+
+# necessary for tests/test_walkthrough.py which requires that ngraph is
+# importable from an entrypoint not local to ngraph.
+ADD . /root/ngraph-test
+RUN pip install -e .

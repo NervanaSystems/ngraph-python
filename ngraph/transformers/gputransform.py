@@ -12,48 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
 from builtins import range
 import atexit
+import sys
+from six import itervalues
+from weakref import WeakSet
 
-from ngraph.transformers.base import Transformer, DeviceBufferStorage, DeviceBufferReference, \
-    DeviceTensor
-from ngraph.op_graph.op_graph import Argmax, Argmin, ContiguousOp, Op, \
-    DotLowDimension, Max, Min, OneHotOp, \
+from ngraph.transformers.base import UnsupportedTransformerException
+
+try:
+    import pycuda.driver as drv
+    from pycuda.gpuarray import GPUArray
+    from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
+except ImportError:
+    raise UnsupportedTransformerException("No GPU")
+
+from ngraph.transformers.base import ComputationGraphTransformer, \
+    DeviceBufferStorage, DeviceBufferReference, DeviceTensor, \
+    PYCUDA_LOGIC_ERROR_CODE
+from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
+    Max, Min, OneHotOp, \
     Power, RngOp, Sum, TensorSizeOp, Fill, TensorDescription, \
-    Function, AbsoluteOp, Add, AssignOneDOp, AssignOp, CosOp, Divide, Mod, Equal, \
+    AbsoluteOp, Add, AssignOp, CosOp, Divide, FloorDivide, Mod, Equal, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
-    Subtract, TanhOp, SetItemOp, Prod
-from ngraph.op_graph.communication import Send, Recv
-from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
+    Subtract, TanhOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
+from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
+    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
+from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv, \
+    DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
+from ngraph.op_graph.ctc import CTCOp
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune, RequiredTensorShaping
-from ngraph.transformers.passes.gpulayout import GPUTensorLayout, GPUTensorShaping, \
-    GPUContiguousPrune
+from ngraph.transformers.passes.passes import SimplePrune
+from ngraph.transformers.passes.gpusimplification import GPUSubstitution
+from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
+    AssignLayouts, AddLayoutConversions, PruneContiguousPass
+# from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
 from ngraph.transformers.gpu.conv import ConvFpropKernel, ConvBpropKernel, ConvUpdateKernel
 from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
-from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, SetItemKernel, \
-    RngFillKernel, SendKernel, RecvKernel
+from ngraph.transformers.gpu.ctc import CTCKernel
+from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, \
+    RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
+    CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
     _get_sm_count, get_cache_dir
+from ngraph.transformers.gpu.gpulayout import gpu_layout_factory, GPUUnaryLayoutConstraint, \
+    gpu_constraint_factory, DimshuffleOp
 
 import cachetools
 import numpy as np
-import pycuda.driver as drv
-from pycuda.gpuarray import GPUArray
-from pycuda.curandom import MRG32k3aRandomNumberGenerator as rng_mrg
-
 
 _none_slice = slice(None, None, None)
+
+
+class Function(TensorOp):
+
+    def __init__(self, **kwargs):
+        super(TensorOp, self).__init__(**kwargs)
+        self.instructions = []
 
 
 class ElementWiseKernel(GPUKernel):
@@ -79,6 +106,7 @@ class ElementWiseKernel(GPUKernel):
         kernel (pycuda.driver.Function): Handle to the compiled GPU kernel
         shared_size (int): Size of shared memory needed by kernel
     """
+
     def __init__(self, transformer):
         super(ElementWiseKernel, self).__init__(transformer)
         self.ops_buffer = []
@@ -90,7 +118,7 @@ class ElementWiseKernel(GPUKernel):
         if len(op.reduction_axes) == 0:
             self._buffer_op("assign", x=x, out=out)
         else:
-            axis = op.args[0].axes.index_unique(op.reduction_axes[0])
+            axis = 0
             self._buffer_op(string, x=x, axis=axis, out=out)
 
     @generic_method(Op)
@@ -129,6 +157,10 @@ class ElementWiseKernel(GPUKernel):
     @add_op.on_type(Divide)
     def add_op(self, op, out, x, y):
         self._buffer_op("div", x=x, y=y, out=out)
+
+    @add_op.on_type(FloorDivide)
+    def add_op(self, op, out, x, y):
+        self._buffer_op("int_div", x=x, y=y, out=out)
 
     @add_op.on_type(Mod)
     def add_op(self, op, out, x, y):
@@ -210,17 +242,13 @@ class ElementWiseKernel(GPUKernel):
     def add_op(self, op, out, x):
         self._buffer_op("rcp", x=x, out=out)
 
-    @add_op.on_type(AssignOneDOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
-
-    @add_op.on_type(AssignOp)
-    def add_op(self, op, out, tensor, value):
-        self._buffer_op("assign", x=value, out=tensor)
-
     @add_op.on_type(SignOp)
     def add_op(self, op, out, x):
         self._buffer_op("sgn", x=x, out=out)
+
+    @add_op.on_type(SigmoidAtomicOp)
+    def add_op(self, op, out, x):
+        self._buffer_op("sig", x=x, out=out)
 
     @add_op.on_type(SinOp)
     def add_op(self, op, out, x):
@@ -270,7 +298,7 @@ class ElementWiseKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = pointer_from_td(self.params[index])
+                self.params[index] = self.pointer_from_td(self.params[index])
 
         super(ElementWiseKernel, self).bind_buffers()
 
@@ -291,7 +319,7 @@ class ElementWiseKernel(GPUKernel):
         if sourcefile is not None:
             # Code generation and compilation are only separate when a sourcefile is
             # provided
-            self.name, self.params = sourcefile.add_kernel(self.ops_buffer)
+            self.name, self.params = sourcefile.add_kernel(self.transformer, self.ops_buffer)
 
         return True
 
@@ -361,17 +389,9 @@ class GPUKernelGroup(object):
         if kernel.generate_source(self.sourcefile):
             self.kernels.append(kernel)
 
-    @add_kernel.on_type(Function)
+    @add_kernel.on_type(AssignOp)
     def add_kernel(self, op):
-        # Iterate over compounded operations and build kernel for them
-        kernel = ElementWiseKernel(self.transformer)
-        for sub_op in op.instructions:
-            out = sub_op.tensor_description()
-            call_info = (_ for _ in sub_op.call_info())
-            kernel.add_op(sub_op, out, *call_info)
-
-        if kernel.generate_source(self.sourcefile):
-            self.kernels.append(kernel)
+        self.kernels.append(DimShuffleKernel(self.transformer, op))
 
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
@@ -385,11 +405,19 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(ConvUpdateKernel(self.transformer, op))
 
-    @add_kernel.on_type(DotLowDimension)
+    @add_kernel.on_type(DeconvolutionOp)
+    def add_kernel(self, op):
+        self.kernels.append(ConvBpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(DeconvDerivOp)
+    def add_kernel(self, op):
+        self.kernels.append(ConvFpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(DotOp)
     def add_kernel(self, op):
         self.kernels.append(GEMMKernel(self.transformer, op))
 
-    @add_kernel.on_type(ContiguousOp)
+    @add_kernel.on_type(DimshuffleOp)
     def add_kernel(self, op):
         self.kernels.append(DimShuffleKernel(self.transformer, op))
 
@@ -412,10 +440,6 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(PoolBpropKernel(self.transformer, op))
 
-    @add_kernel.on_type(SetItemOp)
-    def add_kernel(self, op):
-        self.kernels.append(SetItemKernel(self.transformer, op))
-
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
         self.kernels.append(FillKernel(self.transformer, op.tensor_description(),
@@ -425,13 +449,37 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(LUTBpropKernel(self.transformer, op))
 
-    @add_kernel.on_type(Send)
+    @add_kernel.on_type(CTCOp)
     def add_kernel(self, op):
-        self.kernels.append(SendKernel(self.transformer, op))
+        self.kernels.append(CTCKernel(self.transformer, op))
 
-    @add_kernel.on_type(Recv)
+    @add_kernel.on_type(GPUQueueSendOp)
     def add_kernel(self, op):
-        self.kernels.append(RecvKernel(self.transformer, op))
+        self.kernels.append(QueueSendKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUQueueRecvOp)
+    def add_kernel(self, op):
+        self.kernels.append(QueueRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaScatterSendOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaScatterSendKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaScatterRecvOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaScatterRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaGatherSendOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaGatherSendKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaGatherRecvOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaGatherRecvKernel(self.transformer, op))
+
+    @add_kernel.on_type(GPUCudaAllReduceOp)
+    def add_kernel(self, op):
+        self.kernels.append(CudaAllReduceKernel(self.transformer, op))
 
     def compile_all(self):
         """
@@ -466,6 +514,8 @@ class GPUKernelGroup(object):
         for k in self.kernels:
             if not k.buffers_bound:
                 k.bind_buffers()
+
+        for k in self.kernels:
 
             self.setup_kernel_execute(k)
             k.execute()
@@ -513,6 +563,11 @@ class GPUBufferAllocator():
         """
         self.view_allocators.append(view_alloc)
 
+    def close(self):
+        if self._buffer is not None:
+            self._buffer.free()
+            self._buffer = None
+
 
 class GPUTensorAllocator():
     """
@@ -549,13 +604,22 @@ class GPUTensorAllocator():
                 allocator
         """
         tensor_description = self.tensor_description
+        layout = tensor_description.layout
+        dtype = self.transformer.storage_dtype(tensor_description.dtype)
 
-        gpudata = int(buffer_alloc) + tensor_description.offset
-        new_tensor = GPUArray(tensor_description.shape,
-                              self.transformer.storage_dtype(tensor_description.dtype),
-                              gpudata=gpudata,
-                              strides=tensor_description.strides)
-
+        if layout:
+            gpudata = int(buffer_alloc) + (layout.offset * dtype.itemsize)
+            strides = tuple([s * dtype.itemsize for s in layout.strides])
+            new_tensor = GPUArray(layout.shape,
+                                  dtype,
+                                  gpudata=gpudata,
+                                  strides=strides)
+        else:
+            gpudata = int(buffer_alloc) + tensor_description.offset
+            new_tensor = GPUArray(tensor_description.shape,
+                                  dtype,
+                                  gpudata=gpudata,
+                                  strides=tensor_description.strides)
         self._tensor = new_tensor
         self.transformer.tensors[self.tensor_name] = self._tensor
 
@@ -579,6 +643,7 @@ class GPUDeviceBufferReference(DeviceBufferReference):
     """
     Analogous to NumPyDeviceBufferReference.
     """
+
     def __init__(self, transformer, **kwargs):
         super(GPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
@@ -593,9 +658,15 @@ class GPUDeviceBufferStorage(DeviceBufferStorage):
         self.storage = None
 
     def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return GPUDeviceTensor(self.transformer, self, tensor_description,
-                               name="v_" + tensor_description.name + "_" + shape_str)
+        name = self.get_tensor_name(tensor_description)
+        return GPUDeviceTensor(self.transformer, self, tensor_description, name=name)
+
+    def get_tensor_name(self, tensor_description):
+        if tensor_description.layout:
+            shape_str = "_".join((str(_) for _ in tensor_description.layout.shape))
+        else:
+            shape_str = "_".join((str(_) for _ in tensor_description.shape))
+        return "v_" + tensor_description.name + "_" + shape_str
 
     @property
     def ref_str(self):
@@ -618,6 +689,7 @@ class GPUDeviceTensor(DeviceTensor):
     """
     Used to transform device tensor allocations. Analogous to NumPyDeviceTensor.
     """
+
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
         super(GPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
                                               **kwargs)
@@ -654,7 +726,6 @@ class GPUDeviceTensor(DeviceTensor):
         Returns:
             Numpy array containing tensor data
         """
-
         if np.sum(self.tensor.strides) != 0:
             if self.is_contiguous or self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
                 contig_tensor = self.tensor
@@ -663,7 +734,10 @@ class GPUDeviceTensor(DeviceTensor):
                 contig_tensor = self.as_contiguous()
 
             if tensor is None:
-                return contig_tensor.get()
+                if contig_tensor.shape != self.tensor_description.shape:
+                    return contig_tensor.get().reshape(self.tensor_description.shape)
+                else:
+                    return contig_tensor.get()
             tensor[:] = contig_tensor.get()
         else:
             # Tensor is just a broadcasted scalar, get scalar value and fill output array
@@ -748,13 +822,14 @@ class GPUDeviceTensor(DeviceTensor):
             value = np.float64(value)
         elif type(value) == int:
             value = np.int64(value)
+        elif isinstance(value, np.ndarray) and value.shape == ():
+            value = value[()]
         # flex: added astype to deal with GPUArray dtype int16
         # FLEX TODO: assumed same behavior for all cases
         if type(value) == np.float32 or type(value) == np.float64 or \
                 type(value) == float:
             sliced.fill(value.astype(sliced.dtype))
-        elif type(value) == np.int32 or type(value) == np.int64 or \
-                type(value) == int:
+        elif type(value) in (np.int32, np.int64, int, np.uint32):
             sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
             sliced.fill(value.astype(sliced.dtype))
@@ -764,7 +839,7 @@ class GPUDeviceTensor(DeviceTensor):
         else:
             # Convert to correct dtype if necessary
             if value.dtype != self.tensor.dtype:
-                new_value = np.ndarray(self.tensor.shape, dtype=self.tensor.dtype)
+                new_value = np.ndarray(value.shape, dtype=self.tensor.dtype)
                 new_value[:] = value
                 value = new_value
 
@@ -841,11 +916,16 @@ class GPUDeviceTensor(DeviceTensor):
 
 
 class GPURuntime(object):
+
     def __init__(self, device_id=None, enable_winograd=True, deterministic=True,
                  scratch_size=0):
-        drv.init()
-        self.device_id = device_id if device_id is not None else 0
 
+        try:
+            drv.init()
+        except drv.LogicError:
+            sys.exit(PYCUDA_LOGIC_ERROR_CODE)
+
+        self.device_id = device_id if device_id is not None else 0
         # check compute capability
         self.compute_capability = drv.Device(self.device_id).compute_capability()
         if self.compute_capability[0] < 3:
@@ -897,9 +977,12 @@ class GPURuntime(object):
         return rng_mrg()
 
     def close(self):
+        if self.ctx is None:
+            return
         try:
             self.ctx.pop()
             self.ctx.detach()
+            self.ctx = None
         except drv.Error:
             pass
 
@@ -955,30 +1038,36 @@ class GPURuntime(object):
             self.scratch_size = total_size
 
 
-class GPUTransformer(Transformer):
+class GPUTransformer(ComputationGraphTransformer):
     """
     Transformer for executing graphs on a GPU, backed by pycuda and NervanaGPU.
 
     Given a list of ops you want to compute the results of, this transformer
     will generate allocators and kernels to execute the graph on a GPU.
     """
-    __runtime = None
 
     transformer_name = "gpu"
     default_rtol = 1e-05
     default_atol = 1e-08
 
+    # Transformers that might need to be closed on exit
+    gpu_transformers = WeakSet()
+
     @staticmethod
     def close_gpu():
-        if GPUTransformer.__runtime is not None:
-            GPUTransformer.__runtime.close()
-            GPUTransformer.__runtime = None
+        for transformer in GPUTransformer.gpu_transformers:
+            transformer.close()
 
-    def __init__(self, **kwargs):
+    def __init__(self, device_id=None, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
-        self.graph_passes = [SimplePrune(),
-                             RequiredTensorShaping(), GPUTensorShaping(),
-                             GPUTensorLayout(), GPUContiguousPrune()]
+        GPUTransformer.gpu_transformers.add(self)
+        layout_domain_pass = GenerateLayoutDomains(self)
+        layout_constraints_pass = GenerateLayoutConstraints(self)
+        layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
+        layout_convert_pass = AddLayoutConversions(layout_assign_pass)
+        self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
+                             layout_domain_pass, layout_constraints_pass, layout_assign_pass,
+                             layout_convert_pass]  # , VizPass(show_metadata="layout")]
 
         self.buffer_allocators = []
         self.kernel_groups = dict()
@@ -986,16 +1075,24 @@ class GPUTransformer(Transformer):
         self.argmax_tensors = dict()
         self.finished_transform = False
         self.current_buffer = None
+        self.device_id = device_id
+        self.runtime = None
 
     def initialize_runtime(self):
-        if GPUTransformer.__runtime is None:
-            GPUTransformer.__runtime = GPURuntime()
-            atexit.register(GPUTransformer.close_gpu)
-
-        self.runtime = GPUTransformer.__runtime
+        if self.runtime is None:
+            self.runtime = GPURuntime(device_id=self.device_id)
 
     def close(self):
-        GPUTransformer.close_gpu()
+        if self.runtime is None:
+            return
+        # Free the pool buffers
+        for array in itervalues(self.argmax_tensors):
+            array.gpudata.free()
+        for buffer in self.buffer_allocators:
+            buffer.close()
+        self.argmax_tensors.clear()
+        self.runtime.close()
+        self.runtime = None
 
     def device_register_storage(self, dtype, name):
         return GPURegister(dtype, name)
@@ -1026,13 +1123,16 @@ class GPUTransformer(Transformer):
     def start_transform_allocate(self):
         pass
 
+    def transform_allocate_ops(self, all_ops):
+        pass
+
     def finish_transform_allocate(self):
         pass
 
     def gpu_kernel_group(self, name):
         return GPUKernelGroup(self, name)
 
-    def transform_ordered_ops(self, ordered_ops, name):
+    def transform_ordered_ops(self, computation, ordered_ops, name):
         self.initialize_runtime()
 
         # Create kernel group
@@ -1061,3 +1161,47 @@ class GPUTransformer(Transformer):
 
     def storage_dtype(self, dtype):
         return dtype  # overridden by flex gpu transformer
+
+    def get_layouts(self, op):
+        """
+        Returns a list of possible axis layouts for the op. The default layout must
+        be the first item in the returned list.
+
+        Arguments:
+            op: graph op to get possible layouts for
+
+        Returns:
+            A list of objects that inherit from LayoutAssignment. The first item in the
+            list is the default layout for this op.
+        """
+        return gpu_layout_factory(op)
+
+    def get_layout_cost_function(self, op):
+        """
+        Returns a GPUUnaryLayoutConstraint which computes the cost of an op given an
+        assigned data layout for that op.
+
+        Arguments:
+            op: graph op to get cost function for
+
+        Returns:
+            An object that can be used to calculate the layout assignment cost.
+        """
+        return GPUUnaryLayoutConstraint()
+
+    def get_layout_change_cost_function(self, op, arg):
+        """
+        Returns a BinaryLayoutConstraint which computes the cost of a layout change
+        between the specified op and its specified arg (if any cost).
+
+        Arguments:
+            op: graph op to get cost function for
+            arg: argument to the op to generate cost function for
+
+        Returns:
+            An object that can be used to calculate any layout change cost.
+        """
+        return gpu_constraint_factory(op, arg)
+
+
+atexit.register(GPUTransformer.close_gpu)

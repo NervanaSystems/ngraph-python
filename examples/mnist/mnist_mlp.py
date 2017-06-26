@@ -26,6 +26,7 @@ python examples/mnist/mnist_mlp.py --data_dir /usr/local/data/MNIST --output_fil
 """
 from __future__ import division
 from __future__ import print_function
+from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Affine, Preprocess, Sequential
@@ -34,7 +35,7 @@ from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_d
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
-from mnist import MNIST
+from ngraph.frontends.neon import MNIST
 import ngraph.transformers as ngt
 
 parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
@@ -50,6 +51,7 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 inputs = train_set.make_placeholders()
 ax.Y.length = 10
 
+
 ######################
 # Model specification
 seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
@@ -59,6 +61,7 @@ seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
 optimizer = GradientDescentMomentum(0.1, 0.9)
 train_prob = seq1(inputs['image'])
 train_loss = ng.cross_entropy_binary(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_outputs = dict(batch_cost=batch_cost)
 
@@ -69,16 +72,16 @@ eval_loss = ng.cross_entropy_binary(inference_prob, ng.one_hot(inputs['label'], 
 eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_computation = make_bound_computation(transformer, train_outputs, inputs)
-loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
+with closing(ngt.make_transformer()) as transformer:
+    train_computation = make_bound_computation(transformer, train_outputs, inputs)
+    loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
-cbs = make_default_callbacks(output_file=args.output_file,
-                             frequency=args.iter_interval,
-                             train_computation=train_computation,
-                             total_iterations=args.num_iterations,
-                             eval_set=valid_set,
-                             loss_computation=loss_computation,
-                             use_progress_bar=args.progress_bar)
+    cbs = make_default_callbacks(output_file=args.output_file,
+                                 frequency=args.iter_interval,
+                                 train_computation=train_computation,
+                                 total_iterations=args.num_iterations,
+                                 eval_set=valid_set,
+                                 loss_computation=loss_computation,
+                                 use_progress_bar=args.progress_bar)
 
-loop_train(train_set, train_computation, cbs)
+    loop_train(train_set, train_computation, cbs)

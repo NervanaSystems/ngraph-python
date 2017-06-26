@@ -49,7 +49,7 @@ class PoolFpropKernel(GPUKernel):
         (self.I, ) = (_ for _ in op.call_info())
         self.O = op.tensor_description()
         self.dtype = self.O.dtype
-        self.index = op.index
+        self.op = op
 
         if not (self.dtype.type in self.supported_types):
             raise TypeError("Type not supported: {}".format(self.dtype.type))
@@ -81,7 +81,7 @@ class PoolFpropKernel(GPUKernel):
         else:
             self.gaps = 0
 
-        self.op   = pool_op
+        self.pool_op   = pool_op
         self.C    = C
         self.K    = K
         self.M    = M
@@ -191,16 +191,16 @@ class PoolFpropKernel(GPUKernel):
         since this is required for bprop. Builds a final list of parameters to
         pass to the kernel.
         """
-        I_data = self.I.value.tensor
-        O_data = self.O.value.tensor
+        I_data = self.tensor_view_from_td(self.I).tensor
+        O_data = self.tensor_view_from_td(self.O).tensor
 
         # Allocate argmax tensor
-        if self.op == "max":
-            if self.index not in self.transformer.argmax_tensors:
-                argmax = empty_like(self.O.value.tensor)
-                self.transformer.argmax_tensors[self.index] = argmax
+        if self.pool_op == "max":
+            if self.op not in self.transformer.argmax_tensors:
+                argmax = empty_like(self.tensor_view_from_td(self.O).tensor)
+                self.transformer.argmax_tensors[self.op] = argmax
             else:
-                argmax = self.transformer.argmax_tensors[self.index]
+                argmax = self.transformer.argmax_tensors[self.op]
             A_data = argmax.gpudata
         else:
             A_data = 0
@@ -244,7 +244,7 @@ class PoolBpropKernel(GPUKernel):
         (self.I, ) = (_ for _ in op.call_info())
         self.O = op.tensor_description()
         self.dtype = self.O.dtype
-        self.index = op.index
+        self.op = op
 
         if not (self.dtype.type in self.supported_types):
             raise TypeError("Type not supported: {}".format(self.dtype.type))
@@ -276,7 +276,7 @@ class PoolBpropKernel(GPUKernel):
         else:
             self.gaps = 0
 
-        self.op   = pool_op
+        self.pool_op   = pool_op
         self.C    = C
         self.K    = K
         self.M    = M
@@ -451,13 +451,13 @@ class PoolBpropKernel(GPUKernel):
         since this is required for bprop. Builds a final list of parameters to
         pass to the kernel.
         """
-        I_data = self.I.value.tensor
-        O_data = self.O.value.tensor
+        I_data = self.tensor_view_from_td(self.I).tensor
+        O_data = self.tensor_view_from_td(self.O).tensor
 
         # Get argmax tensor
-        if self.op == "max":
-            assert self.index in self.transformer.argmax_tensors
-            argmax = self.transformer.argmax_tensors[self.index]
+        if self.pool_op == "max":
+            assert self.op.fprop.forwarded in self.transformer.argmax_tensors
+            argmax = self.transformer.argmax_tensors[self.op.fprop.forwarded]
             A_data = argmax.gpudata
         else:
             A_data = 0

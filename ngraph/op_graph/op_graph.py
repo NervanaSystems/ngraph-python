@@ -15,6 +15,7 @@ from __future__ import division
 
 from contextlib import contextmanager
 import collections
+import uuid
 
 import inspect
 import cachetools
@@ -22,13 +23,16 @@ import numpy as np
 from builtins import object
 from functools import wraps
 from collections import defaultdict
+import abc
+from future.utils import with_metaclass
 
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
-    default_int_dtype
+    default_int_dtype, AxesMap, UnmatchedAxesError
 from ngraph.util.names import NameableValue
 from ngraph.util.threadstate import get_thread_state
-from ngraph.util.ordered import OrderedSet
+from orderedset import OrderedSet
+from cached_property import cached_property
 
 
 def tensor_descriptions(args):
@@ -50,9 +54,9 @@ def tdcache():
 
     Returns:
         Cache decorator set to use a particular cache.
-
     """
     return cachetools.cached(cache=tdcache.tensor_description_cache)
+
 
 tdcache.tensor_description_cache = {}
 
@@ -66,7 +70,11 @@ def metadata(**metadata):
     with Op.all_ops() as ops:
         yield
     for op in ops:
-        op.metadata.update(metadata)
+        if isinstance(op, TensorValueOp):
+            # make sure tensorvalue op matches thing it reads from
+            op.metadata.update(op.states_read[0].metadata)
+        else:
+            op.metadata.update(metadata)
 
 
 def with_op_metadata(f, metadata=None):
@@ -132,7 +140,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue, DebugInfo):
+class Op(NameableValue):
     """
     Any operation that can be in an AST.
 
@@ -141,17 +149,12 @@ class Op(NameableValue, DebugInfo):
         const: The value of a constant Op, or None,
         constant (bool): The Op is constant.  Default False.
         forward: If not None, the node to use instead of this node.
-        initializers: List of one-time initializations to run before the op.
-        persistent (bool): The value will be retained from computation to computation and
-            not shared.  Default False.
         metadata: String key value dictionary for frontend metadata.
-        trainable (bool): The value is trainable.  Default False.
         kwargs: Args defined in related classes.
 
     Attributes:
         const: The value of a constant.
         constant (bool): The value is constant.
-        initializers (list): Additional Ops to run before this Op is run the first time.
         control_deps (OrderedSet): Ops in addtion to args that must run before this op.
         persistent (bool): The value will be retained from computation to computation and
             not shared.  Always True if reference is set.
@@ -172,21 +175,6 @@ class Op(NameableValue, DebugInfo):
             ops = [None]
             get_thread_state().ops = ops
         return ops
-
-    @staticmethod
-    @contextmanager
-    def captured_ops(ops=None):
-        """
-        Capture all Ops created within the context. Hides ops created in this
-        context from parent contexts.
-        """
-        if ops is None:
-            ops = []
-        try:
-            Op._get_thread_ops().append(ops)
-            yield (ops)
-        finally:
-            Op._get_thread_ops().pop()
 
     @staticmethod
     def get_all_ops():
@@ -219,37 +207,49 @@ class Op(NameableValue, DebugInfo):
                 parent.extend(ops)
 
     @staticmethod
-    def ordered_ops(results):
+    def all_op_references(ops):
         """
-        depth-first, post-order "Bottom Up" traversal of Ops in results.
+        Currently ops can have references to other ops anywhere in their __dict__, (not just args,
+        but the other typical places handled in serialization's `add_edges`). This function
+        iterates through an ops __dict__ attributes and finds all other ops recursively.
 
-        Ops will only appear once in result.
-
-        Arguments:
-          results: a list of ops which are the roots of the graph traversal
-
-        Returns:
-          list of Ops in depth-first, post-order
+        This is more powerful than the ordered_ops method which only considers args and
+        control_deps.
         """
-        ordered_ops = []
-        Op.visit_input_closure(results, lambda o: ordered_ops.append(o))
-        return ordered_ops
+        op_set = OrderedSet(ops)
+
+        def add_op(op):
+            op_set.add(op)
+            for key in op.__dict__:
+                val = getattr(op, key)
+                if isinstance(val, Op) and val not in op_set:
+                    add_op(val)
+                elif isinstance(val, dict):
+                    for subkey in val:
+                        if isinstance(val[subkey], Op) and val[subkey] not in op_set:
+                            add_op(val[subkey])
+                elif isinstance(val, (list, tuple, set, OrderedSet)):
+                    for item in val:
+                        if isinstance(item, Op) and item not in op_set:
+                            add_op(item)
+        for op in ops:
+            add_op(op)
+        return op_set
 
     @staticmethod
-    def visit_input_closure(roots, fun):
+    def ordered_ops(roots):
         """
-        Topological sort order traversal of root and their inputs.
+        Topological sort of ops reachable from roots. Notes ngraph is using
+        depenency edges rather than dataflow edges, for example,
+        `top_sort(a -> b -> c) => [c, b, a]`.
 
-        Nodes will only be visited once, even if there are multiple routes to the
-        same Node.
-
-        Arguments:
-            roots: root set of nodes to visit
-            fun: Function to call on each visited node
+        Args:
+            roots: List of ops.
 
         Returns:
-            None
+            A list of sorted ops.
         """
+        ordered_ops = []
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(OrderedSet)
@@ -258,12 +258,11 @@ class Op(NameableValue, DebugInfo):
         available.update(root.forwarded for root in roots)
         while available:
             node = available.pop()
-            node.update_forwards()
 
-            if node in counts:
+            if node in counts or node in ready:
                 continue
 
-            children = OrderedSet((child.forwarded for child in node.control_deps))
+            children = OrderedSet((child.forwarded for child in node.all_deps))
             if children:
                 counts[node] = len(children)
                 for child in children:
@@ -274,7 +273,7 @@ class Op(NameableValue, DebugInfo):
 
         while ready:
             node = ready.pop()
-            fun(node)
+            ordered_ops.append(node)
             for p in parents.get(node, []):
                 count = counts[p] - 1
                 if count == 0:
@@ -285,17 +284,33 @@ class Op(NameableValue, DebugInfo):
         if len(counts) > 0:
             raise ValueError("Graph not a DAG")
 
+        return ordered_ops
+
+    @staticmethod
+    def visit_input_closure(roots, fun):
+        """
+        Apply function `fun` in the topological sorted order of roots.
+
+        Args:
+            roots: List of ops.
+
+        Returns:
+            None
+        """
+        for op in Op.ordered_ops(roots):
+            fun(op)
+
     def __init__(self,
                  args=(),
                  metadata=None,
                  const=None,
                  constant=False,
-                 persistent=True,
+                 persistent=False,
                  trainable=False,
-                 initializers=None,
                  **kwargs):
         super(Op, self).__init__(**kwargs)
-        self.__args = tuple(as_op(arg) for arg in args)
+        self._args = None
+        self._set_args(as_op(arg) for arg in args)
         self.metadata = dict()
 
         if metadata is not None:
@@ -305,18 +320,15 @@ class Op(NameableValue, DebugInfo):
             self.metadata.update(metadata)
 
         # List to keep generation deterministic
-        self.__control_deps = OrderedSet()
-        self.__deriv_handler = None
-        self.__const = const
-        self.__is_constant = constant
-        self.__is_persistent = persistent
-        self.__is_trainable = trainable
-        self.initializers = OrderedSet()
-        if initializers is not None:
-            for initializer in initializers:
-                self.add_initializer(initializer)
+        self._control_deps = OrderedSet()
+        self._deriv_handler = None
+        self._const = const
+        self.uuid = uuid.uuid4()
+        self._is_constant = constant
+        self._is_persistent = persistent
+        self._is_trainable = trainable
 
-        # Add this op to both the captured op and all op accounting lists
+        # Add this op to the all op accounting lists
         ops = Op._get_thread_ops()[-1]
         if ops is not None:
             ops.append(self)
@@ -325,7 +337,30 @@ class Op(NameableValue, DebugInfo):
             all_ops.append(self)
 
         self.style = {}
-        self.__forward = None
+        self._forward = None
+
+        self.scope = None
+
+    def copy_with_new_args(self, args):
+        """
+        This method creates a new op given an original op and new args. The purpose here
+        is to replace args for an op with layout conversions as needed but keep the op the same
+        otherwise.
+        """
+        return (type(self))(*args)
+
+    def _set_args(self, args):
+        """
+        Internal function. Changes args.
+
+
+        Args:
+            args: The new arguments.
+
+        """
+        self._args = tuple(args)
+        self.invalidate_property_cache('all_deps')
+        self.invalidate_property_cache('call_info')
 
     @property
     def tensor(self):
@@ -334,7 +369,7 @@ class Op(NameableValue, DebugInfo):
         Returns: The op providing the value.
 
         """
-        return self
+        return self.forwarded
 
     @property
     def states_read(self):
@@ -366,32 +401,76 @@ class Op(NameableValue, DebugInfo):
 
     @property
     def is_constant(self):
-        return self.__is_constant
+        """
+
+        Returns: True if this op is a constant tensor.
+
+        """
+        return False
 
     @property
     def const(self):
-        return self.__const
+        """
 
-    @const.setter
-    def const(self, value):
-        if self.__const is not None:
-            raise ValueError("Cannot change const value")
-        self.__const = value
+        Returns: For a constant, returns the constant value.
+
+        """
+        return None
+
+    @property
+    def is_input(self):
+        """
+
+        Returns: True if this op is a tensor that the host can write to.
+
+        """
+        return False
 
     @property
     def is_persistent(self):
-        return self.__is_persistent
+        """
+
+        Returns: True if this op is a tensor whose value is preserved from computation
+            to computation.
+
+        """
+        return False
 
     @property
     def is_trainable(self):
-        return self.__is_trainable
+        """
+
+        Returns: True if this op is a tensor that is trainable, i.e. is Op.variables
+            will return it.
+
+        """
+        return False
+
+    @property
+    def is_placeholder(self):
+        """
+
+        Returns: True if this op is a placeholder, i.e. a place to attach a tensor.
+
+        """
+        return False
 
     @property
     def is_tensor_op(self):
+        """
+
+        Returns: True if this op is a tensor.
+
+        """
         return False
 
     @property
     def is_scalar(self):
+        """
+
+        Returns: True if this op is a scalar.
+
+        """
         return 0 == len(self.axes)
 
     @property
@@ -406,16 +485,11 @@ class Op(NameableValue, DebugInfo):
     @property
     def scalar_op(self):
         """
-        Returns the scalar op verion of this op.  Will be overridden by subclasses
+        Returns the scalar op version of this op.  Will be overridden by subclasses
         """
         if not self.is_scalar:
             raise ValueError()
         return self
-
-    @property
-    def args(self):
-        """All the inputs to this node."""
-        return self.__args
 
     @property
     def forward(self):
@@ -427,18 +501,21 @@ class Op(NameableValue, DebugInfo):
         Returns:
              None or the replacement.
         """
-        return self.__forward
+        return self._forward
 
     @forward.setter
     def forward(self, value):
+        if value is self:
+            return
+
         self.update_forwards()
         value.update_forwards()
 
         # Make sure everything that is supposed to happen
         # before this op still happens
-        for dep in self.__control_deps:
+        for dep in self._control_deps:
             value.add_control_dep(dep)
-        self.__forward = value
+        self._forward = value
         tdcache.tensor_description_cache.clear()
         value.metadata.update(self.metadata)
 
@@ -448,22 +525,45 @@ class Op(NameableValue, DebugInfo):
         Finds the op that handles this op.
 
         Returns:
-             Follows forwarding to the op that shoud handle this op.
+             Follows forwarding to the op that should handle this op.
         """
         result = self
         while True:
-            if result.__forward is None:
+            if result._forward is None:
                 return result
-            result = result.__forward
+            result = result._forward
+
+    @cached_property
+    def all_deps(self):
+        """
+        Returns:
+            All dependencies of the op, including args and control_deps.
+            `x.all_deps == OrderedSet(x.args) | x.control_deps`, setter
+            functions are used to maintain this invariant. However, user
+            outside of the Op class should still avoid changing x._all_deps,
+            x._control_deps and x._args directly.
+        """
+        return OrderedSet(self.args) | self.control_deps
+
+    def invalidate_property_cache(self, property_name):
+        """
+        Invalidates self.all_deps cache
+        """
+        if property_name in self.__dict__:
+            del self.__dict__[property_name]
+
+    @property
+    def args(self):
+        """All the inputs to this node."""
+        return self._args
 
     @property
     def control_deps(self):
         """
-
         Returns:
-            Ops that must execute before this one can.
+            Control dependency of the op.
         """
-        return self.__control_deps + self.args
+        return self._control_deps
 
     def add_control_dep(self, dep):
         """
@@ -471,11 +571,13 @@ class Op(NameableValue, DebugInfo):
 
         Args:
             dep: The op.
-
         """
         dep = dep.forwarded
-        if dep is not self and dep not in self.control_deps:
-            self.__control_deps.add(dep)
+        if dep is not self and dep not in self.all_deps:
+            # update control_deps
+            self._control_deps.add(dep)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def remove_control_dep(self, dep):
         """
@@ -486,35 +588,38 @@ class Op(NameableValue, DebugInfo):
 
         """
         self.update_forwards()
-        self.__control_deps.remove(dep.forwarded)
-
-    def add_initializer(self, init):
-        self.initializers.add(init)
+        if dep.forwarded in self.control_deps:
+            # update control_deps
+            self._control_deps.remove(dep.forwarded)
+            # invalidate deps cache as self._control_deps is updated
+            self.invalidate_property_cache('all_deps')
 
     def update_forwards(self):
         """
         Replaces internal op references with their forwarded versions.
 
-        Any subclass that uses ops stored outside of args, control_deps, and initializers
+        Any subclass that uses ops stored outside of args and all_deps
         needs to override this method to update those additional ops.
 
         This is mainly to reduce the number of places that need to explicitly check
         for forwarding.
 
         """
+        # replace self._args with self._args's forwarded op
+        args_forward = [op.forward for op in self.args]
+        if any(forward is not None for forward in args_forward):
+            new_args = tuple([op.forwarded for op in self.args])
+            if self._args != new_args:
+                self._args = new_args
+                self.invalidate_property_cache('all_deps')
 
-        for op in self.control_deps:
-            if op.forward is not None:
-                self.__args = tuple(arg.forwarded for arg in self.__args)
-                control_deps = self.__control_deps
-                self.__control_deps = OrderedSet()
-                for op in control_deps:
-                    self.add_control_dep(op.forwarded)
-                break
-        for op in self.initializers:
-            if op.forward is not None:
-                self.initializers = OrderedSet(op.forwarded for op in self.initializers)
-                break
+        # replace self._control_deps with self._control_deps's forwarded op
+        control_deps_forward = [op.forward for op in self.control_deps]
+        if any(forward is not None for forward in control_deps_forward):
+            new_control_deps = OrderedSet([op.forwarded for op in self.control_deps])
+            if self._control_deps != new_control_deps:
+                self._control_deps = new_control_deps
+                self.invalidate_property_cache('all_deps')
 
     def replace_self(self, rep):
         self.forward = as_op(rep)
@@ -529,16 +634,16 @@ class Op(NameableValue, DebugInfo):
             self is returned.
 
         """
-        if self.__deriv_handler is None:
+        if self._deriv_handler is None:
             return self
         else:
-            return self.__deriv_handler
+            return self._deriv_handler
 
     @deriv_handler.setter
     def deriv_handler(self, deriv_handler):
         if deriv_handler is self:
             deriv_handler = None
-        self.__deriv_handler = deriv_handler
+        self._deriv_handler = deriv_handler
 
     @property
     def defs(self):
@@ -550,34 +655,25 @@ class Op(NameableValue, DebugInfo):
         """
         return [self]
 
-    def variables(self, filter=None):
+    def variables(self):
         """
         Return all trainable Ops used in computing this node.
-
-        Arguments:
-            filter: Boolean filter of op, defaults to trainable.
 
         Returns:
             Set of trainable Ops.
         """
-        params = OrderedSet()
+        return OrderedSet([op.tensor for op in Op.ordered_ops([self])
+                           if op.tensor.is_trainable])
 
-        if filter is None:
-            filter = lambda op: op.is_trainable
+    def placeholders(self):
+        """
+        Return all placeholder Ops used in computing this node.
 
-        def visitor(node):
-            """
-            TODO.
-
-            Arguments:
-              node: TODO
-            """
-            if filter(node.tensor):
-                params.add(node.tensor)
-
-        Op.visit_input_closure([self], visitor)
-
-        return params
+        Returns:
+            Set of placeholder Ops.
+        """
+        return OrderedSet([op.tensor for op in Op.ordered_ops([self])
+                           if op.tensor.is_placeholder])
 
     def tensor_description(self):
         return None
@@ -596,6 +692,20 @@ class Op(NameableValue, DebugInfo):
         self.tensor_description()
         """
         return list(tensor_descriptions(self.args))
+
+
+class MutateInsteadOfCopyWithNewArgsMixin(object):
+    """
+    We cannot create new ops with new layouts for GPUCudaScatterSendOp and GPUCudaGatherSendOp.
+    The information available at this point is not sufficient to create them (issue #1410).
+
+    """
+    def __init__(self, **kwargs):
+        super(MutateInsteadOfCopyWithNewArgsMixin, self).__init__(**kwargs)
+
+    def copy_with_new_args(self, args):
+        self._set_args(args)
+        return self
 
 
 def as_op(x):
@@ -632,21 +742,6 @@ def as_ops(xs):
     return tuple(as_op(x) for x in xs)
 
 
-def init_tensor(tensor, valfun):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-
-    Returns:
-        InitTensorOp: The tensor initialization.
-
-    """
-    return InitTensorOp(tensor, valfun)
-
-
 class AssignOp(Op):
     """
     tensor[...] = val.
@@ -654,21 +749,36 @@ class AssignOp(Op):
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
         val: The value to assign.
-        force (bool): Override constant check on tensor.
         **kwargs: Args for related classes.
     """
 
-    def __init__(self, tensor, val, force=False, **kwargs):
-        tensor, val = as_ops((tensor, val))
-        if not force and tensor.is_constant:
-            raise ValueError("{} is not assignable.".format(tensor))
+    def __init__(self, tensor, val, **kwargs):
+        # convert val to op
+        # TODO: requires explicit broadcast in future
+        if not isinstance(val, Op):
+            val = as_op(val)
+            if len(val.axes) == len(tensor.axes):
+                val = cast_axes(val, tensor.axes)
+
+        # automatic broadcast
+        # currently requires val's axes to be a subset of tensor's axes
+        # TODO: requires explicit broadcast in future
+        if len(val.axes - tensor.axes) > 0:
+            raise ValueError(
+                "tensor(LHS) has axes %s, val(RHS) has axes %s,"
+                "val's axes should be subset of tensor's axes" %
+                (val.axes, tensor.axes))
         val = broadcast(val, tensor.axes)
+
         super(AssignOp, self).__init__(args=(tensor, val), **kwargs)
-        self.force = force
 
     @property
     def states_written(self):
         return self.args[0].states_read
+
+    @property
+    def states_read(self):
+        return self.args[1].states_read
 
 
 class AssignOneDOp(Op):
@@ -680,26 +790,18 @@ class AssignOneDOp(Op):
         value (TensorOp): The value.
     """
 
-    def __init__(self, tensor, val, force=False, **kwargs):
+    def __init__(self, tensor, val, **kwargs):
         if val.is_scalar:
             val = val.scalar_op
         super(AssignOneDOp, self).__init__(args=(tensor, val), **kwargs)
-        self.force = force
 
     @property
     def states_written(self):
         return self.args[0].states_read
 
-
-class AssignTwoDOp(AssignOneDOp):
-    """
-    Assign a value to a 2d tensor
-
-    Arguments:
-        tensor (AssignableTensorOp): The value to assign to.
-        value (TensorOp): The value.
-    """
-    pass
+    @property
+    def states_read(self):
+        return self.args[1].states_read
 
 
 def assign(lvalue, rvalue):
@@ -714,26 +816,15 @@ def assign(lvalue, rvalue):
     return AssignOp(lvalue, rvalue)
 
 
-class SetItemOp(Op):
-    """
-    tensor[item] = val
-
-    This is a stub and has no frontend support at this time.
-
-    Arguments:
-        tensor (AssignableTensorOp): An assignable tensor.
-        item: An index into the tensor.
-        val (TensorOp): A value to assign.
-
-    """
-
-    def __init__(self, tensor, item, val, **kwargs):
-        super(SetItemOp, self).__init__(args=(tensor, val), **kwargs)
-        self.item = tuple(item)
-
-    @property
-    def states_written(self):
-        return self.args[0].states_read
+def set_item(tensor, item, value):
+    shape = tensor.tensor_description().shape
+    for sl, l in zip(item, shape):
+        if not isinstance(sl, slice):
+            sl = slice(sl)
+        start, end, step = sl.indices(l)
+        if step <= 0:
+            raise ValueError('Invalid slice (negative step) in item {}'.format(item))
+    return assign(tensor_slice(tensor, item, axes=value.axes), value)
 
 
 class ControlBlockOp(Op):
@@ -777,7 +868,7 @@ class ComputationOp(ParallelOp):
 
     Arguments:
         returns: Values returned by the computation. A list, set, or op.
-        *args: Inputs to the computation.
+        *args: Inputs to the computation. Must be placeholders or variables.
 
     Parameters:
         returns: Ops returned.
@@ -793,23 +884,31 @@ class ComputationOp(ParallelOp):
         else:
             all = []
 
+        self.values = all
         self.returns = returns
         super(ComputationOp, self).__init__(all=all, **kwargs)
 
         def is_input(arg):
-            return isinstance(arg.tensor, AssignableTensorOp) and arg.tensor.input
+            return arg.tensor.is_input
 
+        placeholders = self.placeholders()
         if len(args) == 1 and args[0] == 'all':
-            args = self.variables(filter=is_input)
+            args = placeholders
 
         args = tuple(as_op(arg) for arg in args)
+        arg_tensors = set(arg.tensor for arg in args)
+        missing_tensors = [t for t in placeholders - arg_tensors]
+        if len(missing_tensors) > 0:
+            raise ValueError(("All used placeholders must be supplied to a "
+                              "computation. Currently missed {}."
+                              ).format(missing_tensors))
 
         for arg in args:
-            if not is_input(arg):
+            if not (arg.tensor.is_input):
                 raise ValueError((
                     'The arguments to a computation must all be Ops with property '
-                    'input=True, but the op passed had input=False.  In most '
-                    'cases you want to pass placeholder ops in as arguments.  '
+                    'is_input=True, but the op passed had is_input=False.'
+                    'In most cases you want to pass placeholder ops in as arguments.  '
                     '{op} was passed in, of type {op_type}.'
                 ).format(
                     op=arg,
@@ -843,13 +942,10 @@ class Fill(Op):
     Arguments:
         tensor (AssignableTensorOp): An assignable TensorOp.
         scalar: A scalar value.
-        force (bool): Disable constant check on tensor.
     """
 
-    def __init__(self, tensor, scalar, force=False, **kwargs):
+    def __init__(self, tensor, scalar, **kwargs):
         super(Fill, self).__init__(args=(tensor,), **kwargs)
-        if not force and tensor.is_constant:
-            raise ValueError("{} is not assignable.".format(tensor))
         if isinstance(scalar, TensorOp):
             if scalar.is_constant:
                 scalar = scalar.const
@@ -866,6 +962,14 @@ class Fill(Op):
     @property
     def states_written(self):
         return self.args[0].states_read
+
+    @property
+    def states_read(self):
+        return self.args[0].states_read
+
+
+def fill(x, scalar):
+    return Fill(x, scalar)
 
 
 class TensorOp(Op):
@@ -887,7 +991,7 @@ class TensorOp(Op):
             self.dtype = default_dtype(dtype)
             if axes is not None:
                 axes = make_axes(axes)
-            self.__axes = axes
+            self._axes = axes
             self.scale = scale
 
     @property
@@ -942,7 +1046,15 @@ class TensorOp(Op):
                     adjoint = adjoint * o.scale
 
                 deriv_handler = o.deriv_handler
-                deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
+                # find hetr distribution metadata, pass other data if exists
+                # todo add reduce func metadata key when fixed #1436
+                hetr_meta_key = ['device', 'device_id', 'parallel']
+                hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
+                                 if o.metadata.get(k) is not None}
+                with metadata(**hetr_metadata):
+                    deriv_handler.generate_adjoints(adjoints, adjoint, *deriv_handler.args)
+
                 processed.add(o.tensor)
 
         return adjoints
@@ -955,7 +1067,7 @@ class TensorOp(Op):
             adjoints: dy/dOp for all Ops used to compute y.
             delta: Backprop contribute.
         """
-        if not self.axes.has_same_axes(delta.axes):
+        if not self.axes.is_equal_set(delta.axes):
             raise ValueError(
                 'delta axes {} do not match adjoint axes {}'
                 .format(delta.axes, self.axes)
@@ -1004,6 +1116,9 @@ class TensorOp(Op):
 
     def __rtruediv__(self, val):
         return divide(val, self)
+
+    def __floordiv__(self, val):
+        return floordivide(self, val)
 
     def __rdiv__(self, val):
         return divide(val, self)
@@ -1074,7 +1189,18 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        return TensorDescription(self.axes, dtype=self.dtype).named(self.name)
+        if "layout" in self.metadata:
+            return TensorDescription(self.axes,
+                                     layout=self.metadata["layout"],
+                                     dtype=self.dtype,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
+        else:
+            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                     is_persistent=self.is_persistent,
+                                     is_input=self.is_input,
+                                     is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -1083,16 +1209,16 @@ class TensorOp(Op):
         Returns: The axes of the tensor.
 
         """
-        if self.__axes is not None:
-            return self.__axes
+        if self._axes is not None:
+            return self._axes
         else:
             raise NotImplementedError
 
     @axes.setter
     def axes(self, value):
-        if self.__axes is not None:
+        if self._axes is not None:
             raise ValueError()
-        self.__axes = value
+        self._axes = value
 
     @property
     def has_axes(self):
@@ -1101,7 +1227,7 @@ class TensorOp(Op):
         Returns: True if axes have been set.
 
         """
-        return self.__axes is not None
+        return self._axes is not None
 
     def insert_axis(self, index, axis):
         """
@@ -1110,14 +1236,14 @@ class TensorOp(Op):
             index   : Index to insert at
             axis    : The Axis object to insert
         """
-        if self.__axes is None:
+        if self._axes is None:
             raise ValueError()
-        self.__axes.insert(index, axis)
+        self._axes.insert(index, axis)
 
     def append_axis(self, axis):
-        if self.__axes is None:
+        if self._axes is None:
             raise ValueError()
-        self.__axes.append(axis)
+        self._axes.append(axis)
 
     def generate_adjoints(self, adjoints, delta, *args):
         """
@@ -1157,29 +1283,16 @@ class TensorOp(Op):
         """
         return mean(self, reduction_axes=reduction_axes, out_axes=out_axes)
 
-    @property
-    def value(self):
-        """
-        Returns a handle to the device tensor.
-
-        The transformer must have been initialized.
-
-        :return: A handle to the device tensor.
-        """
-        return self.forwarded.tensor_description().value
-
 
 class ValueOp(TensorOp, ControlBlockOp):
     """
     Mixin class for ops whose value is another op.
-
     Arguments:
         tensor: The tensor supplying the value for this op.
-
     """
     def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
-        self.__tensor = tensor
+        self._tensor = tensor
 
     def tensor_description(self):
         return self.tensor.tensor_description()
@@ -1188,44 +1301,45 @@ class ValueOp(TensorOp, ControlBlockOp):
     def tensor(self):
         """
         The op that ultimately supplies the value. See value_tensor.
-
         Returns:
             The op that supplies the value.
-
         """
-        return self.__tensor.tensor
+        if self._tensor is not None:
+            return self._tensor.forwarded.tensor.forwarded
+        else:
+            return None
 
     @property
     def value_tensor(self):
         """
         The op whose value is returned by this op.
-
         Returns:
             The immediate value returned by this op; see tensor for the closure.
-
         """
-        return self.__tensor
+        if self._tensor is not None:
+            return self._tensor.forwarded
+        else:
+            return None
 
     @value_tensor.setter
     def value_tensor(self, tensor):
-        self.__tensor = tensor
+        self._tensor = tensor
 
     @property
-    def control_deps(self):
-        base_deps = super(ValueOp, self).control_deps
+    def all_deps(self):
+        """
+        TODO: use cached property as other Op
+        """
+        base_deps = super(ValueOp, self).all_deps
         if self.value_tensor is not None and self.value_tensor.is_device_op:
             # Add value_tensor if it is a real op
-            return base_deps + [self.value_tensor]
+            return base_deps | OrderedSet([self.value_tensor])
         else:
             return base_deps
 
     @property
     def is_tensor_op(self):
         return self.tensor.is_tensor_op
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):
@@ -1237,22 +1351,15 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     @dtype.setter
     def dtype(self, dtype):
-        self.tensor.dtype = dtype
+        self.tensor.dtype = default_dtype(dtype)
 
-# TODO - this was needed to fix a hetr issue,
-#        but was not complete as implemented.
-#        must also forward const.
-#    @property
-#    def is_constant(self):
-#        return self.tensor.is_constant
+    @property
+    def is_constant(self):
+        return self.tensor.is_constant
 
     @property
     def const(self):
         return self.tensor.const
-
-    @const.setter
-    def const(self, value):
-        self.tensor.const = value
 
     @property
     def scale(self):
@@ -1268,29 +1375,6 @@ class ValueOp(TensorOp, ControlBlockOp):
 
     def generate_add_delta(self, adjoints, delta):
         self.tensor.generate_add_delta(adjoints, delta)
-
-
-class InitTensorOp(ValueOp):
-    """
-    Initializes a device tensor from a CPU tensor.
-
-    Arguments:
-        tensor: Tensor to be intialized.
-        valfun: Function that performs initialization
-        kwargs: Other op args.
-
-    Attributes:
-        valfun: A CPU function that produces the initial value for the tensor.
-
-    """
-
-    def __init__(self, tensor, valfun, **kwargs):
-        super(InitTensorOp, self).__init__(tensor=tensor, **kwargs)
-        self.valfun = valfun
-
-    @property
-    def states_written(self):
-        return OrderedSet([self.tensor])
 
 
 class SequentialOp(ValueOp):
@@ -1314,21 +1398,21 @@ class SequentialOp(ValueOp):
     def __init__(self, ops=None, **kwargs):
         super(SequentialOp, self).__init__(**kwargs)
         self.value_tensor = None
-        self.__ops = None
+        self._ops = None
         if ops is not None:
             self.ops = ops
 
     @property
     def ops(self):
-        return self.__ops
+        return self._ops
 
     @ops.setter
     def ops(self, ops):
-        self.__ops = list(as_op(op).forwarded for op in ops)
+        self._ops = list(as_op(op).forwarded for op in ops)
 
-        for op in self.__ops:
+        for op in self._ops:
             self.add_control_dep(op)
-        self.value_tensor = self.__ops[-1]
+        self.value_tensor = self._ops[-1]
 
         # Ops that have already executed.
         done_ops = set()
@@ -1337,7 +1421,7 @@ class SequentialOp(ValueOp):
         writers = defaultdict(OrderedSet)
         # State => op_tops that have read state
         readers = defaultdict(OrderedSet)
-        for op_top in self.__ops:
+        for op_top in self._ops:
             ordered_ops = Op.ordered_ops([op_top])
             # Make ops that read/write state execute after the op_tops that last read/wrote
             # the state.
@@ -1372,9 +1456,13 @@ def sequential(ops=None):
 
     Arguments:
         ops: Sequence of ops to compute.
-
     """
-    return SequentialOp(ops)
+    sequential_op = SequentialOp(ops)
+    sequential_op.deriv_handler = sequential_op.value_tensor
+    # Note: Can't return value_tensor here because we may need some ops to execute
+    # after it. For example,
+    # op_1, op_2, op_3, op_1 has value of op_1, but op_1 won't force op_2 and op_3 to run.
+    return sequential_op
 
 
 class TensorValueOp(ValueOp):
@@ -1384,10 +1472,11 @@ class TensorValueOp(ValueOp):
     This provides a way to maintain different control information on different
     versions of state.
 
+    Arguments:
+        tensor: The tensor being wrapped.
     """
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
-
         for key in ['device', 'device_id', 'parallel']:
             if key in tensor.metadata:
                 self.metadata[key] = tensor.metadata[key]
@@ -1397,14 +1486,69 @@ class TensorValueOp(ValueOp):
         return OrderedSet([self.tensor])
 
 
-class ReshapeOp(TensorOp):
+class PatternLabelOp(TensorOp):
+    """
+    An op to represent label in the pattern to be matched in graph
 
+    constraint_fn is a predicate that must hold in order to bind the
+    label to its matching op. By default, constraint_fn is always true.
+
+    """
+    def __init__(self, label, constraint_fn=(lambda op: True), axes=None, **kwargs):
+        if axes is None:
+            axes = {}
+        super(PatternLabelOp, self).__init__(axes=axes, **kwargs)
+        self.label = label
+        self.constraint_fn = constraint_fn
+
+
+class PatternSkipOp(TensorOp):
+    """
+    An op to allow user of pattern matching to skip match for certain ops
+
+    is_optional_op_fn is a predicate that must be defined to specify
+    optional ops. By default, is_optional_op_fn is false.
+
+    """
+    def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
+        super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
+        self.is_optional_op_fn = is_optional_op_fn
+
+
+class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
+    """
+    An base class for ops that change how a tensor is indexed; i.e. get a view of the same tensor.
+
+    Arguments:
+        x: A view of a tensor.
+
+    Returns:
+        A view of the tensor.
+    """
     def __init__(self, x, **kwargs):
-        super(ReshapeOp, self).__init__(
+        super(IndexOp, self).__init__(
             args=(x,),
             dtype=x.dtype,
             **kwargs
         )
+
+    @abc.abstractmethod
+    def transform_tensor_description(self, tensor_description):
+        """
+        Apply this index operation to tensor_description.
+
+        Args:
+            tensor_description: TensorDescription of the input view.
+
+        Returns:
+            TensorDescription of the transformed view.
+
+        """
+
+    @tdcache()
+    def tensor_description(self):
+        return self.transform_tensor_description(self.args[0].tensor_description()).named(
+            self.name)
 
     @property
     def is_scalar(self):
@@ -1429,8 +1573,13 @@ class ReshapeOp(TensorOp):
         """
         return False
 
+    @property
+    def states_read(self):
+        # Reshapes are views of the underlying tensor, so the states are the same.
+        return self.args[0].states_read
 
-class Transpose(ReshapeOp):
+
+class Transpose(IndexOp):
     """
     Used to reverse the axes of a tensor.
 
@@ -1445,37 +1594,101 @@ class Transpose(ReshapeOp):
             **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        return self.args[0].tensor_description().transpose().named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.transpose()
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, Transpose(delta))
 
 
-class AxesCastOp(ReshapeOp):
+class AxesCastOp(IndexOp):
     """
     Used to label a tensor with known axes, without altering its value
 
     Arguments:
         x: A tensor.
         axes: The new axes.
-
     """
 
     def __init__(self, x, axes, **kwargs):
         axes = make_axes(axes)
+        self._check_valid_axes(x, axes)
+        super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
+
+    def _check_valid_axes(self, x, axes):
         if not x.is_scalar and x.axes.lengths != axes.lengths:
             raise ValueError("casting axes {} must have the same length as original axes {}"
                              .format(axes, x.axes))
-        super(AxesCastOp, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        return self.args[0].tensor_description().cast(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.cast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
+
+
+class RoleCastOp(AxesCastOp):
+    """
+    Used to set the names of the axes of a tensor, without altering its value.
+    If the names of the new axes are the same as the incoming tensor's axes,
+    leave the original axis alone.  Otherwise, create a new axis with the
+    length of the original and the name of the new.
+    Arguments:
+        x: A tensor.
+        axes: The new axes.
+    """
+
+    def __init__(self, x, axes, **kwargs):
+        axes = make_axes([
+            old_axis if old_axis == new_axis else make_axis(old_axis.length, new_axis.name)
+            for old_axis, new_axis in zip(x.axes, axes)
+        ])
+        self._check_valid_axes(x, axes)
+
+        super(RoleCastOp, self).__init__(x, axes=axes, **kwargs)
+
+    def _check_valid_axes(self, x, axes):
+        if len(x.axes) != len(axes):
+            raise ValueError(
+                "casting axes {} must have the same number of axes as original axes {}"
+                .format(axes, x.axes)
+            )
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, cast_role(delta, x.axes))
+
+
+class MapRolesOp(AxesCastOp):
+    """
+    Used to set the names of the axes of a tensor, without altering its value.
+
+    If the names of the new axes are the same as the incoming tensor's axes,
+    leave the original axis alone.  Otherwise, create a new axis with the
+    length of the original and the name of the new.
+
+    Arguments:
+        x: A tensor.
+        axes_map: An AxesMap object describing the mapping from axis_name ->
+        axis_name that should be performed.  Axis whose names don't appear in
+        the axes_map won't be changed.
+    """
+
+    def __init__(self, x, axes_map, **kwargs):
+        self.axes_map = AxesMap(axes_map)
+
+        if 'axes' in kwargs:
+            raise ValueError(
+                'MapRolesOp can not have axes specified.  They will '
+                'be infered from x and axes_map'
+            )
+
+        super(MapRolesOp, self).__init__(x, axes=self.axes_map.map_axes(x.axes), **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x):
+        x.generate_add_delta(adjoints, MapRolesOp(delta, self.axes_map.invert()))
 
 
 def cast_axes(tensor, axes):
@@ -1499,7 +1712,42 @@ def cast_axes(tensor, axes):
     return AxesCastOp(tensor, axes)
 
 
-class ExpandDims(ReshapeOp):
+def map_roles(tensor, axes_map):
+    """
+    Cast the axes' roles of a tensor to new roles.
+
+    Args:
+        tensor (TensorOp): The tensor.
+        axes_map ({name: name}:  AxesMap from name to name
+
+    Returns:
+        TensorOp: The tensor with new axes.
+    """
+    return MapRolesOp(tensor, axes_map)
+
+
+def cast_role(tensor, axes):
+    """
+    Cast the axes' roles of a tensor to new roles.
+
+    Args:
+        tensor (TensorOp): The tensor.
+        axes (Axes): The new axes.
+
+    Returns:
+        TensorOp: The tensor with new axes.
+    """
+    axes = make_axes(axes)
+    if len(tensor.axes) != len(axes):
+        raise ValueError(
+            'Tried to cast Axes {} to have the roles from {}.  Both Axes '
+            'must have the same number of Axes.'
+            .format(tensor.axes, axes)
+        )
+    return RoleCastOp(tensor, axes)
+
+
+class ExpandDims(IndexOp):
     """
     Adds additional axes into a tensor.
     Arguments:
@@ -1516,16 +1764,8 @@ class ExpandDims(ReshapeOp):
         axes = make_axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-        Arguments:
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.broadcast(self.axes)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
@@ -1556,7 +1796,7 @@ def expand_dims(x, axis, dim):
     return ExpandDims(x, axis, dim)
 
 
-class BroadcastOp(ReshapeOp):
+class BroadcastOp(IndexOp):
     """
     Used to add additional axes for a returned derivative.
 
@@ -1571,25 +1811,13 @@ class BroadcastOp(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
-
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        td, = tensor_descriptions(self.args)
-        return td.broadcast(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.broadcast(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
-        x.generate_add_delta(adjoints, sum(
-            delta,
-            reduction_axes=delta.axes - x.axes,
-            out_axes=x.axes
-        ))
+        dx = sum(delta, reduction_axes=delta.axes - x.axes)
+        dx_reordered = axes_with_order(dx, x.axes)
+        x.generate_add_delta(adjoints, dx_reordered)
 
 
 def broadcast(x, axes):
@@ -1609,44 +1837,6 @@ def broadcast(x, axes):
     return BroadcastOp(x, axes)
 
 
-def axes_with_role_order(x, roles):
-    """
-    Return a tensor with a different axes order according to
-    specified roles.  Will expand dims as necessary with inferred
-    axes for missing roles
-
-    Args:
-        x (TensorOp): The tensor.
-        roles (sequence, AxisRoles): A permutation of the roles
-                                     of axes of the tensor.
-
-    Returns:
-        TensorOp: The new tensor.
-
-    """
-    reordered_axes = make_axes()
-    y = x
-    for r in roles:
-        ax_i = y.axes.role_axes(r)
-        if len(ax_i) == 0:
-            ax_i = make_axis(length=1, roles=[r])
-        elif len(ax_i) == 1:
-            ax_i = ax_i[0]
-        else:
-            raise ValueError("Unable to handle multiple axes with role {}".format(r.name))
-        reordered_axes += ax_i
-        # This will only add the missing axes to the front
-        y = expand_dims(y, ax_i, 0)
-
-    # Ensure that axes of x are a subset of y
-    if not x.axes.intersect(y.axes).has_same_axes(x.axes):
-        raise ValueError("Input axes contain roles not encompassed by role list: {}".format(
-            x.axes - x.axes.intersect(y.axes)
-        ))
-
-    return axes_with_order(y, reordered_axes)
-
-
 def axes_with_order(x, axes):
     """
     Return a tensor with a different axes order.
@@ -1657,7 +1847,6 @@ def axes_with_order(x, axes):
 
     Returns:
         TensorOp: The new tensor.
-
     """
     axes = make_axes(axes)
     if x.axes == axes:
@@ -1665,7 +1854,7 @@ def axes_with_order(x, axes):
     return ReorderAxes(x, axes)
 
 
-class ReorderAxes(ReshapeOp):
+class ReorderAxes(IndexOp):
     """
     Reorders the axes of a tensor, without making a copy.
 
@@ -1675,7 +1864,7 @@ class ReorderAxes(ReshapeOp):
     """
 
     def __init__(self, x, axes, **kwargs):
-        if not x.axes.has_same_axes(axes):
+        if not x.axes.is_equal_set(axes):
             raise ValueError(
                 'The input and output axes must have the same elements.'
             )
@@ -1683,18 +1872,11 @@ class ReorderAxes(ReshapeOp):
             x, axes=axes, **kwargs
         )
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
 
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        td, = tensor_descriptions(self.args)
-        return td.reorder(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.reorder(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, axes_with_order(
@@ -1718,7 +1900,7 @@ def tensor_slice(x, slices, axes=None):
     return TensorSliceOp(x, slices, axes)
 
 
-class TensorSliceOp(ReshapeOp):
+class TensorSliceOp(IndexOp):
     """
     Creates a sliced version of a tensor.
 
@@ -1739,6 +1921,11 @@ class TensorSliceOp(ReshapeOp):
                 tensor_dim=len(x.shape),
                 slices_len=len(slices),
             ))
+        for s in slices:
+            if not isinstance(s, slice):
+                continue
+            if s.step is not None and s.step < 0:
+                raise ValueError("Negative slice steps are not supported.")
 
         if axes is None:
             axes = []
@@ -1762,35 +1949,91 @@ class TensorSliceOp(ReshapeOp):
 
         self.slices = slices
 
-    @tdcache()
-    def tensor_description(self):
-        """
-        TODO.
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.slices, self.axes)
 
-        Arguments:
-
-        Returns:
-          TODO
-        """
-        x, = tensor_descriptions(self.args)
-        return x.slice(self.slices, self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.slice(self.slices, self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         """
-        TODO.
+        Propagate gradients for y = ng.slice(x, slices). That is, set the
+        adjoints w.r.t. x.
 
-        Arguments:
-          adjoints: TODO
-          delta: TODO
-          x: TODO
+        Args:
+            adjoints: the adjoints global dict
+            delta: df/dy
+            x: the input to ng.slice op
+            self: the tensorslice op
 
-        Returns:
-          TODO
+        Example shapes:
+            y = ng.slice(x, slices)
+            x shape: (2, 3)
+            self shape, i.e. y's shape: (3,)
+            delta shape: (3,)
+            _unslice(delta, self.slices, x.axes) shape: (2, 3)
+
+        Goals:
+            adjoints[x] += _unslice(delta, self.slices, x.axes)
+            more exactly, if x is ValueOp, should be handled by x.value_tensor
+
+        Dependencies graph:
+
+                       [0 or other initial gradients]            [first_unslice]
+                          ^                                          ^ ^ ^ ^
+                          |                                          | | | |
+                        (arg)                                        | | | |
+                          |                                          | | | |
+        adjoints[x] => [ng.add]---(arg)------------------------------- | | |
+                         | | |                                         | | |
+                         | | --(ct_dep)-> [setitem_1] -------(ct_dep)--- | |
+                         | |                                             | |
+                         | ----(ct_dep)-> [setitem_2] -------(ct_dep)----- |
+                         |                                                 |
+                         ------(ct_dep)-> [setitem_3] -------(ct_dep)-------
         """
-        x.generate_add_delta(
-            adjoints,
-            _unslice(delta, self.slices, x.axes)
-        )
+
+        # special handling of value op, this is because in generate_add_delta,
+        # ValueOp has special handler
+        if isinstance(x, ValueOp):
+            x = x.value_tensor
+
+        if x not in adjoints:
+            # x not in adjoints dict, so need to allocate a new buffer with
+            # _unslice
+            x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+
+            # critical to add zero
+            # - if we don't add zero, in the "Dependency graph" above,
+            #   the [ng.add] node will collapse with [first_unslice] node,
+            #   creating circular dependency
+            # - after first add zero, later gradient accumulation will be doing
+            #   self add
+            adjoints[x] = x.first_unslice_op + as_op(0.)
+        else:
+            if not hasattr(x, 'first_unslice_op'):
+                # x has received adjoints from other operations, but not
+                # from TensorSliceOp yet
+                x.first_unslice_op = _unslice(delta, self.slices, x.axes)
+                adjoints[x] = x.first_unslice_op + adjoints[x]
+            else:
+                # has the buffer already available, this is the [setitem_1,2,3]
+                # node case in the above docstrings
+                #
+                # Ops get executed exactly once in a computation, and anything that
+                # uses the op as an argument gets the value from that exactly once time.
+                # A TensorValueOp that happens before the modification should never
+                # give the value after the update. so the updates need to work off a
+                # TensorValueOp after the previous update.
+                this_tv = TensorValueOp(x.first_unslice_op.value_tensor)
+                this_tv.add_control_dep(adjoints[x])
+                updated_delta = delta + tensor_slice(this_tv,
+                                                     self.slices, axes=delta.axes)
+                new_setitem = set_item(this_tv,
+                                       self.slices, updated_delta)
+                final_tv = TensorValueOp(x.first_unslice_op.value_tensor)
+                final_tv.add_control_dep(new_setitem)
+                adjoints[x] = final_tv
 
 
 def slice_along_axis(x, axis, idx):
@@ -1811,16 +2054,17 @@ def slice_along_axis(x, axis, idx):
     return tensor_slice(x, ss, axes=axes)
 
 
-class Flatten(ReshapeOp):
+class Flatten(IndexOp):
 
     def __init__(self, x, axes, **kwargs):
         x = ContiguousOp(axes_with_order(x, x.axes))
         super(Flatten, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.flatten(self.axes).named(self.name)
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.flatten(self.axes)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, unflatten(
@@ -1854,7 +2098,7 @@ def flatten_at(x, idx):
         )))
 
 
-class Unflatten(ReshapeOp):
+class Unflatten(IndexOp):
 
     def __init__(self, x, axes=None, **kwargs):
         if axes is None:
@@ -1865,10 +2109,8 @@ class Unflatten(ReshapeOp):
         Axes.assert_valid_unflatten(x.axes, axes)
         super(Unflatten, self).__init__(x, axes=axes, **kwargs)
 
-    @tdcache()
-    def tensor_description(self):
-        x, = tensor_descriptions(self.args)
-        return x.unflatten(self.axes).named(self.name)
+    def transform_tensor_description(self, tensor_description):
+        return tensor_description.unflatten(self.axes).named(self.name)
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, flatten(
@@ -1893,7 +2135,11 @@ class AssignableTensorOp(TensorOp):
     Value comes directly from storage.
 
     Arguments:
-        input: The storage is used as an input from the CPU. Implies persistent.
+        is_input: The storage is used as an input from the CPU. Implies persistent.
+        is_persistent: The storage value persists form computation to computation.
+        is_constant: The storage value does not change once initialized.
+        is_placeholder: This is a placeholder.
+        const: The host value of the constant for constant storage.
         initial_value: If callable, a function that generates an Op whose tensor should be
             used as the initial value.  Otherwise an Op that should be used as the initial
             value.
@@ -1905,18 +2151,67 @@ class AssignableTensorOp(TensorOp):
     def __init__(
             self,
             initial_value=None,
-            input=False,
-            persistent=False,
+            is_constant=False,
+            is_input=False,
+            is_persistent=False,
+            is_trainable=False,
+            is_placeholder=False,
+            const=None,
+            scope=None,
             **kwargs):
-        if input:
-            persistent = True
-        super(AssignableTensorOp, self).__init__(persistent=persistent, **kwargs)
-        self.input = input
+        super(AssignableTensorOp, self).__init__(**kwargs)
+        self._is_input = is_input
+        self._is_persistent = is_persistent
+        self._is_trainable = is_trainable
+        self._is_constant = is_constant
+        self._is_placeholder = is_placeholder
+        self._const = const
+        self.initial_value = None
+        self.scope = scope
 
-        if callable(initial_value):
-            self.add_initializer(assign(self, initial_value(self.axes)))
-        elif initial_value is not None:
-            self.add_initializer(assign(self, initial_value))
+        if initial_value is not None:
+            # convert callable initial value
+            if callable(initial_value):
+                initial_value = initial_value(self.axes)
+            if isinstance(initial_value, TensorOp):
+                # Caffe2 currently wraps the initial value in a constant (Issue #1138)
+                tensor = initial_value.tensor
+                if tensor.is_constant:
+                    initial_value = tensor.const
+                else:
+                    raise ValueError("initial_value must be convertible to a NumPy tensor")
+            initial_value = np.asarray(initial_value, dtype=self.dtype)
+            self.initial_value = initial_value
+
+    @property
+    def is_constant(self):
+        return self._is_constant
+
+    @property
+    def const(self):
+        return self._const
+
+    @const.setter
+    def const(self, value):
+        if self._const is not None:
+            raise ValueError("Cannot change const value")
+        self._const = value
+
+    @property
+    def is_input(self):
+        return self._is_input
+
+    @property
+    def is_persistent(self):
+        return self._is_persistent
+
+    @property
+    def is_trainable(self):
+        return self._is_trainable
+
+    @property
+    def is_placeholder(self):
+        return self._is_placeholder
 
     @property
     def defs(self):
@@ -1941,7 +2236,7 @@ class AssignableTensorOp(TensorOp):
 
     def add_control_dep(self, op):
         """
-        Allocations happen before executed ops, so control_deps are ignored.
+        Allocations happen before executed ops, so all_deps are ignored.
 
         Args:
             op:
@@ -1961,18 +2256,17 @@ def value_of(tensor):
 
     Returns:
         A copy of the value.
-
     """
     if tensor.is_constant:
         return tensor
-    temp = temporary(axes=tensor.axes, dtype=tensor.dtype, constant=True)
+    temp = temporary(axes=tensor.axes, dtype=tensor.dtype).named('value_of_' + tensor.name)
     return sequential([
-        AssignOp(temp, tensor, force=True),
+        AssignOp(temp, tensor),
         temp
     ])
 
 
-def constant(const, axes=None, dtype=None):
+def constant(const, axes=None, dtype=None, **kwargs):
     """
     Makes a constant scalar/tensor.  For a tensor, constant provides the opportunity
         to supply axes.  Scalar/NumPytensor arguments are usually automatically converted to
@@ -1991,108 +2285,45 @@ def constant(const, axes=None, dtype=None):
     if axes and len(axes) == len(nptensor.shape):
         nptensor_axes = axes
     else:
-        nptensor_axes = make_axes([make_axis(l, match_on_length=True) for l in nptensor.shape])
+        nptensor_axes = make_axes([make_axis(l) for l in nptensor.shape])
     graph_label_type = "<Const({})>".format(const)
-    val = AssignableTensorOp(axes=nptensor_axes, constant=True, persistent=True,
-                             trainable=False, graph_label_type=graph_label_type,
-                             dtype=dtype)
-    val.const = nptensor
-
-    def value_fun(tensor):
-        return nptensor
-
-    val.add_initializer(init_tensor(val, value_fun))
+    val = AssignableTensorOp(axes=nptensor_axes,
+                             is_constant=True,
+                             is_persistent=True,
+                             graph_label_type=graph_label_type,
+                             initial_value=nptensor,
+                             const=nptensor,
+                             dtype=dtype,
+                             **kwargs)
 
     if axes and len(axes) > 0 and val.is_scalar:
         val = broadcast(val, axes)
     return val
 
 
-def is_constant(value):
+def placeholder(axes, dtype=None, initial_value=None, **kwargs):
     """
-    Test an Op to see if it is a constant.
-
-    Args:
-        value: An Op
-
-    Returns: True if value is a constant.
-
-    """
-    return isinstance(value, AssignableTensorOp) and value.is_constant
-
-
-def is_constant_scalar(value):
-    """
-    Tests an Op to see if it is a constant scalar.
-
-    Args:
-        value: An Op.
-
-    Returns: True if value is a constant scalar.
-
-    """
-    return value.is_constant and value.is_scalar
-
-
-def constant_value(value):
-    """
-    Returns the constant value of an Op.
-
-    Args:
-        value (TensorOp): A constant op.
-
-    Returns: The constant value.
-
-    """
-    if not is_constant(value):
-        raise ValueError()
-    return value.const
-
-
-def constant_storage(axes, dtype=None, initial_value=None):
-    """
-    A tensor that is supposed to remain constant.
-
-    Args:
-        axes (Axes): The axes of the constant storage.
-        dtype (optional): The dtype of the storage.
-        name (String, optional): A name for the storage.
-        initial_value: A host constant or callable. If a callable, will be called
-            to produce the value.
-
-
-    Returns:
-        AssignableTensorOp: The constant storage.
-    """
-
-    return AssignableTensorOp(graph_label_type="constant",
-                              constant=True, persistent=True, trainable=False,
-                              axes=axes, dtype=dtype,
-                              initial_value=initial_value)
-
-
-def placeholder(axes, dtype=None, initial_value=None):
-    """
-    A persistent tensor to be initialized from the CPU.
+    A place for a tensor to be supplied; typically used for computation arguments.
 
     Args:
         axes (Axes): The axes of the placeholder.
         dtype (optional): The dtype of the placeholder.
-        initial_value (optional): A host constant or callable. If callable, will
+        initial_value (optional): Deprecated. A host constant or callable. If callable, will
             be called to generate an initial value.
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
     return AssignableTensorOp(graph_label_type="placeholder",
-                              constant=False, persistent=True, trainable=False,
-                              input=True,
+                              is_persistent=True,
+                              is_input=True,
+                              is_placeholder=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None, constant=False):
+def temporary(axes, dtype=None, initial_value=None, **kwargs):
     """
     Temporary storage.
 
@@ -2107,17 +2338,18 @@ def temporary(axes, dtype=None, initial_value=None, constant=False):
 
     Returns:
         AssignableTensorOp: The placeholder.
-
     """
+    if initial_value is not None:
+        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
-                              constant=constant, persistent=True, trainable=False,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def persistent_tensor(axes, dtype=None, initial_value=None):
+def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
     """
-    Persistent storage.
+    Persistent storage, not trainable.
 
     Storage that will retain its value from computation to computation.
 
@@ -2129,15 +2361,16 @@ def persistent_tensor(axes, dtype=None, initial_value=None):
 
     Returns:
         AssignableTensorOp: The persistent storage.
-
     """
     return AssignableTensorOp(graph_label_type="Persistent",
-                              constant=False, persistent=True, trainable=False,
+                              is_persistent=True,
+                              is_input=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None):
+def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2146,15 +2379,20 @@ def variable(axes, dtype=None, initial_value=None):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
+        scope (optional): scope of variable, can be used to filter on when
+                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
-
     """
     return AssignableTensorOp(graph_label_type="Variable",
-                              constant=False, persistent=True, trainable=True,
+                              is_input=True,
+                              is_persistent=True,
+                              is_trainable=True,
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value)
+                              initial_value=initial_value,
+                              scope=scope,
+                              **kwargs)
 
 
 class StackOp(SequentialOp):
@@ -2190,10 +2428,10 @@ class StackOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes((axis,) + tuple(arg_axes))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype)
         slices = [slice(None)] * len(arg_axes)
         self.ops = [
-            doall([SetItemOp(self.storage, [i] + slices, arg)
+            doall([set_item(self.storage, [i] + slices, arg)
                    for i, arg in enumerate(self.x_list)
                    ]),
             axes_with_order(self.storage, result_axes)
@@ -2222,7 +2460,6 @@ def stack(x_list, axis, pos=0):
 
     Returns:
         TensorOp: The joined tensors.
-
     """
     return StackOp(x_list, axis, pos)
 
@@ -2250,8 +2487,7 @@ class ConcatOp(SequentialOp):
         common_axes = arg_axes - ax
 
         # Create long axis for concatenated tens1or
-        concat_axis = make_axis(name=ax.name,
-                                roles=ax.roles)
+        concat_axis = make_axis(name=ax.name)
 
         # Store the axes order equivalent to the first tensor
         ind = arg_axes.index(ax)
@@ -2263,10 +2499,11 @@ class ConcatOp(SequentialOp):
         # result, but things don't quite work that way so we use a temp that would have
         # each arg in its own contiguous section, setitem into that, and reshape the result.
         storage_axes = make_axes([concat_axis] + list(axes_0) + list(axes_1))
-        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype, constant=True)
+        self.storage = temporary(axes=storage_axes, dtype=self.x_list[0].dtype).named('concat')
 
         slices = [slice(None)] * (len(storage_axes) - 1)
         start = 0
+        sets = []
         ops = []
         for ii, (x, ax) in enumerate(zip(self.x_list, axis_list)):
             if len(x.axes - common_axes) > 1:
@@ -2274,11 +2511,14 @@ class ConcatOp(SequentialOp):
                                    " other tensors".format(ii))
             if ax.length is None:
                 raise RuntimeError("Tensor {} axis must have a specified length".format(ii))
-            ops.append(SetItemOp(self.storage,
-                                 [slice(start, start + ax.length)] + slices,
-                                 axes_with_order(x, [ax] + list(storage_axes[1:]))))
+            sets.append(
+                ([slice(start, start + ax.length)] + slices,
+                 axes_with_order(x, [ax] + list(storage_axes[1:])))
+            )
             start += ax.length
         concat_axis.length = start
+        for item, value in sets:
+            ops.append(set_item(self.storage, item, value))
         self.ops = [
             doall(ops),
             axes_with_order(self.storage, result_axes)
@@ -2324,43 +2564,7 @@ def concat_along_axis(x_list, axis):
     if len(x_list) < 1:
         return x_list
 
-    return ConcatOp(x_list, [axis for _ in range(len(x_list))])
-
-
-def concat_role_axis(x_list, role):
-    """
-    Concatenates a list of tensors along an axis with the specified role. All other axes in each
-    tensor should be identical.
-
-    Args:
-        x_list (list of TensorOps): A list of identically-axed tensors to concatenate
-        role (AxisRole): Axis role common to every tensor in x_list
-
-    Returns:
-        The concatenated tensor op. Axes are ordered the same as in the first tensor in x_list.
-
-    Examples:
-        role = ng.make_axis_role("Concat")
-        H1 = ng.make_axis(length=5, roles=[role])
-        H2 = ng.make_axis(length=8, roles=[role])
-        W = ng.make_axis(length=4)
-        x = ng.constant(np.ones((H1.length, W.length)), axes=[H1, W])
-        y = ng.constant(np.ones((H2.length, W.length)), axes=[H2, W])
-        c = ng.concat_role_axis([x, y], role)
-    """
-    if len(x_list) < 1:
-        return x_list
-
-    def get_role_axis(axes, role):
-        ax = axes.role_axes(role)
-        if len(ax) > 1:
-            raise RuntimeError("Multiple axes have role {}".format(role.name))
-        elif len(ax) == 0:
-            raise RuntimeError("No axis with role {}".format(role.name))
-        else:
-            return ax[0]
-
-    return ConcatOp(x_list, [get_role_axis(x.axes, role) for x in x_list])
+    return ConcatOp(x_list, [x.axes[x.axes.index(axis)] for x in x_list])
 
 
 class UnsliceOp(SequentialOp):
@@ -2371,7 +2575,7 @@ class UnsliceOp(SequentialOp):
         temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
         self.ops = [
             Fill(temp, 0),
-            SetItemOp(temp, slices, x),
+            set_item(temp, slices, x),
             temp
         ]
 
@@ -2437,7 +2641,6 @@ def uniform(x, low=0.0, high=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='uniform', params=dict(low=low, high=high), x=x)
 
@@ -2453,16 +2656,8 @@ def normal(x, loc=0.0, scale=1.0):
 
     Returns:
         TensorOp: The  value of x.
-
     """
     return RngOp(distribution='normal', params=dict(loc=loc, scale=scale), x=x)
-
-
-class AllReduce(Op):
-    """TODO."""
-
-    def __init__(self, x, **kwargs):
-        super(AllReduce, self).__init__(args=(x,), **kwargs)
 
 
 class ElementWiseOp(TensorOp):
@@ -2485,10 +2680,6 @@ class StopGradient(UnaryElementWiseOp):
     @property
     def is_tensor_op(self):
         return False
-
-    @property
-    def value(self):
-        return self.tensor.value
 
     @property
     def axes(self):
@@ -2521,7 +2712,6 @@ def negative(x):
 
     Returns:
         (TensorOp): The negative of x.
-
     """
     return NegativeOp(x)
 
@@ -2544,7 +2734,6 @@ def absolute(x):
 
     Returns:
         TensorOp: The absolute value of x.
-
     """
     return AbsoluteOp(x)
 
@@ -2567,7 +2756,6 @@ def sin(x):
 
     Returns:
         TensorOp: sin of x.
-
     """
     return SinOp(x)
 
@@ -2590,7 +2778,6 @@ def cos(x):
 
     Returns:
         TensorOp: The cos of x.
-
     """
     return CosOp(x)
 
@@ -2613,7 +2800,6 @@ def tanh(x):
 
     Returns:
         TensorOp: The tanh of x.
-
     """
     return TanhOp(x)
 
@@ -2636,7 +2822,6 @@ def exp(x):
 
     Returns:
         TensorOp: The exp of x.
-
     """
     return ExpOp(x)
 
@@ -2669,7 +2854,6 @@ def log(x):
 
     Returns:
         TensorOp: The log of x.
-
     """
     return LogOp(x)
 
@@ -2677,8 +2861,9 @@ def log(x):
 safelog_cutoff = 50.0
 
 
-def safelog(x, limit=np.exp(-safelog_cutoff)):
-    return log(maximum(x, limit))
+def safelog(x, limit=-safelog_cutoff):
+    offset = np.exp(limit)
+    return maximum(log(x + offset), limit)
 
 
 class ReciprocalOp(UnaryElementWiseOp):
@@ -2699,7 +2884,6 @@ def reciprocal(x):
 
     Returns:
         TensorOp: The reciprocal of x.
-
     """
     return ReciprocalOp(x)
 
@@ -2718,7 +2902,6 @@ def sign(x):
 
     Returns:
         TensorOp: The sign of x.
-
     """
     return SignOp(x)
 
@@ -2741,7 +2924,6 @@ def square(x):
 
     Returns:
         TensorOp: The square of x.
-
     """
     return SquareOp(x)
 
@@ -2764,7 +2946,6 @@ def sqrt(x):
 
     Returns:
         TensorOp: The square root of x.
-
     """
     return SqrtOp(x)
 
@@ -2774,9 +2955,17 @@ class BinaryElementWiseOp(ElementWiseOp):
     def __init__(self, x, y, **kwargs):
         self.kwargs = kwargs
         x, y = as_ops((x, y))
-        axes = x.axes + y.axes
-        x = broadcast(x, axes)
-        y = broadcast(y, axes)
+
+        x_axes_bcast = x.axes + (y.axes - x.axes)
+        y_axes_bcast = y.axes + (x.axes - y.axes)
+
+        if y_axes_bcast == y.axes:
+            axes = y_axes_bcast
+        else:
+            axes = x_axes_bcast
+
+        x = axes_with_order(broadcast(x, x_axes_bcast), axes)
+        y = axes_with_order(broadcast(y, y_axes_bcast), axes)
 
         super(BinaryElementWiseOp, self).__init__(
             args=(x, y),
@@ -2815,7 +3004,7 @@ def add_adjoints(self, adjoints, delta, x, y):
     y.generate_add_delta(adjoints, delta)
 
 
-Add, add = create_binary_elementwise('AddOp', 'add', add_adjoints)
+Add, add = create_binary_elementwise('Add', 'add', add_adjoints)
 
 
 def subtract_adjoints(self, adjoints, delta, x, y):
@@ -2840,6 +3029,16 @@ def divide_adjoints(self, adjoints, delta, x, y):
 
 
 Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
+
+
+def floordivide_adjoints(self, adjoints, delta, x, y):
+    x.generate_add_delta(adjoints, delta * self // x)
+    y.generate_add_delta(adjoints, -delta * self // y)
+
+
+FloorDivide, floordivide = create_binary_elementwise(
+    'FloorDivide', 'floordivide', floordivide_adjoints)
+
 
 Mod, mod = create_binary_elementwise('Mod', 'mod')
 
@@ -2895,7 +3094,7 @@ class ContiguousOp(TensorOp):
     """
 
     def __init__(self, x, **kwargs):
-        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, **kwargs)
+        super(ContiguousOp, self).__init__(args=(x,), axes=x.axes, dtype=x.dtype, **kwargs)
 
     @property
     def old_axis_positions(self):
@@ -2907,19 +3106,11 @@ class ContiguousOp(TensorOp):
 
 class DotOp(TensorOp):
 
-    def __init__(self, x, y, **kwargs):
-        self.x_reduction_axes = x.axes.intersect(y.axes.get_dual())
-        self.y_reduction_axes = self.x_reduction_axes.get_dual(1)
-        self.x_out_axes = x.axes - self.x_reduction_axes
-        self.y_out_axes = y.axes - self.y_reduction_axes
-
-        intersection_axes = self.x_out_axes.intersect(self.y_out_axes)
-        if len(intersection_axes):
-            raise ValueError(("Both arguments to a DotOp contained {axes}. "
-                              "In order to dot two tensors with the same Axis together, one "
-                              "of the Axes must be a dual. See: "
-                              "https://ngraph.nervanasys.com/docs/latest/axes.html#dualaxis"
-                              ).format(axes=', '.join(str(axis) for axis in intersection_axes)))
+    def __init__(self, x, y, bias=None, **kwargs):
+        self.reduction_axes = x.axes & y.axes
+        self.x_out_axes = x.axes - self.reduction_axes
+        self.y_out_axes = y.axes - self.reduction_axes
+        self.bias = bias
 
         axes = self.x_out_axes + self.y_out_axes
 
@@ -2931,19 +3122,12 @@ class DotOp(TensorOp):
         """
         Generates the adjoint contributions for x and y.
 
-        On input, x axes can be grouped as IJ* and y axes as JK where
-        J* is predecessor of J.
+        On input, x axes can be grouped as IJ and y axes as JK.
 
         Axes will be:
             Delta: IK.
-            x adj: IJ*
+            x adj: IJ
             y adj: JK
-
-        For x adj, we have IK and JK, so we dual K for delta and J for y
-        to get IK* and J*K for a product of IJ*.
-
-        For y adj, we have IJ* and IK, to get JK, so we dual I and undual
-        J* in x, to get I*J and IK for a product of JK.
 
         Args:
             adjoints: The adjoints for the deriv being computed.
@@ -2954,50 +3138,19 @@ class DotOp(TensorOp):
         """
         x.generate_add_delta(
             adjoints,
-            axes_with_order(
-                dot(dualed_axes(delta, self.y_out_axes, -1, 0),
-                    dualed_axes(y, self.y_reduction_axes, -1, 0)),
-                x.axes)
+            axes_with_order(dot(delta, y), x.axes)
         )
         y.generate_add_delta(
             adjoints,
-            axes_with_order(
-                dot(dualed_axes(x, self.x_out_axes, -1, +1), delta),
-                y.axes)
+            axes_with_order(dot(x, delta), y.axes)
         )
-
-
-def dualed_axes(x, filter, in_dual_offset, out_dual_offset):
-    """
-    Cast axes to a dual offset of axes depending on membership in dual_axes.
-
-    In a dot(a, b), each pair of axes (a_i, b_j) between a and b where
-    a_i = b_j - 1
-    will be paired for multiplication and then summing.
-
-    Args:
-        x (TensorOp): A tensor.
-        filter: A collection of axes.
-        in_dual_offset: Dual shift amount for axes in filter.
-        out_dual_offset: Dual shift amount for axes not in filter.
-
-    Returns:
-        TesnsorOp: x with axes cast.
-
-    """
-    def dualed(axis):
-        if axis in filter:
-            return axis + in_dual_offset
-        else:
-            return axis + out_dual_offset
-    return cast_axes(x, (dualed(axis) for axis in x.axes))
 
 
 def dot(x, y):
     """
     The dot product of x and y.
 
-    Reduction axes in x are those whose dual offset is one less than an axis in y.
+    Reduction axes are the axes shared by x and y.
 
     Args:
         x (TensorOp): First argument.
@@ -3006,22 +3159,18 @@ def dot(x, y):
 
     Returns:
         TensorOp: The dot product.
-
     """
     return DotOp(x, y)
 
 
 def squared_L2(x, out_axes=None, reduction_axes=None):
     """
-    Returns the dot of x and y, with the axes of x set to their dual offset.
-
     Args:
         x (TensorOp): The first value, axes shifted down by 1.
         y (TensorOp): The second value.
 
     Returns:
         TensorOp: The result.
-
     """
     if reduction_axes is None:
         if out_axes is None:
@@ -3033,8 +3182,9 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 
 class DotLowDimension(TensorOp):
 
-    def __init__(self, x, y, axes, **kwargs):
+    def __init__(self, x, y, axes, bias=None, **kwargs):
         super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        self.bias = bias
 
 
 class SoftmaxOp(ValueOp):
@@ -3042,7 +3192,7 @@ class SoftmaxOp(ValueOp):
         super(SoftmaxOp, self).__init__(**kwargs)
 
         if normalization_axes is None:
-            normalization_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
+            normalization_axes = x.axes.sample_axes() - x.axes.recurrent_axis()
         self.x = x - max(x, reduction_axes=normalization_axes)
         self.exps = exp(self.x)
         self.Z = sum(self.exps, reduction_axes=normalization_axes)
@@ -3073,19 +3223,7 @@ def softmax(x, normalization_axes=None, **kwargs):
 class ReductionOp(TensorOp):
 
     def __init__(self, x, reduction_axes=None, out_axes=None, dtype=None, **kwargs):
-        if reduction_axes is None and out_axes is None:
-            reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axes()
-            out_axes = x.axes - reduction_axes
-        elif reduction_axes is None:
-            out_axes = make_axes(out_axes)
-            reduction_axes = x.axes - out_axes
-        elif out_axes is None:
-            reduction_axes = make_axes(reduction_axes)
-            out_axes = x.axes - reduction_axes
-        else:
-            out_axes = make_axes(out_axes)
-            reduction_axes = make_axes(reduction_axes)
-        assert reduction_axes.intersect(out_axes) == make_axes(())
+        reduction_axes, out_axes = compute_reduction_axes(x, reduction_axes, out_axes)
 
         self.reduction_axes = reduction_axes
         self.kwargs = kwargs
@@ -3095,11 +3233,42 @@ class ReductionOp(TensorOp):
             axes=out_axes,
             dtype=dtype
         )
-        assert self.valid
 
-    @property
-    def valid(self):
-        return True
+    def copy_with_new_args(self, args):
+        return type(self)(*args, reduction_axes=self.reduction_axes)
+
+
+def compute_reduction_axes(x, reduction_axes, out_axes):
+    if reduction_axes is None and out_axes is None:
+        reduction_axes = x.axes.sample_axes() - x.axes.recurrent_axis()
+        out_axes = x.axes - reduction_axes
+    elif reduction_axes is None:
+        out_axes = make_axes(out_axes)
+        reduction_axes = x.axes - out_axes
+    elif out_axes is None:
+        reduction_axes = make_axes(reduction_axes)
+        out_axes = x.axes - reduction_axes
+    else:
+        out_axes = make_axes(out_axes)
+        reduction_axes = make_axes(reduction_axes)
+
+    # reduction_axes and out_axes must not overlap
+    if not reduction_axes & out_axes == make_axes(()):
+        raise ValueError("reduction_axes {} and out_axes {} must not overlap"
+                         .format(reduction_axes, out_axes))
+
+    # union of reduction_axes and out_axes must be x.axes
+    if not (reduction_axes | out_axes).is_equal_set(x.axes):
+        raise ValueError(("union of reduction_axes {} and out_axes {} must "
+                          "be x.axes {}")
+                         .format(reduction_axes, out_axes, x.axes))
+
+    # out_axes must be the same order as x.axes
+    out_axes_index = [x.axes.index(axis) for axis in out_axes]
+    if sorted(out_axes_index) != out_axes_index:
+        raise ValueError("out_axes {} must has same order as x.axes {}"
+                         .format(out_axes, x.axes))
+    return reduction_axes, out_axes
 
 
 def create_reduction_op(name,
@@ -3111,7 +3280,25 @@ def create_reduction_op(name,
     RedClass = type(name, (ReductionOp,), d)
 
     def func(*args, **kwargs):
-        return RedClass(*args, **kwargs)
+        # handle the case where out_axes not in the same order of x's axes
+        if 'out_axes' in kwargs and kwargs['out_axes'] is not None:
+            x = args[0]
+            out_axes = kwargs['out_axes']
+            out_axes_index = [x.axes.index(axis) for axis in out_axes]
+            sorted_out_axes_index = sorted(out_axes_index)
+            if sorted_out_axes_index != out_axes_index:
+                # temp axes for reduction op
+                temp_out_axes = [x.axes[i] for i in sorted_out_axes_index]
+                kwargs['out_axes'] = temp_out_axes
+                reduction_op = RedClass(*args, **kwargs)
+                # reorder axes to requested out_axes
+                reordered_reduction_op = axes_with_order(reduction_op, out_axes)
+                return reordered_reduction_op
+            else:
+                return RedClass(*args, **kwargs)
+        else:
+            return RedClass(*args, **kwargs)
+
     func.__name__ = func_name
     return RedClass, func
 
@@ -3209,7 +3396,10 @@ class TensorSizeOp(TensorOp):
         elif reduction_axes is None:
             reduction_axes = x.axes - out_axes
         self.reduction_axes = reduction_axes
-        super(TensorSizeOp, self).__init__(axes=())
+        super(TensorSizeOp, self).__init__(args=(x,), axes=())
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.reduction_axes)
 
 
 def tensor_size(x, reduction_axes=None, out_axes=None):
@@ -3232,7 +3422,6 @@ def batch_size(x):
 
     Returns:
         The size of the batch axis in x.
-
     """
     return tensor_size(x, reduction_axes=x.axes.batch_axes())
 
@@ -3309,6 +3498,9 @@ class OneHotOp(TensorOp):
             **kwargs
         )
 
+    def copy_with_new_args(self, args):
+        return type(self)(*args, axis=self.axis)
+
     def as_two_dim(self):
         """
         Constructs a subgraph that is equivalent to this op and can be evaluated
@@ -3339,7 +3531,6 @@ def one_hot(x, axis):
 
     Returns:
         OneHotOp: The op.
-
     """
     return OneHotOp(x, axis)
 
@@ -3381,6 +3572,27 @@ class SigmoidOp(ValueOp):
         self.x.generate_add_delta(adjoints, delta * self.value_tensor * (1.0 - self.value_tensor))
 
 
+class SigmoidAtomicOp(UnaryElementWiseOp):
+    """
+    Computes the sigmoid of x and handles autodiff for sigmoid.
+
+    Arguments:
+        x: The tensor argument.
+        kwargs: Other construction arguments.
+
+    Parameters:
+        x: The tensor argument.
+    """
+
+    def __init__(self, x, **kwargs):
+        super(SigmoidAtomicOp, self).__init__(x, **kwargs)
+        self.x = x
+        self.deriv_handler = self
+
+    def generate_adjoints(self, adjoints, delta):
+        self.x.generate_add_delta(adjoints, delta * self * (1.0 - self))
+
+
 def sigmoid(x):
     """
     Computes the sigmoid of x.
@@ -3394,38 +3606,17 @@ def sigmoid(x):
     return SigmoidOp(x).value_tensor
 
 
-class Function(Op):
-    """TODO."""
+def sigmoidAtomic(x):
+    """
+    Computes the sigmoid of x.
 
-    def __init__(self, ops):
-        self.ops = ops
-        self.instructions = Op.ordered_ops(self.ops)
-        args, defs = set(), set()
-        for op in self.instructions:
-            # Kernel defines the def of each operation
-            defs.add(op)
-            # Kernel uses the args of each operation
-            # except whatever is being defined
-            args |= set(op.args) - defs
-        super(Function, self).__init__(args=args)
-        self.__defs = defs
-        self.initializers = [x for x in op.initializers
-                             for op in self.instructions]
+    Args:
+        x:
 
-    @property
-    def defs(self):
-        """
-
-        Returns:
-            The cumulative invalidated storage for the op sequence.
-
-        """
-        return self.__defs
-
-    @property
-    def inputs(self):
-        """TODO."""
-        return self.use
+    Returns:
+        The sigmoid computation.
+    """
+    return SigmoidAtomicOp(x)
 
 
 def mean(x, reduction_axes=None, out_axes=None):
@@ -3457,7 +3648,7 @@ class DerivOp(ValueOp):
             # made a constant 1 here, since we do not do common subexpression elimination,
             # while it also ensures that independent graphs do not share ops.
             error = self.dependent.one
-        if not error.axes.has_same_axes(dependent.axes):
+        if not error.axes.is_equal_set(dependent.axes):
             raise ValueError("Dependent and error must have the same set of axes")
 
         self.error = as_op(error)
@@ -3484,7 +3675,6 @@ def deriv(dependent, independent, error=None):
 
     Returns:
         TensorOp: Derivative applied to error. Has axes of independent.
-
     """
     return DerivOp(dependent, independent, error).value_tensor
 
@@ -3503,15 +3693,21 @@ class CrossEntropyMultiOp(ValueOp):
 
     Returns:
         The cross-entropy.
+
+    Raises:
+        UnmatchedAxesError: If y and t do not have matching axes
     """
 
     def __init__(self, y, t, usebits=False, out_axes=None,
                  enable_softmax_opt=True,
                  enable_diff_opt=True, **kwargs):
+        if y.axes.is_not_equal_set(t.axes):
+            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
+                                                                                         t.axes))
         super(CrossEntropyMultiOp, self).__init__(**kwargs)
         if out_axes is None:
             # Compute along non-recurrent and non-batch axes
-            index_axes = y.axes.sample_axes() - y.axes.recurrent_axes()
+            index_axes = y.axes.sample_axes() - y.axes.recurrent_axis()
             out_axes = y.axes - index_axes
         if enable_softmax_opt and isinstance(y.deriv_handler, SoftmaxOp):
             # This depends on sum(t) being 1
@@ -3569,8 +3765,14 @@ class CrossEntropyBinaryInnerOp(ValueOp):
 
     Returns:
         Cross entropy of individual samples.
+
+    Raises:
+        UnmatchedAxesError: If y and t do not have matching axes
     """
     def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
+        if y.axes.is_not_equal_set(t.axes):
+            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
+                                                                                         t.axes))
         super(CrossEntropyBinaryInnerOp, self).__init__(**kwargs)
         self.y = y
         self.t = t

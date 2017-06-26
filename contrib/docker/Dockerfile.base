@@ -1,7 +1,7 @@
 FROM nvidia/cuda:8.0-devel-ubuntu14.04
 
 RUN apt-get update && \
-    apt-get install -y python-pip python-dev git && \
+    apt-get install -y python-pip python-dev git software-properties-common && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 RUN pip install --upgrade pip
@@ -19,5 +19,7 @@ ENV PATH="/tmp/env3/bin:$PATH"
 # build ngraph requirements
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
+ADD gpu_requirements.txt /tmp/gpu_requirements.txt
+RUN pip install -r /tmp/gpu_requirements.txt
 
 WORKDIR /root/ngraph-test

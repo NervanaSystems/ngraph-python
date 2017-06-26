@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, ContiguousOp
+from ngraph.op_graph.op_graph import TensorOp
 
 
 def convolution(conv_params, inputs, filters, axes, docstring=None):
@@ -27,22 +27,22 @@ def convolution(conv_params, inputs, filters, axes, docstring=None):
 
     Returns:
         TensorOp: The result of the convolution.
-
     """
     return ConvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
 
 
 class ConvolutionOp(TensorOp):
-    _index = 0
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+
+    Return:
+    """
 
     def __init__(self, conv_params, inputs, filters, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
+        super(ConvolutionOp, self).__init__(args=(inputs, filters), **kwargs)
 
-        Return:
-        """
         if len(inputs.shape) != 5:
             raise ValueError((
                 'convolution input shape must be length 5, found {}'
@@ -53,7 +53,7 @@ class ConvolutionOp(TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if inputs.axes[0] != filters.axes[0]:
+        if not inputs.axes[0] == filters.axes[0]:
             raise ValueError((
                 'the first axis in input {inputs} and filter {filters} are not the same.'
             ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
@@ -68,26 +68,10 @@ class ConvolutionOp(TensorOp):
                     'Expected parameter {key} not present in convparams dict.'
                 ).format(key=k))
 
-        batch_axes = inputs.axes.batch_axes()
-        if len(batch_axes) != 1:
-            raise ValueError((
-                "Input must have one batch axis.  "
-                "Found {n_batch_axes} batch axes: {batch_axes} "
-                "Found {n_sample_axes} sample axes: {sample_axes}."
-            ).format(
-                n_batch_axes=len(batch_axes),
-                batch_axes=batch_axes,
-                n_sample_axes=len(inputs.axes.sample_axes()),
-                sample_axes=inputs.axes.sample_axes(),
-            ))
-
         self.conv_params = conv_params
-        self.index = ConvolutionOp._index
-        ConvolutionOp._index += 1
 
-        super(ConvolutionOp, self).__init__(
-            args=(inputs, filters), **kwargs
-        )
+    def copy_with_new_args(self, args):
+        return type(self)(self.conv_params, *args, axes=self.axes)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
         """
@@ -102,6 +86,73 @@ class ConvolutionOp(TensorOp):
         inputs.generate_add_delta(adjoints, bprop_conv_op)
 
 
+def deconvolution(conv_params, inputs, filters, axes, docstring=None):
+    """
+
+    Args:
+        conv_params: Dimensions.
+        inputs (TensorOp): The input tensor.
+        filters (TensorOp): Filter/kernel tensor.
+        docstring (String, optional): Documentation for the op.
+
+    Returns:
+        TensorOp: The result of the deconvolution.
+    """
+    return DeconvolutionOp(conv_params, inputs, filters, axes=axes, docstring=docstring)
+
+
+class DeconvolutionOp(TensorOp):
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+
+    Return:
+    """
+
+    def __init__(self, conv_params, inputs, filters, **kwargs):
+        super(DeconvolutionOp, self).__init__(args=(inputs, filters), **kwargs)
+
+        if len(inputs.shape) != 5:
+            raise ValueError((
+                'convolution input shape must be length 5, found {}'
+            ).format(len(inputs.shape)))
+
+        if len(filters.shape) != 5:
+            raise ValueError((
+                'convolution filter shape must be length 5, found {}'
+            ).format(len(filters.shape)))
+
+        if not inputs.axes[0] == filters.axes[0]:
+            raise ValueError((
+                'the first axis in input {inputs} and filter {filters} are not the same.'
+            ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
+
+        expected_keys = ['pad_h', 'pad_w', 'pad_d', 'str_h', 'str_w',
+                         'str_d', 'dil_h', 'dil_w', 'dil_d']
+        # TODO: maybe we should assume no padding and no dilation when
+        # these parameters are not given
+        for k in expected_keys:
+            if k not in conv_params:
+                raise ValueError((
+                    'Expected parameter {key} not present in convparams dict.'
+                ).format(key=k))
+
+        self.conv_params = conv_params
+
+    def copy_with_new_args(self, args):
+        return type(self)(self.conv_params, *args, axes=self.axes)
+
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        # requires conv's forward to be completed before backward
+        update_conv_op = update_conv(inputs, delta, filters, self)  # switch inputs and delta
+        update_conv_op.add_control_dep(self)
+        deconv_deriv_op = DeconvDerivOp(delta, inputs, filters, self)
+        deconv_deriv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)
+        inputs.generate_add_delta(adjoints, deconv_deriv_op)
+
+
 class ConvDerivOp(TensorOp):
     """
     Maintains index and conv_params through forwarding of the original convolution.
@@ -112,15 +163,6 @@ class ConvDerivOp(TensorOp):
     def __init__(self, fprop, **kwargs):
         super(ConvDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
-
-    @property
-    def index(self):
-        """
-
-        Returns:
-            The slice index of the convolution.
-        """
-        return self.fprop.forwarded.index
 
     @property
     def conv_params(self):
@@ -134,28 +176,53 @@ class ConvDerivOp(TensorOp):
 
 
 class update_conv(ConvDerivOp):
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+    """
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
-        """
-        Arguments:
-            inputs  : input tensor.
-            filters : filter/kernel tensor.
-        """
         super(update_conv, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(inputs)),
+            args=(delta, inputs),
             fprop=fprop,
             axes=filters.axes, **kwargs
         )
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)
+
 
 class bprop_conv(ConvDerivOp):
+    """
+    Arguments:
+        inputs  : input tensor.
+        filters : filter/kernel tensor.
+    """
+    def __init__(self, delta, inputs, filters, fprop, **kwargs):
+        super(bprop_conv, self).__init__(
+            args=(delta, filters),
+            fprop=fprop,
+            axes=inputs.axes, **kwargs
+        )
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
+
+
+class DeconvDerivOp(ConvDerivOp):
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         """
+        Deconv backprop
+
         Arguments:
             inputs  : input tensor.
             filters : filter/kernel tensor.
         """
-        super(bprop_conv, self).__init__(
-            args=(ContiguousOp(delta), ContiguousOp(filters)),
+        super(DeconvDerivOp, self).__init__(
+            args=(delta, filters),
             fprop=fprop,
             axes=inputs.axes, **kwargs
         )
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)

@@ -20,31 +20,56 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
-from ngraph.frontends.tensorflow.tf_importer.utils import tf_to_shape_tuple
+from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape, \
+    get_nested_attr
+import pytest
 
 
+@pytest.mark.transformer_dependent
 class Tester(ImporterTester):
-    def test_binary_ops(self):
-        # computation
+    @pytest.mark.parametrize("op_name", [
+        'add',
+        'sub',
+        'mul',
+        'div',
+        'maximum'
+    ])
+    def test_binary_ops(self, op_name):
         a = tf.placeholder(tf.float32, shape=(2, 3))
         b = tf.placeholder(tf.float32, shape=(2, 3))
-        c = tf.add(a, b)
-        d = tf.mul(c, a)
-        e = tf.div(d, b)
-        f = tf.sub(a, e)
-        g = tf.maximum(a, f)
+        tf_op = get_nested_attr(tf, op_name)
+        f = tf_op(a, b)
 
         # value
-        a_val = np.random.rand(*tf_to_shape_tuple(a))
-        b_val = np.random.rand(*tf_to_shape_tuple(b))
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
 
         # test
-        self.run(g, tf_feed_dict={a: a_val, b: b_val})
+        self.run(f, tf_feed_dict={a: a_val, b: b_val})
+
+    @pytest.mark.parametrize("shapes", [
+        [(2, 1), (1,)],
+        [(3, 2), (2,)],
+        [(3, 2, 1), (1,)],
+        [(4, 3, 2), (2,)]
+    ])
+    def test_bias_add(self, shapes):
+        a_shape, b_shape = shapes
+        a = tf.placeholder(tf.float32, shape=a_shape)
+        b = tf.placeholder(tf.float32, shape=b_shape)
+        f = tf.nn.bias_add(a, b)
+
+        # value
+        a_val = np.random.rand(*tf_obj_shape(a))
+        b_val = np.random.rand(*tf_obj_shape(b))
+
+        # test
+        self.run(f, tf_feed_dict={a: a_val, b: b_val})
 
     def test_mod(self):
         # computation
-        a = tf.placeholder(tf.int32, shape=(6, ))
-        b = tf.placeholder(tf.int32, shape=(6, ))
+        a = tf.placeholder(tf.int32, shape=(6,))
+        b = tf.placeholder(tf.int32, shape=(6,))
         f = a % b
 
         # value
@@ -53,22 +78,3 @@ class Tester(ImporterTester):
 
         # test
         self.run(f, tf_feed_dict={a: a_val, b: b_val})
-
-    def test_broadcast_rules(self):
-        # tf have un-implemented broadcasts
-        # for example: (2, 1, 2, 1) + (1, 2, 1, 2) is not implemented in tf
-        #              (10, 1, 2, 1, 5) + (11, 1, 1, 5) is not implemented in tf
-
-        a = tf.placeholder(tf.float32, shape=(5, 1, 1, 4))
-        b = tf.placeholder(tf.float32, shape=(1, 1, 3, 1, 1))
-        c = tf.placeholder(tf.float32, shape=(1, 1, 4))
-        d = tf.placeholder(tf.float32, shape=(4, ))
-        f = a + b * c + d
-
-        # value
-        feed_dict = dict()
-        for x in [a, b, c, d]:
-            feed_dict[x] = np.random.rand(*tf_to_shape_tuple(x))
-
-        # test
-        self.run(f, tf_feed_dict=feed_dict)

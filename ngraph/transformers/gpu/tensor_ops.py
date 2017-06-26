@@ -16,12 +16,119 @@
 from __future__ import division
 from builtins import range
 
-from ngraph.transformers.gpu.kernel import GPUKernel, pointer_from_td
+from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
+from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.op_graph.axes import TensorDescription
-
+from ngraph.op_graph.op_graph import AssignOp
+from queue import Empty
 import numpy as np
+import pycuda.driver as drv
+import pycuda.gpuarray as gpuarray
+from pycuda.compiler import SourceModule
+from pycuda.driver import event_flags
+
+
+SLEEP_S = 0.1
+ITEMS_PER_THREAD = 32
+
+
+def set_ipc_handle(op, shared_queue, handle, local=False):
+    lock = drv.mem_alloc(1)
+    drv.memset_d8(lock, 0, 1)
+    if local:
+        buf_ipc_hdl = int(handle)
+        lock_ipc_hdl = int(lock)
+    else:
+        buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
+        lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
+    shared_queue.put((local, buf_ipc_hdl, lock_ipc_hdl))
+    return (lock)
+
+
+def open_ipc_handle(shared_queue):
+    while True:
+        try:
+            (is_local, buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
+            if is_local:
+                return buf_ipc_hdl, lock_ipc_hdl
+            else:
+                buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
+                lock = drv.IPCMemoryHandle(lock_ipc_hdl)
+                return (buf_hdl, lock)
+        except Exception as e:
+            if isinstance(e, Empty):
+                pass
+            else:
+                raise
+
+
+def _reduction_kernel(op):
+    kernel_code_template = """
+        #define ITEMS_PER_THREAD 32
+
+        __global__ void float_accum(float *dest, float *scratch, int max_size,
+                                    int num_scratch_arrays, int scratch_array_size)
+        {{
+            float4 dest_regs;
+            float4 scratch_regs;
+            int offset = (blockIdx.x * ITEMS_PER_THREAD * blockDim.x) + (threadIdx.x * 4);
+            float ndevs = num_scratch_arrays + 1;
+
+            #pragma unroll
+            for(int i = 0; i < ITEMS_PER_THREAD; i+=4)
+            {{
+                if(offset < max_size)
+                {{
+                    dest_regs = *((float4*)(&(dest[offset])));
+                }}
+
+                for(int array_id = 0; array_id < num_scratch_arrays; array_id++)
+                {{
+                    int scratch_offset = (array_id * scratch_array_size) + offset;
+
+                    if(offset < max_size)
+                    {{
+                        scratch_regs = *((float4*)(&(scratch[scratch_offset])));
+
+                        dest_regs.x += scratch_regs.x;
+                        dest_regs.y += scratch_regs.y;
+                        dest_regs.z += scratch_regs.z;
+                        dest_regs.w += scratch_regs.w;
+                    }}
+                }}
+
+                {mean_code}
+
+                if(offset < max_size)
+                {{
+                    *((float4*)(&(dest[offset]))) = dest_regs;
+                }}
+
+                offset += (blockDim.x * 4);
+            }}
+        }}
+        """
+    if op == "mean":
+        mean_code = """
+                    if(offset < max_size)
+                    {{
+                        dest_regs.x /= ndevs;
+                        dest_regs.y /= ndevs;
+                        dest_regs.z /= ndevs;
+                        dest_regs.w /= ndevs;
+                    }}
+                    """
+    else:
+        mean_code = "(void)ndevs;"
+
+    kernel_code = kernel_code_template.format(mean_code=mean_code)
+    _float_accum_kernel = SourceModule(kernel_code)
+
+    kernel = _float_accum_kernel.get_function("float_accum")
+    kernel.prepare("PPiii")
+    return kernel
 
 
 def get_dimshuffle(dtype, shape, axes, src, dst):
@@ -58,16 +165,32 @@ class DimShuffleKernel(GPUKernel):
             dimshuffle operation
         params (list): List of parameters to pass to kernel
     """
+
     def __init__(self, transformer, op):
         super(DimShuffleKernel, self).__init__(transformer)
 
-        out = TensorDescriptionWrapper(op.tensor_description(), 2)
-        (arg, ) = (_ for _ in op.call_info())
-        in_tensor = TensorDescriptionWrapper(arg, 2)
+        if isinstance(op, DimshuffleOp):
+            out = TensorDescriptionWrapper(self.transformer, op.tensor_description())
+            (arg, ) = (_ for _ in op.call_info())
+            in_tensor = TensorDescriptionWrapper(self.transformer, arg, ignore_layout=True)
 
-        dtype = out.dtype
-        shape = in_tensor.shape
-        axes = op.old_axis_positions
+            # Reshape the tensors in place with dimshuffle views
+            in_tensor.shape = tuple(op.in_view.shape)
+            in_tensor.strides = tuple(op.in_view.strides)
+            out.shape = tuple(op.out_view.shape)
+            out.strides = tuple(op.out_view.strides)
+
+            dtype = out.dtype
+            shape = in_tensor.shape
+            axes = op.axis_order
+        elif isinstance(op, AssignOp):
+            (larg, rarg) = (_ for _ in op.call_info())
+            out = TensorDescriptionWrapper(self.transformer, larg)
+            in_tensor = TensorDescriptionWrapper(self.transformer, rarg)
+
+            dtype = out.dtype
+            shape = in_tensor.shape
+            axes = tuple(range(len(shape)))
 
         self.kernel, self.params = get_dimshuffle(dtype, shape, axes, in_tensor, out)
 
@@ -81,7 +204,7 @@ class DimShuffleKernel(GPUKernel):
         """
         for index in range(len(self.params)):
             if isinstance(self.params[index], TensorDescription):
-                self.params[index] = pointer_from_td(self.params[index])
+                self.params[index] = self.pointer_from_td(self.params[index])
 
         super(DimShuffleKernel, self).bind_buffers()
 
@@ -110,6 +233,7 @@ class FillKernel(GPUKernel):
         value : Scalar value to fill tensor
         out (GPUTensor): Tensor to fill with value
     """
+
     def __init__(self, transformer, tensor, value):
         super(FillKernel, self).__init__(transformer)
 
@@ -120,7 +244,7 @@ class FillKernel(GPUKernel):
         """
         Get allocated GPU tensor for output
         """
-        self.tensor = self.tensor.value.tensor
+        self.tensor = self.tensor_view_from_td(self.tensor).tensor
         super(FillKernel, self).bind_buffers()
 
     def execute(self):
@@ -131,23 +255,24 @@ class FillKernel(GPUKernel):
         self.tensor.fill(self.value)
 
 
-class SendKernel(GPUKernel):
+class QueueSendKernel(GPUKernel):
+
     def __init__(self, transformer, send_op):
-        super(SendKernel, self).__init__(transformer)
-        self.q = send_op.shared_q
+        super(QueueSendKernel, self).__init__(transformer)
+        self.q = send_op.queue
         self.tensor = send_op.args[0].tensor_description()
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
-        super(SendKernel, self).bind_buffers()
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        super(QueueSendKernel, self).bind_buffers()
 
     def execute(self):
         value = self.tensor.get(None)
         self.q.put(value)
 
 
-class RecvKernel(GPUKernel):
+class QueueRecvKernel(GPUKernel):
     """
     Kernel used to receive a tensor. The tensor's value can be
     a scalar, another tensor, or a numpy array
@@ -160,8 +285,9 @@ class RecvKernel(GPUKernel):
     Attributes:
         tensor (GPUTensor): Dest tensor
     """
+
     def __init__(self, transformer, op):
-        super(RecvKernel, self).__init__(transformer)
+        super(QueueRecvKernel, self).__init__(transformer)
         self.recv_op = op
         self.tensor = op.tensor_description()
 
@@ -170,20 +296,343 @@ class RecvKernel(GPUKernel):
         Get allocated GPU tensor for output and potentially source value
         """
         if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
-        super(RecvKernel, self).bind_buffers()
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        super(QueueRecvKernel, self).bind_buffers()
 
     def execute(self):
         """
         Receive tensor
         """
-        q = self.recv_op.shared_q
+        q = self.recv_op.queue
         x = q.get()
 
         if self.tensor.shape == ():
             self.tensor.tensor.fill(x)
         else:
             self.tensor.__setitem__(None, x)
+
+
+class CudaScatterSendKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaScatterSendKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.args[0].tensor_description()
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        # if input buffer changes we need to make sure to set new ipc handle and
+        # signal the recv kernel to get the new ipc handle.
+        # Assuming bind_buffers() is called once and the tensor does not change
+        super(CudaScatterSendKernel, self).bind_buffers()
+        self.send_ready = list()
+        for i, to_id in enumerate(self.op.to_id):
+            self.send_ready.append(
+                set_ipc_handle(
+                    self.op,
+                    self.op._shared_queues[i],
+                    self.tensor.tensor.gpudata,
+                    local=self.op.metadata['device_id'] == int(to_id)))
+
+    def execute(self):
+        for i in range(len(self.op.to_id)):
+            drv.memset_d8(self.send_ready[i], 1, 1)
+
+
+class CudaScatterRecvKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaScatterRecvKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.tensor_description()
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        # get a handle to the send-buffer in our corresponding send-op using the shared queue
+        # In the case where sender/recvr are in the same cpu process,
+        # avoid IPC and pass the direct pointer through the shared q.
+        # since sender/recvr are in the same process in this case,
+        # set_ipc_handle must be called before open_ipc_handle to avoid a hang,
+        # hence doing set_ in bind_buffers and open_ in execute.
+        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues
+                                                                 [self.op.idx])
+        super(CudaScatterRecvKernel, self).bind_buffers()
+        chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+        self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+
+    def execute(self):
+        sender_ready = drv.from_device(self.sender_ready, (1,), np.int8)
+        while (sender_ready == 0):
+            sender_ready = drv.from_device(self.sender_ready, (1,), np.int8)
+        drv.memcpy_dtod(
+            self.tensor.tensor.gpudata,
+            self.sender_buf,
+            self.tensor.tensor.size * self.op.dtype.itemsize)
+        drv.memset_d8(self.sender_ready, 0, 1)
+
+
+class CudaGatherSendKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaGatherSendKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.args[0].tensor_description()
+        self.recvr_buf = None
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        super(CudaGatherSendKernel, self).bind_buffers()
+
+    def execute(self):
+        if self.recvr_buf is None:
+            # set_ipc_handle must be called before open_ipc_handle in certain cases to avoid a
+            # hang, hence calling set_ in bind_buffers and open_ in execute.
+            # See corresponding comment in ScatterRecv kernel for details.
+            (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues
+                                                                   [self.op.idx])
+            chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+            self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+
+        # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
+        # is least contiguous.
+        drv.memcpy_dtod(
+            self.recvr_buf,
+            self.tensor.tensor.gpudata,
+            self.tensor.tensor.size * self.op.dtype.itemsize)
+        drv.memset_d8(self.send_ready, 1, 1)
+
+
+class CudaGatherRecvKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaGatherRecvKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.tensor_description()
+
+    def bind_buffers(self):
+        super(CudaGatherRecvKernel, self).bind_buffers()
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        self.sender_ready = list()
+        for i, from_id in enumerate(self.op.from_id):
+            self.sender_ready.append(
+                set_ipc_handle(
+                    self.op,
+                    self.op._shared_queues[i],
+                    self.tensor.tensor.gpudata,
+                    local=int(from_id) == self.op.metadata['device_id']))
+
+    def execute(self):
+        for i in range(len(self.op.from_id)):
+            sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
+            while (sender_ready == 0):
+                sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
+            drv.memset_d8(self.sender_ready[i], 0, 1)
+
+
+class CudaAllReduceKernel(GPUKernel):
+
+    def __init__(self, transformer, op):
+        super(CudaAllReduceKernel, self).__init__(transformer)
+        self.op = op
+        self.tensor = op.tensor_description()
+        self.device_id = transformer.device_id
+        self.event = drv.Event(flags=event_flags.INTERPROCESS | event_flags.DISABLE_TIMING)
+        self.stream = drv.Stream()
+        self.output_buff_dict = {}
+        self.scratch_buff_dict = {}
+        self.event_buff_dict = {}
+        self.init_buffers()
+
+    def init_buffers(self):
+        shape = self.op.args[0].tensor_description().shape
+        dtype = self.op.args[0].tensor_description().dtype
+
+        # Allocate output and scratch buffers
+        self.output_buff = gpuarray.zeros(shape, dtype)
+        self.scratch_buff = gpuarray.zeros(shape, dtype)
+
+        self.output_buff_dict[self.device_id] = self.output_buff.gpudata
+        self.scratch_buff_dict[self.device_id] = self.scratch_buff.gpudata
+
+        # Allocate IPC handles
+        output_ipc_hdl = drv.mem_get_ipc_handle(self.output_buff.gpudata)
+        scratch_ipc_hdl = drv.mem_get_ipc_handle(self.scratch_buff.gpudata)
+        event_ipc_hdl = self.event.ipc_handle()
+
+        # Put handles in queues
+        for i in self.op.shared_queues.keys():
+            if i != self.device_id:
+                self.op.shared_queues[i].put(
+                    (self.device_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl))
+
+        # Get handles from others
+        q = self.op.shared_queues[self.device_id]
+        for i in range(len(self.op.shared_queues) - 1):
+            peer_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl = q.get()
+            output_hdl = drv.IPCMemoryHandle(output_ipc_hdl)
+            scratch_hdl = drv.IPCMemoryHandle(scratch_ipc_hdl)
+            event_hdl = drv.Event.from_ipc_handle(event_ipc_hdl)
+            self.output_buff_dict[peer_id] = output_hdl
+            self.scratch_buff_dict[peer_id] = scratch_hdl
+            self.event_buff_dict[peer_id] = event_hdl
+
+    def bind_buffers(self):
+        if isinstance(self.tensor, TensorDescription):
+            self.tensor = self.tensor_view_from_td(self.tensor)
+        super(CudaAllReduceKernel, self).bind_buffers()
+        self.input_tensor = self.tensor_view_from_td(self.op.args[0].tensor_description())
+
+    def execute(self):
+        ndevs = len(self.op.device_ids)
+        size = self.input_tensor.tensor.size
+        dtype = self.input_tensor.dtype
+        segment_size = int(size / ndevs)
+        if ((segment_size * ndevs) < size):
+            segment_size += 1
+
+        # Align segment size to 16 bytes
+        if (segment_size & 0x03):
+            segment_size = (segment_size & (~0x03)) + 4
+
+        # Determine GPU active mask based on segment size
+        num_active = int(size / segment_size)
+        if ((segment_size * num_active) < size):
+            num_active += 1
+
+        # Copy tensor to output buffer
+        drv.memcpy_dtod(
+            self.output_buff.gpudata,
+            self.input_tensor.tensor.gpudata,
+            size * dtype.itemsize)
+
+        # Send each GPU its assigned segment
+        device_idx = self.op.device_ids.index(self.device_id)
+        for peer_idx, peer_id in enumerate(self.op.device_ids):
+            if (peer_id == self.device_id):
+                continue
+
+            # Only send if peer is active
+            if (peer_idx >= num_active):
+                continue
+
+            # Compute size and offset of this peer's segment
+            peer_segment_size = segment_size
+            peer_segment_offset = peer_idx * segment_size
+
+            if (device_idx > peer_idx):
+                peer_scratch_offset = segment_size * (device_idx - 1)
+            else:
+                peer_scratch_offset = segment_size * device_idx
+
+            if ((peer_idx + 1) == num_active):
+                peer_segment_size = size - peer_segment_offset
+
+            # Enqueue peer to peer memcpy
+            src = int(self.output_buff_dict.get(self.device_id)) + \
+                peer_segment_offset * dtype.itemsize
+            scratch = int(self.scratch_buff_dict.get(peer_id)) + \
+                peer_scratch_offset * dtype.itemsize
+
+            drv.memcpy_dtod_async(scratch, src,
+                                  peer_segment_size * dtype.itemsize,
+                                  self.stream)
+
+        # Record event in stream
+        self.event.record(self.stream)
+
+        # Sync with other devices
+        self.process_sync()
+
+        # Wait for other GPUs events
+        for peer_id in self.op.device_ids:
+            if (peer_id == self.device_id):
+                continue
+            self.stream.wait_for_event(self.event_buff_dict[peer_id])
+
+        segment_offset = device_idx * segment_size
+        this_segment_size = segment_size
+        if ((device_idx + 1) == num_active):
+            this_segment_size = size - segment_offset
+
+        src = int(self.output_buff_dict.get(self.device_id)) + \
+            segment_offset * dtype.itemsize
+
+        # Sum received peer segments
+        block_size = 1024
+        grid_size = int(this_segment_size / (block_size * ITEMS_PER_THREAD))
+        if ((grid_size * block_size * ITEMS_PER_THREAD) < this_segment_size):
+            grid_size += 1
+
+            # Perform reduction operation
+            if (device_idx < num_active):
+                num_arrays = ndevs - 1
+                params = [src, self.scratch_buff_dict[self.device_id],
+                          this_segment_size, num_arrays, segment_size]
+                grid_dim = (grid_size, 1, 1)
+                block_dim = (block_size, 1, 1)
+                kernel = _reduction_kernel(self.op.reduce_func)
+                kernel.prepared_async_call(grid_dim, block_dim, self.stream, *params)
+
+                # Send other GPUs this GPU's assigned segment
+                for peer_id in self.op.device_ids:
+                    if (peer_id == self.device_id):
+                        continue
+
+                    # Enqueue peer to peer memcpy
+                    dst = int(self.output_buff_dict.get(peer_id)) + \
+                        segment_offset * dtype.itemsize
+                    drv.memcpy_dtod_async(dst, src,
+                                          this_segment_size * dtype.itemsize,
+                                          self.stream)
+
+            self.event.record(self.stream)
+
+            self.process_sync()
+
+            # Wait for other GPUs events
+            for peer_id in self.op.device_ids:
+                if (peer_id == self.device_id):
+                    continue
+                self.event_buff_dict[peer_id].synchronize()
+            self.event.synchronize()
+
+            drv.memcpy_dtod_async(
+                self.tensor.tensor.gpudata,
+                self.output_buff.gpudata,
+                size * dtype.itemsize,
+                self.stream)
+
+            # This sync is only needed if we call this kernel 'synchronously'
+            # if the assumption is that another kernel is called right after,
+            # and uses the same streams as us, then we can remove this and
+            # rely on the next kernel being put into our stream.
+
+            # Record event in stream
+            self.event.record(self.stream)
+
+            # Sync with other devices
+            self.process_sync()
+
+            # Wait for other GPUs events
+            for peer_id in self.op.device_ids:
+                if (peer_id == self.device_id):
+                    continue
+                self.event_buff_dict[peer_id].synchronize()
+            self.event.synchronize()
+
+    def process_sync(self):
+        x = None
+        queues = self.op.shared_queues
+        ndevs = len(self.op.device_ids)
+        for peer_id in self.op.device_ids:
+            if peer_id != self.device_id:
+                queues[peer_id].put(x)
+        for i in range(ndevs - 1):
+            x = queues[self.device_id].get()
 
 
 class RngFillKernel(GPUKernel):
@@ -201,6 +650,7 @@ class RngFillKernel(GPUKernel):
         value : Scalar value to fill tensor
         out (GPUTensor): Tensor to fill with value
     """
+
     def __init__(self, transformer, td, distribution, params):
         super(RngFillKernel, self).__init__(transformer)
 
@@ -212,7 +662,7 @@ class RngFillKernel(GPUKernel):
         """
         Get allocated GPU tensor for output
         """
-        self.out = self.out.value.tensor
+        self.out = self.tensor_view_from_td(self.out).tensor
         super(RngFillKernel, self).bind_buffers()
 
     def execute(self):
@@ -228,77 +678,29 @@ class RngFillKernel(GPUKernel):
             self.out[:] = self.out * self.params['scale'] + self.params['loc']
 
 
-class SetItemKernel(GPUKernel):
-    """
-    Kernel used set all or part of a tensor with a value. Value can be
-    a scalar, another tensor, or a numpy array
-
-    Arguments:
-        transformer (GPUTransformer): GPU transformer containing instance of
-            NervanaGPU
-        op (SetItemOneDOp): Graph op being transformed into this kernel
-
-    Attributes:
-        tensor (GPUTensor): Dest tensor
-        value: Source scalar, numpy array, or tensor
-        item (slice): Slice to apply to dest tensor
-    """
-    def __init__(self, transformer, op):
-        super(SetItemKernel, self).__init__(transformer)
-
-        self.tensor, self.value = (_ for _ in op.call_info())
-        self.item = op.item
-
-        # Use copy transpose kernel for unsupported cases
-        if len(self.tensor.strides) > 0 and np.min(self.tensor.strides) < 0 and self.item is None:
-            dtype = self.tensor.dtype
-            shape = self.tensor.shape
-            axes = range(len(self.tensor.shape))
-
-            self.kernel, self.params = get_dimshuffle(dtype, shape, tuple(axes),
-                                                      TensorDescriptionWrapper(self.value),
-                                                      TensorDescriptionWrapper(self.tensor))
-        else:
-            self.kernel = None
-
-    def bind_buffers(self):
-        """
-        Get allocated GPU tensor for output and potentially source value
-        """
-        if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor.value
-        if isinstance(self.value, TensorDescription):
-            self.value = self.value.value.tensor
-
-        if self.kernel is not None:
-            for index in range(len(self.params)):
-                if isinstance(self.params[index], TensorDescription):
-                    self.params[index] = pointer_from_td(self.params[index])
-
-        super(SetItemKernel, self).bind_buffers()
+class FlexAssignKernel(GPUKernel):
+    def __init__(self, transformer, tensor, value, **kwargs):
+        super(FlexAssignKernel, self).__init__(transformer, **kwargs)
+        self.tensor = self.tensor_view_from_td(tensor)
+        self.value = self.tensor_view_from_td(value)
+        self.output_flex_ids = []
 
     def execute(self):
-        """
-        Run kernel to copy into tensor
-        Temporarily using the neon GPUTensor implementation
-        """
-        if self.kernel is not None:
-            self.kernel.prepared_async_call(self.kernel.grid, self.kernel.block,
-                                            None, *self.params)
-        elif self.tensor.shape == ():
-            self.tensor.tensor.fill(self.value)
-        else:
-            self.tensor.__setitem__(self.item, self.value)
+        self.tensor[...] = self.value.get(None)
+
+    def bind_flex_scales(self):
+        pass
 
 
 class FlexFillKernel(FillKernel):
     """
     Flex version of FillKernel
     """
+
     def __init__(self, transformer, tensor, value):
         super(FlexFillKernel, self).__init__(transformer, tensor, value)
 
-        self.flex_entry = self.tensor.value.flex_entry
+        self.flex_entry = self.tensor_view_from_td(self.tensor).flex_entry
         self.output_flex_ids = [self.flex_entry.flex_id]
 
     def execute(self):
@@ -328,11 +730,12 @@ class FlexRngFillKernel(RngFillKernel):
     """
     Flex version of RngFillKernel
     """
+
     def __init__(self, transformer, td, distribution, params):
         super(FlexRngFillKernel, self).__init__(transformer, td, distribution, params)
 
         # save flex entry for bind_flex_scales
-        self.flex_entry = td.value.flex_entry
+        self.flex_entry = self.tensor_view_from_td(td).flex_entry
         # output flex ids for autoflex to manage
         self.output_flex_ids = [self.flex_entry.flex_id]
 

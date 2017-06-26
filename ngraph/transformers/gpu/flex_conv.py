@@ -62,9 +62,9 @@ class FlexConvFpropKernel(ConvFpropKernel):
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
-        self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
-        self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
-        self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
+        self.I = TensorDescriptionWrapper(self.transformer, self.I)
+        self.F = TensorDescriptionWrapper(self.transformer, self.F)
+        self.O = TensorDescriptionWrapper(self.transformer, self.O)
 
         self.flex_entry_I = self.I.flex_entry()
         self.flex_entry_F = self.F.flex_entry()
@@ -173,7 +173,8 @@ class FlexConvFpropKernel(ConvFpropKernel):
         for k_id in range(len(self.kernels)):
             for index in range(len(self.kernels[k_id])):
                 if isinstance(self.kernels[k_id][index], TensorDescriptionWrapper):
-                    self.kernels[k_id][index] = self.kernels[k_id][index].td.value.tensor.gpudata
+                    self.kernels[k_id][index] = \
+                        self.tensor_view_from_td(self.kernels[k_id][index].td).tensor.gpudata
 
                 if isinstance(self.kernels[k_id][index], ScratchBufferWrapper):
                     self.kernels[k_id][index] = self.kernels[k_id][index].get_ptr()
@@ -211,9 +212,9 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
-        self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
-        self.F = TensorDescriptionWrapper(self.F, len(self.F.shape))
-        self.O = TensorDescriptionWrapper(self.O, len(self.O.shape))
+        self.E = TensorDescriptionWrapper(self.transformer, self.E)
+        self.F = TensorDescriptionWrapper(self.transformer, self.F)
+        self.O = TensorDescriptionWrapper(self.transformer, self.O)
 
         self.flex_entry_E = self.E.flex_entry()
         self.flex_entry_F = self.F.flex_entry()
@@ -391,7 +392,8 @@ class FlexConvBpropKernel(ConvBpropKernel):
         for k_id in range(len(self.kernels)):
             for index in range(len(self.kernels[k_id])):
                 if isinstance(self.kernels[k_id][index], TensorDescriptionWrapper):
-                    self.kernels[k_id][index] = self.kernels[k_id][index].td.value.tensor.gpudata
+                    self.kernels[k_id][index] = \
+                        self.tensor_view_from_td(self.kernels[k_id][index].td).tensor.gpudata
 
                 if isinstance(self.kernels[k_id][index], ScratchBufferWrapper):
                     self.kernels[k_id][index] = self.kernels[k_id][index].get_ptr()
@@ -417,7 +419,7 @@ class FlexConvBpropKernel(ConvBpropKernel):
 
     def execute(self):
         if self.bprop_zero:
-            self.O.td.value[:] = 0
+            self.tensor_view_from_td(self.O.td)[:] = 0
 
         for kernel in self.kernels:
             kernel[0].prepared_async_call(*kernel[1:], shared_size=self.bprop_lut_size)
@@ -435,9 +437,9 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
 
     def gen_kernels(self, runtime, N, C, K, D, H, W, T, R, S, M, P, Q,
                     pad_d, pad_h, pad_w, str_d, str_h, str_w, dil_d, dil_h, dil_w):
-        self.I = TensorDescriptionWrapper(self.I, len(self.I.shape))
-        self.E = TensorDescriptionWrapper(self.E, len(self.E.shape))
-        self.U = TensorDescriptionWrapper(self.U, len(self.U.shape))
+        self.I = TensorDescriptionWrapper(self.transformer, self.I)
+        self.E = TensorDescriptionWrapper(self.transformer, self.E)
+        self.U = TensorDescriptionWrapper(self.transformer, self.U)
 
         self.flex_entry_I = self.I.flex_entry()
         self.flex_entry_E = self.E.flex_entry()
@@ -584,7 +586,8 @@ class FlexConvUpdateKernel(ConvUpdateKernel):
         for k_id in range(len(self.kernels)):
             for index in range(len(self.kernels[k_id])):
                 if isinstance(self.kernels[k_id][index], TensorDescriptionWrapper):
-                    self.kernels[k_id][index] = self.kernels[k_id][index].td.value.tensor.gpudata
+                    self.kernels[k_id][index] = \
+                        self.tensor_view_from_td(self.kernels[k_id][index].td).tensor.gpudata
 
                 if isinstance(self.kernels[k_id][index], ScratchBufferWrapper):
                     self.kernels[k_id][index] = self.kernels[k_id][index].get_ptr()

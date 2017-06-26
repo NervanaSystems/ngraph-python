@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+// UUID type is used to refer to ops and edges
+message UUID {
+  // put as a message so that we can change this representation if we want to
+  bytes uuid = 1;
+}
+
+
+// references to other messages are all stored as UUIDs
+message GraphDef {
+  repeated Edge edges = 1;
+  repeated Op ops = 2;
+}
+
+message Op {
+  UUID uuid = 1;
+  string name = 2; // user specifed (or auto-generated otherwise) name for this op
+  string op_type = 4; // For terminal/primitive ops (sum, add, etc) this will be the way to identify it.
+  DTYPE dtype = 5; // If this Op is specialized for any dtype, we can specify it
+  map<string, OpAttr> attrs = 6;  // states for the operation
+}
+
+message OpAttr {
+  oneof value {
+    Scalar scalar = 3;
+    RepeatedScalar repeated_scalar = 4;
+    FilterParams conv_params = 5;
+    FilterParams pool_params = 6;
+    Axes axes = 7;
+    Tensor tensor = 8;
+    Axis axis = 9;
+  }
+}
+
+message FilterParams {
+  // for convenience can specify some common parameter sets
+  repeated uint32 fshape  = 1;
+  repeated uint32 stride  = 2;  // single value will be applies to all axes, otherwise give stride per axis
+  repeated uint32 padding = 3;  // single value will be applies to all axes, otherwise give stride per axis
+}
+
+message Scalar {
+  // This is not intended for handling tensor data, so not all dtypes are represented here
+  oneof value {
+    bool   bool_val   = 1;
+    string string_val = 2;
+    double double_val = 3;
+    int64  int_val  = 4;
+    bytes  byte_val = 5;
+    UUID uuid_val = 6;  // for Op attributes that point to other messages
+    AttributeMap map_val = 7;
+    bool null_val = 8; // Sentinel for Python None values
+    Slice slice_val = 9; // Python slices
+    DTYPE dtype_val = 10;
+  }
+}
+
+// To handle maps in op attributes
+message AttributeMap {
+    map<string, Scalar> map = 1;
+}
+
+message RepeatedScalar {
+  repeated Scalar val = 1;
+}
+
+message Edge {
+  UUID uuid = 1;
+  UUID from_uuid = 2;  // node from which the edge eminates
+  UUID to_uuid   = 3;  // node from which the edge eminates
+  map<string, EdgeAttr> attrs = 4; // edge attributes
+  EdgeType edge_type = 5;
+
+  enum EdgeType {
+    DATA = 0;
+    CONTROL = 1;
+    CONTAINER = 2;
+    OTHER = 3;
+  }
+}
+
+message EdgeAttr {
+  oneof value {
+    // the generic attributes - users can add their own stuff using these types
+    Scalar scalar = 1;
+    RepeatedScalar repeated_scalar = 2;
+  }
+}
+
+// Tensor possible data types
+// Will need to expand this
+// enumerated type mst be all caps in the field names
+enum DTYPE {
+  FLOAT32 = 0;
+  FLOAT16 = 1;
+  FLOAT64 = 2;
+  UINT8 = 3;
+  UINT16 = 4;
+  UINT32 = 5;
+  INT8 = 6;
+  INT16 = 7;
+  INT32 = 8;
+  INT64 = 9;
+  FLEX16 = 10;
+}
+
+message Tensor {
+  //  tensor will be encoded in binary format
+  UUID uuid = 1;
+  DTYPE dtype = 2;
+  repeated uint32 shape = 3;
+  // TODO(jknight) storing the data inline like this is currently a short term solution for
+  // constants.
+  bytes raw_data = 8;
+}
+
+message TensorDescription {
+  UUID uuid   = 1;
+  Axes axes    = 2;
+  UUID base   = 3;  // uuid of the base
+  DTYPE dtype  = 4;
+  int32 offset = 5;
+  repeated int32 full_strides = 6;
+  repeated int32 full_sizes   = 7;
+}
+
+message Axes {
+  // axes descriptions
+  // currently just a simple container for repeated Axis objects
+  // put this as a message in case we need to expand/add stuff here
+  // otherwise it's just a repeated set of axis
+  UUID uuid = 1;
+  string name = 2;
+  repeated Axis axes = 3;
+}
+
+message Axis {
+  UUID uuid = 1;
+  string name = 2;
+  int32 length = 3;
+  bool recurrent = 4;
+  bool batch = 5;
+  bool match_on_length = 6;
+  string docstring = 8;
+  Axes flattened_axes = 9;
+}
+
+// Allows for detecting nullable int64 values in things like Slice
+message Int64Value {
+  int64 value = 1;
+}
+
+message Slice {
+  Int64Value start = 1;
+  Int64Value step = 2;
+  Int64Value stop = 3;
+}

@@ -178,3 +178,119 @@ class RefBidirectional(object):
             return np.concatenate([fwd_out, bwd_out], 0)
         else:
             return [fwd_out, bwd_out]
+
+
+class RefSeq2Seq(object):
+
+    def __init__(self, in_size, hidden_size, encoder_activation='tanh',
+                 decoder_activation='tanh', decoder_return_sequence=True):
+
+        assert encoder_activation in ('tanh', 'identity', ), "invalid encoder_activation"
+        self.encoder_activation = encoder_activation
+        assert decoder_activation in ('tanh', 'identity', ), "invalid decoder_activation"
+        self.decoder_activation = decoder_activation
+
+        self.hidden_size = hidden_size
+        self.in_size = in_size
+        # encoder
+        self.Wxh_enc = np.zeros((hidden_size, in_size))  # input to hidden
+        self.Whh_enc = np.zeros((hidden_size, hidden_size))  # hidden to hidden
+        self.bh_enc = np.zeros((hidden_size, 1))  # hidden bias
+        # decoder
+        self.Wxh_dec = np.zeros((hidden_size, in_size))  # input to hidden
+        self.Whh_dec = np.zeros((hidden_size, hidden_size))  # hidden to hidden
+        self.bh_dec = np.zeros((hidden_size, 1))  # hidden bias
+        self.decoder_return_sequence = decoder_return_sequence
+
+    def set_weights(self, w_in_enc, w_rec_enc, b_enc, w_in_dec, w_rec_dec, b_dec):
+        self.Wxh_enc = w_in_enc
+        self.Whh_enc = w_rec_enc
+        self.bh_enc = b_enc
+        self.Wxh_dec = w_in_dec
+        self.Whh_dec = w_rec_dec
+        self.bh_dec = b_dec
+
+    def lossFun(self, inputs_enc, inputs_dec, errors):
+        """
+            Adapted from RefRecurrent lossFun
+            inputs_enc: sequence length x
+        """
+        xs_enc, hs_enc = {}, {}
+        hs_enc[-1] = np.zeros((self.hidden_size, 1))
+        seq_len_enc = len(inputs_enc)
+        hs_list_enc = np.zeros((self.hidden_size, seq_len_enc))
+
+        # forward pass
+        # encoder
+        for t in range(seq_len_enc):
+            xs_enc[t] = np.matrix(inputs_enc[t])
+            a = (np.dot(self.Wxh_enc, xs_enc[t]) +
+                 np.dot(self.Whh_enc, hs_enc[t - 1]) +
+                 self.bh_enc)
+            if self.encoder_activation == 'identity':
+                hs_enc[t] = a
+            elif self.encoder_activation == 'tanh':
+                hs_enc[t] = np.tanh(a)
+            hs_list_enc[:, t] = hs_enc[t].flatten()
+
+        encoding = hs_list_enc[:, -1].reshape(-1, 1)
+
+        # decoder
+        xs_dec, hs_dec = {}, {}
+        hs_dec[-1] = encoding  # decoder initial state
+        seq_len_dec = len(inputs_dec)
+        hs_list_dec = np.zeros((self.hidden_size, seq_len_dec))
+
+        for t in range(seq_len_dec):
+            xs_dec[t] = np.matrix(inputs_dec[t])
+            a = (np.dot(self.Wxh_dec, xs_dec[t]) +
+                 np.dot(self.Whh_dec, hs_dec[t - 1]) +
+                 self.bh_dec)
+            if self.decoder_activation == 'identity':
+                hs_dec[t] = a
+            elif self.decoder_activation == 'tanh':
+                hs_dec[t] = np.tanh(a)
+            hs_list_dec[:, t] = hs_dec[t].flatten()
+
+        hs_return_dec = hs_list_dec if self.decoder_return_sequence \
+            else hs_list_dec[:, -1].reshape(-1, 1)
+
+        # backward pass
+        dhnext = np.zeros_like(hs_dec[0])
+        dWxh_enc = np.zeros_like(self.Wxh_enc)
+        dWhh_enc = np.zeros_like(self.Whh_enc)
+        dbh_enc = np.zeros_like(self.bh_enc)
+        dWxh_dec = np.zeros_like(self.Wxh_dec)
+        dWhh_dec = np.zeros_like(self.Whh_dec)
+        dbh_dec = np.zeros_like(self.bh_dec)
+
+        dh_list = errors
+
+        # bprop through decoder
+        for t in reversed(range(seq_len_dec)):
+            dh = dh_list[t] + dhnext  # backprop into h
+            if self.decoder_activation == 'identity':
+                dhraw = dh
+            elif self.decoder_activation == 'tanh':
+                # backprop through tanh nonlinearity
+                dhraw = np.multiply(dh, (1 - np.square(hs_dec[t])))
+            dbh_dec += dhraw
+            dWxh_dec += np.dot(dhraw, xs_dec[t].T)
+            dWhh_dec += np.dot(dhraw, hs_dec[t - 1].T)
+            dhnext = np.dot(self.Whh_dec.T, dhraw)
+
+        # bprop through encoder
+        for t in reversed(range(seq_len_enc)):
+            dh = dhnext
+            if self.encoder_activation == 'identity':
+                dhraw = dh
+            elif self.encoder_activation == 'tanh':
+                # backprop through tanh nonlinearity
+                dhraw = np.multiply(dh, (1 - np.square(hs_enc[t])))
+            dbh_enc += dhraw
+            dWxh_enc += np.dot(dhraw, xs_enc[t].T)
+            dWhh_enc += np.dot(dhraw, hs_enc[t - 1].T)
+            dhnext = np.dot(self.Whh_enc.T, dhraw)
+
+        return (dWxh_enc, dWhh_enc, dbh_enc, dWxh_dec, dWhh_dec, dbh_dec,
+                encoding, hs_return_dec)

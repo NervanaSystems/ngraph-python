@@ -15,7 +15,17 @@
 
 from __future__ import print_function
 from __future__ import division
-from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp
+import numpy as np
+
+from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.passes.flexfusion import FlexFusion
+
+try:
+    from ngraph.flex import GPUFlexManager, GPUFlex
+except ImportError:
+    raise UnsupportedTransformerException("autoflex package not installed")
+
+from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp, AssignOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
@@ -24,11 +34,10 @@ from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
 from ngraph.transformers.gpu.pool import FlexPoolFpropKernel, FlexPoolBpropKernel
-from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel
+from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel, FlexAssignKernel
 from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, FlexPoolingPass, ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
-from ngraph.flex import GPUFlexManager, GPUFlex
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
 
@@ -47,6 +56,8 @@ def _ew_bind_flex_scales(kernel):
         scale = 1.0 / scale if flex_scale_desc.is_output else scale
         kernel.params[index] = scale
     FlexPtrDescription.bind_ptr(kernel.params)
+
+
 ElementWiseKernel.bind_flex_scales = _ew_bind_flex_scales
 
 
@@ -73,11 +84,13 @@ class FlexGPUTransformer(GPUTransformer):
         self.fixed_point = fixed_point
 
         # flex passes for setting Op dtypes to flex
+        self.register_graph_pass(FlexFusion(), 0)
         self.register_graph_pass(ClearTensorDescriptions())
         self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
-        self.flex_manager = GPUFlexManager(fixed_point=fixed_point, verbose=flex_verbose)
+        self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
+                                           verbose=flex_verbose)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -91,8 +104,9 @@ class FlexGPUTransformer(GPUTransformer):
         FlexDECPass().do_pass(self.ops, self)
         FlexPoolingPass().do_pass(self.ops, self)
 
-    def transform_ordered_ops(self, ordered_ops, name):
-        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(ordered_ops, name)
+    def transform_ordered_ops(self, computation, ordered_ops, name):
+        ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
+            computation, ordered_ops, name)
 
         # device memory allocation after drv init
         self.flex_manager.allocate()
@@ -132,12 +146,30 @@ class FlexGPUDeviceTensor(GPUDeviceTensor):
 
     def __setitem__(self, key, value):
 
-        # initialize flex entry (only happens if not already initialized)
-        # required by InitTensorOp
-        self.flex_entry.initialize(value)
+        # flex management
+        # though not a kernel, setitem modifies tensor values
+        self.flex_entry.manage_before_computation(value)
 
+        # store integer representation
         value = value / self.scale
+
+        # check for overflow and clip
+        bits = self.flex_entry.dtype.storage_bits - 1
+        maxval = 2**bits - 1
+        minval = -2**bits
+        if isinstance(value, (int, float)):
+            value = min(value, maxval) if value >= 0 else max(value, minval)
+        else:
+            value[value > maxval] = maxval
+            value[value < minval] = minval
+
+        # set modified values
         super(FlexGPUDeviceTensor, self).__setitem__(key, value)
+
+        # flex management
+        maxabs = int(np.amax(np.absolute(value)))
+        self.flex_entry.manage_after_computation(maxabs,
+                                                 self.transformer.flex_manager.autoflex_count)
 
 
 class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
@@ -146,12 +178,11 @@ class FlexGPUDeviceBufferStorage(GPUDeviceBufferStorage):
         super(FlexGPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
 
         # create flex entry
-        self.flex_entry = self.transformer.flex_manager.make_flex_entry()
+        self.flex_entry = self.transformer.flex_manager.make_flex_entry(name=self.name)
 
     def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return FlexGPUDeviceTensor(self.transformer, self, tensor_description,
-                                   name="v_" + tensor_description.name + "_" + shape_str)
+        name = self.get_tensor_name(tensor_description)
+        return FlexGPUDeviceTensor(self.transformer, self, tensor_description, name=name)
 
 
 class FlexGPUKernelGroup(GPUKernelGroup):
@@ -170,6 +201,11 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     @generic_method(Op)
     def add_kernel(self, op):
         super(FlexGPUKernelGroup, self).add_kernel(op)
+
+    @add_kernel.on_type(AssignOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexAssignKernel(self.transformer,
+                                             op.call_info()[0], op.call_info()[1]))
 
     @add_kernel.on_type(ConvolutionOp)
     def add_kernel(self, op):
@@ -291,5 +327,13 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def __call__(self):
 
+        # TODO move this once we know where fprop and bprop boundaries are
         self.transformer.flex_manager.autoflex_count += 1
+        self.transformer.flex_manager.autoflex_count += 1
+
+        # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)
+        # has been called before loop_train in example file
+        # where cbs is CallbackContainer instance returned by make_default_callbacks
+        self.transformer.flex_manager.save_diagnostic_data()
+
         super(FlexGPUKernelGroup, self).__call__()

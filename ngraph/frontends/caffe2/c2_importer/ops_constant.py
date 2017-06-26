@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.frontends.caffe2.c2_importer.ops_base import OpsBase
 import ngraph as ng
 import caffe2.python.core as c2core
 import caffe2.proto.caffe2_pb2 as c2proto
@@ -21,7 +20,7 @@ import numpy as np
 from utils import make_const_op
 
 
-class OpsConstant(OpsBase):
+class OpsConstant():
     """
     Mix-in class for constant ops.
     """
@@ -51,7 +50,7 @@ class OpsConstant(OpsBase):
         np_val = np.full(tuple(args["shape"].ints), value)
 
         ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
-        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        ng_placeholder = ng.persistent_tensor(axes=ng_const.axes, initial_value=ng_const)
         return ng_placeholder
 
     def GaussianFill(self, c2_op, inputs):
@@ -79,7 +78,7 @@ class OpsConstant(OpsBase):
                                   tuple(args["shape"].ints))
 
         ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
-        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        ng_placeholder = ng.persistent_tensor(axes=ng_const.axes, initial_value=ng_const)
         return ng_placeholder
 
     def UniformFill(self, c2_op, inputs):
@@ -105,7 +104,7 @@ class OpsConstant(OpsBase):
                                    tuple(args["shape"].ints))
 
         ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
-        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        ng_placeholder = ng.persistent_tensor(axes=ng_const.axes, initial_value=ng_const)
         return ng_placeholder
 
     def UniformIntFill(self, c2_op, inputs):
@@ -192,7 +191,7 @@ class OpsConstant(OpsBase):
         np_val[:] = np_init.reshape(shape)[:]
 
         ng_const = make_const_op(np_val, np_val.shape, c2_op.name)  # TODO simplify
-        ng_placeholder = ng.placeholder(axes=ng_const.axes, initial_value=ng_const)
+        ng_placeholder = ng.persistent_tensor(axes=ng_const.axes, initial_value=ng_const)
         return ng_placeholder
 
     def GivenTensorIntFill(self, c2_op, inputs):
