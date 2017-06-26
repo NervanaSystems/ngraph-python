@@ -182,7 +182,8 @@ def reference_deconv_bprop(conv_params, valE, valI, valF):
 class ConvParams(object):
     def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
                  pad_d=0, pad_h=0, pad_w=0,
-                 str_d=1, str_h=1, str_w=1, deconv=False):
+                 str_d=1, str_h=1, str_w=1,
+                 dil_d=1, dil_h=1, dil_w=1, deconv=False):
 
         if deconv:
             M = output_dim_deconv(D, T, pad_d, str_d)
@@ -203,7 +204,7 @@ class ConvParams(object):
         self.conv_params = dict(
             pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
             str_d=str_d, str_h=str_h, str_w=str_w,
-            dil_d=1, dil_h=1, dil_w=1
+            dil_d=dil_d, dil_h=dil_h, dil_w=dil_w
         )
 
         batch_axis = ng.make_axis(name='N', length=N)

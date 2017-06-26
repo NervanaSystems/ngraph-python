@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,9 +17,8 @@ from types import FunctionType
 import numpy as np
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose, RandomTensorGenerator
-from ngraph.frontends.neon.layer import output_dim
-from ngraph.frontends.neon import ax
-from tests.transformer_dependent.test_conv import reference_conv
+from tests.transformer_dependent.test_conv import reference_conv, ConvParams
+
 MINIMUM_FLEX_VALUE = -2 ** 15
 MAXIMUM_FLEX_VALUE = 2 ** 15 - 1
 
@@ -236,70 +235,30 @@ def template_dot_one_placeholder_and_scalar(row, col, scalar, flex_exceptions, i
 
 
 def execute_convolution(image_height, image_width, filter_height, filter_width, channel=16,
-                        batch_size=32, filter_number=8, image_add_dim=1, filter_add_dim=1,
-                        padding=0, stride=1, dilation=1, np_comparison=False):
+                        batch_size=32, filter_number=8, image_3rd_dim=1,
+                        filter_3rd_dim=1, padding=(0, 0, 0), stride=(1, 1, 1),
+                        dilation=1, np_comparison=False):
 
-    ax_i = ng.make_axes([
-        ng.make_axis(name='C'),
-        ng.make_axis(name='D'),
-        ng.make_axis(name='H'),
-        ng.make_axis(name='W'),
-        ax.N
-    ])
+    pad_h, pad_w, pad_d = padding
+    str_h, str_w, str_d = stride
+    cf = ConvParams(C=channel, N=batch_size, K=filter_number, D=image_3rd_dim, H=image_height,
+                    W=image_width, T=filter_3rd_dim, R=filter_height, S=filter_width,
+                    pad_d=pad_d, pad_h=pad_h, pad_w=pad_w, str_d=str_d, str_h=str_h, str_w=str_w,
+                    dil_d=dilation, dil_h=dilation, dil_w=dilation)
 
-    ax_f = ng.make_axes([
-        ng.make_axis(name='C'),
-        ng.make_axis(name='D'),
-        ng.make_axis(name='H'),
-        ng.make_axis(name='W'),
-        ng.make_axis(name='K'),
-    ])
-
-    ax_o = ng.make_axes([
-        ng.make_axis(name='C'),
-        ng.make_axis(name='D'),
-        ng.make_axis(name='H'),
-        ng.make_axis(name='W'),
-        ax.N
-    ])
-
-    pad_d, pad_h, pad_w = padding, padding, padding
-    str_d, str_h, str_w = stride, stride, stride
-    dil_d, dil_h, dil_w = dilation, dilation, dilation
-
-    M = output_dim(image_add_dim, filter_add_dim, pad_d, str_d)
-    P = output_dim(image_height, filter_height, pad_h, str_h)
-    Q = output_dim(image_width, filter_width, pad_w, str_w)
-
-    ax_i.set_shape((channel, image_add_dim, image_height, image_width, batch_size))
-    ax_f.set_shape((channel, filter_add_dim, filter_height, filter_width, filter_number))
-    ax_o[:-1].set_shape((filter_number, M, P, Q))
-
-    inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
-
-    padding = dict(pad_d=pad_d, pad_h=pad_h, pad_w=pad_w)
-    strides = dict(str_d=str_d, str_h=str_h, str_w=str_w)
-    dilation = dict(dil_d=dil_d, dil_h=dil_h, dil_w=dil_w)
-
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
+    inputs = ng.placeholder(cf.ax_i)
+    filters = ng.placeholder(cf.ax_f)
     rng = RandomTensorGenerator(0, np.float32)
-    input_value = rng.uniform(1, 1, ax_i)
-    filter_value = rng.uniform(1, 1, ax_f)
-    error_value = rng.uniform(-0.5, 0.5, ax_o)
-
-    with executor(ng.convolution(conv_params, inputs, filters, axes=ax_o),
+    input_value = rng.uniform(0, 4, cf.ax_i, dtype=int)
+    filter_value = rng.uniform(0, 4, cf.ax_f, dtype=int)
+    error_value = rng.uniform(-0.5, 0.5, cf.ax_o)
+    with executor(ng.convolution(cf.conv_params, inputs, filters, axes=cf.ax_o),
                   inputs, filters) as const_executor:
         out = const_executor(input_value, filter_value)
 
     if np_comparison:
         np_out, gradInp, gradF_np = \
-            reference_conv((channel, image_add_dim, image_height, image_width, batch_size),
-                           (channel, filter_add_dim, filter_height, filter_width, filter_number),
-                           (filter_number, M, P, Q, batch_size),
-                           conv_params, input_value, filter_value, error_value)
+            reference_conv(cf.dimI, cf.dimF, cf.dimO, cf.conv_params, input_value, filter_value,
+                           error_value)
         return out, np_out
     return out
