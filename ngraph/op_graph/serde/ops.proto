@@ -29,7 +29,6 @@ message OpAttr {
     FilterParams pool_params = 6;
     Axes axes = 7;
     Tensor tensor = 8;
-    Axis axis = 9;
   }
 }
 
@@ -53,6 +52,7 @@ message Scalar {
     bool null_val = 8; // Sentinel for Python None values
     Slice slice_val = 9; // Python slices
     DTYPE dtype_val = 10;
+    Axis axis = 11;
   }
 }
 
