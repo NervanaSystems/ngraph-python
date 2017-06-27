@@ -287,7 +287,7 @@ class AddLayoutConversions(PeepholeGraphPass):
 
     def do_pass(self, ops):
         self.binary_constraints = self.assign_pass.binary_constraints
-        super(AddLayoutConversions, self).do_pass(ops)
+        super(AddLayoutConversions, self).do_pass(ops=ops)
 
     def visit(self, op, *args):
         """

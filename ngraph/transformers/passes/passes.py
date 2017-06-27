@@ -16,7 +16,6 @@ import abc
 import itertools
 
 from future.utils import with_metaclass
-from collections import Iterable
 
 from ngraph.op_graph.axes import make_axis
 from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
@@ -32,14 +31,13 @@ from ngraph.util.generics import generic_method
 
 class GraphPass(with_metaclass(abc.ABCMeta, DelegateOpAccessor)):
     @abc.abstractmethod
-    def do_pass(self, min_ops):
+    def do_pass(self, **kwargs):
         pass
 
 
 class ProcessOpGraphPass(GraphPass):
-    def do_pass(self, min_ops):
-        assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
-        self.run_pass(self.process_op, min_ops=min_ops)
+    def do_pass(self, **kwargs):
+        self.run_pass(self.process_op, **kwargs)
 
     @abc.abstractmethod
     def process_op(self, op):
@@ -57,7 +55,7 @@ class ProcessOpGraphPass(GraphPass):
 class GraphBuildingPass(ProcessOpGraphPass):
 
     def process_op(self, op):
-        self.visit(op, *op.args)
+        self.visit(op, *self.op_args(op))
 
 
 # How to use the graph rewrite pass
@@ -301,30 +299,6 @@ class GraphRewritePass(ProcessOpGraphPass):
 
         """
         self.registered_patterns.append((pattern, callback_fn))
-
-    def do_pass(self, min_ops):
-        """
-        Visit the ops and do pattern matching and replacement until nothing changes.
-
-        Args:
-            min_ops: The set of ops to be checked for pattern match
-            transformer: An InitGraph object.
-
-        """
-        assert isinstance(min_ops, Iterable), "Ops passed into do_pass must be an iterable"
-        has_work = True
-        while has_work:
-            self.begin_batch()
-
-            # pass through the ops in an execution order collecting things to do
-            ops = Op.ordered_ops(op.forwarded for op in min_ops)
-            for op in ops:
-                op.update_forwards()
-                self.process_op(op)
-
-            # Perform the gathered replacements
-            has_work = self.end_batch()
-            min_ops = list(op.forwarded for op in min_ops)
 
     def process_op(self, op):
         # For performing pattern match, we have 2 options:

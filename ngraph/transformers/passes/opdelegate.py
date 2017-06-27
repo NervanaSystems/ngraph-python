@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 import abc
 from future.utils import with_metaclass
+from collections import Iterable
+
 from ngraph.op_graph.op_graph import SequentialOp, TensorValueOp, Op
 
 
@@ -72,7 +74,7 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
         """
 
     @abc.abstractmethod
-    def run_pass(self, process_op):
+    def run_pass(self, process_op, **kwargs):
         """
         Runs a pass to completion, calling process_op on each relevant op.
 
@@ -175,19 +177,20 @@ class OpGraphOpAccessor(OpAccessor):
 
         return None
 
-    def run_pass(self, process_op, min_ops):
+    def run_pass(self, process_op, ops):
+        assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while has_work:
             self.begin_batch()
 
             # pass through the ops in an execution order collecting things to do
-            ops = Op.ordered_ops(op.forwarded for op in min_ops)
+            ops = Op.ordered_ops(op.forwarded for op in ops)
             for op in ops:
                 op.update_forwards()
                 process_op(op)
 
             has_work = self.end_batch()
-            min_ops = list(op.forwarded for op in min_ops)
+            ops = list(op.forwarded for op in ops)
 
     def begin_batch(self):
         self.replacement_list = []

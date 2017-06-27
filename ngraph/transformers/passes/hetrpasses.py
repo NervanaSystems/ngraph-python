@@ -74,7 +74,7 @@ class CommunicationPass(GraphBuildingPass):
         op.invalidate_property_cache('all_deps')
 
     def do_pass(self, ops):
-        super(CommunicationPass, self).do_pass(ops)
+        super(CommunicationPass, self).do_pass(ops=ops)
         ops.update(self.send_nodes)
 
 
