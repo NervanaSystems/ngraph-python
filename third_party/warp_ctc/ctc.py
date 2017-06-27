@@ -165,7 +165,6 @@ class CTC(object):
         warp_labels = self.ffi.cast("int*", lbls.ravel().ctypes.data)
         warp_label_lens = self.ffi.cast("int*", lbl_lens.ravel().ctypes.data)
         warp_input_lens = self.ffi.cast("int*", utt_lens.ravel().ctypes.data)
-
         status = self.ctclib.get_workspace_size(warp_label_lens,
                                                 warp_input_lens,
                                                 self.nout,

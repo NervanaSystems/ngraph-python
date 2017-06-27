@@ -23,6 +23,7 @@ import collections
 from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.op_graph.comm_nodes import ResultOp
+# from ngraph.op_graph.hetr_grpc.rpc_client import RPCTransformerClient
 from ngraph.util.hetr_utils import update_comm_deps
 from ngraph.transformers.base import ComputationGraphTransformer
 from ngraph.transformers.base import make_transformer_factory
@@ -111,7 +112,6 @@ class AsyncTransformer(Process):
                         return_dict = {op: return_list[mypos]
                                        for (op, mypos) in iteritems(self.returns)}
                         return return_dict
-
                     except Exception as e:
                         if isinstance(e, Empty):
                             if not self.async_transformer.is_alive():
@@ -236,7 +236,7 @@ class HetrComputation(Computation):
                 p.metadata.update(p.states_read[0].metadata)
 
         # simplify by already having asynctrans made by passes
-        for t_name, async_trans in iteritems(self.transformer.child_transformers):
+        for t_name, trans in iteritems(self.transformer.child_transformers):
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation_op.parameters)
                          if p.metadata['transformer'] == t_name]
@@ -244,18 +244,17 @@ class HetrComputation(Computation):
                       if op.metadata['transformer'] == t_name]
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
 
-            async_comp = async_trans.computation(transform_ops, tuple([p for pos, p in my_params]))
-            async_comp.param_idx = [g_pos for g_pos, p in my_params]
+            comp = trans.computation(transform_ops, tuple([p for pos, p in my_params]))
+            comp.param_idx = [g_pos for g_pos, p in my_params]
 
             # when there is a ResultOp, hack around it
-            async_comp.returns = dict()
+            comp.returns = dict()
             for i, op in enumerate(my_ops):
                 if op in self.returns and 'hetr_replaced_by' not in op.metadata:
-                    async_comp.returns[op] = i
+                    comp.returns[op] = i
                 elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
-                    async_comp.returns[op.metadata['replaces_op']] = i
-
-            self.child_computations[t_name] = async_comp
+                    comp.returns[op.metadata['replaces_op']] = i
+            self.child_computations[t_name] = comp
 
     def __call__(self, *args, **kwargs):
         """
@@ -266,14 +265,12 @@ class HetrComputation(Computation):
         :return: tuple of return values, one per return specified in __init__ returns list.
         """
         args = self.unpack_args_or_feed_dict(args, kwargs)
-
         for child in itervalues(self.child_computations):
             child.feed_input([args[i] for i in child.param_idx])
 
         return_vals = dict()
         for child in itervalues(self.child_computations):
             return_vals.update(child.get_results())
-
         if isinstance(self.computation_op.returns, Op):
             return return_vals[self.computation_op.returns]
         elif isinstance(self.computation_op.returns, collections.Set):
@@ -338,8 +335,12 @@ class HetrTransformer(ComputationGraphTransformer):
     def register_transformer(self, tname):
         # TODO change from using tname string to using (ttype, dev_id, host) tuple
         if tname not in self.child_transformers:
-            at = AsyncTransformer(tname)
-            self.child_transformers[tname] = at
+            if 'cpu' in tname:
+                # trans_client = RPCTransformerClient(tname)
+                trans_client = AsyncTransformer(tname)  # TODO replace with RPC when ready
+            else:
+                trans_client = AsyncTransformer(tname)
+            self.child_transformers[tname] = trans_client
 
     def transformer(self, tname):
         assert tname in self.child_transformers, "register transformer {} before use".format(tname)

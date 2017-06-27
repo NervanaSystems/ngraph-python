@@ -20,6 +20,9 @@ class ReluOp(UnaryElementWiseOp):
         super(ReluOp, self).__init__(inputs, **kwargs)
         self.slope = slope
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.slope)
+
     def generate_adjoints(self, adjoints, delta, inputs):
         bprop_relu_op = BpropReluOp(delta, inputs, self)
         bprop_relu_op.add_control_dep(self)
@@ -36,3 +39,6 @@ class BpropReluOp(ElementWiseOp):
     def __init__(self, delta, inputs, fprop, **kwargs):
         super(BpropReluOp, self).__init__(args=(delta, inputs), axes=delta.axes, **kwargs)
         self.fprop = fprop
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], self.fprop)
