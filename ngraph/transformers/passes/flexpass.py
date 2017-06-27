@@ -14,7 +14,9 @@ class FlexDtypePass(PeepholeGraphPass):
 
 class FlexDECPass(PeepholeGraphPass):
 
-    def __init__(self):
+    def __init__(self, transformer, **kwargs):
+        super(FlexDECPass, self).__init__(**kwargs)
+        self.transformer = transformer
         self.propagate_flex_entry = False
 
     @generic_method(dispatch_base_type=Op)
@@ -30,7 +32,11 @@ class FlexDECPass(PeepholeGraphPass):
 
 
 class ClearTensorDescriptions(GraphPass):
-    def do_pass(self, ops, transformer):
-        transformer.initialize_allocations()
+    def __init__(self, transformer, **kwargs):
+        self.transformer = transformer
+        super(ClearTensorDescriptions, self).__init__(**kwargs)
+
+    def do_pass(self, ops):
+        self.transformer.initialize_allocations()
         tdcache.tensor_description_cache.clear()
-        return ops, transformer
+        return ops
