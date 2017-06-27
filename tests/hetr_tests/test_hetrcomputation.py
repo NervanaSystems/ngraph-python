@@ -182,6 +182,17 @@ def test_distributed_graph_plus_two(transformer_factory):
         np.testing.assert_array_equal(res, np_x + 2)
 
 
+def test_singleton_device_id(transformer_factory):
+    with ng.metadata(device_id=(['1'])):
+        x = ng.placeholder(())
+    graph_ops = OrderedSet([x])
+
+    graph_op_metadata = {op: list() for op in graph_ops}
+    graph_op_metadata[x] = ["cpu", '1']
+
+    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
+
+
 def test_from_device(transformer_factory):
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
