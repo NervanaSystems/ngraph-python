@@ -95,7 +95,6 @@ def id_func(param):
         for i in param:
             description += str(i)
         return description
-    return " param: " + param
 
 
 def unpack_list(a, b, *c):
