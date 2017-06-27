@@ -170,7 +170,7 @@ def test_ser_pass():
     _, graph = get_simple_graph()
     ser_pass = SerializationPass('mypass_token')
     fname = ser_pass.tmpfile.name
-    ser_pass.do_pass([graph])
+    ser_pass.do_pass(ops=[graph])
     assert os.path.getsize(fname) > 0
     os.unlink(fname)
 

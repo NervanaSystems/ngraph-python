@@ -61,7 +61,7 @@ def check_device_assign_pass(default_device, default_device_id,
         hetr = MockHetr()
         obj = DeviceAssignPass(hetr, default_device, default_device_id)
 
-        obj.do_pass(graph_op)
+        obj.do_pass(ops=graph_op)
 
         for op in graph_op_metadata.keys():
             assert op.metadata['device'] == graph_op_metadata[op][0]
