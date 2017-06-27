@@ -184,5 +184,5 @@ if __name__ == "__main__":
                              device_id=device_id,
                              transformer_type=args.transformer,
                              device=args.device,
-                             bprop=args.bprop!=0,
+                             bprop=args.bprop != 0,
                              visualize=args.visualize)
