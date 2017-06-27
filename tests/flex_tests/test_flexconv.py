@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 import pytest
 import numpy as np
-from ngraph.testing.flexutil import execute_convolution, id_func
+from ngraph.testing.flex_util import execute_convolution, id_func
 
 pytestmark = pytest.mark.flex_only
 
