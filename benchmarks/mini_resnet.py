@@ -177,8 +177,6 @@ if __name__ == "__main__":
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
     for device_id in device_ids:
-        if len(device_id) == 1:
-            device_id = device_id[0]
         run_resnet_benchmark(dataset=args.data_set,
                              n_iter=args.max_iter,
                              n_skip=args.skip_iter,
