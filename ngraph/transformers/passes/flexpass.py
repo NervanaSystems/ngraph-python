@@ -34,9 +34,6 @@ class FlexDECPass(PeepholeGraphPass):
         self.transformer = transformer
         self.propagate_flex_entry = False
 
-    def do_pass(self, min_ops, transformer):
-        super(FlexDECPass, self).do_pass(min_ops, self.transformer)
-
     @generic_method(dispatch_base_type=Op)
     def visit(self, op, *args):
         # copy flex entry for any op followed by dimshuffle op
