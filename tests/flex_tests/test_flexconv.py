@@ -44,7 +44,7 @@ test_data_execute_convolution = (
 )
 
 test_data_convolution_limitation = (
-    # template: (filter_number, batch_size, dilation, description)
+    # template: (filter_count, batch_size, dilation, description)
 
     (7, 32, 1, "K dim must be multiple of 8"),
     (8, 31, 1, "N dim must be multiple of 32"),
@@ -62,7 +62,7 @@ def test_execute_convolution(transformer_factory, image_height, image_width, ima
     out, np_out = execute_convolution(image_height=image_height, image_width=image_width,
                                       image_3rd_dim=image_3rd_dim, filter_height=filter_height,
                                       filter_width=filter_width, filter_3rd_dim=filter_3rd_dim,
-                                      channel=16, batch_size=32, filter_number=8,
+                                      channel=16, batch_size=32, filter_count=8,
                                       padding=padding, stride=stride, dilation=1,
                                       np_comparison=True)
     print("out: ", out)
@@ -70,12 +70,12 @@ def test_execute_convolution(transformer_factory, image_height, image_width, ima
     assert np.array_equal(out, np_out)
 
 
-@pytest.mark.parametrize("filter_number, batch_size, dilation, description",
+@pytest.mark.parametrize("filter_count, batch_size, dilation, description",
                          test_data_convolution_limitation, ids=id_func)
-def test_convolution_limitation(transformer_factory, filter_number, batch_size, dilation,
+def test_convolution_limitation(transformer_factory, filter_count, batch_size, dilation,
                                 description):
     with pytest.raises(AssertionError) as excinfo:
         execute_convolution(image_height=7, image_width=7, filter_height=3, filter_width=3,
-                            channel=16, batch_size=batch_size, filter_number=filter_number,
-                            image_3rd_dim=1, filter_3rd_dim=1, stride=(1, 1, 1), dilation=dilation)
+                            channel=16, batch_size=batch_size, filter_count=filter_count,
+                            image_3rd_dim=1, filter_3rd_dim=1, dilation=dilation)
     assert excinfo.match(description)

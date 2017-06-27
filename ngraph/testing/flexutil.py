@@ -239,13 +239,12 @@ def template_dot_one_placeholder_and_scalar(row, col, scalar, flex_exceptions, i
 
 
 def execute_convolution(image_height, image_width, filter_height, filter_width, channel=16,
-                        batch_size=32, filter_number=8, image_3rd_dim=1, filter_3rd_dim=1,
-                        padding=(0, 0, 0), stride=(1, 1, 1),
-                        dilation=1, np_comparison=False):
+                        batch_size=32, filter_count=8, image_3rd_dim=1, filter_3rd_dim=1,
+                        padding=(0, 0, 0), stride=(1, 1, 1), dilation=1, np_comparison=False):
 
     pad_h, pad_w, pad_d = padding
     str_h, str_w, str_d = stride
-    cf = ConvParams(C=channel, N=batch_size, K=filter_number, D=image_3rd_dim, H=image_height,
+    cf = ConvParams(C=channel, N=batch_size, K=filter_count, D=image_3rd_dim, H=image_height,
                     W=image_width, T=filter_3rd_dim, R=filter_height, S=filter_width,
                     pad_d=pad_d, pad_h=pad_h, pad_w=pad_w, str_d=str_d, str_h=str_h, str_w=str_w,
                     dil_d=dilation, dil_h=dilation, dil_w=dilation)
@@ -253,8 +252,8 @@ def execute_convolution(image_height, image_width, filter_height, filter_width, 
     inputs = ng.placeholder(cf.ax_i)
     filters = ng.placeholder(cf.ax_f)
     rng = RandomTensorGenerator(0, np.float32)
-    input_value = rng.uniform(0, 4, cf.ax_i, dtype=int)
-    filter_value = rng.uniform(0, 4, cf.ax_f, dtype=int)
+    input_value = rng.uniform(-4, 4, cf.ax_i, dtype=int)
+    filter_value = rng.uniform(-4, 4, cf.ax_f, dtype=int)
     error_value = rng.uniform(-0.5, 0.5, cf.ax_o)
     with executor(ng.convolution(cf.conv_params, inputs, filters, axes=cf.ax_o),
                   inputs, filters) as const_executor:
