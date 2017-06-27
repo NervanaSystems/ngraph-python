@@ -400,11 +400,12 @@ class CPUCodeGenerator(PyGen):
         self.conv_slices[op.name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
 
-    @allocate_op.on_type(DeconvDerivOp)
-    def allocate_op(self, op, gI, delta, filters):
-        self.conv_params[op.fprop.forwarded.name] = op.conv_params
-        self.conv_slices[op.fprop.forwarded.name] = \
-            CPUConvEngine.get_slices(delta, filters, gI, op.conv_params)
+    @allocate_op.on_type(DeconvolutionOp)
+    def allocate_op(self, op, outputs, inputs, filters):
+        # get_slices args: Swap outputs and inputs
+        self.conv_params[op.name] = op.conv_params
+        self.conv_slices[op.name] = \
+            CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
