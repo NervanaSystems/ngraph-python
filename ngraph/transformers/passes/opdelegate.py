@@ -26,6 +26,10 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
     This is currently used so that the same pass can be used with op-graph and exec-graph if
     the pass uses the OpAccessor methods to access the components of the Op.
     """
+    def __init__(self, **kwargs):
+        self.replacement_list = []
+        self.replacements = dict()
+
     @abc.abstractmethod
     def op_arg(self, op, n):
         """
@@ -80,13 +84,12 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
 
         """
 
-    @abc.abstractmethod
     def begin_batch(self):
         """
         Called before beginning processing on a pass.
         """
+        self.replacement_list = []
 
-    @abc.abstractmethod
     def replace_op(self, op, replacement):
         """
         Queue op-graph Op op to be replaced by replacement at the end of the batch.
@@ -96,8 +99,19 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
             replacement: The replacement op-graph Op fro old_op.
 
         """
+        self.replacement_list.append((op, replacement))
 
     @abc.abstractmethod
+    def perform_replace_op(self, op, replacement):
+        """
+        Actually perform the op replacement
+
+        Args:
+            op: An Op to be replaced.
+            replacement: An Op to replace op with.
+
+        """
+
     def end_batch(self):
         """
         Called after a pass has been processed.
@@ -105,14 +119,16 @@ class OpAccessor(with_metaclass(abc.ABCMeta, object)):
         Returns:
             True if the graph was changed.
         """
+        for op, replacement in self.replacement_list:
+            self.perform_replace_op(op, replacement)
+            self.replacements[op] = replacement
+        return len(self.replacement_list) > 0
+
+    def get_replacement(self, op):
+        return self.replacements.get(op, None)
 
 
 class OpGraphOpAccessor(OpAccessor):
-
-    def __init__(self, **kwargs):
-        super(OpGraphOpAccessor, self).__init__(**kwargs)
-        self.replacement_list = []
-
     """
     Provides access to some op properties when they may have been modified during passes.
     """
@@ -192,16 +208,8 @@ class OpGraphOpAccessor(OpAccessor):
             has_work = self.end_batch()
             ops = list(op.forwarded for op in ops)
 
-    def begin_batch(self):
-        self.replacement_list = []
-
-    def replace_op(self, op, replacement):
-        self.replacement_list.append((op, replacement))
-
-    def end_batch(self):
-        for old, rep in self.replacement_list:
-            old.forwarded.replace_self(rep.forwarded)
-        return len(self.replacement_list) > 0
+    def perform_replace_op(self, op, replacement):
+        op.forwarded.replace_self(replacement.forwarded)
 
 
 op_graph_op_accessor = OpGraphOpAccessor()
@@ -270,8 +278,14 @@ class DelegateOpAccessor(OpAccessor):
     def replace_op(self, op, replacement):
         self.op_accessor.replace_op(op, replacement)
 
+    def perform_replace_op(self, op, replacement):
+        self.op_accessor.perform_replace_op(op, replacement)
+
     def end_batch(self):
         return self.op_accessor.end_batch()
+
+    def get_replacement(self, op):
+        return self.op_accessor.get_replacement(op)
 
 
 class OpDelegate(with_metaclass(abc.ABCMeta, object)):
