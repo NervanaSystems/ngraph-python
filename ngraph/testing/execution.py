@@ -111,7 +111,7 @@ class ExecutorFactory(object):
         if len(fshape) is 0:
             return self.transformer.computation(ng.deriv(f, px), px, *parameters)
         else:
-            initial_adjoint = ng.placeholder(f.axes)
+            initial_adjoint = ng.placeholder(f.axes).named('adj')
             adjoint = np.zeros(fshape, dtype=f.dtype)
             dfdx = ng.deriv(f, px, error=initial_adjoint)
             comp = self.transformer.computation(dfdx, initial_adjoint, px, *parameters)

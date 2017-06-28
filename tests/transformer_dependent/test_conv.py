@@ -492,14 +492,14 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     axes_nmpqk = ng.make_axes([cf.ax_o[-1], cf.ax_o[1], cf.ax_o[2], cf.ax_o[3], cf.ax_o[0]])
 
     # broadcast input / filter axes
-    input_var = ng.variable(cf.ax_i)
+    input_var = ng.variable(cf.ax_i).named('input')
     input_val = np.ones(input_var.axes.lengths)
 
-    filter_rsck_prime = ng.variable(axes_rsck_prime)
+    filter_rsck_prime = ng.variable(axes_rsck_prime).named('filter')
     filter_var = filter_rsck_prime
-    filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck)
-    filter_trsck = ng.expand_dims(filter_rsck, cf.ax_f[1], 0)
-    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=cf.ax_f)
+    filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck).named('frsck')
+    filter_trsck = ng.expand_dims(filter_rsck, cf.ax_f[1], 0).named('ftrsck')
+    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=cf.ax_f).named('ctrsk')
 
     # convolution
     output_kmpqn = ng.convolution(cf.conv_params, input_var, filter_ctrsk, axes=cf.ax_o)

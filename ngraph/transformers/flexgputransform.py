@@ -86,7 +86,7 @@ class FlexGPUTransformer(GPUTransformer):
 
         # flex passes for setting Op dtypes to flex
         self.register_graph_pass(FlexFusion(), 0)
-        self.register_graph_pass(ClearTensorDescriptions())
+        self.register_graph_pass(ClearTensorDescriptions(transformer=self))
         self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
@@ -102,7 +102,7 @@ class FlexGPUTransformer(GPUTransformer):
     def finish_transform_allocate(self):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
-        FlexPropagateEntryPass().do_pass(self.ops, self)
+        FlexPropagateEntryPass(transformer=self).do_pass(ops=self.ops)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
