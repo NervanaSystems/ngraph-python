@@ -99,8 +99,8 @@ def test_cputensor_dot(transformer_factory):
     np_b = np.array([[1, 2], [2, 3], [3, 4]], dtype=np.float32)
     np_c = np.dot(np_a, np_b)
 
-    a = ng.constant(np_a, [M, N])
-    b = ng.constant(np_b, [N, Y])
+    a = ng.constant(np_a, [M, N]).named('a')
+    b = ng.constant(np_b, [N, Y]).named('b')
     c = ng.dot(a, b)
 
     with executor(c) as ex:

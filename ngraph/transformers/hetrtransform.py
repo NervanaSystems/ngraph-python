@@ -377,9 +377,6 @@ class HetrTransformer(ComputationGraphTransformer):
     def device_buffer_storage(self, bytes, dtype, name):
         assert False, "Should not be used, TODO cleanup"
 
-    def device_buffer_reference(self):
-        assert False, "Should not be used, TODO cleanup"
-
     def start_transform_allocate(self):
         assert False, "Should not be used, TODO cleanup"
 

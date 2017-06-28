@@ -51,6 +51,7 @@ __all__ = [
     'cos',
     'deconvolution',
     'exp',
+    'fill',
     'log',
     'lookuptable',
     'ctc',
