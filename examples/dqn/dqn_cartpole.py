@@ -9,28 +9,24 @@ def model(action_axes):
         neon.Affine(
             nout=20,
             weight_init=neon.XavierInit(),
-            bias_init=neon.ConstantInit(),
             activation=neon.Tanh(),
             batch_norm=True,
         ),
         neon.Affine(
             nout=20,
             weight_init=neon.XavierInit(),
-            bias_init=neon.ConstantInit(),
             activation=neon.Tanh(),
             batch_norm=True,
         ),
         neon.Affine(
             nout=20,
             weight_init=neon.XavierInit(),
-            bias_init=neon.ConstantInit(),
             activation=neon.Tanh(),
             batch_norm=True,
         ),
         neon.Affine(
             axes=action_axes,
             weight_init=neon.XavierInit(),
-            bias_init=neon.ConstantInit(),
             activation=neon.Rectlin(),
             batch_norm=True,
         ),
