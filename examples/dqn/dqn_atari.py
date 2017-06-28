@@ -17,7 +17,7 @@ def model(action_axes):
     action axes for use by the dqn agent.
     """
     return neon.Sequential([
-        neon.Activation(lambda x: x / 255.0),
+        neon.Preprocess(lambda x: x / 255.0),
         neon.Convolution(
             (8, 8, 32),
             neon.XavierInit(),
@@ -238,17 +238,16 @@ class DimShuffleWrapper(gym.Wrapper):
         return self._modify_observation(self.env.reset())
 
 
-
-
 def main():
-    # deterministic version 4 results in a frame skip of 4 and no repeat action probability
     if False:
+        # deterministic version 4 results in a frame skip of 4 and no repeat action probability
         environment = gym.make('BreakoutDeterministic-v4')
         environment = TerminateOnEndOfLifeWrapper(environment)
         environment = ReshapeWrapper(environment)
         environment = ClipRewardWrapper(environment)
         environment = RepeatWrapper(environment, frames=4)
     else:
+        # use the environment wrappers found in openai baselines.
         environment = gym.make('BreakoutNoFrameskip-v4')
         environment = wrap_dqn(environment)
         environment = DimShuffleWrapper(environment)
