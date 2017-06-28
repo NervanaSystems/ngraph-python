@@ -1,3 +1,4 @@
+import examples.dqn.gym_wrapper
 import numpy as np
 import gym
 import dqn_atari
@@ -23,14 +24,14 @@ class MockEnvironment(object):
 
 def test_repeat_wrapper_reset():
     environment = MockEnvironment(range(10))
-    environment = dqn_atari.RepeatWrapper(frames=2)(environment)
+    environment = examples.dqn.gym_wrapper.RepeatWrapper(frames=2)(environment)
 
     assert list(environment._reset()) == [0, 1]
 
 
 def test_repeat_wrapper_step():
     environment = MockEnvironment(range(10))
-    environment = dqn_atari.RepeatWrapper(frames=2)(environment)
+    environment = examples.dqn.gym_wrapper.RepeatWrapper(frames=2)(environment)
     environment.reset()
 
     assert (environment.step(1)[0] == np.array([1, 2])).all()
