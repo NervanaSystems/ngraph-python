@@ -202,3 +202,35 @@ def test_initial_value(transformer_factory):
     with ExecutorFactory() as ex:
         result = ex.executor(y)()
     ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))
+
+
+def test_multiple_computations(transformer_factory):
+    """
+    Create multiple computations for the same value.
+
+    Args:
+        transformer_factory:
+
+    Returns:
+
+    """
+    C = ng.make_axis(length=2)
+    D = ng.make_axis(length=3)
+
+    x = ng.placeholder([C, D])
+
+    x0_slice = x[0, :]
+    x1_slice = x[1, :]
+
+    y1 = x0_slice * 2 + x1_slice * 3
+
+    x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
+    y1_np = x_np[0, :] * 2 + x_np[1, :] * 3
+
+    with ExecutorFactory() as ex:
+        fs = [ex.executor(y1, x) for i in range(5)]
+        vals_np = [y1_np for f in fs]
+        vals = [f(x_np) for f in fs]
+        # print(vals_np)
+        # print(vals)
+        assert ng.testing.allclose(vals, vals_np)

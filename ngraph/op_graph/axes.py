@@ -1084,6 +1084,7 @@ class TensorDescription(NameableValue):
                  is_persistent=False,
                  is_input=False,
                  is_placeholder=False,
+                 op=None,
                  **kwargs):
         super(TensorDescription, self).__init__(**kwargs)
         # TODO: get the default type from the backend. May not always be numpy.
@@ -1104,6 +1105,7 @@ class TensorDescription(NameableValue):
         self.__is_persistent = is_persistent
         self.__is_input = is_input
         self.__is_placeholder = is_placeholder
+        self.op = op
         if not isinstance(self.name, str):
             raise ValueError()
         for axis in axes:
