@@ -3555,7 +3555,7 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, bias=None, **kwargs):
-        super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        super(DotLowDimension, self).__init__(args=(x, y, bias), axes=axes, **kwargs)
         self.bias = bias
 
 
