@@ -44,7 +44,7 @@ test_data_execute_convolution = (
 )
 
 test_data_convolution_limitation = (
-    # template: (filter_count, batch_size, dilation, description)
+    # template: (filter_count, batch_size, dilation, description )
 
     (7, 32, 1, "K dim must be multiple of 8"),
     (8, 31, 1, "N dim must be multiple of 32"),
