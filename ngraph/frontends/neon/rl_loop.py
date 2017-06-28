@@ -10,11 +10,15 @@ def rl_loop(environment, agent, episodes, render=False):
     """
     train an agent inside an environment for a set number of episodes
 
+    This function should be common to all reinforcement learning algorithms.
+    New algorithms should be written by implementing the Agent interface. An
+    example of agent implementing such an interface can be found in dqn.py.
+
     # todo: rename to rl_loop_train, and follow the same pattern and callbacks
     # neon.loop_train used for supervised learning.
     """
     total_steps = 0
-    rewards = deque(maxlen=100)
+    rewards = deque(maxlen=500)
     for episode in range(episodes):
         state = environment.reset()
         done = False
@@ -41,15 +45,6 @@ def rl_loop(environment, agent, episodes, render=False):
 
         agent.end_of_episode()
         rewards.append(total_reward)
-        print({
-            'type': 'training episode',
-            'episode': episode,
-            'total_steps': total_steps,
-            'steps': step,
-            'total_reward': total_reward,
-            'running_average_reward': np.mean(rewards),
-        })
-
         # we would like to evaluate the model at a consistent time measured
         # in update steps, but we can't start an evaluation in the middle of an
         # episode.  if we have accumulated enough updates to warrant an evaluation
@@ -57,6 +52,16 @@ def rl_loop(environment, agent, episodes, render=False):
         # the episode.
         if trigger_evaluation:
             trigger_evaluation = False
+
+            print({
+                'type': 'training episode',
+                'episode': episode,
+                'total_steps': total_steps,
+                'steps': step,
+                'total_reward': total_reward,
+                'running_average_reward': np.mean(rewards),
+            })
+
             for epsilon in (0, 0.01, 0.05, 0.1):
                 total_reward = evaluate_single_episode(
                     environment, agent, render, epsilon
@@ -72,7 +77,10 @@ def rl_loop(environment, agent, episodes, render=False):
 
 def evaluate_single_episode(environment, agent, render=False, epsilon=None):
     """
-    evaluate a single episode of agent operating inside of an environment
+    Evaluate a single episode of agent operating inside of an environment.
+
+    This method should be applicable to all reinforcement learning algorithms
+    so long as they implement the Agent interface.
     """
     state = environment.reset()
     done = False
