@@ -20,9 +20,10 @@ The model uses a sequence from the PTB dataset as input, and learns to output
 the same sequence in reverse order.
 """
 
+import numpy as np
 from contextlib import closing
 import ngraph as ng
-from ngraph.frontends.neon import Preprocess, Recurrent, Affine, Softmax, Tanh
+from ngraph.frontends.neon import Layer, Preprocess, Recurrent, Affine, Softmax, Tanh
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
@@ -31,17 +32,15 @@ import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
 
-
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
-parser.set_defaults()
+parser.set_defaults(batch_size=128, num_iterations=2000)
 args = parser.parse_args()
 
-# these hyperparameters are from the paper
-args.batch_size = 50
+# model parameters
 time_steps = 5
-hidden_size = 10
-gradient_clip_value = 15
+hidden_size = 256
+gradient_clip_value = 5
 
 # download penn treebank
 # set shift_target to be False, since it is going to predict the same sequence
@@ -53,9 +52,33 @@ train_set = SequentialArrayIterator(ptb_data['train'],
                                     total_iterations=args.num_iterations,
                                     reverse_target=True,
                                     get_prev_target=True)
+valid_set = SequentialArrayIterator(ptb_data['valid'],
+                                    batch_size=args.batch_size,
+                                    time_steps=time_steps,
+                                    total_iterations=10,
+                                    reverse_target=True,
+                                    get_prev_target=True)
 
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
+
+
+def generate_samples(inputs, encode, decode, num_time_steps):
+    """
+    Inference
+    """
+    encoding = encode(inputs)
+    decoder_input = np.zeros(decode.computation_op.parameters[0].axes.lengths)
+    state = encoding
+    tokens = list()
+    for step in range(num_time_steps):
+        output, state = decode(decoder_input, state.squeeze())
+        index = np.argmax(output, axis=0)
+        decoder_input[:] = 0
+        decoder_input[index] = 1
+        tokens.append(index)
+
+    return np.squeeze(np.array(tokens)).T
 
 
 def expand_onehot(x):
@@ -91,11 +114,30 @@ updates = optimizer(loss)
 train_outputs = dict(batch_cost=mean_cost, updates=updates)
 loss_outputs = dict(cross_ent_loss=loss)
 
+# inference graph
+with Layer.inference_mode_on():
+    enc_out_inference = enc(one_hot_enc_out)
+
+    # Create decoder placeholders
+    axes = one_hot_dec_out.axes
+    axes = axes - axes.recurrent_axis() + ng.make_axis(length=1, name="REC")
+    decoder_input_inference = ng.placeholder(axes, name="input")
+    decoder_state_inference = ng.placeholder(enc_out_inference.axes, name="state")
+    dec_out_inference = dec(decoder_input_inference, init_state=decoder_state_inference)
+    inference_out = linear(dec_out_inference)
+
+encoder_computation = ng.computation(enc_out_inference, inputs["inp_txt"])
+decoder_computation = ng.computation([inference_out, dec_out_inference],
+                                     decoder_input_inference,
+                                     decoder_state_inference)
+
+
 ######################
 # Train Loop
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:
+    # training computations
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
     loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
 
@@ -103,7 +145,26 @@ with closing(ngt.make_transformer()) as transformer:
                                  frequency=args.iter_interval,
                                  train_computation=train_computation,
                                  total_iterations=args.num_iterations,
+                                 eval_set=valid_set,
                                  loss_computation=loss_computation,
                                  use_progress_bar=args.progress_bar)
 
+    # inference computations
+    encoder_function = transformer.add_computation(encoder_computation)
+    decoder_function = transformer.add_computation(decoder_computation)
+
+    # training
     loop_train(train_set, train_computation, cbs)
+
+    # inference
+    valid_set.reset()
+    num_errors = 0
+    for mb_idx, data in enumerate(valid_set):
+        tokens = generate_samples(data["inp_txt"], encoder_function, decoder_function, time_steps)
+        num_errors += len(np.argwhere(tokens != data["tgt_txt"]))
+    num_total = valid_set.total_iterations * (time_steps * args.batch_size)
+    print('Misclassification error: {} %'.format(float(num_errors)/num_total * 100))
+
+    # print some samples
+    for sample_idx in range(5):
+        print(''.join([tree_bank_data.vocab[i] for i in tokens[sample_idx, :]])[::-1])
