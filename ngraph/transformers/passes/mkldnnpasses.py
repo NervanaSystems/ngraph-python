@@ -140,7 +140,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     """
 
-    def __init__(self, mkldnn):
+    def __init__(self, mkldnn, **kwargs):
+        super(MklCreateOpDescriptors, self).__init__(**kwargs)
         assert mkldnn.enabled
         self.mkldnn = mkldnn
 
@@ -676,7 +677,8 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     non-MKL op
     """
 
-    def __init__(self, mkldnn, layoutpass):
+    def __init__(self, mkldnn, layoutpass, **kwargs):
+        super(MklAddLayoutConversions, self).__init__(**kwargs)
         self.mkldnn = mkldnn
         self.layoutpass = layoutpass
         self.reorder_ops = dict()   # Maps op.name to reorder op
