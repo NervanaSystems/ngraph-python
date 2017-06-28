@@ -751,7 +751,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     @visit.on_type(ComputationOp)
     def visit(self, op):
-        if isinstance(op.returns, Op) and op.returns.name in self.mkldnn.op_layouts:
+        if isinstance(op.returns, Op) and op.returns.forwarded.name in self.mkldnn.op_layouts:
             reorder_op = self.get_reorder_op(op.returns.forwarded)
             op.returns = reorder_op
             op.add_control_dep(reorder_op)
