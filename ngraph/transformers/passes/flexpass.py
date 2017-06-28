@@ -31,7 +31,7 @@ class FlexDtypePass(PeepholeGraphPass):
 class FlexPropagateEntryPass(PeepholeGraphPass):
 
     def __init__(self, transformer, **kwargs):
-        super(FlexDECPass, self).__init__(**kwargs)
+        super(FlexPropagateEntryPass, self).__init__(**kwargs)
         self.transformer = transformer
         self.propagate_flex_entry = False
 

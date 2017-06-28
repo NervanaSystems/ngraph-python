@@ -454,7 +454,7 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
-# GitHub issue #0000 - FlexConvUpdateKernel does not change DEC, it use default from autoflex
+# GitHub issue #1822 - FlexConvUpdateKernel does not change DEC, it use default from autoflex
 @pytest.mark.flex_disabled
 def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """

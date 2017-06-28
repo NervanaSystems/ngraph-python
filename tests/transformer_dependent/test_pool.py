@@ -180,7 +180,7 @@ def test_gen_reference(transformer_factory, pool_args):
     # X-FAIL for flex_disabled known issue
     if pool_args == n4_c1_hw4_2x2_max:
         if is_flex_factory(transformer_factory):
-            pytest.xfail('GitHub issue #0000, flex pooling does not work well when stride = 1')
+            pytest.xfail('GitHub issue #1823, flex pooling does not work well when stride = 1')
 
     pf = PoolParams(**pool_args['settings'])
 
