@@ -37,7 +37,14 @@ def make_axes(lengths, name=None):
 
 
 class ModelWrapper(object):
-    """the ModelWrapper is responsible for interacting with neon and ngraph"""
+    """
+    the ModelWrapper is responsible for interacting with neon and ngraph.
+
+    ModelWrapper wraps a neon model with an optimizer and computations which
+    the dqn agent will need. These methods could be merged into the dqn agent,
+    but this way all of the boilerplate required to interact with ngraph and
+    neon can be separated from the dqn logic in order to keep it clear.
+    """
 
     def __init__(
             self, state_axes, action_size, batch_size, model,
@@ -137,7 +144,11 @@ class ModelWrapper(object):
         self.update()
 
     def predict_single(self, state):
-        """run inference on the model for a single input state"""
+        """
+        Run inference on the model for a single input state.
+
+        The output axes will be (action).
+        """
         state = np.asarray(state, dtype=np.float32)
 
         # add a batch axis of 1 if it doesn't already exist
@@ -152,6 +163,11 @@ class ModelWrapper(object):
         return self.inference_function_single(state)
 
     def predict(self, state):
+        """
+        Run inference on the model for a batch of states.
+
+        The output axes will be (action, N).
+        """
         state = np.asarray(state, dtype=np.float32)
 
         if state.shape != self.state.axes.lengths:
@@ -162,6 +178,12 @@ class ModelWrapper(object):
         return self.inference_function(state)
 
     def predict_target(self, state):
+        """
+        Run inference on the model for a batch of states using the target
+        network.
+
+        The output axes will be (action, N).
+        """
         state = np.asarray(state, dtype=np.float32)
 
         if state.shape != self.state.axes.lengths:
@@ -172,6 +194,9 @@ class ModelWrapper(object):
         return self.inference_target_function(state)
 
     def train(self, states, targets):
+        """
+        Run a single update step given a batch of states and targets.
+        """
         states = np.asarray(states, dtype=np.float32)
         targets = np.asarray(targets, dtype=np.float32)
 
@@ -183,6 +208,9 @@ class ModelWrapper(object):
         self.train_function(states, targets)
 
     def update(self):
+        """
+        Update the target network weights.
+        """
         self.update_function()
 
 
@@ -229,7 +257,12 @@ def decay_generator(start, decay, minimum):
 
 
 class Agent(object):
-    """the Agent is responsible for interacting with the environment."""
+    """
+    The Agent is responsible for interacting with the environment.
+
+    The Agent implements an interface common to all reinforcement learning
+    problems. This agent implements the dqn algorithm.
+    """
 
     def __init__(
             self,
@@ -261,6 +294,9 @@ class Agent(object):
         else:
             self.memory = memory
 
+        # this model wrapper gives us a simple interface to the computations
+        # we will need in order to keep this agents code focused on the high
+        # level dqn algorithm.
         self.model_wrapper = ModelWrapper(
             state_axes=state_axes,
             action_size=action_space.n,
@@ -271,10 +307,13 @@ class Agent(object):
 
     def act(self, state, training=True, epsilon=None):
         """
-        given a state, return the index of the action that should be taken
+        Given a state, return the index of the action that should be taken.
 
-        if training is true, occasionally return a randomly sampled action
-        from the action space instead
+        If training is true, occasionally return a randomly sampled action
+        from the action space instead.
+
+        No training actually takes place in this function. This is the method
+        one would call in a loop during inference.
         """
         if epsilon is None:
             if training:
@@ -292,8 +331,11 @@ class Agent(object):
             self, state, action, reward, next_state, done, total_steps
     ):
         """
-        this method should be called after an action has been taken to inform
-        the agent about the results of the action it took
+        This method should be called after an action has been taken to inform
+        the agent about the results of the action it took.
+
+        The DQN algorithm stores every observation in memory and then
+        randomly samples from that memory during the update step.
         """
         self.memory.append({
             'state': state,
@@ -302,6 +344,8 @@ class Agent(object):
             'next_state': next_state,
             'done': done
         })
+
+        state = np.array(state)
 
         if not self.update_after_episode:
             if total_steps >= self.learning_starts:
@@ -312,10 +356,16 @@ class Agent(object):
                     self.model_wrapper.update()
 
     def end_of_episode(self):
+        """
+        This method should be called at the end of every episode.
+        """
         if self.update_after_episode:
             self._update()
 
     def _update(self):
+        """
+        Run a single DQN update step by sampling from the replay memory.
+        """
         # only attempt to sample if our memory has at least one more record
         # then our batch size.  we need one extra because we need to sample
         # state as well as next_state which will overlap for all but one record
