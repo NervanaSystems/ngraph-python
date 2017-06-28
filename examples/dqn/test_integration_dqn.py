@@ -36,7 +36,7 @@ def test_dependent_environment():
             learning_rate=0.1,
         )
 
-        rl_loop.rl_loop(environment, agent, episodes=10)
+        rl_loop.rl_loop_train(environment, agent, episodes=10)
 
         total_rewards.append(
             rl_loop.evaluate_single_episode(environment, agent)

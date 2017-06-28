@@ -1,9 +1,7 @@
 from collections import deque
 
-import cv2
 import gym
 import ngraph as ng
-import numpy as np
 from baselines.common.atari_wrappers_deprecated import wrap_dqn
 from examples.dqn.gym_wrapper import ReshapeWrapper, ClipRewardWrapper, RepeatWrapper, TerminateOnEndOfLifeWrapper, \
     DimShuffleWrapper
@@ -88,7 +86,7 @@ def main():
         learning_starts=10000,
     )
 
-    rl_loop.rl_loop(environment, agent, episodes=200000)
+    rl_loop.rl_loop_train(environment, agent, episodes=200000)
 
 
 if __name__ == "__main__":

@@ -3,19 +3,14 @@ from __future__ import print_function
 import numpy as np
 from collections import deque
 
-from ngraph.frontends.neon.callbacks import CallbackPhase
 
-
-def rl_loop(environment, agent, episodes, render=False):
+def rl_loop_train(environment, agent, episodes, render=False):
     """
     train an agent inside an environment for a set number of episodes
 
     This function should be common to all reinforcement learning algorithms.
     New algorithms should be written by implementing the Agent interface. An
     example of agent implementing such an interface can be found in dqn.py.
-
-    # todo: rename to rl_loop_train, and follow the same pattern and callbacks
-    # neon.loop_train used for supervised learning.
     """
     total_steps = 0
     rewards = deque(maxlen=500)
