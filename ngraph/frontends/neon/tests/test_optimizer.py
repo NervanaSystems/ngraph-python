@@ -22,7 +22,7 @@ import ngraph as ng
 from ngraph.frontends.neon import GradientDescentMomentum, Adam, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
+pytestmark = pytest.mark.transformer_dependent
 
 
 class GDMReference(object):
@@ -139,6 +139,7 @@ def random_momentum_coef():
     return np.random.random()
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
 def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, transformer_factory):
@@ -166,6 +167,7 @@ def random_beta_2():
     return np.random.uniform(low=0.0, high=1.0)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("epsilon", [1e-8])
 def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
 

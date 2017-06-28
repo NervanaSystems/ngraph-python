@@ -30,6 +30,8 @@ from ngraph.frontends.tensorflow.tf_importer.utils_broadcast import \
 from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 from ngraph.testing.execution import ExecutorFactory
 
+pytestmark = pytest.mark.transformer_dependent
+
 
 def test_np_layout_shuffle():
     # set up

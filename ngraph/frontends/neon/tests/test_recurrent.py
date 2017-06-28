@@ -171,7 +171,6 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -359,6 +358,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -457,6 +457,7 @@ def test_birnn_output_types(recurrent_input, output_size, weight_initializer,
             "Output is of type {} instead of {}".format(type(out), tuple)
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("batch_size", [4])

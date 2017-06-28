@@ -30,8 +30,9 @@ from ngraph.frontends.tensorflow.examples.mnist_mlp import mnist_mlp
 from ngraph.frontends.tensorflow.examples.mnist_mlp_shaped import \
     mnist_mlp_ns, mnist_mlp_tf
 
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
-@pytest.mark.transformer_dependent
+
 @pytest.mark.usefixtures("transformer_factory")
 class TestExamples(ImporterTester):
     def test_logistic_regression(self):
