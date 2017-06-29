@@ -56,6 +56,8 @@ class CPUTensorLayout(PeepholeGraphPass):
     def visit(self, op, delta, inputs):
         replace = False
 
+        # If we have updated op.fprop in this pass, replace this op
+        # with a version with the replaced fprop.
         fprop = op.fprop
         replacement_fprop = self.get_replacement(fprop)
         if replacement_fprop is not None:
@@ -77,6 +79,8 @@ class CPUTensorLayout(PeepholeGraphPass):
     def visit(self, op, delta, filters):
         replace = False
 
+        # If we have updated op.fprop in this pass, replace this op
+        # with a version with the replaced fprop.
         fprop = op.fprop
         replacement_fprop = self.get_replacement(fprop)
         if replacement_fprop is not None:
@@ -130,6 +134,8 @@ class CPUTensorLayout(PeepholeGraphPass):
     def visit(self, op, delta):
         replace = False
 
+        # If we have updated op.fprop in this pass, replace this op
+        # with a version with the replaced fprop.
         fprop = op.fprop
         replacement_fprop = self.get_replacement(fprop)
         if replacement_fprop is not None:
