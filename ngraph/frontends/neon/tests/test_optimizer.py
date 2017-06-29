@@ -309,6 +309,7 @@ def test_learning_policy_schedule(transformer_factory, drop_factor):
             reference_value = base_learning_rate * scale_factor
             assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
 
+
 if __name__ == '__main__':
     test_rmsprop(0.1, 0.95, 1e-6)
     test_gdm(0.1, 0.1, 0.1, False)
