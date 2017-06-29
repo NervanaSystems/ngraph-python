@@ -16,10 +16,9 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-
 from ngraph.op_graph.convolution import bprop_conv, update_conv
 from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor, ConvParams, \
-    reference_deconv_fprop, reference_deconv_bprop, reference_conv
+    reference_deconv_fprop, reference_deconv_bprop, reference_conv, is_flex_factory
 
 pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
@@ -33,12 +32,18 @@ def n64_hw32_c32_3x3():
 
 
 @pytest.fixture()
-def n128_hw32_c3_2x2():
+def n128_hw32_c3_2x2(transformer_factory):
+    # flex limitation - Flex requires K to be a multiple of 8
+    if is_flex_factory(transformer_factory):
+        return dict(C=3, N=128, K=8, H=32, W=32, R=2, S=2)
     return dict(C=3, N=128, K=2, H=32, W=32, R=2, S=2)
 
 
 @pytest.fixture()
-def n4_hw12_c3_5x5():
+def n4_hw12_c3_5x5(transformer_factory):
+    # flex limitation - Flex requires N to be a multiple of 32
+    if is_flex_factory(transformer_factory):
+        return dict(C=3, N=32, K=8, H=12, W=12, R=5, S=5)
     return dict(C=3, N=4, K=8, H=12, W=12, R=5, S=5)
 
 
@@ -84,7 +89,7 @@ def test_conv(transformer_factory, n64_hw32_c32_3x3):
     assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
 
 
-@pytest.mark.flex_disabled
+@pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
 def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -123,7 +128,7 @@ def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     assert np.allclose(gradF_ng, gradF_np, rtol=0.1, atol=0)
 
 
-@pytest.mark.flex_disabled
+@pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
 def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf1 = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -233,6 +238,7 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
+# GitHub issue #1822 - FlexConvUpdateKernel does not change DEC, it use default from autoflex
 @pytest.mark.flex_disabled
 def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """
@@ -254,10 +260,10 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
         dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
         dcdf_num_val = dcdf_num_fun(filter_value, input_value)
 
-        ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
+        ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=0.01)
 
 
-@pytest.mark.flex_disabled
+@pytest.mark.flex_disabled  # There is no SetItemKernel implementation for flex yet
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """
     Test deriv of conv followed by flatten
