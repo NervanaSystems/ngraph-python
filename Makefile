@@ -151,7 +151,6 @@ test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only" --boxed \
-	$(PARALLEL_OPTS) \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
