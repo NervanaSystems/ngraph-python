@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-from ngraph.testing.flexutil import template_one_placeholder, MINIMUM_FLEX_VALUE, \
+from ngraph.testing.flex_util import template_one_placeholder, MINIMUM_FLEX_VALUE, \
     MAXIMUM_FLEX_VALUE, id_func, template_two_placeholders, assert_allclose
 from ngraph.testing import executor
 
