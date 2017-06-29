@@ -163,7 +163,7 @@ with closing(ngt.make_transformer()) as transformer:
         tokens = generate_samples(data["inp_txt"], encoder_function, decoder_function, time_steps)
         num_errors += len(np.argwhere(tokens != data["tgt_txt"]))
     num_total = valid_set.total_iterations * (time_steps * args.batch_size)
-    print('Misclassification error: {} %'.format(float(num_errors)/num_total * 100))
+    print('Misclassification error: {} %'.format(float(num_errors) / num_total * 100))
 
     # print some samples
     for sample_idx in range(5):
