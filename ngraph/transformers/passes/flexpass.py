@@ -52,7 +52,7 @@ class ClearTensorDescriptions(GraphPass):
         self.transformer = transformer
         super(ClearTensorDescriptions, self).__init__(**kwargs)
 
-    def do_pass(self, ops):
+    def do_pass(self, ops, **kwargs):
         self.transformer.initialize_allocations()
         tdcache.tensor_description_cache.clear()
         return ops

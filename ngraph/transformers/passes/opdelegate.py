@@ -193,7 +193,7 @@ class OpGraphOpAccessor(OpAccessor):
 
         return None
 
-    def run_pass(self, process_op, ops):
+    def run_pass(self, process_op, ops, **kwargs):
         assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
         has_work = True
         while has_work:
@@ -221,6 +221,26 @@ class DelegateOpAccessor(OpAccessor):
     """
     def __init__(self, op_accessor=op_graph_op_accessor):
         self.op_accessor = op_accessor
+
+    def begin_pass(self, op_accessor=None, **kwargs):
+        """
+        Called before do_pass to peform pass initialization.
+
+        Args:
+            op_accessor: An OpAccessor for delegation.
+            **kwargs:
+        """
+        if op_accessor is not None:
+            self.op_accessor = op_accessor
+
+    def end_pass(self, **kwargs):
+        """
+        Called after do_pass to perform any cleanup.
+
+        Args:
+            **kwargs:
+        """
+        pass
 
     def op_arg(self, op, n):
         """

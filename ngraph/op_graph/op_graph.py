@@ -4287,3 +4287,42 @@ def cross_entropy_binary(y, t, usebits=False, out_axes=None,
     if usebits:
         result = result * np.float(1. / np.log(2.0))
     return result
+
+
+class ReturnOp(Op):
+    """
+    The inputs to a ReturnOp are the values returned from a computation.
+
+    This Op is internal to execution graph compilation.
+    """
+
+    @property
+    def is_device_op(self):
+        return False
+
+
+class LiteralScalarOp(TensorOp):
+    """
+    An in-lined literal scalar.
+
+    This Op is internal to execution graph compilation.
+    """
+    def __init__(self, scalar):
+        super(LiteralScalarOp, self).__init__(axes=[])
+        self.scalar = scalar
+
+
+class WriteOp(TensorOp):
+    """
+    Do one or more writes to a tensor.
+
+    This Op is internal to execution graph compilation.
+    """
+
+
+class ReadOp(TensorOp):
+    """
+    Read a tensor. TensorValueOp is replaced by ReadOp during the SSA pass.
+
+    This Op is internal to execution graph compilation.
+    """
