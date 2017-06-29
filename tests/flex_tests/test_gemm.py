@@ -16,7 +16,7 @@ from __future__ import print_function
 
 import pytest
 import numpy as np
-from ngraph.testing.flexutil import template_dot_two_placeholders, template_dot_one_placeholder,\
+from ngraph.testing.flex_util import template_dot_two_placeholders, template_dot_one_placeholder,\
     template_dot_one_placeholder_and_scalar
 
 pytestmark = pytest.mark.flex_only
