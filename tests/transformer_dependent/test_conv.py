@@ -16,230 +16,14 @@ import numpy as np
 import pytest
 
 import ngraph as ng
-import itertools as itt
 from ngraph.op_graph.convolution import bprop_conv, update_conv
-from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor
-from ngraph.frontends.neon.layer import output_dim, output_dim_deconv
+from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor, ConvParams, \
+    reference_deconv_fprop, reference_deconv_bprop, reference_conv, is_flex_factory
 
 pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
 
 rng = RandomTensorGenerator(0, np.float32)
-
-
-def slicable(dim, pad=0):
-    """
-    colapse outer dimensions into one and preserve inner dimension
-    this allows for easy cpu convolution in numpy
-
-    Arguments:
-        dim (tuple): dimensions list in a tuple
-        pad (int):  how many pixel paddings
-    """
-    dim0 = np.prod(dim[:-1]) + pad
-    return (dim0, dim[-1])
-
-
-def pixel_indices(T, R, S, D, H, W, C, mt, pr, qs):
-    HW = H * W
-    DHW = D * H * W
-    imax = C * DHW
-
-    idx = []
-    for c, t, r, s in itt.product(range(C), range(T), range(R), range(S)):
-
-        ci = c * DHW
-
-        z = mt + t
-        zi = ci + z * HW
-        zb = z >= 0 and z < D
-
-        y = pr + r
-        yi = zi + y * W
-        yb = zb and y >= 0 and y < H
-
-        x = qs + s
-
-        if yb and x >= 0 and x < W:
-            xi = yi + x
-        else:
-            xi = imax  # out of bounds
-
-        idx.append(xi)
-
-    return idx
-
-
-def reference_conv(dimI, dimF, dimO, conv_params, valI, valF, valE):
-    (K, M, P, Q, N) = dimO
-    (C, D, H, W, N) = dimI
-    (C, T, R, S, K) = dimF
-    pad_d, pad_h, pad_w = conv_params['pad_d'], conv_params['pad_h'], conv_params['pad_w']
-    str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
-    dtype = np.float32
-
-    no_pad_I = slicable(dimI)
-    cpuI = np.zeros(slicable(dimI, 1), dtype=dtype)
-    cpuI[:no_pad_I[0], :] = valI.reshape(no_pad_I)
-
-    cpuF = valF.reshape(slicable(dimF))
-    cpuE = valE
-
-    # ======numpy===========
-    # cpu output arrays
-    cpuO = np.zeros(dimO, dtype=dtype)
-    cpuB = np.zeros(slicable(dimI, 1), dtype=dtype)
-    cpuU = np.zeros(slicable(dimF), dtype=dtype)
-
-    for m, p, q in itt.product(range(M), range(P), range(Q)):
-        mt = m * str_d - pad_d
-        pr = p * str_h - pad_h
-        qs = q * str_w - pad_w
-
-        idx = pixel_indices(T, R, S, D, H, W, C, mt, pr, qs)
-
-        cpuO[:, m, p, q, :] = np.dot(cpuF.T, cpuI[idx, :])
-
-        cpuB[idx, :] += np.dot(cpuF, cpuE[:, m, p, q, :])
-
-        cpuU += np.dot(cpuI[idx, :], cpuE[:, m, p, q, :].T)
-
-    outB = cpuB[:-1, :].reshape(dimI)
-    outU = cpuU.reshape(dimF)
-    return (cpuO, outB, outU)
-
-
-def reference_deconv_fprop(conv_params, valI, valF):
-    dimI = valI.shape
-    dimF = valF.shape
-    (C, M, P, Q, N) = dimI
-    (K, T, R, S, C) = dimF
-    pad_d, pad_h, pad_w = conv_params['pad_d'], conv_params['pad_h'], conv_params['pad_w']
-    str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
-    # output dimensions
-    H = R + (P + pad_d - 1) * str_h
-    W = S + (Q + pad_w - 1) * str_w
-    D = T + (M + pad_d - 1) * str_d
-    dimO = (K, D, H, W, N)
-    dtype = np.float32
-
-    cpuO = np.zeros(slicable(dimO, 1), dtype=dtype)
-    cpuF = valF.reshape(slicable(dimF))
-    cpuI = valI
-
-    for m, p, q in itt.product(range(M), range(P), range(Q)):
-        mt = m * str_d - pad_d
-        pr = p * str_h - pad_h
-        qs = q * str_w - pad_w
-
-        idx = pixel_indices(T, R, S, D, H, W, K, mt, pr, qs)
-
-        cpuO[idx, :] += np.dot(cpuF, cpuI[:, m, p, q, :])
-
-    cpuO = cpuO[:-1, :].reshape(dimO)
-    return cpuO
-
-
-def reference_deconv_bprop(conv_params, valE, valI, valF):
-    dimO = valE.shape
-    dimI = valI.shape
-    dimF = valF.shape
-    (C, M, P, Q, N) = dimI
-    (K, D, H, W, N) = dimO
-    (K, T, R, S, C) = dimF
-    pad_d, pad_h, pad_w = conv_params['pad_d'], conv_params['pad_h'], conv_params['pad_w']
-    str_d, str_h, str_w = conv_params['str_d'], conv_params['str_h'], conv_params['str_w']
-    dtype = np.float32
-
-    # make error shaped like cpuO
-    no_pad_E = slicable(dimO)
-    cpuE = np.zeros(slicable(dimO, 1), dtype=dtype)
-    cpuE[:no_pad_E[0], :] = valE.reshape(no_pad_E)
-
-    cpuF = valF.reshape(slicable(dimF))
-
-    # ======numpy===========
-    cpuI = valI
-    cpuB = np.zeros(dimI, dtype=dtype)
-    cpuU = np.zeros(slicable(dimF), dtype=dtype)
-
-    for m, p, q in itt.product(range(M), range(P), range(Q)):
-        mt = m * str_d - pad_d
-        pr = p * str_h - pad_h
-        qs = q * str_w - pad_w
-
-        idx = pixel_indices(T, R, S, D, H, W, K, mt, pr, qs)
-
-        cpuB[:, m, p, q, :] = np.dot(cpuF.T, cpuE[idx, :])
-
-        cpuU += np.dot(cpuE[idx, :], cpuI[:, m, p, q, :].T)
-
-    outB = cpuB
-    outU = cpuU.reshape(dimF)
-    return (outB, outU)
-
-
-class ConvParams(object):
-    def __init__(self, C=1, N=1, K=1, D=1, H=1, W=1, T=1, R=1, S=1,
-                 pad_d=0, pad_h=0, pad_w=0,
-                 str_d=1, str_h=1, str_w=1, deconv=False):
-
-        if deconv:
-            M = output_dim_deconv(D, T, pad_d, str_d)
-            P = output_dim_deconv(H, R, pad_h, str_h)
-            Q = output_dim_deconv(W, S, pad_w, str_w)
-        else:
-            M = output_dim(D, T, pad_d, str_d)
-            P = output_dim(H, R, pad_h, str_h)
-            Q = output_dim(W, S, pad_w, str_w)
-
-        self.dimO = (K, M, P, Q, N)
-        self.dimI = (C, D, H, W, N)
-        if deconv:
-            self.dimF = (K, T, R, S, C)
-        else:
-            self.dimF = (C, T, R, S, K)
-
-        self.conv_params = dict(
-            pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
-            str_d=str_d, str_h=str_h, str_w=str_w,
-            dil_d=1, dil_h=1, dil_w=1
-        )
-
-        batch_axis = ng.make_axis(name='N', length=N)
-
-        self.ax_i = ng.make_axes([
-            ng.make_axis(name='C', length=C),
-            ng.make_axis(name='D', length=D),
-            ng.make_axis(name='H', length=H),
-            ng.make_axis(name='W', length=W),
-            batch_axis
-        ])
-
-        if deconv:
-            self.ax_f = ng.make_axes([
-                ng.make_axis(name='C', length=K),
-                ng.make_axis(name='D', length=T),
-                ng.make_axis(name='H', length=R),
-                ng.make_axis(name='W', length=S),
-                ng.make_axis(name='K', length=C),
-            ])
-        else:
-            self.ax_f = ng.make_axes([
-                ng.make_axis(name='C', length=C),
-                ng.make_axis(name='D', length=T),
-                ng.make_axis(name='H', length=R),
-                ng.make_axis(name='W', length=S),
-                ng.make_axis(name='K', length=K),
-            ])
-
-        self.ax_o = ng.make_axes([
-            ng.make_axis(name='C', length=K),
-            ng.make_axis(name='D', length=M),
-            ng.make_axis(name='H', length=P),
-            ng.make_axis(name='W', length=Q),
-            batch_axis
-        ])
 
 
 @pytest.fixture()
@@ -248,12 +32,18 @@ def n64_hw32_c32_3x3():
 
 
 @pytest.fixture()
-def n128_hw32_c3_2x2():
+def n128_hw32_c3_2x2(transformer_factory):
+    # flex limitation - Flex requires K to be a multiple of 8
+    if is_flex_factory(transformer_factory):
+        return dict(C=3, N=128, K=8, H=32, W=32, R=2, S=2)
     return dict(C=3, N=128, K=2, H=32, W=32, R=2, S=2)
 
 
 @pytest.fixture()
-def n4_hw12_c3_5x5():
+def n4_hw12_c3_5x5(transformer_factory):
+    # flex limitation - Flex requires N to be a multiple of 32
+    if is_flex_factory(transformer_factory):
+        return dict(C=3, N=32, K=8, H=12, W=12, R=5, S=5)
     return dict(C=3, N=4, K=8, H=12, W=12, R=5, S=5)
 
 
@@ -299,7 +89,7 @@ def test_conv(transformer_factory, n64_hw32_c32_3x3):
     assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
 
 
-@pytest.mark.flex_disabled
+@pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
 def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -338,7 +128,7 @@ def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     assert np.allclose(gradF_ng, gradF_np, rtol=0.1, atol=0)
 
 
-@pytest.mark.flex_disabled
+@pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
 def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf1 = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -448,6 +238,7 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
+# GitHub issue #1822 - FlexConvUpdateKernel does not change DEC, it use default from autoflex
 @pytest.mark.flex_disabled
 def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """
@@ -469,10 +260,10 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
         dcdf_sym_val = dcdf_sym_fun(filter_value, input_value)
         dcdf_num_val = dcdf_num_fun(filter_value, input_value)
 
-        ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=1)
+        ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=0.01)
 
 
-@pytest.mark.flex_disabled
+@pytest.mark.flex_disabled  # There is no SetItemKernel implementation for flex yet
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """
     Test deriv of conv followed by flatten
@@ -485,14 +276,14 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     axes_nmpqk = ng.make_axes([cf.ax_o[-1], cf.ax_o[1], cf.ax_o[2], cf.ax_o[3], cf.ax_o[0]])
 
     # broadcast input / filter axes
-    input_var = ng.variable(cf.ax_i)
+    input_var = ng.variable(cf.ax_i).named('input')
     input_val = np.ones(input_var.axes.lengths)
 
-    filter_rsck_prime = ng.variable(axes_rsck_prime)
+    filter_rsck_prime = ng.variable(axes_rsck_prime).named('filter')
     filter_var = filter_rsck_prime
-    filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck)
-    filter_trsck = ng.expand_dims(filter_rsck, cf.ax_f[1], 0)
-    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=cf.ax_f)
+    filter_rsck = ng.cast_axes(filter_rsck_prime, axes_rsck).named('frsck')
+    filter_trsck = ng.expand_dims(filter_rsck, cf.ax_f[1], 0).named('ftrsck')
+    filter_ctrsk = ng.axes_with_order(filter_trsck, axes=cf.ax_f).named('ctrsk')
 
     # convolution
     output_kmpqn = ng.convolution(cf.conv_params, input_var, filter_ctrsk, axes=cf.ax_o)

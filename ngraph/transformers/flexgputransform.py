@@ -26,14 +26,17 @@ except ImportError:
     raise UnsupportedTransformerException("autoflex package not installed")
 
 from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp, AssignOp
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
+from ngraph.transformers.gpu.flex_pool import FlexPoolFpropKernel, FlexPoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel, FlexAssignKernel
-from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, ClearTensorDescriptions
+from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexPropagateEntryPass, \
+    ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
@@ -83,7 +86,7 @@ class FlexGPUTransformer(GPUTransformer):
 
         # flex passes for setting Op dtypes to flex
         self.register_graph_pass(FlexFusion(), 0)
-        self.register_graph_pass(ClearTensorDescriptions())
+        self.register_graph_pass(ClearTensorDescriptions(transformer=self))
         self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
@@ -99,7 +102,7 @@ class FlexGPUTransformer(GPUTransformer):
     def finish_transform_allocate(self):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
-        FlexDECPass().do_pass(self.ops, self)
+        FlexPropagateEntryPass(transformer=self).do_pass(ops=self.ops)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
@@ -226,6 +229,14 @@ class FlexGPUKernelGroup(GPUKernelGroup):
                                               op.tensor_description(),
                                               op.distribution,
                                               op.params))
+
+    @add_kernel.on_type(PoolingOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexPoolFpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(BpropPoolOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexPoolBpropKernel(self.transformer, op))
 
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
