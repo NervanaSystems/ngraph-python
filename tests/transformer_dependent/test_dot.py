@@ -113,8 +113,8 @@ def test_dot_sum_backprop(transformer_factory):
     x_np[...] = [[1.0, 0.0, 1.0], [2.0, 0.0, 3.0]]
     y_np[...] = [-1.0, 1.0]
 
-    x = ng.placeholder(x_axes)
-    y = ng.placeholder(y_axes)
+    x = ng.placeholder(x_axes).named('x')
+    y = ng.placeholder(y_axes).named('y')
     d = ng.dot(x, y)
     s = ng.sum(d, out_axes=())
 

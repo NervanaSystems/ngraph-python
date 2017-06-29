@@ -15,7 +15,7 @@
 import numpy as np
 import pytest
 import ngraph as ng
-from ngraph.testing.flexutil import template_one_placeholder, id_func, MINIMUM_FLEX_VALUE, \
+from ngraph.testing.flex_util import template_one_placeholder, id_func, MINIMUM_FLEX_VALUE, \
     MAXIMUM_FLEX_VALUE
 
 pytestmark = pytest.mark.flex_only
