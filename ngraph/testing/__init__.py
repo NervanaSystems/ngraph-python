@@ -19,7 +19,7 @@ from ngraph.testing.decorators import with_error_settings, raise_all_numpy_error
 from ngraph.testing.error_check import assert_allclose, allclose
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import executor, ExecutorFactory, \
-    numeric_derivative, check_derivative
+    numeric_derivative, check_derivative, is_flex_factory
 from ngraph.testing.conv_utils import ConvParams, reference_conv, reference_deconv_bprop, \
     reference_deconv_fprop
 
@@ -36,5 +36,6 @@ __all__ = [
     'ConvParams',
     'reference_conv',
     'reference_deconv_bprop',
-    'reference_deconv_fprop'
+    'reference_deconv_fprop',
+    'is_flex_factory',
 ]

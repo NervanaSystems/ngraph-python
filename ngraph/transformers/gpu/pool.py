@@ -40,6 +40,9 @@ class PoolFpropKernel(GPUKernel):
             pooling operation
         params (list): List of parameters to pass to kernel
     """
+
+    supported_types = [np.float16, np.float32]
+
     def __init__(self, transformer, op):
         super(PoolFpropKernel, self).__init__(transformer)
 
@@ -48,12 +51,8 @@ class PoolFpropKernel(GPUKernel):
         self.dtype = self.O.dtype
         self.op = op
 
-        if self.dtype.type is np.float16:
-            clss = "hpool"
-        elif self.dtype.type is np.float32:
-            clss = "spool"
-        else:
-            raise TypeError("Type not supported {}".format(self.dtype))
+        if not (self.dtype.type in self.supported_types):
+            raise TypeError("Type not supported: {}".format(self.dtype.type))
 
         C, D, H, W, _ = self.I.axes.lengths
         K, M, P, Q, N = self.O.axes.lengths
@@ -236,6 +235,9 @@ class PoolBpropKernel(GPUKernel):
             pooling operation
         params (list): List of parameters to pass to kernel
     """
+
+    supported_types = [np.float16, np.float32]
+
     def __init__(self, transformer, op):
         super(PoolBpropKernel, self).__init__(transformer)
 
@@ -244,12 +246,8 @@ class PoolBpropKernel(GPUKernel):
         self.dtype = self.O.dtype
         self.op = op
 
-        if self.dtype.type is np.float16:
-            clss = "hpool"
-        elif self.dtype.type is np.float32:
-            clss = "spool"
-        else:
-            raise TypeError("Type not supported {}".format(self.dtype.type))
+        if not (self.dtype.type in self.supported_types):
+            raise TypeError("Type not supported: {}".format(self.dtype.type))
 
         C, D, H, W, _ = self.O.axes.lengths
         K, M, P, Q, N = self.I.axes.lengths

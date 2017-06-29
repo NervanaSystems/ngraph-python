@@ -313,3 +313,4 @@ def test_learning_policy_schedule(transformer_factory, drop_factor):
 if __name__ == '__main__':
     test_rmsprop(0.1, 0.95, 1e-6)
     test_gdm(0.1, 0.1, 0.1, False)
+    test_adam(0.1, 0.5, 0.9, 1e-6, None)
