@@ -136,7 +136,6 @@ test_mkldnn: test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
-	$(PARALLEL_OPTS) \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
