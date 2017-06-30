@@ -72,7 +72,7 @@ def metadata(**metadata):
     for op in ops:
         if isinstance(op, TensorValueOp):
             # make sure tensorvalue op matches thing it reads from
-            op.metadata.update(op.states_read[0].metadata)
+            op.metadata.update(op.value_tensor.metadata)
         else:
             op.metadata.update(metadata)
 
