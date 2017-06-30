@@ -959,7 +959,9 @@ class CPUTransformer(ExecutionGraphTransformer):
         return CPUDeviceTensor(self, computation, tensor_decl)
 
     def initialize_module(self, module):
-        module.execute("""import os
+        module.execute("""from __future__ import print_function
+from builtins import print
+import os
 import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct

@@ -39,7 +39,7 @@ class HelloCodeGenerator(PyModule):
 
     def generate_make_list(self):
         self.compile("""def make_list():
-    return list()
+    return []
 """)
         return self['make_list']
 
