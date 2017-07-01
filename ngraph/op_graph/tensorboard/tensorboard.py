@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import tempfile
 
@@ -98,7 +99,7 @@ def ngraph_to_tensorboard(graph, start_tensorboard=False):
     else:
         writer.Close()
 
-    print(fname)
+    sys.stdout.write('Tensorboard file written to: ' + fname + '\n')
 
     if start_tensorboard:
         subprocess.check_call(['tensorboard', '--logdir', os.path.dirname(fname)])
