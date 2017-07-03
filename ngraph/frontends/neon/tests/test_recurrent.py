@@ -38,7 +38,7 @@ from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
-pytestmark = pytest.mark.transformer_dependent
+pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
 
 
 rng = RandomTensorGenerator()
@@ -369,7 +369,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                                                 (False, True)])
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
-                               sum_out, concat_out):
+                               sum_out, concat_out, transformer_factory):
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
