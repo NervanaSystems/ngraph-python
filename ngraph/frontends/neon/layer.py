@@ -991,7 +991,6 @@ class Recurrent(Layer):
         if self.w_in_axes is None:
             self.in_axes = in_obj.axes
 
-            self.recurrent_axis = self.in_axes.recurrent_axis()
             self.in_feature_axes = self.in_axes.sample_axes() - self.recurrent_axis
 
             # if init state is given, use that as hidden axes
@@ -1042,14 +1041,18 @@ class Recurrent(Layer):
             rnn_out (Tensor): output
 
         """
+        # for seq2seq, recurrent axis and init_state change
+        # between training and inference
+        self.recurrent_axis = in_obj.axes.recurrent_axis()
+        if init_state is not None:
+            self.h_init = init_state
+
         # try to understand the axes from the input
         if not self.initialized:
             self.interpret_axes(in_obj, init_state)
 
-            # initialize the hidden states
-            if init_state is not None:
-                self.h_init = init_state
-            else:
+            # initialize the hidden states if init_state was not given
+            if init_state is None:
                 if self.reset_cells:
                     self.h_init = ng.constant(
                         const=0, axes=self.out_axes).named('h_init')
@@ -1266,7 +1269,7 @@ class LSTM(Recurrent):
         return [h, c]
 
     @wrap_layer(cache_key=Layer.inference_mode_key)
-    def __call__(self, in_obj, init_state=None):
+    def __call__(self, in_obj, init_state=None, return_cell_state=False):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -1282,19 +1285,23 @@ class LSTM(Recurrent):
 
         """
 
+        # for seq2seq, recurrent axis and init_state change
+        # between training and inference
+        self.recurrent_axis = in_obj.axes.recurrent_axis()
+        if init_state is not None:
+            assert len(init_state) == 2 and init_state[0].axes == init_state[1].axes
+            self.h_init = init_state[0]
+            self.c_init = init_state[1]
+
         if not self.initialized:
             # try to understand the axes from the input
             if init_state is not None:
-                assert len(init_state) == 2 and init_state[0].axes == init_state[1].axes
                 self.interpret_axes(in_obj, init_state[0])
             else:
                 self.interpret_axes(in_obj, init_state)
 
             # initialize the hidden states
-            if init_state is not None:
-                self.h_init = init_state[0]
-                self.c_init = init_state[1]
-            else:
+            if init_state is None:
                 if self.reset_cells:
                     self.h_init = ng.constant(const=0,
                                               axes=self.out_axes).named('h_init')
@@ -1355,9 +1362,17 @@ class LSTM(Recurrent):
             if self.backward:
                 h_list = h_list[::-1]
                 c_list = c_list[::-1]
-            lstm_out = ng.stack(h_list, self.recurrent_axis, pos=self.recurrent_axis_idx)
+            h_stack = ng.stack(h_list, self.recurrent_axis, pos=self.recurrent_axis_idx)
+            if return_cell_state:
+                c_stack = ng.stack(c_list, self.recurrent_axis, pos=self.recurrent_axis_idx)
+                lstm_out = (h_stack, c_stack)
+            else:
+                lstm_out = h_stack
         else:
-            lstm_out = h_list[-1]
+            if return_cell_state:
+                lstm_out = (h_list[-1], c_list[-1])
+            else:
+                lstm_out = h_list[-1]
 
         if self.reset_cells is True:
             return lstm_out

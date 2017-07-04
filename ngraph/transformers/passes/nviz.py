@@ -33,7 +33,7 @@ class JSONPass(GraphPass):
     def __init__(self, **kwargs):
         super(JSONPass, self).__init__(**kwargs)
 
-    def do_pass(self, ops):
+    def do_pass(self, ops, **kwargs):
         nodes = dict()
         edges = []
 
@@ -147,7 +147,7 @@ class VizPass(GraphPass):
                 label = edge.attrs['_ngraph_list_attribute'].scalar.string_val
             graph.edge(head_op.name, tail_op.name, label=label, color='red', style='dotted')
 
-    def do_pass(self, ops):
+    def do_pass(self, ops, **kwargs):
         try:
             import graphviz
         except ImportError:

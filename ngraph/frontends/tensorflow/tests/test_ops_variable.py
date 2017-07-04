@@ -23,8 +23,9 @@ import ngraph as ng
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 import pytest
 
+pytestmark = pytest.mark.transformer_dependent
 
-@pytest.mark.transformer_dependent
+
 class Tester(ImporterTester):
     def test_variable(self):
         # tf placeholder
