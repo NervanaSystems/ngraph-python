@@ -286,6 +286,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
+        self.graph_passes = []
 
     @abc.abstractproperty
     def use_exop(self):
@@ -425,6 +426,19 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         pass
 
+    def register_graph_pass(self, graph_pass, position=None):
+        """
+        Register a graph pass to be run.
+
+        Arguments:
+            graph_pass (): The pass to register
+            position (int): insert index in the list of passes, append by default
+        """
+        if position is not None:
+            self.graph_passes.insert(position, graph_pass)
+        else:
+            self.graph_passes.append(graph_pass)
+
     def close(self):
         pass
 
@@ -443,24 +457,10 @@ class ComputationGraphTransformer(Transformer):
         self.finalized = False
         self.allocated = False
         self.initialized = False
-        self.graph_passes = None
 
-    def register_graph_pass(self, graph_pass, position=None):
-        """
-        Register a graph pass to be run.
-
-        Arguments:
-            graph_pass (): The pass to register
-            position (int): insert index in the list of passes, append by default
-        """
-        if position is not None:
-            self.graph_passes.insert(position, graph_pass)
-        else:
-            self.graph_passes.append(graph_pass)
-
-    def run_registered_graph_passes(self, ops):
+    def run_registered_graph_passes(self, ops, **kwargs):
         for graph_pass in self.graph_passes:
-            graph_pass.do_pass(ops=ops)
+            graph_pass.wrapped_do_pass(ops=ops, **kwargs)
         return ops
 
     def initialize_allocations(self):
@@ -727,7 +727,7 @@ class ComputationGraphTransformer(Transformer):
         for comp in self.computations:
             all_results.append(comp.computation_op)
 
-        all_ops = self.run_registered_graph_passes(all_results)
+        all_ops = self.run_registered_graph_passes(ops=all_results)
 
         # Collect up all ops from the graph and obtain the init graph
         all_ops = OrderedSet(Op.ordered_ops(all_ops))

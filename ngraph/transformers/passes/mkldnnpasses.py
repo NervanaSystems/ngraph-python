@@ -16,7 +16,7 @@ from __future__ import division
 
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, ComputationOp, \
-    Flatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp
+    Flatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp, ReturnOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.op_graph.axes import FlattenedAxis
@@ -751,7 +751,8 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     @visit.on_type(ComputationOp)
     def visit(self, op):
-        if isinstance(op.returns, Op) and op.returns.name in self.mkldnn.op_layouts:
+        # this version only runs with the op-graph transformer
+        if isinstance(op.returns, Op) and op.returns.forwarded.name in self.mkldnn.op_layouts:
             reorder_op = self.get_reorder_op(op.returns.forwarded)
             op.returns = reorder_op
             op.add_control_dep(reorder_op)
@@ -778,3 +779,11 @@ class MklAddLayoutConversions(PeepholeGraphPass):
                     op.returns.add(orig_op)
         else:
             pass
+
+    @visit.on_type(ReturnOp)
+    def visit(self, op, *returns):
+        # This version only runs with the exec-graph transformer
+        for orig_op in returns:
+            if orig_op.name in self.mkldnn.op_layouts:
+                reorder_op = self.get_reorder_op(orig_op)
+                self.replace_op(orig_op, reorder_op)
