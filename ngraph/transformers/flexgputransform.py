@@ -74,7 +74,7 @@ class FlexGPUTransformer(GPUTransformer):
 
     # TODO haven't investigated how these should be set, start with small tol
     default_rtol = 2e-05
-    default_atol = 0.20
+    default_atol = 1e-08
 
     def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
 
