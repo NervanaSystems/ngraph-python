@@ -48,7 +48,8 @@ def test_gemm_multiply_matrices(transformer_factory, rows_1, col_1, col_2, descr
     (3, 3, 1, [[15.99951171875, 15.99951171875, 15.99951171875]], 3,
      "Dot product of matrix and positive vector"),
     (9, 9, -0.1, [[-32.40039062, -33.29882812, -34.19921875, -35.09960938, -36.0, -36.90039062,
-                   -37.79882812, -38.69921875, -39.59960938]], 9,
+                   -37.79882812, -38.69921875, -39.59960938],
+                  ], 9,
      "Dot product of matrix and negative vector"),
     (4, 2, 0, [[0, 0]], 2, "Dot product of matrix and vector of zeros")))
 def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val, flex_exceptions,
