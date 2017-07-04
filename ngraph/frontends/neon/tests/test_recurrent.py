@@ -38,8 +38,6 @@ from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
-pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
-
 
 rng = RandomTensorGenerator()
 
@@ -114,6 +112,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -171,6 +170,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -243,6 +243,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -299,6 +300,7 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -359,6 +361,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
@@ -457,7 +460,6 @@ def test_birnn_output_types(recurrent_input, output_size, weight_initializer,
             "Output is of type {} instead of {}".format(type(out), tuple)
 
 
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("batch_size", [4])
@@ -486,6 +488,7 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
 
 
 @pytest.mark.flex_disabled
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length_enc", [5])
 @pytest.mark.parametrize("sequence_length_dec", [3])
