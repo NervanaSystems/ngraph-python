@@ -182,8 +182,7 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
 
 
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
-
-    if input_placeholder._axes.lengths == (32, 32):
+    if transformer_factory.name == "flexgpu" and input_placeholder._axes.lengths == (32, 32):
         pytest.xfail('Failing test for Flex because of the strict tolerance (rtol, atol)')
 
     layer = BatchNorm(**bn_params)
