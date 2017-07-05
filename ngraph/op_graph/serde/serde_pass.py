@@ -33,7 +33,7 @@ class SerializationPass(GraphPass):
         super(SerializationPass, self).__init__()
         self.tmpfile = tempfile.NamedTemporaryFile(prefix=fname_prefix, delete=False)
 
-    def do_pass(self, ops):
+    def do_pass(self, ops, **kwargs):
         assert isinstance(ops, Iterable), "Ops passed into do_pass must be an iterable"
         data = serde.serialize_graph(ops)
         self.tmpfile.write(data)

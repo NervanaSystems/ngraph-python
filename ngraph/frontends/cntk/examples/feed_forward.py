@@ -105,10 +105,10 @@ if __name__ == "__main__":
         for xs, ys in zip(features, labels):
             trainer.train_minibatch({input: [xs], label: [ys]})
         training_loss = trainer.previous_minibatch_loss_average
-        print("cntk iteration {0} -> loss: {1}".format(i, training_loss))
+        print("cntk iteration {0} -> loss: {1:.5f}".format(i, training_loss))
 
     # ngraph training
     for i in range(0, number_of_iterations):
         for xs, ys in zip(features, labels):
             ret = update_fun(xs, ys)
-        print("ngraph iteration {0} -> loss: {1}".format(i, ret[0]))
+        print("ngraph iteration {0} -> loss: {1:.5f}".format(i, float(ret[0])))

@@ -209,7 +209,6 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
         assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=atol)
 
 
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
@@ -266,7 +265,6 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
             assert ng.testing.allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
 
 
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
