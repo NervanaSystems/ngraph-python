@@ -758,12 +758,12 @@ def test_softmax(transformer_factory, input_tensor):
         smax_fun = ex.executor(ng.softmax(p_x), p_x)
 
         s = smax_w_fun(x)
-        # ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
+        ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
         x = rng.uniform(-5000, 5000, p_x.axes)
         u = np_softmax(x, 0)
         s = smax_w_fun(x)
-        # ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
+        ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
         # Test with softmax_axis default
         s = smax_fun(x)
