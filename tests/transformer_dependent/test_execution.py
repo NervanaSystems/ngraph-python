@@ -739,7 +739,7 @@ def np_cross_entropy_multi(y, t, axis=None):
 
 
 # Flex disabled - because of the strict tolerance (rtol, atol) and too wide range of input values
-@pytest.mark.flex_disable
+@pytest.mark.flex_disabled
 def test_softmax(transformer_factory, input_tensor):
     """TODO."""
     p_x = input_tensor
