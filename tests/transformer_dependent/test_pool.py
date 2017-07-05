@@ -22,11 +22,6 @@ from ngraph.testing import executor, is_flex_factory
 from ngraph.frontends.neon.layer import output_dim
 
 
-pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
-                                               reason="Not supported by argon backend",
-                                               strict=True)
-
-
 class PoolParams(object):
     def __init__(self, C=1, N=1, D=1, H=1, W=1, J=1, T=1, R=1, S=1,
                  pad_c=0, pad_d=0, pad_h=0, pad_w=0,
@@ -174,7 +169,7 @@ n2_c1_hw4_2x2_str2_avg = dict(
 
 
 @pytest.mark.transformer_dependent
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("pool_args",
                          [n4_c1_hw4_2x2_max,
                           n2_c1_hw5_3x3_str2_max,

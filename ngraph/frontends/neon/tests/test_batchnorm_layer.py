@@ -22,11 +22,8 @@ from ngraph.frontends.neon import BatchNorm, Recurrent, LSTM, Tanh
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import ExecutorFactory
 
-pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
-                                               reason="Not supported by argon backend",
-                                               strict=True)
 pytestmark = [pytest.mark.transformer_dependent,
-              pytest.mark.argon_disabled("module")]
+              pytest.config.argon_disabled("module")]
 
 rng = RandomTensorGenerator()
 rtol = 0

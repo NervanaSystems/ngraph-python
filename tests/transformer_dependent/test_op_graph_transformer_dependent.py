@@ -19,9 +19,6 @@ import ngraph as ng
 from ngraph.testing import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
-pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
-                                               reason="Not supported by argon backend",
-                                               strict=True)
 
 
 @pytest.fixture(params=[(1, 2, 1),
@@ -151,7 +148,7 @@ def test_sequential_side(M):
 
 
 @pytest.mark.flex_disabled
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_concatenate(transformer_factory, concatenate_variables):
     x_list, np_list, pos = concatenate_variables
 
@@ -167,7 +164,7 @@ def test_concatenate(transformer_factory, concatenate_variables):
 
 
 @pytest.mark.flex_disabled
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_concat_different_axis_lengths(transformer_factory):
     ax1 = ng.make_axis(length=3, name="concat")
     ax2 = ng.make_axis(length=2, name="concat")
@@ -209,7 +206,7 @@ def test_initial_value(transformer_factory):
     ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))
 
 
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_multiple_computations(transformer_factory):
     """
     Create multiple computations for the same value.

@@ -23,9 +23,6 @@ from ngraph.testing import raise_all_numpy_errors
 import pytest
 
 pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
-pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
-                                               reason="Not supported by argon backend",
-                                               strict=True)
 
 """
 Test ngraph's implementation of the dot product.
@@ -100,7 +97,7 @@ def ngraph_l2_norm(np_array):
 
 
 @raise_all_numpy_errors
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
@@ -166,7 +163,7 @@ def test_dot_sum_backprop(transformer_factory):
 
 
 @raise_all_numpy_errors
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
     C = ng.make_axis().named('C')

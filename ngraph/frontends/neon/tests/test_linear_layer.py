@@ -23,9 +23,6 @@ from ngraph.frontends.neon.axis import make_shadow_axis
 from ngraph.testing import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
-pytest.mark.argon_disabled = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
-                                               reason="Not supported by argon backend",
-                                               strict=True)
 
 
 @pytest.fixture(scope='module', params=[2])
@@ -53,7 +50,7 @@ def input_placeholder(feature_axis, batch_axis):
     return ng.placeholder([feature_axis, batch_axis])
 
 
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_linear_zeros(input_placeholder, output_size, transformer_factory):
     # basic sanity check with 0 weights random inputs
     x = np.random.random(input_placeholder.axes.lengths)
@@ -68,7 +65,7 @@ def test_linear_zeros(input_placeholder, output_size, transformer_factory):
     assert np.min(output_values) == 0.0 and np.max(output_values) == 0.0
 
 
-@pytest.mark.argon_disabled  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 def test_linear_ones(input_size, input_placeholder, output_size, transformer_factory):
     # basic sanity check with all ones on the inputs and weights, check that
     # each row in output is the sum of the weights for that output this check
