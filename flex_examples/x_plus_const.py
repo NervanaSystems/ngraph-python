@@ -17,10 +17,9 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 import ngraph.op_graph.axes as ax
-from ngraph.flex.flexargparser import FlexNgraphArgparser
+from ngraph.frontends.neon.argparser import NgraphArgparser
 
-
-parser = FlexNgraphArgparser(description='x + 1.5 example')
+parser = NgraphArgparser(description='x + 1.5 example')
 parser.add_argument('--start', type=int, default=0)
 parser.add_argument('--end', type=int, default=5)
 args = parser.parse_args()

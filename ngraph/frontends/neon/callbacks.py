@@ -122,7 +122,8 @@ class TrainCostCallback(Callback):
         if phase == CallbackPhase.train_pre_:
             transformer = self.computation.comp_func.transformer
             if hasattr(transformer, 'collect_flex_data'):
-                transformer.set_flex_data_file(callback_data)
+                if transformer.collect_flex_data:
+                    transformer.set_flex_data_file(callback_data)
             iterations = callback_data['config'].attrs['total_iterations']
             callback_data.create_dataset("cost/train", (iterations,))
             # clue in the data reader to use the 'minibatch' time_markers
