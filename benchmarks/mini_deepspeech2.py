@@ -171,14 +171,14 @@ if __name__ == "__main__":
                                                      'the first layer', default=2)
     parser.add_argument('--filter_width', type=int, help='Width of 1D convolutional filters',
                         default=11)
-    parser.add_argument('--str_w', type=int, help='Stride in time', default=3)
+    parser.add_argument('--str_w', type=int, help='Stride in time', default=1)
     parser.add_argument('--depth', type=int, help='Number of RNN layers', default=1)
     parser.add_argument('--hidden_size', type=int, help='Number of hidden units in the RNN '
                                                         'and affine layers', default=1)
     parser.add_argument('--nbands', type=int, default=13)
     parser.add_argument('--nout', type=int, default=29)
     parser.add_argument('--batch_norm', action='store_true')
-    parser.add_argument('--max_iter', type=int, help='Number of  iterations', default=10)
+    parser.add_argument('--max_iter', type=int, help='Number of  iterations', default=2)
     parser.add_argument('--skip_iter', type=int, help='Number of iterations to skip', default=1)
     parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
     parser.add_argument('--max_length', type=float, help="max duration for each audio sample",
-                        default=0.03)
+                        default=0.3)
     parser.add_argument('-v', '--visualize', action="store_true",
                         help="enable graph visualization")
 
