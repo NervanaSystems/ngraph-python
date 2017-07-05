@@ -16,6 +16,8 @@ import os
 import configargparse
 import ngraph.transformers as ngt
 from ngraph.flex.names import flex_gpu_transformer_name
+from ngraph.flex.flexargparser import FlexNgraphArgparser
+
 
 class NgraphArgparser(configargparse.ArgumentParser):
 
@@ -38,7 +40,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.setup_default_args()
 
     def backend_names(self):
-        return ngt.transformer_choices()
+        return ngt.transformer_choices().append(FlexNgraphArgparser.flex_backend_name())
 
     def setup_default_args(self):
         """
@@ -54,9 +56,6 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.add_argument('--no_progress_bar',
                           action="store_true",
                           help="suppress running display of progress bar")
-        self.add_argument('--collect_flex_data',
-                          action="store_true",
-                          help="collect flex data and save it to h5py File")
         self.add_argument('-w', '--data_dir',
                           default=os.path.join(self.work_dir, 'data'),
                           help='working directory in which to cache '
@@ -79,6 +78,8 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           metavar='SEED',
                           help='random number generator seed')
 
+        FlexNgraphArgparser.setup_flex_args(self)
+
     def parse_args(self, *args, **kwargs):
         args = super(NgraphArgparser, self).parse_args(*args, **kwargs)
         self.make_and_set_transformer_factory(args)
@@ -89,15 +90,8 @@ class NgraphArgparser(configargparse.ArgumentParser):
         return args
 
     def make_and_set_transformer_factory(self, args):
-        flex_args = ('collect_flex_data',)
-        # default value for all flex args if not given, confusing with store_true in add_argument
-        default = False
-
-        if args.backend == flex_gpu_transformer_name and \
-           any([hasattr(args, a) for a in flex_args]):
-                flex_args_dict = dict((a, getattr(args, a, default)) for a in flex_args)
-                factory = ngt.make_transformer_factory(args.backend, **flex_args_dict)
+        if args.backend == flex_gpu_transformer_name:
+                FlexNgraphArgparser.make_and_set_transformer_factory(args)
         else:
             factory = ngt.make_transformer_factory(args.backend)
-
-        ngt.set_transformer_factory(factory)
+            ngt.set_transformer_factory(factory)
