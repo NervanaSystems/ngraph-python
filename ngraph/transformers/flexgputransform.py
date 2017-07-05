@@ -75,7 +75,6 @@ class FlexGPUTransformer(GPUTransformer):
     # set global override tolerances for unit tests
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
-    # TODO haven't investigated how these should be set, start with small tol
     default_rtol = 1e-02
     default_atol = 1e-05
 

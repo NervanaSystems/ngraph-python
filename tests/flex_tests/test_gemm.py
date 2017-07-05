@@ -47,11 +47,10 @@ def test_gemm_multiply_matrices(transformer_factory, rows_1, col_1, col_2, descr
 @pytest.mark.parametrize("row, col, const_val, flex_exceptions, iters, description", (
     (3, 3, 1, [[15.99951171875, 15.99951171875, 15.99951171875]], 3,
      "Dot product of matrix and positive vector"),
-    (9, 9, -0.1, [[-32.40039062, -33.29882812, -34.19921875, -35.09960938, -36.0, -36.90039062,
-                   -37.79882812, -38.69921875, -39.59960938],
-                  ], 9,
-     "Dot product of matrix and negative vector"),
-    (4, 2, 0, [[0, 0]], 2, "Dot product of matrix and vector of zeros")))
+    (9, 9, -0.1, [[-63.19921875, -64, -64, -64, -64, -64, -64, -64, -64]], 9,
+     "Dot product of matrix and negative vector"), (4, 2, 0, [[0, 0]], 2,
+                                                    "Dot product of matrix and vector of zeros")
+))
 def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val, flex_exceptions,
                                         iters, description):
     """
@@ -74,27 +73,13 @@ def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val
 
 
 @pytest.mark.parametrize("row, col, scalar, flex_exceptions, iters, description", (
-    (3, 3, 0.4,
-     [np.array([[0, 0.40002441, 0.80004883],
-                [1.19995117, 1.59997559, 2],
-                [2.40002441, 2.79992676, 3.19995117]]),
-      np.array([[0, 0.15991211, 0.31994629],
-                [0.4798584, 0.63989258, 0.80004883],
-                [0.95996094, 1.11987305, 1.27990723]]),
-      np.array([[ 0, 0.06396484, 0.12792969],
-                [0.19189453, 0.25585938, 0.31982422],
-                [0.3840332, 0.44775391, 0.51196289]])], 3,
-     "Dot product of matrix and positive scalar"),
-    (2, 4, -0.3,
-     [np.array([[0, -0.29992676, -0.59997559, -0.89990234],
-                [-1.19995117, -1.49987793, -1.79992676, -2.09985352]]),
-      np.array([[0, 0.08996582, 0.17993164, 0.27001953],
-                [0.35998535, 0.44995117, 0.53991699, 0.62988281]])], 2,
-     "Dot product of matrix and negative scalar"),
+    (3, 3, 0.4, [], 3, "Dot product of matrix and positive scalar"),
+    (2, 4, -0.3, [], 2, "Dot product of matrix and negative scalar"),
     (3, 5, 0, [], 3, "Dot product of matrix and zero"),
-    (3, 2, 10,
-     [np.array([[0, 63.99804688], [63.99804688, 63.99804688], [63.99804688, 63.99804688]]),
-      np.array([[0, 255.9921875], [255.9921875, 255.9921875], [255.9921875, 255.9921875]])], 3,
+    (3, 2, 10, [np.array([[0, 63.99804688], [63.99804688, 63.99804688], [63.99804688,
+                                                                         63.99804688]]),
+                np.array([[0, 255.9921875], [255.9921875, 255.9921875],
+                          [255.9921875, 255.9921875]])], 3,
      "Dot product with two expected overflows")
 ))
 def test_gemm_multiply_matrix_by_scalar(transformer_factory, row, col, scalar, flex_exceptions,

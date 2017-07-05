@@ -182,9 +182,7 @@ def template_dot_one_placeholder(row, col, const_val, flex_exceptions, iters):
                 print("Flex dot product result: \n", ng_op_out)
                 print("Current array inside flex exceptions list: \n",
                       flex_exceptions[flex_exceptions_index])
-
-                # assert list(ng_op_out) == flex_exceptions[flex_exceptions_index]
-                assert_allclose(ng_op_out,  flex_exceptions[flex_exceptions_index])
+                assert_allclose(ng_op_out, flex_exceptions[flex_exceptions_index])
 
                 # Iterate to the next element of flex exceptions list
                 flex_exceptions_index += 1
