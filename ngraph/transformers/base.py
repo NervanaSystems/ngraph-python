@@ -124,22 +124,27 @@ class Computation(NameableValue):
             return None
 
 
-class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
+class DeviceBufferStorage(with_metaclass(abc.ABCMeta, NameableValue)):
     """
     Something that can provide storage.
 
+    Arguments:
+        transformer: The transformer associated with this device buffer.
+        bytes: Size of storage.
+        dtype: Alignment of storage.
+
     Attributes:
         transformer: The transformer associated with this device buffer.
+        bytes: Size of storage.
+        dtype: Alignment of storage.
+
         views: All direct tensor views of this buffer.
     """
-    def __init__(self, transformer, **kwargs):
-        """
-
-        :param transformer: The associated transformer.
-        :param kwargs: Any additional arguments.
-        """
-        super(DeviceBuffer, self).__init__(**kwargs)
+    def __init__(self, transformer, bytes, dtype, **kwargs):
+        super(DeviceBufferStorage, self).__init__(**kwargs)
         self.transformer = transformer
+        self.bytes = bytes
+        self.dtype = dtype
         self.__views = weakref.WeakValueDictionary()
 
     @property
@@ -188,44 +193,6 @@ class DeviceBuffer(with_metaclass(abc.ABCMeta, NameableValue)):
 
         Returns: A DeviceTensor.
         """
-
-
-class DeviceBufferStorage(with_metaclass(abc.ABCMeta, DeviceBuffer)):
-    """
-    A handle to allocated device storage.
-
-    Arguments:
-        transformer: The associated transformer.
-        bytes: Size of storage.
-        dtype: Alignment of storage.
-        **kwargs: Args for related classes.
-
-    Attributes:
-        bytes: The size of the byte buffer.
-        dtype: The dtype of the storage.
-    """
-    def __init__(self, transformer, bytes, dtype, **kwargs):
-        super(DeviceBufferStorage, self).__init__(transformer, **kwargs)
-        self.bytes = bytes
-        self.dtype = dtype
-
-
-class DeviceBufferReference(with_metaclass(abc.ABCMeta, DeviceBuffer)):
-    """
-    A handle to a reference to a DeviceBuffer.
-
-    Arguments:
-        transformer: The associated transformer.
-
-    Attributes:
-
-        transformer: The transformer associated with this device buffer reference.
-        views: All direct tensor views of this buffer reference.  Does not include views of
-            device buffer references set to this device buffer.
-    """
-    def __init__(self, transformer, **kwargs):
-        super(DeviceBufferReference, self).__init__(self, **kwargs)
-        self.device_buffer = None
 
 
 class DeviceTensor(with_metaclass(abc.ABCMeta, NameableValue)):
@@ -319,6 +286,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     """
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
+        self.graph_passes = []
 
     @abc.abstractproperty
     def use_exop(self):
@@ -348,14 +316,6 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         Returns:
             A NumPy tensor with the elements associated with op.
 
-        """
-
-    @abc.abstractmethod
-    def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
         """
 
     @abc.abstractmethod
@@ -466,6 +426,19 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         pass
 
+    def register_graph_pass(self, graph_pass, position=None):
+        """
+        Register a graph pass to be run.
+
+        Arguments:
+            graph_pass (): The pass to register
+            position (int): insert index in the list of passes, append by default
+        """
+        if position is not None:
+            self.graph_passes.insert(position, graph_pass)
+        else:
+            self.graph_passes.append(graph_pass)
+
     def close(self):
         pass
 
@@ -484,24 +457,10 @@ class ComputationGraphTransformer(Transformer):
         self.finalized = False
         self.allocated = False
         self.initialized = False
-        self.graph_passes = None
 
-    def register_graph_pass(self, graph_pass, position=None):
-        """
-        Register a graph pass to be run.
-
-        Arguments:
-            graph_pass (): The pass to register
-            position (int): insert index in the list of passes, append by default
-        """
-        if position is not None:
-            self.graph_passes.insert(position, graph_pass)
-        else:
-            self.graph_passes.append(graph_pass)
-
-    def run_registered_graph_passes(self, ops):
+    def run_registered_graph_passes(self, ops, **kwargs):
         for graph_pass in self.graph_passes:
-            graph_pass.do_pass(ops, self)
+            graph_pass.wrapped_do_pass(ops=ops, **kwargs)
         return ops
 
     def initialize_allocations(self):
@@ -768,7 +727,7 @@ class ComputationGraphTransformer(Transformer):
         for comp in self.computations:
             all_results.append(comp.computation_op)
 
-        all_ops = self.run_registered_graph_passes(all_results)
+        all_ops = self.run_registered_graph_passes(ops=all_results)
 
         # Collect up all ops from the graph and obtain the init graph
         all_ops = OrderedSet(Op.ordered_ops(all_ops))

@@ -50,7 +50,7 @@ from ngraph.transformers.passes.layout import AddLayoutConversions
 # from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
-    DeviceBufferReference, DeviceTensor, make_transformer_factory, \
+    DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
@@ -236,12 +236,6 @@ except NameError as error:
         self.transformer.allocate_code.append("{}()", self.alloc_name)
 
 
-class CPUDeviceBufferReference(DeviceBufferReference):
-
-    def __init__(self, transformer, **kwargs):
-        super(CPUDeviceBufferReference, self).__init__(transformer, **kwargs)
-
-
 class CPUDeviceTensor(DeviceTensor):
 
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
@@ -406,11 +400,12 @@ class CPUCodeGenerator(PyGen):
         self.conv_slices[op.name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
 
-    @allocate_op.on_type(DeconvDerivOp)
-    def allocate_op(self, op, gI, delta, filters):
-        self.conv_params[op.fprop.forwarded.name] = op.conv_params
-        self.conv_slices[op.fprop.forwarded.name] = \
-            CPUConvEngine.get_slices(delta, filters, gI, op.conv_params)
+    @allocate_op.on_type(DeconvolutionOp)
+    def allocate_op(self, op, outputs, inputs, filters):
+        # get_slices args: Swap outputs and inputs
+        self.conv_params[op.name] = op.conv_params
+        self.conv_slices[op.name] = \
+            CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
@@ -792,14 +787,6 @@ class CPUTransformer(ComputationGraphTransformer):
         Returns: A DeviceBuffer.
         """
         return CPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
-
-    def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
-        """
-        return CPUDeviceBufferReference(self)
 
     def initialize_mkldnn(self):
         self.code.execute("""

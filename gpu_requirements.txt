@@ -1,2 +1,2 @@
-pycuda==2016.1.2
+pycuda==2017.1
 pynvrtc==7.5

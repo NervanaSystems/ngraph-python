@@ -64,7 +64,8 @@ class FlexFusion(GraphRewritePass):
                                                                  enable_diff_opt=True)
             self.replace_op(op, cross_without_opt_op)
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        super(FlexFusion, self).__init__(**kwargs)
         # Register Sigmoid pattern
         pattern_sigmoid = self.construct_sigmoid_pattern()
         self.register_pattern(pattern_sigmoid, self.fuse_sigmoid_callback)
