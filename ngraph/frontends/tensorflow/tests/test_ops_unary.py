@@ -25,6 +25,8 @@ from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape, \
     get_nested_attr
 
+pytestmark = pytest.mark.transformer_dependent
+
 
 # call by tf.unary_ew_op(tensor)
 class Tester(ImporterTester):
