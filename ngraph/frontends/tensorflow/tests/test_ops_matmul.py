@@ -23,8 +23,9 @@ from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape
 import pytest
 
+pytestmark = pytest.mark.transformer_dependent
 
-@pytest.mark.transformer_dependent
+
 class Tester(ImporterTester):
     def test_matmul(self):
         # computation

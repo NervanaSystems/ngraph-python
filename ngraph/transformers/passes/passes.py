@@ -30,6 +30,11 @@ from ngraph.util.generics import generic_method
 
 
 class GraphPass(with_metaclass(abc.ABCMeta, DelegateOpAccessor)):
+    def wrapped_do_pass(self, **kwargs):
+        self.begin_pass(**kwargs)
+        self.do_pass(**kwargs)
+        self.end_pass(**kwargs)
+
     @abc.abstractmethod
     def do_pass(self, **kwargs):
         pass

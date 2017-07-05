@@ -16,7 +16,7 @@ from __future__ import division
 
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, ComputationOp, \
-    Flatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp
+    Flatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp, ReturnOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.op_graph.axes import FlattenedAxis
@@ -575,8 +575,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(DotLowDimension)
-    def visit(self, op, x, y):
-        bias = op.bias
+    def visit(self, op, x, y, bias=None):
 
         # Sanity check tensor shapes
         if (len(x.axes.lengths) != 2) or (len(y.axes.lengths) != 2):
@@ -590,8 +589,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # TODO Make references to axis based on input.
         x_shape = get_size_mkl_order(x.axes, [0, 1])
         y_shape = get_size_mkl_order(y.axes, [1, 0])
-        bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
         o_shape = get_size_mkl_order(op.axes, [1, 0])
+        bias_shape = [o_shape[1]] if bias else None
 
         x_shape_arg = ((ct.c_int) * len(x_shape))(*x_shape)
         y_shape_arg = ((ct.c_int) * len(y_shape))(*y_shape)
@@ -751,7 +750,8 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     @visit.on_type(ComputationOp)
     def visit(self, op):
-        if isinstance(op.returns, Op) and op.returns.name in self.mkldnn.op_layouts:
+        # this version only runs with the op-graph transformer
+        if isinstance(op.returns, Op) and op.returns.forwarded.name in self.mkldnn.op_layouts:
             reorder_op = self.get_reorder_op(op.returns.forwarded)
             op.returns = reorder_op
             op.add_control_dep(reorder_op)
@@ -778,3 +778,11 @@ class MklAddLayoutConversions(PeepholeGraphPass):
                     op.returns.add(orig_op)
         else:
             pass
+
+    @visit.on_type(ReturnOp)
+    def visit(self, op, *returns):
+        # This version only runs with the exec-graph transformer
+        for orig_op in returns:
+            if orig_op.name in self.mkldnn.op_layouts:
+                reorder_op = self.get_reorder_op(orig_op)
+                self.replace_op(orig_op, reorder_op)

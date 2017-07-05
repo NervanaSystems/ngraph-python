@@ -365,8 +365,26 @@ class Op(NameableValue):
     @property
     def tensor(self):
         """
+        Deprecated. See effective_tensor_op.
 
         Returns: The op providing the value.
+        """
+        return self.forwarded
+
+    @property
+    def effective_tensor_op(self):
+        """
+        The op that provides the value for this op.
+
+        For example, for a TensorValueOp, the op itself provides the value of the state,
+        while for a SequenceOp, the last op in the sequence will provide the value, or,
+        rather, the effective op comes from it.
+
+        This op deprecates tensor, which does some strange things that require isinstance
+        checks in a number of callers.
+
+        Returns:
+            The op used for the value of this op.
 
         """
         return self.forwarded
@@ -702,6 +720,26 @@ class Op(NameableValue):
         """
         return False
 
+    @property
+    def is_sequencing_op(self):
+        """
+
+        Returns:
+            True if this op's sole purpose is to influence the sequencing of other ops.
+
+        """
+        return False
+
+    @property
+    def is_state_op(self):
+        """
+
+        Returns:
+            True if this op is state.
+
+        """
+        return False
+
 
 class MutateInsteadOfCopyWithNewArgsMixin(object):
     """
@@ -865,6 +903,16 @@ class ParallelOp(ControlBlockOp):
         super(ParallelOp, self).__init__(**kwargs)
         for op in all:
             self.add_control_dep(op)
+
+    @property
+    def is_sequencing_op(self):
+        """
+
+        Returns:
+            True if this op's sole purpose is to influence the sequencing of other ops.
+
+        """
+        return True
 
 
 def doall(all):
@@ -1387,6 +1435,16 @@ class ValueOp(TensorOp, ControlBlockOp):
     def generate_add_delta(self, adjoints, delta):
         self.tensor.generate_add_delta(adjoints, delta)
 
+    @property
+    def effective_tensor_op(self):
+        # Due to hard to correct class hierarchy, state access is wrapped in ValueOp, but we
+        # always want state access wrapped in a state reader such as TensorValueOp, so we
+        # need to resort to some ugliness here.
+        tensor = self._tensor
+        if tensor.is_state_op:
+            return self.forwarded
+        return tensor.effective_tensor_op
+
 
 class SequentialOp(ValueOp):
     """
@@ -1457,6 +1515,16 @@ class SequentialOp(ValueOp):
                     readers[state].add(op_top)
             done_ops.update(ordered_ops)
 
+    @property
+    def is_sequencing_op(self):
+        """
+
+        Returns:
+            True if this op's sole purpose is to influence the sequencing of other ops.
+
+        """
+        return True
+
 
 def sequential(ops=None):
     """
@@ -1495,6 +1563,10 @@ class TensorValueOp(ValueOp):
     @property
     def states_read(self):
         return OrderedSet([self.tensor])
+
+    @property
+    def effective_tensor_op(self):
+        return self.forwarded
 
 
 class PatternLabelOp(TensorOp):
@@ -2257,6 +2329,20 @@ class AssignableTensorOp(TensorOp):
         """
         pass
 
+    @property
+    def is_state_op(self):
+        """
+
+        Returns:
+            True if this op is state.
+
+        """
+        return True
+
+    @property
+    def effective_tensor_op(self):
+        return TensorValueOp(self)
+
 
 def value_of(tensor):
     """
@@ -2687,10 +2773,6 @@ class StopGradient(UnaryElementWiseOp):
     @tdcache()
     def tensor_description(self):
         return self.tensor.tensor_description()
-
-    @property
-    def is_tensor_op(self):
-        return False
 
     @property
     def axes(self):
@@ -3555,8 +3637,10 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, bias=None, **kwargs):
-        super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
-        self.bias = bias
+        if bias is None:
+            super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        else:
+            super(DotLowDimension, self).__init__(args=(x, y, bias), axes=axes, **kwargs)
 
 
 class SoftmaxOp(ValueOp):
@@ -4205,3 +4289,42 @@ def cross_entropy_binary(y, t, usebits=False, out_axes=None,
     if usebits:
         result = result * np.float(1. / np.log(2.0))
     return result
+
+
+class ReturnOp(Op):
+    """
+    The inputs to a ReturnOp are the values returned from a computation.
+
+    This Op is internal to execution graph compilation.
+    """
+
+    @property
+    def is_device_op(self):
+        return False
+
+
+class LiteralScalarOp(TensorOp):
+    """
+    An in-lined literal scalar.
+
+    This Op is internal to execution graph compilation.
+    """
+    def __init__(self, scalar):
+        super(LiteralScalarOp, self).__init__(axes=[])
+        self.scalar = scalar
+
+
+class WriteOp(TensorOp):
+    """
+    Do one or more writes to a tensor.
+
+    This Op is internal to execution graph compilation.
+    """
+
+
+class ReadOp(TensorOp):
+    """
+    Read a tensor. TensorValueOp is replaced by ReadOp during the SSA pass.
+
+    This Op is internal to execution graph compilation.
+    """
