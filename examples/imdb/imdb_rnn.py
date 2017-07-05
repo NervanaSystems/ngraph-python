@@ -17,6 +17,7 @@ from __future__ import division
 from __future__ import print_function
 from contextlib import closing
 import ngraph as ng
+import pdb
 from ngraph.frontends.neon import (Layer, Sequential, BiRNN, Recurrent, Affine,
                                    Softmax, Tanh, LookupTable)
 from ngraph.frontends.neon import UniformInit, RMSProp
@@ -54,6 +55,7 @@ valid_set = ArrayIterator(imdb_data['valid'], batch_size=args.batch_size)
 
 inputs = train_set.make_placeholders()
 ax.Y.length = imdb_dataset.nclass
+pdb.set_trace()
 
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)

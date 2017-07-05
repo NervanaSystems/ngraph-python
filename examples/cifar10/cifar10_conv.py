@@ -21,6 +21,7 @@ model without the neon architecture. This may also help with debugging.
 
 Run it using
 
+ python ./cifar10/cifar10_conv.py --data_dir ./data/ 
 python examples/cifar10/cifar10_conv.py --data_dir /usr/local/data/CIFAR --output_file out.hd5
 
 """
@@ -37,6 +38,7 @@ from ngraph.frontends.neon import ArrayIterator
 
 from ngraph.frontends.neon import CIFAR10
 import ngraph.transformers as ngt
+import pdb
 
 parser = NgraphArgparser(description='Train simple CNN on cifar10 dataset')
 parser.add_argument('--use_batch_norm', action='store_true',
@@ -53,6 +55,7 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 inputs = train_set.make_placeholders()
 ax.Y.length = 10
 
+pdb.set_trace()
 ######################
 # Model specification
 
