@@ -24,24 +24,13 @@ class FlexNgraphArgparser():
                                help="collect flex data and save it to h5py File")
 
     @staticmethod
-    def flex_backend_name():
-        backend_name = ""
-        try:
-            from ngraph.flex import GPUFlexManager  # noqa
-            backend_name = flex_gpu_transformer_name
-        except ImportError:
-            print('{} transformer not available'.format(flex_gpu_transformer_name))
-        return backend_name
-
-    @staticmethod
     def make_and_set_transformer_factory(args):
 
         flex_args = ('fixed_point', 'flex_verbose', 'collect_flex_data')
         # default value for all flex args if not given, confusing with store_true in add_argument
         default = False
 
-        if args.backend == flex_gpu_transformer_name and \
-           any([hasattr(args, a) for a in flex_args]):
+        if args.backend == flex_gpu_transformer_name:
                 flex_args_dict = dict((a, getattr(args, a, default)) for a in flex_args)
                 factory = ngt.make_transformer_factory(args.backend, **flex_args_dict)
         else:

@@ -40,7 +40,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.setup_default_args()
 
     def backend_names(self):
-        return ngt.transformer_choices().append(FlexNgraphArgparser.flex_backend_name())
+        return ngt.transformer_choices()
 
     def setup_default_args(self):
         """
