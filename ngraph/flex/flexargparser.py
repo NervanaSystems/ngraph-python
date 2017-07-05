@@ -1,6 +1,7 @@
 from __future__ import print_function
 import ngraph.transformers as ngt
 from ngraph.flex.names import flex_gpu_transformer_name
+import argparse
 
 
 class FlexNgraphArgparser():
@@ -13,15 +14,18 @@ class FlexNgraphArgparser():
         """
         Add flex specific arguments to other default args used by ngraph
         """
+        # use fixed point for flex backend
         argParser.add_argument('--fixed_point',
                                action="store_true",
-                               help='use fixed point for flex backend')
+                               help=argparse.SUPPRESS)
+        # turn on flex verbosity for debug
         argParser.add_argument('--flex_verbose',
                                action="store_true",
-                               help='turn on flex verbosity for debug')
+                               help=argparse.SUPPRESS)
+        # collect flex data and save it to h5py File
         argParser.add_argument('--collect_flex_data',
                                action="store_true",
-                               help="collect flex data and save it to h5py File")
+                               default=argparse.SUPPRESS)
 
     @staticmethod
     def make_and_set_transformer_factory(args):
