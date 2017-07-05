@@ -26,6 +26,20 @@ class OpsUnary:
         Returns element-wise sigmoid of inputs[0].
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return ng.sigmoid(inputs[0]).named(cntk_op.uid)
+
+    def StableSigmoid(self, cntk_op, inputs):
+        """
+        Returns element-wise sigmoid of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -38,6 +52,7 @@ class OpsUnary:
         Returns element-wise exp of inputs[0].
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -50,6 +65,7 @@ class OpsUnary:
         Returns element-wise tanh of inputs[0].
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -62,6 +78,7 @@ class OpsUnary:
         Returns element-wise reciprocal of inputs[0].
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -74,9 +91,37 @@ class OpsUnary:
         Returns element-wise rectified linear of inputs[0].
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
             A ngraph Op.
         """
         return ng.maximum(inputs[0], 0.).named(cntk_op.uid)
+
+    def Reshape(self, cntk_op, inputs):
+        """
+        Returns input having reinterpreted tensor dimensions.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        in_axes = list(inputs[0].axes)
+        out_axes = []
+        for dim in cntk_op.shape:
+            found = False
+            for axis in in_axes:
+                if axis.length == dim:
+                    found = True
+                    out_axes.append(axis)
+                    in_axes.remove(axis)
+                    break
+            if found is not True:
+                out_axes.append(ng.make_axis(dim))
+
+        out_axes += in_axes
+        return ng.broadcast(inputs[0], out_axes).named(cntk_op.uid)
