@@ -81,6 +81,7 @@ def test_is_compatible_broadcast_shape(test_case):
     assert is_compatible_broadcast_shape(left_shape, right_shape) == result
 
 
+@pytest.mark.transformer_dependent
 @pytest.mark.parametrize("test_case", [
     [(), (1,)],
     [(), (1, 2)],
