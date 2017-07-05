@@ -13,11 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from ngraph.util.pygen import PyGen
+from ngraph.util.pygen import PyModule
 import numpy as np
 
 
-class HelloCodeGenerator(PyGen):
+class HelloCodeGenerator(PyModule):
 
     def __init__(self, **kwargs):
         super(HelloCodeGenerator, self).__init__(prefix="gentest", **kwargs)
@@ -26,26 +26,22 @@ class HelloCodeGenerator(PyGen):
         return x
 
     def generate_hello(self):
-        self.append("""
-def hello(who):
-    return "Hello " + who + "!" """)
-        self.endl()
-        r = self.compile()
-        return r['hello']
+        self.compile("""def hello(who):
+    return "Hello " + who + "!"
+""")
+        return self['hello']
 
     def generate_try_twice(self):
-        self.append("""
-def try_twice(who):
-    return hello(who) + "|" + hello(who)""")
-        self.endl()
-        return self.compile()['try_twice']
+        self.compile("""def try_twice(who):
+    return hello(who) + "|" + hello(who)
+""")
+        return self['try_twice']
 
     def generate_make_list(self):
-        self.append("""
-def make_list():
-    return list()""")
-        self.endl()
-        return self.compile()['make_list']
+        self.compile("""def make_list():
+    return []
+""")
+        return self['make_list']
 
 
 def test_hello():
