@@ -1130,7 +1130,7 @@ class ComputationDecl(ExecutionGraphElt):
         self.values = set(self.get_exop(op) for op in computation_op.values
                           if op.tensor.is_tensor_op)
 
-    def get_tensor_decl(self, op=None):
+    def get_tensor_decl(self, op):
         return self.execution_graph.get_tensor_decl(op=op)
 
     def get_exop(self, op, default=_default_default):

@@ -17,7 +17,7 @@ import tempfile
 import six
 
 from ngraph.transformers.passes.expass import SequentialExOpPass
-from ngraph.op_graph.op_graph import TensorValueOp, AssignableTensorOp, IndexOp
+from ngraph.op_graph.op_graph import TensorValueOp, IndexOp
 from ngraph.transformers.exop import ExOp
 
 tensor_color = 'green'
@@ -58,39 +58,41 @@ class ExVizPass(SequentialExOpPass):
             self.exops_without_nodes.add(exop)
         return 'E' + str(id(exop))
 
-    def arg_name(self, arg):
-        return self.exop_name(arg.exop) + ':' + self.arg_ext(arg)
+    def input_decl_name(self, input_decl):
+        return self.exop_name(input_decl.exop) + ':' + self.input_decl_ext(input_decl)
 
-    def arg_ext(self, arg):
-        return 'A' + str(arg.pos)
+    def input_decl_ext(self, input_decl):
+        return 'A' + str(input_decl.pos)
 
-    def value_name(self, value):
-        return self.exop_name(value.exop) + ':' + self.value_ext(value)
+    def output_decl_name(self, output_decl):
+        return self.exop_name(output_decl.exop) + ':' + self.output_decl_ext(output_decl)
 
-    def value_ext(self, value):
-        return 'V' + str(value.pos)
+    def output_decl_ext(self, output_decl):
+        return 'V' + str(output_decl.pos)
 
-    def tensor_name(self, tensor):
-        if tensor not in self.tensors_with_nodes:
-            self.tensors_without_nodes.add(tensor)
-        return 'T' + str(id(tensor))
+    def tensor_decl_name(self, tensor_decl):
+        if tensor_decl not in self.tensors_with_nodes:
+            self.tensors_without_nodes.add(tensor_decl)
+        return 'T' + str(id(tensor_decl))
 
-    def tensor_view_name(self, tensor_view):
-        return self.tensor_name(tensor_view.tensor) + ':' + self.tensor_view_ext(tensor_view)
+    def tensor_view_decl_name(self, tensor_view_decl):
+        return self.tensor_decl_name(
+            tensor_view_decl.tensor_decl) + ':' + self.tensor_view_decl_ext(
+            tensor_view_decl)
 
-    def tensor_view_ext(self, tensor_view):
-        return 'TV' + str(id(tensor_view))
+    def tensor_view_decl_ext(self, tensor_view_decl):
+        return 'TV' + str(id(tensor_view_decl))
 
-    def add_edge(self, exop_from, exop_to, **kwargs):
-        self.add_exop(exop_from)
-        self.add_exop(exop_to)
-        self.graph.edge(self.exop_name(exop_from),
+    def add_tensor_decl_exop_edge(self, tensor_decl_from, exop_to, **kwargs):
+        self.add_tensor_decl(tensor_decl_from)
+        # self.add_node(exop_to)
+        self.graph.edge(self.tensor_decl_name(tensor_decl_from),
                         self.exop_name(exop_to),
                         **kwargs)
 
     def add_control_edge(self, exop_from, exop_to, **kwargs):
-        self.add_exop(exop_from)
-        self.add_exop(exop_to)
+        self.add_exop_node(exop_from)
+        self.add_exop_node(exop_to)
         attrs = dict()
         attrs['weight'] = '10'
         self.graph.edge(self.exop_name(exop_from),
@@ -98,72 +100,69 @@ class ExVizPass(SequentialExOpPass):
                         color=control_edge_color,
                         **attrs)
 
-    def add_arg_view_edge(self, arg):
-        tensor_view = arg.read_view
-        tensor = tensor_view.tensor
-        self.add_tensor(tensor)
-        # print('arg edge {} - {}'.format(self.tensor_view_name(tensor_view), self.arg_name(arg)))
-        self.graph.edge(self.tensor_view_name(tensor_view),
-                        self.arg_name(arg),
+    def add_input_decl_view_edge(self, input_decl):
+        tensor_decl_view = input_decl.tensor_decl_view
+        tensor_decl = tensor_decl_view.tensor_decl
+        self.add_tensor_decl(tensor_decl)
+        # print('arg edge {} - {}'.format(self.tensor_view_name(tensor_decl_view),
+        #                                 self.input_decl_name(input_decl)))
+        self.graph.edge(self.tensor_view_decl_name(tensor_decl_view),
+                        self.input_decl_name(input_decl),
                         color=tensor_edge_color)
 
-    def add_value_view_edge(self, value):
-        tensor_view = value.tensor_view_decl
-        if tensor_view is None:
+    def add_output_decl_view_edge(self, output_decl):
+        tensor_view_decl = output_decl.tensor_view_decl
+        if tensor_view_decl is None:
             return
-        tensor = tensor_view.tensor
-        self.add_tensor(tensor)
-        # print(
-        # 'val edge {} - {}'.format(self.value_name(value), self.tensor_view_name(tensor_view)))
-        self.graph.edge(self.value_name(value),
-                        self.tensor_view_name(tensor_view),
+        tensor = tensor_view_decl.tensor_decl
+        self.add_tensor_decl(tensor)
+        # print('val edge {} - {}'.format(self.output_decl_name(output_decl),
+        #                                 self.tensor_decl_view_name(tensor_view_decl)))
+        self.graph.edge(self.output_decl_name(output_decl),
+                        self.tensor_view_decl_name(tensor_view_decl),
                         color=tensor_edge_color)
 
-    def add_flow_edge(self, arg, **kwargs):
-        value = arg.value
-        self.add_exop(arg.exop)
-        self.add_exop(value.exop)
-        # print('flow edge {} - {}'.format(self.value_name(value), self.arg_name(arg)))
-        self.graph.edge(self.value_name(value), self.arg_name(arg), **kwargs)
+    def add_flow_edge(self, input_decl, **kwargs):
+        output_decl = input_decl.source_output_decl
+        self.add_exop_node(input_decl.exop)
+        self.add_exop_node(output_decl.exop)
+        # print('flow edge {} - {}'.format(self.output_decl_name(output_decl),
+        #                                  self.input_decl_name(input_decl)))
+        self.graph.edge(self.output_decl_name(output_decl),
+                        self.input_decl_name(input_decl), **kwargs)
         if self.show_tensors:
-            self.add_arg_view_edge(arg)
+            self.add_input_decl_view_edge(input_decl)
 
-    def add_tensor(self, tensor):
-        if tensor in self.tensors_with_nodes:
+    def add_tensor_decl(self, tensor_decl):
+        if tensor_decl in self.tensors_with_nodes:
             return
-        if tensor in self.tensors_without_nodes:
-            self.tensors_without_nodes.remove(tensor)
-        self.tensors_with_nodes.add(tensor)
-        self.add_exop(tensor)
+        if tensor_decl in self.tensors_without_nodes:
+            self.tensors_without_nodes.remove(tensor_decl)
+        self.tensors_with_nodes.add(tensor_decl)
 
-        views_labels = ' | '.join(['<{}>'.format(self.tensor_view_ext(tensor_view))
-                                   for tensor_view in six.itervalues(tensor.tensor_descriptions)])
-        label = '{ <tensor> ' + \
-                tensor.tensor_description_base.name + \
-                ' | { ' + views_labels + ' } }'
-        self.graph.node(self.tensor_name(tensor), label=label, shape='Mrecord',
+        views_labels = ' | '.join(['<{}>'.format(self.tensor_view_decl_ext(tensor_view_decl))
+                                   for tensor_view_decl in
+                                   six.itervalues(tensor_decl.tensor_view_decls)])
+        label = '{ <tensor> ' + tensor_decl.name + ' | { ' + views_labels + ' } }'
+        self.graph.node(self.tensor_decl_name(tensor_decl), label=label, shape='Mrecord',
                         fillcolor=tensor_color, style='filled')
         if False:
-            self.graph.edge(self.tensor_name(tensor), self.exop_name(tensor),
+            self.graph.edge(self.tensor_decl_name(tensor_decl), self.exop_name(tensor_decl),
                             color=tensor_edge_color, style='dashed')
 
-    def add_arg_tensor_view(self, arg):
-        self.add_tensor(self, arg.read_view.tensor)
-
-    def add_exop(self, exop, **kwargs):
+    def add_exop_node(self, exop):
         if exop in self.exops_with_nodes:
             return
         if exop in self.exops_without_nodes:
             self.exops_without_nodes.remove(exop)
         self.exops_with_nodes.add(exop)
-        op = exop.op
 
         attrs = dict()
+        op = None
+
+        op = exop.op
         # print('op {}'.format(type(op)))
-        if isinstance(op, AssignableTensorOp):
-            attrs['peripheries'] = '2'
-            attrs['style'] = ''
-        elif isinstance(op, IndexOp):
+        if isinstance(op, IndexOp):
             attrs['fillcolor'] = reshape_color
             attrs['style'] = 'filled'
         elif isinstance(op, TensorValueOp):
@@ -175,45 +174,41 @@ class ExVizPass(SequentialExOpPass):
         else:
             # attrs['fillcolor'] = control_color
             attrs['style'] = 'rounded'
-
-        if op is None:
-            op_label = ""
+        op_type_name = type(op).__name__
+        if op_type_name in op.name:
+            op_label = op.name
         else:
-            op_type_name = type(op).__name__
-            if op_type_name in op.name:
-                op_label = op.name
-            else:
-                op_label = '{}: {}'.format(op_type_name, op.name)
+            op_label = '{}: {}'.format(op_type_name, op.name)
+        arg_label = ' | '.join(['<{}> {}'
+                               .format(self.input_decl_ext(input_decl),
+                                       input_decl.source_output_decl.tensor_decl.name)
+                                for input_decl in exop.input_decls])
+        val_label = ' | '.join(['<{}> {}'
+                               .format(self.output_decl_ext(output_decl),
+                                       output_decl.tensor_decl.name)
+                                for output_decl in exop.output_decls])
+        label = '{ { ' + arg_label + ' } | <exop> ' + op_label + ' | { ' + val_label + ' } }'
 
         if hasattr(op, 'axes') and self.show_axes:
             op_label += "\\n{}".format(str(op.axes))
 
-        arg_label = ' | '.join(['<{}> {}'
-                               .format(self.arg_ext(arg),
-                                       arg.value.tensor.tensor_description_base.name)
-                                for arg in exop.args])
-        val_label = ' | '.join(['<{}> {}'
-                               .format(self.value_ext(value),
-                                       value.tensor.tensor_description_base.name)
-                                for value in exop.values])
-        label = '{ { ' + arg_label + ' } | <exop> ' + op_label + ' | { ' + val_label + ' } }'
         # print('{} label={}'.format(self.exop_name(exop), label))
 
         if self.show_tensors:
-            for value in exop.values:
-                self.add_value_view_edge(value)
+            for output_decl in exop.values:
+                self.add_output_decl_view_edge(output_decl)
 
         self.graph.node(self.exop_name(exop), label=label, shape='Mrecord', **attrs)
 
     def visit_exop(self, exop, *args):
         if not exop.next_exop.is_exop_end_of_list:
             self.add_control_edge(exop, exop.next_exop)
-        for arg in exop.args:
-            self.add_flow_edge(arg)
+        for input_decl in exop.input_decls:
+            self.add_flow_edge(input_decl)
         if isinstance(exop.op, TensorValueOp):
-            tv_exop = self.computation_decl.get_tensor(op=exop.op.value_tensor)
-            self.add_edge(tv_exop, exop, color='blue')
-            self.add_exop(tv_exop)
+            tensor_decl = self.computation_decl.get_tensor_decl(op=exop.op.value_tensor)
+            self.add_tensor_decl_exop_edge(tensor_decl, exop, color='blue')
+            pass
 
     def begin_pass(self, filename=None, **kwargs):
         super(ExVizPass, self).begin_pass(**kwargs)
