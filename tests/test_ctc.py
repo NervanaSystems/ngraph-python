@@ -24,7 +24,7 @@ import pytest
 
 pytestmark = [pytest.mark.transformer_dependent("module"),
               pytest.mark.flex_disabled("module"),
-              pytest.config.argon_disabled("module")]
+              pytest.config.argon_disabled(scope="module")]
 
 rng = RandomTensorGenerator(0, np.float32)
 

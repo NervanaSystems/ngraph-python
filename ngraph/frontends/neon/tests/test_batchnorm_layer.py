@@ -23,7 +23,7 @@ from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import ExecutorFactory
 
 pytestmark = [pytest.mark.transformer_dependent,
-              pytest.config.argon_disabled("module")]
+              pytest.config.argon_disabled(scope="module")]
 
 rng = RandomTensorGenerator()
 rtol = 0
