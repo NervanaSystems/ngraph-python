@@ -13,8 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from __future__ import print_function
-from __future__ import division
+from __future__ import division, print_function
 
 import inspect
 
@@ -58,13 +57,14 @@ def classification_error(model, labels):
     Returns:
         Classification error function (mean for batch)
     """
-    if labels.axes.batch_axis():
+    try:
         errors = ng.not_equal(
             ng.argmax(model, out_axes=[labels.axes.batch_axis()]),
             ng.argmax(labels, out_axes=[labels.axes.batch_axis()])
         )
-    else:
+    except ValueError:
         errors = ng.not_equal(ng.argmax(model), ng.argmax(labels))
+
     return ng.mean(errors, out_axes=())
 
 
@@ -155,9 +155,6 @@ class CNTKImporter:
                             print("Finished importing: " +
                                   uid + str(cntk_op.shape) + " -> " +
                                   temp.name + str(temp.shape.full_lengths))
-                        if len(temp.axes) == 1:
-                            if temp.axes[0].length == 1:
-                                temp = ng.sum(temp, out_axes=())
                         self.uid_op_map[uid] = temp
                 inputs.append(temp)
             elif i.is_input:
@@ -172,12 +169,11 @@ class CNTKImporter:
                 except AttributeError:
                     input_value = C.plus(i, np.zeros(i.shape)).eval()
                 if i.is_constant:
-                    inputs.append(ng.constant(input_value, axes, dtype))
+                    inputs.append(ng.constant(input_value, axes, dtype).named(i.uid))
                 elif i.is_parameter:
                     inputs.append(ng.variable(axes, dtype, input_value).named(i.uid))
                 else:
                     raise ValueError("Unknown input: " + i.uid)
-
         return self.ops_bridge(cntk_op, inputs)
 
     def import_model(self, cntk_model):
@@ -185,10 +181,10 @@ class CNTKImporter:
         Import and translate CNTK network model to ngraph network.
 
         Arguments:
-            cntk_model: Model (with inputs) to be translated to ngraph.
+            cntk_model: CNTK Model (with inputs) to be translated to ngraph.
 
         Returns:
-            Translated model - last ngraph operation.
+            Translatedngraph model.
             List of placeholders.
         """
         self.load_operations(cntk_model)

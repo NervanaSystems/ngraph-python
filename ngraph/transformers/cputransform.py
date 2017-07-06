@@ -522,8 +522,7 @@ class CPUCodeGenerator(PyGen):
         self.append("np.mod({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(DotLowDimension)
-    def generate_op(self, op, out, x, y):
-        bias = op.bias.tensor.const if op.bias else None
+    def generate_op(self, op, out, x, y, bias=None):
         self.append("mkldnn.innerproduct_fprop('{}', {}, {}, {}, out={})",
                     op.name, x, y, bias, out)
 
