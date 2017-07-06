@@ -13,10 +13,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
+
+import multiprocessing
+
+from orderedset import OrderedSet
+
 from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes, \
     MutateInsteadOfCopyWithNewArgsMixin
-from orderedset import OrderedSet
-import multiprocessing
 
 
 def calculate_gather_axes(axes, gather_axis, num_devices):
@@ -218,7 +221,7 @@ class GatherRecvOp(RecvOp):
         """
         :return: iterable of send nodes
         """
-        from ngraph.util.hetr_utils import get_iterable
+        from ngraph.transformers.hetr.hetr_utils import get_iterable
         return OrderedSet(i for i in get_iterable(self._send_node))
 
     @send_nodes.setter
