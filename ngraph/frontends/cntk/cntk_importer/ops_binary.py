@@ -14,10 +14,10 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
-from ngraph.frontends.common.legacy_binary_ew_op import LegacyOpsBinary
+from ngraph.frontends.common.utils import remove_ones_axes
 
 
-class OpsBinary(LegacyOpsBinary):
+class OpsBinary:
     """
     Bridging binary operations between CNTK and ngraph.
     """
@@ -38,7 +38,7 @@ class OpsBinary(LegacyOpsBinary):
         for i, axis_0 in enumerate(bigger):
             for axis_1 in smaller:
                 if axis_0.length == axis_1.length:
-                    if axis_1 not in axes:
+                    if axis_1 not in axes and axis_0.name != 'N':
                         axes.append(axis_1)
                         break
             if len(axes) == i:
@@ -56,7 +56,7 @@ class OpsBinary(LegacyOpsBinary):
         Returns:
             Casted inputs.
         """
-        cast_0, cast_1 = inputs
+        cast_0, cast_1 = remove_ones_axes(inputs)
 
         if len(cast_0.axes) >= len(cast_1.axes):
             axes = self._match_axes(cast_0.axes, cast_1.axes)
@@ -72,6 +72,7 @@ class OpsBinary(LegacyOpsBinary):
         Returns input[0] + input[1] element-wise.
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -85,6 +86,7 @@ class OpsBinary(LegacyOpsBinary):
         Returns input[0] - input[1] element-wise.
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -98,6 +100,7 @@ class OpsBinary(LegacyOpsBinary):
         Returns input[0] x input[1] (element wise).
 
         Arguments:
+             cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
@@ -111,6 +114,7 @@ class OpsBinary(LegacyOpsBinary):
         Returns input[0] x input[1] (matrix multiplication).
 
         Arguments:
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
