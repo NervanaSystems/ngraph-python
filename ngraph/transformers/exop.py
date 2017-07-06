@@ -783,6 +783,12 @@ class ExOpBlock(ExecutionGraphElt):
         # * dropping out means a change to sequencing.
         new_op = as_op(new_op)
         old_exop = self.computation_graph.get_exop(old_op)
+        if old_op is new_op:
+            # Hetr bashes some ops. See MutateInsteadOfCopyWithNewArgsMixin, issue #1410
+            after_exop = old_exop.prev_exop
+            self.remove_exop(old_exop)
+            self.add_ops([new_op], after_exop=after_exop)
+            return
         new_exop = self.computation_graph.get_exop(new_op, None)
         if new_exop is None:
             self.add_ops([new_op], after_exop=old_exop.prev_exop)
