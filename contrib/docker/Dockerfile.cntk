@@ -8,7 +8,7 @@ RUN wget -q https://www.open-mpi.org/software/ompi/v1.10/downloads/openmpi-1.10.
     cd openmpi-1.10.3 && \
     ./configure --prefix=/usr/local/mpi && \
     make -j all && \
-    sudo make install && \
+    sudo make install && cd .. && \
     rm -rf openmpi-1.10.3 openmpi-1.10.3.tar.gz
 
 # Add Open MPI to path
@@ -17,8 +17,8 @@ ENV LD_LIBRARY_PATH="/usr/local/mpi/lib:$LD_LIBRARY_PATH"
 
 # Get and install CNTK Binary Distribution
 RUN if [ "$(python -c 'import sys; print(sys.version_info[0])')" = "3" ]; then \
-    pip install https://cntk.ai/PythonWheel/CPU-Only/cntk-2.0rc1-cp34-cp34m-linux_x86_64.whl ; else \
-    pip install --trusted-host cntk.ai https://cntk.ai/PythonWheel/CPU-Only/cntk-2.0rc1-cp27-cp27mu-linux_x86_64.whl ; fi
+    pip install https://cntk.ai/PythonWheel/CPU-Only/cntk-2.0-cp34-cp34m-linux_x86_64.whl ; else \
+    pip install --trusted-host cntk.ai https://cntk.ai/PythonWheel/CPU-Only/cntk-2.0-cp27-cp27mu-linux_x86_64.whl ; fi
 
 # necessary for tests/test_walkthrough.py which requires that ngraph is
 # importable from an entrypoint not local to ngraph.

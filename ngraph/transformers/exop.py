@@ -107,65 +107,109 @@ class ExecutionGraphElt(object):
 
 class InputDecl(object):
     """
-    An argument for an exop.
+    Dewscribes an input for an exop.
 
     Arguments:
         exop: The exop.
         pos: The position of the value, defaults to 0.
-        tensor_description: Tensor description of the value.
-        read_view: The tensor view where the value is read from.
+        tensor_description: Tensor description of the value. Describes the view.
+        source_output_decl: The output_decl that supplies the value for this input.
 
     Attributes:
         exop: The exop.
         pos: The position of the value.
-        tensor_description: Tensor description of the value.
-        read_view: The tensor view where the value is read from.
-        value: Arguments supplying this value.
+        tensor_view_decl: The tensor view where the value is read from.
+        source_output_decl: The output_decl that supplies the value for this input.
 
     """
 
-    def __init__(self, exop=None, pos=None, tensor_description=None, value=None, **kwargs):
+    def __init__(self,
+                 exop=None,
+                 pos=None,
+                 tensor_description=None,
+                 source_output_decl=None,
+                 **kwargs):
         super(InputDecl, self).__init__(**kwargs)
         self.exop = exop
         self.pos = pos
         if tensor_description is None:
-            tensor_description = value.tensor_description
-        self.tensor_description = tensor_description
-        self.read_view = None
-        self.__value = None
-        self.value = value
+            tensor_description = source_output_decl.tensor_description
+        self.__tensor_description = tensor_description
+        self.__tensor_view_decl = None
+        self.__source_output_decl = None
+        self.source_output_decl = source_output_decl
+
+    @property
+    def tensor_description(self):
+        """
+
+        Returns:
+            The TensorDescription associated with this InputDecl. Being phased out.
+
+        """
+        return self.__tensor_description
+
+    @tensor_description.setter
+    def tensor_description(self, tensor_description):
+        """
+        Being phased out.
+        Args:
+            tensor_description:
+
+        Returns:
+
+        """
+        # assert self.__tensor_description.axes_key == tensor_description.axes_key
+        self.__tensor_description = tensor_description
+
+    @property
+    def tensor_view_decl(self):
+        return self.__tensor_view_decl
+
+    @tensor_view_decl.setter
+    def tensor_view_decl(self, tensor_view_decl):
+        self.__tensor_view_decl = tensor_view_decl
 
     @property
     def tensor_decl(self):
-        return self.read_view.tensor_decl
+        """
+
+        Returns:
+            The TensorDecl associated with the OutputDecl that supplies the value for this input.
+
+        """
+        return self.tensor_view_decl.tensor_decl
 
     @property
-    def value(self):
+    def source_output_decl(self):
         """
 
-        Returns: The argument supplying this value.
+        Returns:
+            The OutputDecl that supplies a value for this InputDecl.
 
         """
-        return self.__value
+        return self.__source_output_decl
 
-    @value.setter
-    def value(self, value):
+    @source_output_decl.setter
+    def source_output_decl(self, output_decl):
         """
         Changes the value assigned to this argument, updating value users.
 
         Args:
-            value: The new value for this argument.
+            output_decl: The new value for this argument.
 
         """
-        if self.__value is not None:
-            self.__value.value_users.remove(self)
-            self.read_view.readers.remove(self)
-        if self.__value is not None and value is not None:
-            self.tensor_description = value.tensor_description
-        self.__value = value
-        if value is not None:
-            value.value_users.add(self)
-            self.read_view = value.write_view.get_tensor_view(self.tensor_description, reader=self)
+        if self.__source_output_decl is not None:
+            self.__source_output_decl.user_input_decls.remove(self)
+            self.__tensor_view_decl.readers.remove(self)
+        if self.__source_output_decl is not None and output_decl is not None:
+            self.__tensor_description = output_decl.tensor_description
+        self.__source_output_decl = output_decl
+        if output_decl is not None:
+            output_decl.user_input_decls.add(self)
+            self.__tensor_view_decl = \
+                output_decl.tensor_view_decl.get_tensor_view(self.__tensor_description,
+                                                             reader=self)
 
     def __repr__(self):
         return "Arg({exop}:{pos})".format(exop=self.exop.name, pos=self.pos)
@@ -178,54 +222,105 @@ class OutputDecl(object):
     Arguments:
         exop: The exop.
         pos: The position of the value, defaults to 0.
-        tensor_description: Tensor description of the value.
+        tensor_description: Tensor description describing the value.
         write_view: The tensor view where the value is written.
 
     Attributes:
         exop: The exop.
         pos: The position of the value.
-        tensor_description: Tensor description of the value.
-        write_view: The tensor view where the value is written.
-        value_users: Arguments using this value.
+        tensor_view_decl: The tensor view decl for where this output is written.
+        user_input_decls: InputDecls using this output.
     """
 
     def __init__(self, exop=None, pos=None, tensor_decl=None, tensor_description=None, **kwargs):
         super(OutputDecl, self).__init__(**kwargs)
         self.exop = exop
         self.pos = pos
-        self.tensor_description = tensor_description
+        self.__tensor_description = tensor_description
         self.__tensor = None
-        self.__write_view = None
-        self.value_users = set()
+        self.__tensor_view_decl = None
+        self.user_input_decls = set()
         self.tensor_decl = tensor_decl
 
     @property
+    def tensor_description(self):
+        """
+
+        Returns:
+            The TensorDescription associated with this OutputDecl. Being phased out.
+
+        """
+        return self.__tensor_description
+
+    @tensor_description.setter
+    def tensor_description(self, tensor_description):
+        """
+        Being phased out.
+
+        Args:
+            tensor_description:
+
+        """
+        # assert self.__tensor_description.axes_key == tensor_description.axes_key
+        self.__tensor_description = tensor_description
+
+    @property
     def tensor_decl(self):
+        """
+
+        Returns:
+            The TensorDecl associated with this output.
+
+        """
         return self.__tensor
 
     @tensor_decl.setter
     def tensor_decl(self, tensor_decl):
+        """
+        Change the TensorDecl, updating tensor_view_decl in the process.
+
+        Args:
+            tensor_decl: The new TensorRecl.
+
+        """
         if self.__tensor is tensor_decl:
             return
         if self.__tensor is not None:
             tensor_decl.merge_flags(self.__tensor)
         self.__tensor = tensor_decl
-        self.write_view = tensor_decl.get_tensor_view(self.tensor_description, writer=self)
+        self.tensor_view_decl = tensor_decl.get_tensor_view(self.__tensor_description, writer=self)
 
     @property
-    def write_view(self):
-        return self.__write_view
+    def tensor_view_decl(self):
+        """
 
-    @write_view.setter
-    def write_view(self, view):
-        if view is None and len(self.value_users) > 0:
+        Returns:
+            The TensorViewDecl for this output.
+
+        """
+        return self.__tensor_view_decl
+
+    @tensor_view_decl.setter
+    def tensor_view_decl(self, tensor_view_decl):
+        """
+        Change the TensorViewDecl associated with this output.
+
+        Args:
+            tensor_view_decl:
+
+        Returns:
+
+        """
+        if tensor_view_decl is None and len(self.user_input_decls) > 0:
             raise ValueError("Cannot deallocate a view that is in use")
-        self.__write_view = view
-        view.value = self
-        if view is not None:
-            for arg in self.value_users:
-                arg.tensor_description = self.tensor_description
-                arg.read_view = view.get_tensor_view(arg.tensor_description, reader=arg)
+        self.__tensor_view_decl = tensor_view_decl
+        tensor_view_decl.value = self
+        if tensor_view_decl is not None:
+            for input_decl in self.user_input_decls:
+                input_decl.tensor_description = self.__tensor_description
+                input_decl.tensor_view_decl = \
+                    tensor_view_decl.get_tensor_view(input_decl.tensor_description,
+                                                     reader=input_decl)
 
     def __repr__(self):
         return "Val({exop}:{pos})".format(exop=self.exop.name, pos=self.pos)
@@ -250,8 +345,8 @@ class ExOp(ExecutionGraphElt):
 
     Attributes:
         op: The computation graph op to execute.
-        args: exops for the arguments.
-        views_in: Views for the arguments.
+        input_decls: InputDecls for this exop.
+        views_in: Views for the inputs.
         views_out: Views for the results.
         tensor_decl: Tensor of the primary output.
         tensor_view: View of the primary output.
@@ -269,10 +364,10 @@ class ExOp(ExecutionGraphElt):
                  **kwargs):
         super(ExOp, self).__init__(execution_graph=computation_graph.execution_graph,
                                    **kwargs)
-        self.args = []
+        self.__input_decls = []
         # Kludge until we have values with writers/readers
         self.write_args = []
-        self.values = []
+        self.__output_decls = []
         self.computation_graph = computation_graph
         self.__op = None
         self.ref_ops = set()
@@ -286,56 +381,94 @@ class ExOp(ExecutionGraphElt):
             self.computation_graph.ops[self.op] = self
             self.add_ref_op(self.op)
 
-        self.tensor_decl = None
-        self.tensor_view = None
-
         for arg in self.op.args:
             arg = arg.effective_tensor_op
             exop = self.computation_graph.get_exop(arg)
-            value = exop.values[0]
-            self.add_arg(value=value)
+            output_decls = exop.output_decls[0]
+            self.add_input_decl(source_output_decl=output_decls)
 
         if create_value and self.op.is_tensor_op:
             tensor_description = self.op.tensor_description()
             tensor_decl = self.computation_graph.get_tensor_decl(op=self.op)
-            self.add_value(tensor_decl, tensor_description)
+            self.add_output_decl(tensor_decl, tensor_description)
 
-    def add_arg(self, value, tensor_description=None):
-        arg = InputDecl(exop=self,
-                        pos=len(self.args),
-                        value=value,
-                        tensor_description=tensor_description)
-        self.args.append(arg)
-        return arg
+    @property
+    def input_decls(self):
+        return self.__input_decls
 
-    def add_write_arg(self, value, tensor_description=None):
+    @property
+    def output_decls(self):
+        return self.__output_decls
+
+    def add_input_decl(self, source_output_decl):
+        input_decl = InputDecl(exop=self,
+                               pos=len(self.__input_decls),
+                               source_output_decl=source_output_decl)
+        self.__input_decls.append(input_decl)
+        return input_decl
+
+    def add_write_arg(self, source_output_decl, tensor_description=None):
+        """
+        Temporary. Makes a pseudo-input; associated with WriteOp.
+
+        Args:
+            source_output_decl:
+            tensor_description:
+
+        Returns:
+
+        """
         arg = InputDecl(exop=self,
-                        pos=len(self.args),
-                        value=value,
+                        pos=len(self.__input_decls),
+                        source_output_decl=source_output_decl,
                         tensor_description=tensor_description)
         self.write_args.append(arg)
         return arg
 
-    def add_value(self, tensor_decl, tensor_description=None):
+    def add_output_decl(self, tensor_decl, tensor_description=None):
+        """
+        Adds an OutputDecl with a given TensorDecl and view description.
+
+        Args:
+            tensor_decl: Describes the tensor for the output.
+            tensor_description: Describes the view to create.
+
+        Returns:
+            The new OutputDecl.
+
+        """
         if tensor_description is None:
             tensor_description = tensor_decl.tensor_description_base
-        value = OutputDecl(exop=self,
-                           pos=len(self.values),
-                           tensor_decl=tensor_decl,
-                           tensor_description=tensor_description)
-        self.values.append(value)
-        return value
+        output_decl = OutputDecl(exop=self,
+                                 pos=len(self.output_decls),
+                                 tensor_decl=tensor_decl,
+                                 tensor_description=tensor_description)
+        self.output_decls.append(output_decl)
+        return output_decl
 
-    def take_value(self, value):
-        value.exop = self
-        value.pos = len(self.values)
+    def take_output_decl(self, output_decl):
+        output_decl.exop = self
+        output_decl.pos = len(self.output_decls)
 
     @property
     def op(self):
+        """
+
+        Returns:
+            The op-graph Op associated with this exop.
+
+        """
         return self.__op
 
     @op.setter
     def op(self, op):
+        """
+        Changes the op-graph Op assciated with this exop.
+
+        Args:
+            op: The new op-graph O.
+
+        """
         if op is None:
             if self.__op is not None:
                 raise ValueError("Cannot set op to None.")
@@ -352,7 +485,7 @@ class ExOp(ExecutionGraphElt):
 
     def add_ref_op(self, op):
         """
-        Add another op that references this exop.
+        Add another op-graph Op that references this exop.
 
         Args:
             op: The computation graph op freferencing this exop.
@@ -421,8 +554,8 @@ class ExOp(ExecutionGraphElt):
 live: {live}\n\tnew: {new}\n\tfree: {free}'.format(
             nn=self.op.name,
             id=id(self),
-            in_args=", ".join([str(x.value) for x in self.args]),
-            out_args=", ".join([str(x) for x in self.values]),
+            in_args=", ".join([str(x.source_output_decl) for x in self.__input_decls]),
+            out_args=", ".join([str(x) for x in self.output_decls]),
             live=self.liveness_live_list,
             new=self.liveness_new_list,
             free=self.liveness_free_list
@@ -430,14 +563,25 @@ live: {live}\n\tnew: {new}\n\tfree: {free}'.format(
 
 
 def literal_scalar_exop(scalar, computation_graph):
+    """
+    Creates an Exop for a scalar value.
+
+    Args:
+        scalar: The scalar value.
+        computation_graph: The computation graph associated with the exop.
+
+    Returns:
+        An Exop.
+
+    """
     exop = ExOp(computation_graph=computation_graph, op=LiteralScalarOp(scalar=scalar))
-    exop.values[0].tensor_decl.is_compile_only = True
+    exop.output_decls[0].tensor_decl.is_compile_only = True
     return exop
 
 
 class ExOpBlock(ExecutionGraphElt):
     """
-    Sequentially execute a list of exops.
+    A list of exops to be executed sequentially.
 
     Attributes:
         computation_graph: The associated computation graph.
@@ -525,9 +669,9 @@ class ExOpBlock(ExecutionGraphElt):
         while not exop.is_exop_end_of_list:
             computed_ops.add(exop.op)
             computed_ops.update(exop.ref_ops)
-            computed_ops.update(arg.exop.op for arg in exop.args)
-            for arg in exop.args:
-                computed_ops.update(arg.value.exop.ref_ops)
+            computed_ops.update(input_decl.exop.op for input_decl in exop.input_decls)
+            for input_decl in exop.input_decls:
+                computed_ops.update(input_decl.source_output_decl.exop.ref_ops)
             exop = exop.prev_exop
 
         available = OrderedSet()
@@ -628,8 +772,8 @@ class ExOpBlock(ExecutionGraphElt):
     def remove_exop(self, exop):
         exop.prev_exop.next_exop = exop.next_exop
         exop.next_exop.prev_exop = exop.prev_exop
-        for arg in exop.args:
-            arg.value.value_users.remove(arg)
+        for input_decl in exop.input_decls:
+            input_decl.source_output_decl.user_input_decls.remove(input_decl)
 
     def replace_op(self, old_op, new_op):
         # TODO Replacing an op can remove ops. For example, (x + 2) * 1 -> x + 2
@@ -658,17 +802,17 @@ class ExOpBlock(ExecutionGraphElt):
             new_exop: The replaceent exop.
 
         """
-        for old_value, new_value in zip(old_exop.values, new_exop.values):
-            self.replace_value(old_value, new_value)
+        for old_output_decl, new_output_decl in zip(old_exop.output_decls, new_exop.output_decls):
+            self.replace_output_decl(old_output_decl, new_output_decl)
         for op in old_exop.ref_ops:
             new_exop.add_ref_op(op)
         self.computation_graph.ops[old_exop.op] = new_exop
 
-    def replace_value(self, old_value, new_value):
-        for value_user in set(old_value.value_users):
-            value_user.value = new_value
-        new_value.tensor_decl.merge_flags(old_value.tensor_decl)
-        old_value.exop.values[old_value.pos] = new_value
+    def replace_output_decl(self, old_output_decl, new_output_decl):
+        for input_decl in set(old_output_decl.user_input_decls):
+            input_decl.source_output_decl = new_output_decl
+        new_output_decl.tensor_decl.merge_flags(old_output_decl.tensor_decl)
+        old_output_decl.exop.output_decls[old_output_decl.pos] = new_output_decl
 
     def replace_exop(self, old_exop, new_exop):
         self.add_exop(new_exop, old_exop.prev_exop)
@@ -696,7 +840,7 @@ class ExOpBlock(ExecutionGraphElt):
     def worst_case_footprint(self):
         mem = 0
         for var in self.get_temp_vars():
-            mem += var.write_view.tensor_decl.size
+            mem += var.tensor_view_decl.tensor_decl.size
         return mem
 
     def memory_efficiency(self):
@@ -712,27 +856,27 @@ class ExOpBlock(ExecutionGraphElt):
     def persistent_size(self):
         mem = 0
         for var in self.get_persistent_vars():
-            mem += var.write_view.tensor_decl.size
+            mem += var.tensor_view_decl.tensor_decl.size
         return mem
 
     def get_vars(self):
         vars = set()
-        for node in self:
-            vars |= set(x.value for x in node.args)
-            vars |= set(node.values)
+        for exop in self:
+            vars |= set(input_decl.source_output_decl for input_decl in exop.input_decls)
+            vars |= set(exop.output_decls)
         return vars
 
     def get_temp_vars(self):
         result = list()
         for var in self.get_vars():
-            if not var.write_view.tensor_decl.is_persistent:
+            if not var.tensor_view_decl.tensor_decl.is_persistent:
                 result.append(var)
         return result
 
     def get_persistent_vars(self):
         result = list()
         for var in self.get_vars():
-            if var.write_view.tensor_decl.is_persistent:
+            if var.tensor_view_decl.tensor_decl.is_persistent:
                 result.append(var)
         return result
 
@@ -971,11 +1115,11 @@ class ComputationDecl(ExecutionGraphElt):
         self.exop_block.root_set = OrderedSet(
             self.get_exop(op) for op in computation_op.values if op.is_tensor_op)
         for exop in self.exop_block.root_set:
-            for value in exop.values:
-                arg = self.returns.add_arg(value)
-                self.op_returns[exop.op] = arg
-                self.op_returns[exop.op.tensor] = arg
-                value.write_view.tensor_decl.is_output = True
+            for output_decl in exop.output_decls:
+                input_decl = self.returns.add_input_decl(output_decl)
+                self.op_returns[exop.op] = input_decl
+                self.op_returns[exop.op.tensor] = input_decl
+                output_decl.tensor_view_decl.tensor_decl.is_output = True
 
         self.values = set(self.get_exop(op) for op in computation_op.values
                           if op.tensor.is_tensor_op)

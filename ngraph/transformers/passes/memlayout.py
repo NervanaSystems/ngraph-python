@@ -24,14 +24,14 @@ from ngraph.transformers.passes.passes import GraphPass
 
 class MemLayoutPass(GraphPass):
     def do_pass(self, computation_decl, **kwargs):
-        self.ops = computation_decl.exop_block
+        self.exop_block = computation_decl.exop_block
 
         # this pass may be run multiple times
         # reset all of the allocated buffers to None before starting
-        for node in self.ops:
-            for new in node.liveness_new_list:
+        for exop in self.exop_block:
+            for new in exop.liveness_new_list:
                 new.buffer_pool_offset = None
-            for free in node.liveness_free_list:
+            for free in exop.liveness_free_list:
                 free.buffer_pool_offset = None
 
         # Layout temporary memory
@@ -40,21 +40,23 @@ class MemLayoutPass(GraphPass):
 
         # Layout persistent memory
         pmm = MemoryManager()
-        for node in self.ops:
-            for arg in node.args:
-                if arg.value.tensor_decl.is_persistent and \
-                        arg.value.tensor_decl.buffer_pool_offset is None:
-                    arg.value.tensor.buffer_pool_offset = pmm.allocate(arg.value.tensor.size)
-            for value in node.values:
-                if value.tensor_decl.is_persistent and \
-                        value.tensor_decl.buffer_pool_offset is None:
-                    value.tensor_decl.buffer_pool_offset = pmm.allocate(value.tensor_decl.size)
+        for exop in self.exop_block:
+            for input_decl in exop.input_decls:
+                if input_decl.source_output_decl.tensor_decl.is_persistent and \
+                        input_decl.source_output_decl.tensor_decl.buffer_pool_offset is None:
+                    input_decl.source_output_decl.tensor.buffer_pool_offset = \
+                        pmm.allocate(input_decl.source_output_decl.tensor.size)
+            for output_decl in exop.output_decls:
+                if output_decl.tensor_decl.is_persistent and \
+                        output_decl.tensor_decl.buffer_pool_offset is None:
+                    output_decl.tensor_decl.buffer_pool_offset = \
+                        pmm.allocate(output_decl.tensor_decl.size)
 
         # self.test_memory_overlap()
 
     def layout_memory_best_fit(self):
         mm = MemoryManager()
-        for i, node in enumerate(self.ops):
+        for i, node in enumerate(self.exop_block):
             for new in node.liveness_new_list:
                 if new.buffer_pool_offset is not None:
                     raise RuntimeError('Error: {} - {} Already allocated'.format(i, new))
@@ -71,7 +73,7 @@ class MemLayoutPass(GraphPass):
 
     def layout_memory_first_fit(self):
         mm = MemoryManager()
-        for i, node in enumerate(self.ops):
+        for i, node in enumerate(self.exop_block):
             for new in node.liveness_new_list:
                 if new.buffer_pool_offset is not None:
                     raise RuntimeError('Error: {} - {} Already allocated'.format(i, new))
@@ -90,7 +92,7 @@ class MemLayoutPass(GraphPass):
         mm = MemoryManager()
         max_usage = 0
         max_op = None
-        for op in self.ops:
+        for op in self.exop_block:
             usage = op.memory_usage()
             if usage >= max_usage:
                 max_usage = usage
@@ -140,7 +142,7 @@ class MemLayoutPass(GraphPass):
             node = node.next_exop
 
     def test_memory_overlap(self):
-        for i, node in enumerate(self.ops):
+        for i, node in enumerate(self.exop_block):
             for tensor1 in node.liveness_live_list:
                 for tensor2 in node.liveness_live_list:
                     if tensor1 != tensor2:

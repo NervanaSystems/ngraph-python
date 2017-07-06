@@ -33,31 +33,31 @@ class LivenessPass(GraphPass):
         currently_live = list()
 
         for i, exop in enumerate(reversed(ops)):
-            args = list()
-            for arg in exop.args:
-                if self.is_interesting(arg.tensor_decl):
-                    args.append(arg.tensor_decl)
+            input_tensor_decls = list()
+            for input_decl in exop.input_decls:
+                if self.is_interesting(input_decl.tensor_decl):
+                    input_tensor_decls.append(input_decl.tensor_decl)
 
-            values = list()
-            for value in exop.values:
-                if self.is_interesting(value.tensor_decl):
-                    values.append(value.tensor_decl)
+            output_tensor_decls = list()
+            for output_decl in exop.output_decls:
+                if self.is_interesting(output_decl.tensor_decl):
+                    output_tensor_decls.append(output_decl.tensor_decl)
 
-            free_objs = list()
-            new_objs = list()
-            for obj in args + values:
-                if obj not in currently_live:
+            free_tensor_decls = list()
+            new_tensor_decls = list()
+            for tensor_decl in input_tensor_decls + output_tensor_decls:
+                if tensor_decl not in currently_live:
                     # this is the last node that value is seen in
                     # delete it at the end of the op
-                    currently_live.append(obj)
-                    free_objs.append(obj)
+                    currently_live.append(tensor_decl)
+                    free_tensor_decls.append(tensor_decl)
             live_list.insert(0, list(currently_live))
-            for value in values:
-                if value in currently_live:
-                    new_objs.append(value)
-                    currently_live.remove(value)
-            free_list.insert(0, free_objs)
-            new_list.insert(0, new_objs)
+            for output_decl in output_tensor_decls:
+                if output_decl in currently_live:
+                    new_tensor_decls.append(output_decl)
+                    currently_live.remove(output_decl)
+            free_list.insert(0, free_tensor_decls)
+            new_list.insert(0, new_tensor_decls)
 
         # Anything marked as output must remain live for the remainder of the graph
         # Add outputs to live_list and remove from free_list

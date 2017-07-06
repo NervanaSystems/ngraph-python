@@ -240,7 +240,7 @@ class ExecutionGraphTransformer(Transformer):
         """
         if isinstance(op, AssignableTensorOp):
             tensor_decl = self.execution_state.get_op_tensor(op)
-            return self.device_tensor_view(tensor_decl.values[0].write_view)
+            return self.device_tensor_view(tensor_decl.values[0].tensor_view_decl)
         else:
             raise ValueError()
 
@@ -262,25 +262,25 @@ class ExecutionGraphTransformer(Transformer):
         self.device_computation = computation_decl.device_computation
         exop_block = computation_decl.exop_block
         self.start_allocate_computation(computation_decl)
-        for arg in itervalues(computation_decl.op_returns):
-            self.device_tensor_view(arg.read_view)
+        for input_decl in itervalues(computation_decl.op_returns):
+            self.device_tensor_view(input_decl.tensor_view_decl)
         for exop in exop_block:
-            for arg in exop.args:
-                self.device_tensor_view(arg.read_view)
-            for arg in exop.write_args:
-                self.device_tensor_view(arg.read_view)
-            for value in exop.values:
-                self.device_tensor_view(value.write_view)
+            for input_decl in exop.input_decls:
+                self.device_tensor_view(input_decl.tensor_view_decl)
+            for input_decl in exop.write_args:
+                self.device_tensor_view(input_decl.tensor_view_decl)
+            for output_decl in exop.output_decls:
+                self.device_tensor_view(output_decl.tensor_view_decl)
         # Make sure we have values for ops that got optimized out
-        for input_exop in computation_decl.returns.args:
-            value = input_exop.value
-            if isinstance(value.exop.op, TensorValueOp):
+        for input_decl in computation_decl.returns.input_decls:
+            output_decl = input_decl.source_output_decl
+            if isinstance(output_decl.exop.op, TensorValueOp):
                 tensor_decl = exop.computation_graph.get_tensor_decl(
-                    op=value.exop.op.value_tensor)
+                    op=output_decl.exop.op.value_tensor)
                 self.device_tensor_view(
-                    tensor_decl.get_tensor_view(value.exop.op.tensor_description()))
+                    tensor_decl.get_tensor_view(output_decl.exop.op.tensor_description()))
             else:
-                self.device_tensor_view(value.write_view)
+                self.device_tensor_view(output_decl.tensor_view_decl)
         for param in computation_decl.computation_op.parameters:
             tensor_decl = computation_decl.get_tensor_decl(op=param.tensor)
             self.device_tensor_view(tensor_decl.root_tensor_view_decl)
@@ -399,7 +399,7 @@ class ExecutionGraphTransformer(Transformer):
             tensor_decl = computation_decl.get_tensor_decl(op=op)
             device_tensor = self.device_tensor_view(tensor_decl.root_tensor_view_decl)
         else:
-            tensor_view = computation_decl.op_returns[op.tensor].read_view
+            tensor_view = computation_decl.op_returns[op.tensor].tensor_view_decl
             device_tensor = self.device_tensor_view(tensor_view)
 
         return device_tensor.get(tensor)

@@ -108,7 +108,7 @@ class ExVizPass(SequentialExOpPass):
                         color=tensor_edge_color)
 
     def add_value_view_edge(self, value):
-        tensor_view = value.write_view
+        tensor_view = value.tensor_view_decl
         if tensor_view is None:
             return
         tensor = tensor_view.tensor

@@ -177,12 +177,12 @@ class VisualizeMemPass(GraphPass):
 
     def compute_op_weight(self, exop):
         mass = 0
-        # for arg in exop.args:
-        #     tensor = arg.value.tensor
+        # for input_decl in exop.input_decls:
+        #     tensor = input_decl.source_output_decl.tensor
         #     if tensor.is_persistent is False:
         #         mass += tensor.size
-        # for value in exop.values:
-        #     tensor = value.tensor
+        # for output_decl in exop.output_decls:
+        #     tensor = output_decl.tensor
         #     if tensor.is_persistent is False:
         #         mass -= tensor.size
         for tensor in exop.liveness_new_list:
