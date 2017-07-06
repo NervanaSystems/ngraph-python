@@ -130,8 +130,9 @@ class SequentialArrayIterator(object):
         self.index = 0
 
         if isinstance(data_arrays, dict):
-            self.data_arrays = {k: v['data'] for k, v in viewitems(data_arrays)}
-            self.axis_names = {k: v['axes'] for k, v in viewitems(data_arrays)}
+            self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
+            #self.data_arrays = {k: v['data'] for k, v in viewitems(data_arrays)}
+            #self.axis_names = {k: v['axes'] for k, v in viewitems(data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
 

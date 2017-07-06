@@ -10,14 +10,14 @@ from ngraph.frontends.neon import ax, NgraphArgparser, loop_train
 from ngraph.frontends.neon import make_bound_computation, make_default_callbacks # noqa
 from tqdm import tqdm
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import ArrayIterator
+from ngraph.frontends.neon import ArrayIterator, SequentialArrayIterator
 import pdb
 import math
 import utils
 import ngraph.transformers.passes.nviz
 
 batch_size  = 128
-feature_dim = 3
+feature_dim = 2
 seq_len     = 30
 
 output_dim  = 2
@@ -49,16 +49,23 @@ data.test follows a similar model
 data    = utils.TimeSeries( train_ratio = 0.8,  #ratio of samples to set aside for training 
                             seq_len = seq_len,  #length of the sequence in each sample
                             npoints = 100,      #number of points to take in each cycle
-                            ncycles = 10)       #number of cycles in the curve
+                            ncycles = 100)       #number of cycles in the curve
 
 #Make an iterable / generator that receives chunks of training data (chunk = batch_size)
-#train_set   = ArrayIterator(data.train, batch_size) 
-#test_set    = ArrayIterator(data.test, batch_size) 
-N   = ng.make_axis(name='N', length=args.batch_size)
-REC = ng.make_axis(name='REC', length= seq_len)
-F   = ng.make_axis(name='F', length= output_dim)
-my_axes = ng.make_axes([REC, F, N])
-inputs = ng.placeholder(axes=my_axes)
+#train_set   = SequentialArrayIterator(data.train, seq_len, batch_size) 
+#test_set    = SequentialArrayIterator(data.test, seq_len, batch_size) 
+train_set   = ArrayIterator(data.train, batch_size, total_iterations=args.num_iterations) 
+test_set    = ArrayIterator(data.test, batch_size, total_iterations=args.num_iterations) 
+
+batch_axis      = ng.make_axis(length=batch_size, name="N")
+time_axis       = ng.make_axis(length=seq_len, name="REC")
+feature_axis    = ng.make_axis(length=feature_dim, name="feature_axis")
+out_axis        = ng.make_axis(length=output_dim, name="output_axis")
+
+in_axes         = ng.make_axes([batch_axis, time_axis, feature_axis])
+out_axes        = ng.make_axes([batch_axis,out_axis])
+
+inputs          = {'X': ng.placeholder(in_axes),'y': ng.placeholder(out_axes) }
 
 #Make placeholders of training data (these are temporary variables used for training)
 #inputs      = train_set.make_placeholders()
@@ -68,9 +75,13 @@ inputs = ng.placeholder(axes=my_axes)
 
 
 #Define the network
+ax.Y.length = output_dim
+ax.Y.name   = 'output_axis'
+#ax.Y.name   = 'Fo'
 seq1    = Sequential([Recurrent(nout = recurrent_units, init = init_uni, activation=Tanh(), return_sequence=False),
-                      Affine(weight_init = init_uni, bias_init=init_uni, activation=Identity(), nout = output_dim)] )
-
+#                      Affine(weight_init = init_uni, bias_init=init_uni, activation=Identity())] )
+#                      Affine(weight_init = init_uni, bias_init=init_uni, activation=Identity(), nout = output_dim)] )
+                      Affine(weight_init = init_uni, bias_init=init_uni, activation=Identity(), axes = out_axis )] )
 
 optimizer   = RMSProp()
 
@@ -82,19 +93,20 @@ train_loss  = ng.squared_L2(fwd_prop - inputs['y'])
 batch_cost      = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_outputs   = dict(batch_cost=batch_cost)
 
-
+#Used for fwd prop of batch norm / dropout
 with Layer.inference_mode_on():
     inference_prob = seq1(inputs['X'])
 eval_loss       = ng.squared_L2(inference_prob - inputs['y'])
-eval_outputs    = dict(batch_cost=eval_loss)
+eval_outputs    = dict(l2_loss=eval_loss)
 
-
+print('Start training')
 # Now bind the computations we are interested in
+
 with closing(ngt.make_transformer()) as transformer:
     #transformer.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True, show_axes=True, view= False))
     train_computation   = make_bound_computation(transformer, train_outputs, inputs)
     loss_computation    = make_bound_computation(transformer, eval_outputs, inputs)
-
+    #Make these explicit
     cbs = make_default_callbacks(output_file=args.output_file,
                                  frequency=args.iter_interval,
                                  train_computation=train_computation,
