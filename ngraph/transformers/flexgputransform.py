@@ -94,6 +94,10 @@ class FlexGPUTransformer(GPUTransformer):
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
 
+    def set_output_statistics_file(self, statistics_file):
+        if self.collect_flex_data:
+            self.set_flex_data_file(statistics_file)
+
     def set_flex_data_file(self, data_file):
         self.flex_manager.set_h5py_file(data_file)
 

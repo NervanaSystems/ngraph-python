@@ -35,10 +35,11 @@ class CallbackPhase(Enum):
     minibatch_post = 5
 
 
-def make_default_callbacks(output_file, frequency, train_computation, total_iterations,
-                           eval_set=None, loss_computation=None, use_progress_bar=True):
+def make_default_callbacks(transformer, output_file, frequency, train_computation,
+                           total_iterations, eval_set=None, loss_computation=None,
+                           use_progress_bar=True):
 
-    cbs = CallbackContainer(output_file, total_iterations)
+    cbs = CallbackContainer(transformer, output_file, total_iterations)
 
     cbs.append(TrainCostCallback(train_computation))
 
@@ -54,7 +55,8 @@ def make_default_callbacks(output_file, frequency, train_computation, total_iter
 
 
 class CallbackContainer(object):
-    def __init__(self, output_file, total_iterations, callback_list=[]):
+    def __init__(self, transformer, output_file, total_iterations, callback_list=[]):
+        self.transformer = transformer
         '''
         just store a list of callbacks
         '''
@@ -102,11 +104,11 @@ class CallbackContainer(object):
 
     def __call__(self, phase, data=None, idx=None):
         for c in self._callbacks:
-            c(self.callback_data, phase, data, idx)
+            c(self.transformer, self.callback_data, phase, data, idx)
 
 
 class Callback(object):
-    def __call__(self, callback_data, phase, data, idx):
+    def __call__(self, transformer, callback_data, phase, data, idx):
         pass
 
 
@@ -118,12 +120,9 @@ class TrainCostCallback(Callback):
     def __init__(self, computation):
         self.computation = computation
 
-    def __call__(self, callback_data, phase, data, idx):
+    def __call__(self, transformer, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
-            transformer = self.computation.comp_func.transformer
-            if hasattr(transformer, 'collect_flex_data'):
-                if transformer.collect_flex_data:
-                    transformer.set_flex_data_file(callback_data)
+            transformer.set_output_statistics_file(callback_data)
             iterations = callback_data['config'].attrs['total_iterations']
             callback_data.create_dataset("cost/train", (iterations,))
             # clue in the data reader to use the 'minibatch' time_markers
@@ -137,7 +136,7 @@ class RunTimerCallback(Callback):
     """
     Callback which tracks the total training time.
     """
-    def __call__(self, callback_data, phase, data, idx):
+    def __call__(self, transformer, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             self.timing = callback_data.create_group("time/train")
             self.timing.create_dataset("start_time", (1,), dtype='float64')
@@ -153,7 +152,7 @@ class ProgressCallback(Callback):
     """
     Callback shows overall progress
     """
-    def __call__(self, callback_data, phase, data, idx):
+    def __call__(self, transformer, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             self.tpbar = tqdm(desc="Overall",
                               unit="minibatches",
@@ -175,7 +174,7 @@ class TrainLoggerCallback(Callback):
     def __init__(self, frequency):
         self.frequency = frequency
 
-    def __call__(self, callback_data, phase, data, idx):
+    def __call__(self, transformer, callback_data, phase, data, idx):
         if phase == CallbackPhase.minibatch_post:
             if ((idx + 1) % self.frequency == 0):
                 interval = slice(idx + 1 - self.frequency, idx)
@@ -198,7 +197,7 @@ class LossCallback(Callback):
         self.dataset = dataset
         self.interval_loss_comp = interval_loss_comp
 
-    def __call__(self, callback_data, phase, data, idx):
+    def __call__(self, transformer, callback_data, phase, data, idx):
         if phase == CallbackPhase.train_pre_:
             self.total_iterations = callback_data['config'].attrs['total_iterations']
             num_intervals = self.total_iterations // self.frequency
