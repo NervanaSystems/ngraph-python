@@ -7,6 +7,7 @@
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
+# Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
@@ -57,7 +58,7 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
         while self.did_something:
             self.did_something = False
             for exop in self.exop_block:
-                self.visit_exop(exop, *exop.args)
+                self.visit_exop(exop, *exop.input_decls)
 
         return self.end_pass(**kwargs)
 
@@ -66,7 +67,7 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
         pass
 
     def exop_args(self, exop):
-        return (arg.value.exop.op for arg in exop.args)
+        return (input_decl.source_output_decl.exop.op for input_decl in exop.input_decls)
 
     def op_args(self, op):
         return self.exop_args(self.computation_decl.get_exop(op))
@@ -95,7 +96,7 @@ class SSAConversion(SequentialExOpPass):
                                 op=ReadOp(
                                     axes=source_tensor.tensor_description_base.axes))
             current_exop.add_ref_op(exop.op)
-            current_exop.add_value(source_tensor)
+            current_exop.add_output_decl(source_tensor)
             source_tensor.exop = exop
             self.exop_block.add_exop(current_exop, exop.prev_exop)
             self.tensor_map[source_tensor] = current_exop
@@ -105,56 +106,58 @@ class SSAConversion(SequentialExOpPass):
     def visit_exop(self, exop):
         current_exop = self.current_exop(exop, self.execution_graph.get_tensor_decl(
             op=exop.op.value_tensor).source_tensor)
-        current_value = current_exop.values[0]
-        current_value.tensor_decl.merge_flags(exop.values[0].tensor_decl)
-        for arg in set(exop.values[0].value_users):
-            arg.value = current_value
+        current_output_decl = current_exop.output_decls[0]
+        current_output_decl.tensor_decl.merge_flags(exop.output_decls[0].tensor_decl)
+        for input_decl in set(exop.output_decls[0].user_input_decls):
+            input_decl.source_output_decl = current_output_decl
         self.exop_block.remove_exop(exop)
 
     @visit_exop.on_type(AssignOp)
-    def visit_exop(self, exop, tensor_arg, value_arg):
-        source_tensor = tensor_arg.value.tensor_decl.source_tensor
+    def visit_exop(self, exop, tensor_input_decl, value_input_decl):
+        source_tensor = tensor_input_decl.source_output_decl.tensor_decl.source_tensor
         current_exop = self.current_exop(exop, source_tensor)
         write_exop = ExOp(computation_graph=self.computation_decl,
                           op=WriteOp(axes=current_exop.op.axes))
-        write_tensor = write_exop.values[0].tensor_decl
-        write_tensor.source_tensor = source_tensor
-        write_exop.add_write_arg(write_exop.values[0])
-        write_exop.add_arg(current_exop.values[0])
-        write_exop.add_write_arg(write_exop.values[0], tensor_arg.read_view.tensor_description)
-        write_exop.add_arg(value_arg.value)
+        write_tensor_decl = write_exop.output_decls[0].tensor_decl
+        write_tensor_decl.source_tensor = source_tensor
+        write_exop.add_write_arg(write_exop.output_decls[0])
+        write_exop.add_input_decl(current_exop.output_decls[0])
+        write_exop.add_write_arg(write_exop.output_decls[0],
+                                 tensor_input_decl.tensor_view_decl.tensor_description)
+        write_exop.add_input_decl(value_input_decl.source_output_decl)
         self.exop_block.replace_exop(exop, write_exop)
         self.tensor_map[source_tensor] = write_exop
 
     @visit_exop.on_type(Fill)
-    def visit_exop(self, exop, tensor_arg):
-        source_tensor = tensor_arg.value.tensor_decl.source_tensor
+    def visit_exop(self, exop, tensor_input_decl):
+        source_tensor = tensor_input_decl.source_output_decl.tensor_decl.source_tensor
         current_exop = self.current_exop(exop, source_tensor)
         write_exop = ExOp(computation_graph=self.computation_decl,
                           op=WriteOp(axes=current_exop.op.axes))
-        write_tensor = write_exop.values[0].tensor_decl
-        write_tensor.source_tensor = source_tensor
-        write_exop.add_write_arg(write_exop.values[0])
-        write_exop.add_arg(current_exop.values[0])
+        write_tensor_decl = write_exop.output_decls[0].tensor_decl
+        write_tensor_decl.source_tensor = source_tensor
+        write_exop.add_write_arg(write_exop.output_decls[0])
+        write_exop.add_input_decl(current_exop.output_decls[0])
         scalar_op = literal_scalar_exop(scalar=exop.op.scalar,
                                         computation_graph=self.computation_decl)
-        write_exop.add_write_arg(write_exop.values[0], tensor_arg.read_view.tensor_description)
-        write_exop.add_arg(scalar_op.values[0])
+        write_exop.add_write_arg(write_exop.output_decls[0],
+                                 tensor_input_decl.tensor_view_decl.tensor_description)
+        write_exop.add_input_decl(scalar_op.output_decls[0])
         self.exop_block.replace_exop(exop, write_exop)
         self.tensor_map[source_tensor] = write_exop
 
     def end_pass(self, **kwargs):
         super(SSAConversion, self).end_pass(**kwargs)
         for source_tensor_decl, current_exop in iteritems(self.tensor_map):
-            if current_exop.values[0].tensor_decl is source_tensor_decl:
+            if current_exop.output_decls[0].tensor_decl is source_tensor_decl:
                 continue
             if not source_tensor_decl.is_output:
                 continue
             copy_exop = ExOp(computation_graph=self.computation_decl,
                              create_value=False,
                              op=WriteOp(axes=[]))
-            copy_exop.add_write_arg(source_tensor_decl.exop.values[0])
-            copy_exop.add_arg(current_exop.values[0])
+            copy_exop.add_write_arg(source_tensor_decl.exop.output_decls[0])
+            copy_exop.add_input_decl(current_exop.output_decls[0])
             self.exop_block.add_exop(copy_exop)
 
 
@@ -164,10 +167,10 @@ class IndexElision(SequentialExOpPass):
         pass
 
     @visit_exop.on_type(IndexOp)
-    def visit_exop(self, exop, arg):
-        value = exop.args[0].value
-        exop.values[0].tensor_description = exop.op.transform_tensor_description(
-            value.tensor_description)
-        exop.values[0].tensor_decl = value.tensor_decl
-        value.exop.take_value(exop.values[0])
+    def visit_exop(self, exop, input_decl):
+        output_decl = exop.input_decls[0].source_output_decl
+        exop.output_decls[0].tensor_description = exop.op.transform_tensor_description(
+            output_decl.tensor_description)
+        exop.output_decls[0].tensor_decl = output_decl.tensor_decl
+        output_decl.exop.take_output_decl(exop.output_decls[0])
         self.exop_block.remove_exop(exop)

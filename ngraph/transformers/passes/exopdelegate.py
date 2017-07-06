@@ -19,10 +19,10 @@ from ngraph.transformers.passes.opdelegate import OpAccessor
 class ExOpGraphOpAccessor(OpAccessor):
 
     def exop_args(self, exop):
-        return tuple(arg.value.exop.op for arg in exop.args)
+        return tuple(input_decl.source_output_decl.exop.op for input_decl in exop.input_decls)
 
     def op_arg(self, op, n):
-        return self.computation_decl.get_exop(op).args[n].value.exop.op
+        return self.computation_decl.get_exop(op).input_decls[n].source_output_decl.exop.op
 
     def op_args(self, op):
         return self.exop_args(self.computation_decl.get_exop(op))

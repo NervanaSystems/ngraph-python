@@ -37,6 +37,6 @@ class VerifyPass(GraphPass):
                         raise RuntimeError(
                             'tensor read before written: {} - {}'.format(exop.name, tensor))
 
-            for value in exop.values:
-                if value.write_view.tensor.is_persistent is False:
-                    written_tensors.add(value.write_view.tensor)
+            for output_decl in exop.output_decls:
+                if output_decl.tensor_view_decl.tensor.is_persistent is False:
+                    written_tensors.add(output_decl.tensor_view_decl.tensor)

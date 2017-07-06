@@ -335,11 +335,11 @@ class CPUCodeGenerator(PyGen):
 
     @name.on_type(InputDecl)
     def name(self, x):
-        return self.transformer.device_tensor_view(x.read_view).ref_str
+        return self.transformer.device_tensor_view(x.tensor_view_decl).ref_str
 
     @name.on_type(OutputDecl)
     def name(self, x):
-        return self.transformer.device_tensor_view(x.write_view).ref_str
+        return self.transformer.device_tensor_view(x.tensor_view_decl).ref_str
 
     def np_reduction_axis(self, op):
         """
@@ -443,24 +443,25 @@ class CPUCodeGenerator(PyGen):
         pass
         # exop = self.exop
         # self.append("\n# {} pre", exop.name)
-        # for arg in exop.args:
-        #     arg_name = 'a_'+arg.tensor.tensor_name
-        #     self.append("#    arg {}", arg_name)
-        # for val in exop.values:
-        #     val_name = 'a_'+val.tensor.tensor_name
-        #     self.append("#    val {}", val_name)
+        # for input_decl in exop.input_decls:
+        #     input_decl_name = 'a_'+input_decl.tensor.tensor_name
+        #     self.append("#    arg {}", input_decl_name)
+        # for output_decl in exop.output_decls:
+        #     output_decl_name = 'a_'+output_decl.tensor.tensor_name
+        #     self.append("#    output_decl {}", val_name)
 
     def generate_op_post(self, op):
         pass
         # exop = self.exop
         # self.append("print('{{}}'.format('{}'))", op.name)
-        # for arg in exop.args:
-        #     arg_name = 'a_'+arg.tensor.tensor_name
-        #     self.append("print('   arg {} = {{}}'.format({}))", arg_name, arg_name)
-        # for val in exop.values:
-        #     val_name = 'a_'+val.tensor.tensor_name
-        #     self.append("#    val {}", val_name)
-        #     self.append("print('   val {} = {{}}'.format({}))", val_name, val_name)
+        # for input_decl in exop.input.decls:
+        #     input_decl_name = 'a_'+input_decl.tensor.tensor_name
+        #     self.append("print('   arg {} = {{}}'.format({}))", input_decl_name, arg_name)
+        # for val in exop.output_decls:
+        #     output_decl_name = 'a_'+val.tensor.tensor_name
+        #     self.append("#    output_decl {}", output_decl_name)
+        #     self.append("print('   output_decl {} = {{}}'.format({}))", \
+        #            output_decl_name, output_decl_name)
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -482,8 +483,8 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, *args):
         write_args = self.exop.write_args
         for dest, source in zip(write_args, args):
-            if isinstance(source.value.exop.op, LiteralScalarOp):
-                self.append("{}[...] = {}", dest, source.value.exop.op.scalar)
+            if isinstance(source.source_output_decl.exop.op, LiteralScalarOp):
+                self.append("{}[...] = {}", dest, source.source_output_decl.exop.op.scalar)
             else:
                 self.append("{}[...] = {}", dest, source)
 
@@ -876,10 +877,10 @@ class CPUTransformer(ExecutionGraphTransformer):
                 self.exop_codegen.append('super({}, self).__init__(**kwargs)',
                                          computation_decl.computation_op.name)
                 for exop in computation_decl.exop_block:
-                    value = exop.values[0] if len(exop.values) > 0 else None
+                    output_decl = exop.output_decls[0] if len(exop.output_decls) > 0 else None
                     # TODO better way to deal with multiple values
                     self.exop_codegen.exop = exop
-                    self.exop_codegen.allocate_op(exop.op, value, *exop.args)
+                    self.exop_codegen.allocate_op(exop.op, output_decl, *exop.input_decls)
 
             self.exop_codegen.endl()
 
@@ -889,11 +890,11 @@ class CPUTransformer(ExecutionGraphTransformer):
         self.codegen_define_length = self.exop_codegen.code_length
 
     def generate_exop(self, exop):
-        value = exop.values[0] if len(exop.values) > 0 else None
+        value = exop.output_decls[0] if len(exop.output_decls) > 0 else None
         # TODO better way to deal with multiple values
         self.exop_codegen.exop = exop
         self.exop_codegen.generate_op_pre(exop.op)
-        self.exop_codegen.generate_op(exop.op, value, *exop.args)
+        self.exop_codegen.generate_op(exop.op, value, *exop.input_decls)
         self.exop_codegen.generate_op_post(exop.op)
 
     def finish_define_computation(self, computation_decl):
