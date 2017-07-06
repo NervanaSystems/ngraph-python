@@ -93,7 +93,7 @@ class Decoder(object):
 
         # build mapping of words to integers
         b = set(s1.split() + s2.split())
-        word2char = dict(zip(b, range(len(b))))
+        word2char = dict(zip(b, enumerate(b)))
 
         # map the words to a char array (Levenshtein packages only accepts
         # strings)
