@@ -24,7 +24,6 @@ from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
-import pdb
 
 
 # parse the command line arguments
@@ -52,7 +51,7 @@ valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_siz
 
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
-pdb.set_trace()
+
 
 def expand_onehot(x):
     return ng.one_hot(x, axis=ax.Y)

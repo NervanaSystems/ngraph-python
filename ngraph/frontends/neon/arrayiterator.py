@@ -18,7 +18,7 @@ from future.utils import viewitems
 import six
 from ngraph.frontends.neon import ax
 import collections
-import pdb
+
 
 class ArrayIterator(object):
 
@@ -70,7 +70,6 @@ class ArrayIterator(object):
         return -((self.start - self.ndata) // self.batch_size)
 
     def make_placeholders(self, include_iteration=False):
-        pdb.set_trace()
         placeholders = {}
         ax.N.length = self.batch_size
         for k, axnm in self.axis_names.items():
@@ -131,8 +130,6 @@ class SequentialArrayIterator(object):
 
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
-            #self.data_arrays = {k: v['data'] for k, v in viewitems(data_arrays)}
-            #self.axis_names = {k: v['axes'] for k, v in viewitems(data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
 
@@ -142,7 +139,6 @@ class SequentialArrayIterator(object):
         self.ntokens = self.ndata * self.time_steps
         self.nbatches = self.ndata // self.batch_size
 
-        
         if self.ndata < self.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
 
