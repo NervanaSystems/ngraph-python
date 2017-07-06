@@ -32,6 +32,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         return ng.sigmoid(inputs[0]).named(cntk_op.uid)
 
     def StableSigmoid(self, cntk_op, inputs):
@@ -45,6 +47,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         return ng.sigmoid(inputs[0]).named(cntk_op.uid)
 
     def Exp(self, cntk_op, inputs):
@@ -58,6 +62,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         return ng.exp(inputs[0]).named(cntk_op.uid)
 
     def Tanh(self, cntk_op, inputs):
@@ -71,6 +77,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         return ng.tanh(inputs[0]).named(cntk_op.uid)
 
     def Reciprocal(self, cntk_op, inputs):
@@ -84,6 +92,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         return ng.reciprocal(inputs[0]).named(cntk_op.uid)
 
     def ReLU(self, cntk_op, inputs):
@@ -97,6 +107,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         return ng.maximum(inputs[0], 0.).named(cntk_op.uid)
 
     def Reshape(self, cntk_op, inputs):
@@ -110,6 +122,8 @@ class OpsUnary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 1
+
         in_axes = list(inputs[0].axes)
         out_axes = []
         for dim in cntk_op.shape:
@@ -125,3 +139,18 @@ class OpsUnary:
 
         out_axes += in_axes
         return ng.broadcast(inputs[0], out_axes).named(cntk_op.uid)
+
+    def Softmax(self, cntk_op, inputs):
+        """
+        Returns softmax of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return ng.softmax(inputs[0])
