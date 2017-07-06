@@ -259,6 +259,16 @@ class ExecutionGraphTransformer(Transformer):
         return self.get_op_tensor_view(op).get(host_tensor)
 
     def load_computation(self, computation_decl):
+        """
+        Load a computation and associated storage into the current execution state.
+
+        Args:
+            computation_decl: A ComputationDecl for the computation.
+
+        Returns:
+            An executable for the computation.
+
+        """
         self.device_computation = computation_decl.device_computation
         exop_block = computation_decl.exop_block
         self.start_allocate_computation(computation_decl)
