@@ -169,6 +169,7 @@ n2_c1_hw4_2x2_str2_avg = dict(
 
 
 @pytest.mark.transformer_dependent
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("pool_args",
                          [n4_c1_hw4_2x2_max,
                           n2_c1_hw5_3x3_str2_max,

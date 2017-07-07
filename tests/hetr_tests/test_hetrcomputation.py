@@ -317,7 +317,9 @@ def test_recvop_axes_using_dot(transformer_factory):
 
     with ExecutorFactory() as ex:
         computation = ex.executor(result, x, w)
-        assert ng.equal(computation(x_value, w_value), np.dot(x_value, w_value))
+        val_ng = computation(x_value, w_value)
+        val_np = np.dot(x_value, w_value)
+        assert ng.testing.allclose(val_ng, val_np)
 
 
 def test_recvop_tensorupdate(transformer_factory):
