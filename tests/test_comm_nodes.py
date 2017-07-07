@@ -241,6 +241,7 @@ def test_broadcast_ops(config):
 def test_allreduce_hint(config):
     c = config
 
+    pytest.xfail("Ticket to fix this test: #1858")
     with ng.metadata(device_id=c['device_id']):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
