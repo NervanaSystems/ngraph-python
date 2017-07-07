@@ -78,10 +78,11 @@ class FlexGPUTransformer(GPUTransformer):
     default_rtol = 1e-02
     default_atol = 1e-05
 
-    def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
+    def __init__(self, fixed_point=False, flex_verbose=False, collect_flex_data=False, **kwargs):
 
         super(FlexGPUTransformer, self).__init__()
         self.fixed_point = fixed_point
+        self.collect_flex_data = collect_flex_data
 
         # flex passes for setting Op dtypes to flex
         self.register_graph_pass(FlexFusion(), 0)
@@ -91,6 +92,13 @@ class FlexGPUTransformer(GPUTransformer):
         # flex manager manages autoflex mechanics
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
+
+    def set_output_statistics_file(self, statistics_file):
+        if self.collect_flex_data:
+            self.set_flex_data_file(statistics_file)
+
+    def set_flex_data_file(self, data_file):
+        self.flex_manager.set_h5py_file(data_file)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -325,9 +333,6 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         self.transformer.flex_manager.manage_after_computation(kernel)
 
     def __call__(self):
-
-        # TODO move this once we know where fprop and bprop boundaries are
-        self.transformer.flex_manager.autoflex_count += 1
         self.transformer.flex_manager.autoflex_count += 1
 
         # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)
