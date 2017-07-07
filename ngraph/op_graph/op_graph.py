@@ -211,40 +211,39 @@ class Op(NameableValue):
         """
         Currently ops can have references to other ops anywhere in their __dict__, (not just args,
         but the other typical places handled in serialization's `add_edges`). This function
-        iterates through an ops __dict__ attributes and finds all other ops recursively.
+        iterates through an ops __dict__ attributes and tests if any of them are subclasses of
+        `Op`.
 
-        This is more powerful than the ordered_ops method which only considers args and
-        control_deps.
+        This is 'greedier' than the `ordered_ops` method which only traverses the graph using the
+        `args` and `control_deps` keys of an ops `__dict__`. In addition, the order of ops
+        returned by this method is not guaranteed to be in a valid linear execution ordering.
         """
-        # TODO: work around until #1790 is done, to get ds2 working
-        import sys
-        sys.setrecursionlimit(200000)
+        op_set = OrderedSet()
+        frontier = OrderedSet(ops)
 
-        op_set = OrderedSet(ops)
-
-        def add_op(op):
+        while frontier:
+            op = frontier.pop()
             op_set.add(op)
+
             for key in op.__dict__:
                 val = getattr(op, key)
                 if isinstance(val, Op) and val not in op_set:
-                    add_op(val)
+                    frontier.add(val)
                 elif isinstance(val, dict):
                     for subkey in val:
                         if isinstance(val[subkey], Op) and val[subkey] not in op_set:
-                            add_op(val[subkey])
+                            frontier.add(val[subkey])
                 elif isinstance(val, (list, tuple, set, OrderedSet)):
                     for item in val:
                         if isinstance(item, Op) and item not in op_set:
-                            add_op(item)
-        for op in ops:
-            add_op(op)
+                            frontier.add(item)
         return op_set
 
     @staticmethod
     def ordered_ops(roots):
         """
-        Topological sort of ops reachable from roots. Notes ngraph is using
-        depenency edges rather than dataflow edges, for example,
+        Topological sort of ops reachable from roots. Note that ngraph is
+        using depenency edges rather than dataflow edges, for example,
         `top_sort(a -> b -> c) => [c, b, a]`.
 
         Args:
