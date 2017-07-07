@@ -28,6 +28,7 @@ pytestmark = pytest.mark.transformer_dependent
 atol, rtol = 0, 1e-6
 
 
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.75, 0.5])
 def test_dropout_train(nin, batch_size, keep, transformer_factory):
@@ -83,6 +84,7 @@ def test_dropout_inference(nin, batch_size, transformer_factory):
 
 
 @pytest.mark.flex_disabled
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.5])
 def test_dropout_bprop_single_comp(nin, batch_size, keep, transformer_factory):
