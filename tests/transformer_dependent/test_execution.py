@@ -30,6 +30,9 @@ pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transf
 
 rng = RandomTensorGenerator(0, np.float32)
 
+pytest.mark.always = pytest.mark.xfail(strict=True)
+
+pytestmark = pytest.mark.always(scope="module")
 
 def test_constant_multiply(transformer_factory):
     # TODO: better error message when missing axes length in cases where it
