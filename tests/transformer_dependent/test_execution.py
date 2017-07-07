@@ -746,6 +746,8 @@ def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
+# Flex disabled - because of the strict tolerance (rtol, atol) and too wide range of input values
+@pytest.mark.flex_disabled
 @pytest.config.argon_disabled  # TODO triage
 def test_softmax(transformer_factory, input_tensor):
     """TODO."""

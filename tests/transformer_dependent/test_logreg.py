@@ -40,6 +40,8 @@ class NumpyLogreg(object):
         return grad, loss, self.thetas
 
 
+# Flex disabled - because of the strict tolerance (rtol, atol)
+@pytest.mark.flex_disabled
 def test_logreg(transformer_factory):
     # xs: (C, N), y: (N,)
     xs = np.array([[0.52, 0.88, 0.52, 0.74],
