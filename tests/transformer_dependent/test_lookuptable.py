@@ -66,6 +66,7 @@ def lut_update_ref(error, lut, idx, pad_idx):
 
 
 @pytest.mark.flex_disabled
+@pytest.config.argon_disabled  # TODO triage
 def test_lut(transformer_factory, lut_args):
     """
     test lut fprop and bprop
