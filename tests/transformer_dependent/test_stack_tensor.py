@@ -24,6 +24,7 @@ rtol = atol = 1e-2
 
 
 @pytest.mark.flex_disabled  # Allowed to fail until PR2
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 def test_stack(transformer_factory):
     W = ng.make_axis(length=4)
