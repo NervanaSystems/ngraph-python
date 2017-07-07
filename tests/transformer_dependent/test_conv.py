@@ -22,7 +22,6 @@ from ngraph.testing import ExecutorFactory, RandomTensorGenerator, executor, Con
 
 pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
-
 rng = RandomTensorGenerator(0, np.float32)
 
 
@@ -90,6 +89,7 @@ def test_conv(transformer_factory, n64_hw32_c32_3x3):
 
 
 @pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
+@pytest.config.argon_disabled  # DeconvolutionOp not yet supported #1781
 def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -129,6 +129,7 @@ def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
 
 
 @pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
+@pytest.config.argon_disabled  # DeconvolutionOp not yet supported #1781
 def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf1 = ConvParams(**deconv_n4_hw4_c1_5x5)
 
@@ -264,6 +265,7 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
 
 
 @pytest.mark.flex_disabled  # There is no SetItemKernel implementation for flex yet
+@pytest.config.argon_disabled  # WIP debugging
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """
     Test deriv of conv followed by flatten

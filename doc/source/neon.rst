@@ -127,7 +127,8 @@ Callbacks allow the model to report back its progress and any relevant metrics d
 
 	from ngraph.frontends.neon import make_default_callbacks
 
-	cbs = make_default_callbacks(output_file=args.output_file,
+	cbs = make_default_callbacks(transformer=transformer,
+	                         output_file=args.output_file,
                              frequency=args.iter_interval,
                              train_computation=train_computation,
                              total_iterations=args.num_iterations,
