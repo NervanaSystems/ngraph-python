@@ -15,13 +15,15 @@
 # ----------------------------------------------------------------------------
 import abc
 
-from future.utils import with_metaclass, iteritems
-from ngraph.transformers.exop import ExOpBlock, ExOp, literal_scalar_exop
+from future.utils import with_metaclass, iteritems, itervalues
+from ngraph.transformers.exop import ExOpBlock, ExOp, literal_scalar_exop, ReturnOp
 from ngraph.transformers.passes.passes import GraphPass
 
 from ngraph.op_graph.op_graph import Op, TensorValueOp, AssignOp, IndexOp, Fill, \
     ReadOp, WriteOp
+from ngraph.op_graph.convolution import ConvolutionOp
 from ngraph.util.generics import TypeMethods
+from ngraph.op_graph.comm_nodes import CommunicationOp
 
 
 def exop_method(dispatch_base_type=object, extends=None, next_method_arg=None):
@@ -76,6 +78,50 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
         self.exop_block.replace_op(old_op, replacement_op)
 
 
+class DeadCodeEliminationPass(SequentialExOpPass):
+    @exop_method(dispatch_base_type=Op)
+    def visit_exop(self, exop, *args):
+        for op in self.computation_decl.computation_op.parameters:
+            if self.computation_decl.get_exop(op) is exop:
+                # Used as a parameter
+                return
+
+        is_dead = True
+        for output_decl in exop.output_decls:
+            if len(output_decl.user_input_decls) > 0:
+                is_dead = False
+                break
+
+        if is_dead:
+            # print("DEAD", exop.op)
+            self.exop_block.remove_exop(exop)
+            self.did_something = True
+
+    @visit_exop.on_type(WriteOp)
+    def visit_exop(self, *args):
+        pass
+
+    @visit_exop.on_type(ReturnOp)
+    def visit_exop(self, *args):
+        pass
+
+    @visit_exop.on_type(AssignOp)
+    def visit_exop(self, *args):
+        pass
+
+    @visit_exop.on_type(Fill)
+    def visit_exop(self, *args):
+        pass
+
+    @visit_exop.on_type(CommunicationOp)
+    def visit_exop(self, *args):
+        pass
+
+    @visit_exop.on_type(ConvolutionOp)
+    def visit_exop(self, *args):
+        pass
+
+
 class SSAConversion(SequentialExOpPass):
     def __init__(self, **kwargs):
         super(SSAConversion, self).__init__(**kwargs)
@@ -91,7 +137,7 @@ class SSAConversion(SequentialExOpPass):
     def current_exop(self, exop, source_tensor):
         current_exop = self.tensor_map.get(source_tensor, None)
         if current_exop is None:
-            current_exop = ExOp(computation_graph=self.computation_decl,
+            current_exop = ExOp(computation_decl=self.computation_decl,
                                 create_value=False,
                                 op=ReadOp(
                                     axes=source_tensor.tensor_description_base.axes))
@@ -116,7 +162,7 @@ class SSAConversion(SequentialExOpPass):
     def visit_exop(self, exop, tensor_input_decl, value_input_decl):
         source_tensor = tensor_input_decl.source_output_decl.tensor_decl.source_tensor
         current_exop = self.current_exop(exop, source_tensor)
-        write_exop = ExOp(computation_graph=self.computation_decl,
+        write_exop = ExOp(computation_decl=self.computation_decl,
                           op=WriteOp(axes=current_exop.op.axes))
         write_tensor_decl = write_exop.output_decls[0].tensor_decl
         write_tensor_decl.source_tensor = source_tensor
@@ -132,14 +178,14 @@ class SSAConversion(SequentialExOpPass):
     def visit_exop(self, exop, tensor_input_decl):
         source_tensor = tensor_input_decl.source_output_decl.tensor_decl.source_tensor
         current_exop = self.current_exop(exop, source_tensor)
-        write_exop = ExOp(computation_graph=self.computation_decl,
+        write_exop = ExOp(computation_decl=self.computation_decl,
                           op=WriteOp(axes=current_exop.op.axes))
         write_tensor_decl = write_exop.output_decls[0].tensor_decl
         write_tensor_decl.source_tensor = source_tensor
         write_exop.add_write_arg(write_exop.output_decls[0])
         write_exop.add_input_decl(current_exop.output_decls[0])
         scalar_op = literal_scalar_exop(scalar=exop.op.scalar,
-                                        computation_graph=self.computation_decl)
+                                        computation_decl=self.computation_decl)
         write_exop.add_write_arg(write_exop.output_decls[0],
                                  tensor_input_decl.tensor_view_decl.tensor_description)
         write_exop.add_input_decl(scalar_op.output_decls[0])
@@ -153,7 +199,7 @@ class SSAConversion(SequentialExOpPass):
                 continue
             if not source_tensor_decl.is_output:
                 continue
-            copy_exop = ExOp(computation_graph=self.computation_decl,
+            copy_exop = ExOp(computation_decl=self.computation_decl,
                              create_value=False,
                              op=WriteOp(axes=[]))
             copy_exop.add_write_arg(source_tensor_decl.exop.output_decls[0])

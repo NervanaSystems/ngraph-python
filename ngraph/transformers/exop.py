@@ -341,7 +341,7 @@ class ExOp(ExecutionGraphElt):
     Arguments:
         create_value: Create an output.
         op: The computation graph Op.
-        computation_graph: The ComputationDecl owning this exop.
+        computation_decl: The ComputationDecl owning this exop.
         prev_exop: The exop that precedes this op.
         next_exop: The exop that will follow this op.
 
@@ -360,17 +360,17 @@ class ExOp(ExecutionGraphElt):
     def __init__(self,
                  create_value=True,
                  op=None,
-                 computation_graph=None,
+                 computation_decl=None,
                  prev_exop=None,
                  next_exop=None,
                  **kwargs):
-        super(ExOp, self).__init__(execution_graph=computation_graph.execution_graph,
+        super(ExOp, self).__init__(execution_graph=computation_decl.execution_graph,
                                    **kwargs)
         self.__input_decls = []
         # Kludge until we have values with writers/readers
         self.write_args = []
         self.__output_decls = []
-        self.computation_graph = computation_graph
+        self.computation_decl = computation_decl
         self.__op = None
         self.ref_ops = set()
         self.op = op
@@ -380,18 +380,18 @@ class ExOp(ExecutionGraphElt):
         self.liveness_free_list = []
         self.liveness_new_list = []
         if self.op is not None:
-            self.computation_graph.ops[self.op] = self
+            self.computation_decl.ops[self.op] = self
             self.add_ref_op(self.op)
 
         for arg in self.op.args:
             arg = arg.effective_tensor_op
-            exop = self.computation_graph.get_exop(arg)
+            exop = self.computation_decl.get_exop(arg)
             output_decls = exop.output_decls[0]
             self.add_input_decl(source_output_decl=output_decls)
 
         if create_value and self.op.is_tensor_op:
             tensor_description = self.op.tensor_description()
-            tensor_decl = self.computation_graph.get_tensor_decl(op=self.op)
+            tensor_decl = self.computation_decl.get_tensor_decl(op=self.op)
             self.add_output_decl(tensor_decl, tensor_description)
 
     @property
@@ -494,7 +494,7 @@ class ExOp(ExecutionGraphElt):
 
         """
         self.ref_ops.add(op)
-        self.computation_graph.ops[op] = self
+        self.computation_decl.ops[op] = self
 
     def memory_usage(self):
         """
@@ -564,19 +564,19 @@ live: {live}\n\tnew: {new}\n\tfree: {free}'.format(
         )
 
 
-def literal_scalar_exop(scalar, computation_graph):
+def literal_scalar_exop(scalar, computation_decl):
     """
     Creates an Exop for a scalar value.
 
     Args:
         scalar: The scalar value.
-        computation_graph: The computation graph associated with the exop.
+        computation_decl: The ComputationDecl associated with the exop.
 
     Returns:
         An Exop.
 
     """
-    exop = ExOp(computation_graph=computation_graph, op=LiteralScalarOp(scalar=scalar))
+    exop = ExOp(computation_decl=computation_decl, op=LiteralScalarOp(scalar=scalar))
     exop.output_decls[0].tensor_decl.is_compile_only = True
     return exop
 
@@ -586,19 +586,19 @@ class ExOpBlock(ExecutionGraphElt):
     A list of exops to be executed sequentially.
 
     Attributes:
-        computation_graph: The associated computation graph.
+        computation_decl: The associated computation graph.
         prev_exop: The latst exop.
         next_exop: The first exop.
         root_set: Set of exops whose values are needed.
 
     """
 
-    def __init__(self, computation_graph=None, **kwargs):
-        if computation_graph is None:
-            raise ValueError("computation_graph must be specified.")
-        super(ExOpBlock, self).__init__(execution_graph=computation_graph.execution_graph,
+    def __init__(self, computation_decl=None, **kwargs):
+        if computation_decl is None:
+            raise ValueError("computation_decl must be specified.")
+        super(ExOpBlock, self).__init__(execution_graph=computation_decl.execution_graph,
                                         **kwargs)
-        self.computation_graph = computation_graph
+        self.computation_decl = computation_decl
         # Doubly linked loop, with self as termination
         self.prev_exop = self
         self.next_exop = self
@@ -728,7 +728,7 @@ class ExOpBlock(ExecutionGraphElt):
         if op.is_sequencing_op:
             return after_exop
 
-        exec_op = ExOp(computation_graph=self.computation_graph, op=op)
+        exec_op = ExOp(computation_decl=self.computation_decl, op=op)
         return self.add_exop(exec_op, after_exop)
 
     def add_exop(self, exop, after_exop=None):
@@ -784,17 +784,17 @@ class ExOpBlock(ExecutionGraphElt):
         # anywhere else
         # * dropping out means a change to sequencing.
         new_op = as_op(new_op)
-        old_exop = self.computation_graph.get_exop(old_op)
+        old_exop = self.computation_decl.get_exop(old_op)
         if old_op is new_op:
             # Hetr bashes some ops. See MutateInsteadOfCopyWithNewArgsMixin, issue #1410
             after_exop = old_exop.prev_exop
             self.remove_exop(old_exop)
             self.add_ops([new_op], after_exop=after_exop)
             return
-        new_exop = self.computation_graph.get_exop(new_op, None)
+        new_exop = self.computation_decl.get_exop(new_op, None)
         if new_exop is None:
             self.add_ops([new_op], after_exop=old_exop.prev_exop)
-            new_exop = self.computation_graph.get_exop(new_op, None)
+            new_exop = self.computation_decl.get_exop(new_op, None)
         self.replace_users(old_exop, new_exop)
         self.remove_exop(old_exop)
         if old_exop in self.root_set:
@@ -814,7 +814,7 @@ class ExOpBlock(ExecutionGraphElt):
             self.replace_output_decl(old_output_decl, new_output_decl)
         for op in old_exop.ref_ops:
             new_exop.add_ref_op(op)
-        self.computation_graph.ops[old_exop.op] = new_exop
+        self.computation_decl.ops[old_exop.op] = new_exop
 
     def replace_output_decl(self, old_output_decl, new_output_decl):
         for input_decl in set(old_output_decl.user_input_decls):
@@ -1112,10 +1112,10 @@ class ComputationDecl(ExecutionGraphElt):
         self.op_returns = {}
 
         # exops = []
-        self.exop_block = ExOpBlock(computation_graph=self)
+        self.exop_block = ExOpBlock(computation_decl=self)
         self.exop_block.add_ops([self.computation_op])
 
-        self.returns = ExOp(computation_graph=self, op=ReturnOp())
+        self.returns = ExOp(computation_decl=self, op=ReturnOp())
         self.exop_block.add_exop(self.returns, None)
 
         # Get the exops we need values for, so that if they are computed at compile-time we still

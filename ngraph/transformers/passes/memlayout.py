@@ -44,8 +44,8 @@ class MemLayoutPass(GraphPass):
             for input_decl in exop.input_decls:
                 if input_decl.source_output_decl.tensor_decl.is_persistent and \
                         input_decl.source_output_decl.tensor_decl.buffer_pool_offset is None:
-                    input_decl.source_output_decl.tensor.buffer_pool_offset = \
-                        pmm.allocate(input_decl.source_output_decl.tensor.size)
+                    input_decl.source_output_decl.tensor_decl.buffer_pool_offset = \
+                        pmm.allocate(input_decl.source_output_decl.tensor_decl.size)
             for output_decl in exop.output_decls:
                 if output_decl.tensor_decl.is_persistent and \
                         output_decl.tensor_decl.buffer_pool_offset is None:

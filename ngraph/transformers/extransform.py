@@ -285,7 +285,7 @@ class ExecutionGraphTransformer(Transformer):
         for input_decl in computation_decl.returns.input_decls:
             output_decl = input_decl.source_output_decl
             if isinstance(output_decl.exop.op, TensorValueOp):
-                tensor_decl = exop.computation_graph.get_tensor_decl(
+                tensor_decl = exop.computation_decl.get_tensor_decl(
                     op=output_decl.exop.op.value_tensor)
                 self.device_tensor_view(
                     tensor_decl.get_tensor_view(output_decl.exop.op.tensor_description()))
