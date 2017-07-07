@@ -18,6 +18,9 @@ import ngraph as ng
 from ngraph.testing import executor
 
 pytestmark = pytest.mark.transformer_dependent
+pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
+                                                  reason="Not supported by argon backend",
+                                                  strict=False)
 
 
 def safelog(x):
@@ -74,6 +77,7 @@ class MeanSquaredPair(CostPair):
         return np.mean((y - t) ** 2, axis=0, keepdims=True) / 2.
 
 
+@pytest.mark.argon_disab_loose  # TODO triage, make stricter or fix
 @pytest.mark.parametrize("y,t", [
     (np.array([0.5, 0.9, 0.1, 0.0001]), np.array([0.5, 0.99, 0.01, 0.2])),
     (np.array([0.5, 1.0, 0.0, 0.0001]), np.array([0.5, 0.0, 1.0, 0.2])),

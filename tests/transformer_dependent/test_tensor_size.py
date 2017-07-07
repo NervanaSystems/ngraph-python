@@ -24,6 +24,7 @@ import pytest
 
 
 @pytest.mark.transformer_dependent
+@pytest.config.argon_disabled  # TODO triage
 def test_tensor_size(transformer_factory):
     n, m = 3, 4
 
