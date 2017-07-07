@@ -17,6 +17,12 @@ from ngraph.transformers.passes.opdelegate import OpAccessor
 
 
 class ExOpGraphOpAccessor(OpAccessor):
+    """
+    Provides access to exops so that many passes can be shared by exop-based transformers
+    and opraph-based transformers. See OpAccessor for additional details.
+
+    This class should be removed when opgraph-based transformers are no longer in use.
+    """
 
     def exop_args(self, exop):
         return tuple(input_decl.source_output_decl.exop.op for input_decl in exop.input_decls)

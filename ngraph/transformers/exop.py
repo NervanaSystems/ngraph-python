@@ -107,7 +107,7 @@ class ExecutionGraphElt(object):
 
 class InputDecl(object):
     """
-    Dewscribes an input for an exop.
+    Describes an input for an exop.
 
     Arguments:
         exop: The exop.
@@ -222,7 +222,8 @@ class OutputDecl(object):
     Arguments:
         exop: The exop.
         pos: The position of the value, defaults to 0.
-        tensor_description: Tensor description describing the value.
+        tensor_decl: The TensorDecl where the output will be written.
+        tensor_description: Tensor description describing the view of the tensor_decl.
         write_view: The tensor view where the value is written.
 
     Attributes:
@@ -247,7 +248,8 @@ class OutputDecl(object):
         """
 
         Returns:
-            The TensorDescription associated with this OutputDecl. Being phased out.
+            The TensorDescription associated with this OutputDecl. Being phased out as we
+            replace tensor descriptions with TensorViewDecl/TensorViewLayoutDecl.
 
         """
         return self.__tensor_description
