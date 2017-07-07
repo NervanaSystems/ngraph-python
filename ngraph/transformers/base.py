@@ -388,6 +388,12 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         """
         raise NotImplementedError("Layout methods not implemented in this transformer")
 
+    def set_output_statistics_file(self, statistics_file):
+        """
+        Collects data for transformer
+        """
+        pass
+
     # Old interface
     def computation(self, results, *parameters):
         """

@@ -148,6 +148,7 @@ def test_sequential_side(M):
 
 
 @pytest.mark.flex_disabled
+@pytest.config.argon_disabled  # TODO triage
 def test_concatenate(transformer_factory, concatenate_variables):
     x_list, np_list, pos = concatenate_variables
 
@@ -163,6 +164,7 @@ def test_concatenate(transformer_factory, concatenate_variables):
 
 
 @pytest.mark.flex_disabled
+@pytest.config.argon_disabled  # TODO triage
 def test_concat_different_axis_lengths(transformer_factory):
     ax1 = ng.make_axis(length=3, name="concat")
     ax2 = ng.make_axis(length=2, name="concat")
@@ -204,6 +206,7 @@ def test_initial_value(transformer_factory):
     ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))
 
 
+@pytest.config.argon_disabled  # TODO triage
 def test_multiple_computations(transformer_factory):
     """
     Create multiple computations for the same value.

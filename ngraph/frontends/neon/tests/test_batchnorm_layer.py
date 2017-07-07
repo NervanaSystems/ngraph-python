@@ -22,7 +22,8 @@ from ngraph.frontends.neon import BatchNorm, Recurrent, LSTM, Tanh
 from ngraph.testing.random import RandomTensorGenerator
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = pytest.mark.transformer_dependent
+pytestmark = [pytest.mark.transformer_dependent,
+              pytest.config.argon_disabled(scope="module")]
 
 rng = RandomTensorGenerator()
 rtol = 0
@@ -143,6 +144,8 @@ def bn_params(request):
                 init_beta=request.param[1])
 
 
+# Flex disabled - because of the strict tolerance (rtol, atol)
+@pytest.mark.flex_disabled
 def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
     """This checks that that we are doing batch norm across a feature make_axis
     and properly tracking the side effect variables
@@ -180,6 +183,8 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
 
 
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
+    if transformer_factory.name == "flexgpu" and input_placeholder._axes.lengths == (32, 32):
+        pytest.xfail('Failing test for Flex because of the strict tolerance (rtol, atol)')
 
     layer = BatchNorm(**bn_params)
     fprop = layer(input_placeholder)
@@ -209,6 +214,8 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
         assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=atol)
 
 
+# Flex disabled - because of the strict tolerance (rtol, atol)
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
@@ -265,6 +272,8 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
             assert ng.testing.allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
 
 
+# Flex disabled - because of the strict tolerance (rtol, atol)
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
