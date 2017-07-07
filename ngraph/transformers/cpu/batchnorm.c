@@ -141,14 +141,16 @@ void create_mkldnn_batchnorm_fprop_primitives(
 
   /* Allocate memory for internal format conversions */
   if (opkernel->reorder_i[0]) {
-    void* tmp_buf = alloc_memory(product(batchnorm_src_sizes, src_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(batchnorm_src_sizes, src_dims), data_type, 64);
     opkernel->internal_inputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                             tmp_buf));
   }
 
   if (opkernel->reorder_o[0]) {
-    void* tmp_buf = alloc_memory(product(batchnorm_src_sizes, src_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(batchnorm_src_sizes, src_dims), data_type, 64);
     opkernel->internal_outputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_outputs[0].prim,
                                             tmp_buf));

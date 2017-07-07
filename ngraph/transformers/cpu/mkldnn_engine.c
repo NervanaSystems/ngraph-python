@@ -311,6 +311,30 @@ void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int* dims,
   opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
+
+void* alloc_aligned_memory(void **buf, size_t size, mkldnn_data_type_t data_type, size_t alignment) {
+  size_t size_to_alloc;
+  //------------------------------------------------------------------
+  // Check if the given memory size is the multiple of the alignment,
+  // if not caclulate the new memory size accordingly 
+  if (((size*4)%alignment)!=0){
+    size_to_alloc = (size*4) + (alignment - ((size*4)%alignment));
+  }
+  else{
+    size_to_alloc = size*4;
+  }
+
+  *buf = aligned_alloc(alignment, size_to_alloc);
+  //test
+  //float **test_buf = (float**)buf;
+
+  if (*buf == NULL) {
+    printf("Memory allocation failure. Could not allocate %lld bytes aligned to %d bytes\n",
+            size * 4, alignment);
+    exit(2);
+  }
+}
+
 void* alloc_memory(size_t size, mkldnn_data_type_t data_type) {
   void* buf;
   switch (data_type) {
