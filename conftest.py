@@ -65,3 +65,10 @@ def force_serialization_computations(monkeypatch):
             assert len(deser_comp) == 1
             return original_computation(self, deser_comp[0])
         monkeypatch.setattr(ngt.Transformer, 'add_computation', monkey_add_computation)
+
+
+def pytest_configure(config):
+    # Define a reusable marker
+    config.argon_disabled = pytest.mark.xfail(config.getvalue("transformer") == "argon",
+                            reason="Not supported by argon backend",
+                            strict=True)

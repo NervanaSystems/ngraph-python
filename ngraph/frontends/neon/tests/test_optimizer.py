@@ -214,6 +214,7 @@ def random_beta_2():
     return np.random.uniform(low=0.0, high=1.0)
 
 
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 @pytest.mark.parametrize("epsilon", [1e-8])
 def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
@@ -231,6 +232,7 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, trans
     compare_optimizer(adam, adam_reference)
 
 
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
@@ -281,6 +283,7 @@ def test_learning_policy_fixed_without_input(transformer_factory):
         assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("drop_factor", [0.1,
                                          [0.1, 0.2, 0.3, 0.4, 0.5]])
 def test_learning_policy_schedule(transformer_factory, drop_factor):
