@@ -81,6 +81,9 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
 class DeadCodeEliminationPass(SequentialExOpPass):
     @exop_method(dispatch_base_type=Op)
     def visit_exop(self, exop, *args):
+        if exop.has_side_effects:
+            return
+
         for op in self.computation_decl.computation_op.parameters:
             if self.computation_decl.get_exop(op) is exop:
                 # Used as a parameter
@@ -96,30 +99,6 @@ class DeadCodeEliminationPass(SequentialExOpPass):
             # print("DEAD", exop.op)
             self.exop_block.remove_exop(exop)
             self.did_something = True
-
-    @visit_exop.on_type(WriteOp)
-    def visit_exop(self, *args):
-        pass
-
-    @visit_exop.on_type(ReturnOp)
-    def visit_exop(self, *args):
-        pass
-
-    @visit_exop.on_type(AssignOp)
-    def visit_exop(self, *args):
-        pass
-
-    @visit_exop.on_type(Fill)
-    def visit_exop(self, *args):
-        pass
-
-    @visit_exop.on_type(CommunicationOp)
-    def visit_exop(self, *args):
-        pass
-
-    @visit_exop.on_type(ConvolutionOp)
-    def visit_exop(self, *args):
-        pass
 
 
 class SSAConversion(SequentialExOpPass):

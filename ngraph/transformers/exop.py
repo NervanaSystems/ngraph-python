@@ -496,6 +496,10 @@ class ExOp(ExecutionGraphElt):
         self.ref_ops.add(op)
         self.computation_decl.ops[op] = self
 
+    @property
+    def has_side_effects(self):
+        return self.op.has_side_effects
+
     def memory_usage(self):
         """
         Get the memory usage of this op which is the sum of the sizes of all
