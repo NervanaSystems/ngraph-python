@@ -28,8 +28,9 @@ import tensorflow as tf
 from ngraph.frontends.tensorflow.tests.importer_tester import ImporterTester
 from ngraph.frontends.tensorflow.tf_importer.utils import tf_obj_shape
 
+pytestmark = pytest.mark.transformer_dependent
 
-@pytest.mark.transformer_dependent
+
 class Tester(ImporterTester):
     def test_binary_ops_combined(self):
         # computation

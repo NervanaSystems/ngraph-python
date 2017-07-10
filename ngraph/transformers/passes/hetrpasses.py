@@ -22,8 +22,8 @@ import socket
 
 class DeviceAssignPass(GraphBuildingPass):
 
-    def __init__(self, hetr, default_device, default_device_id):
-        super(DeviceAssignPass, self).__init__()
+    def __init__(self, hetr, default_device, default_device_id, **kwargs):
+        super(DeviceAssignPass, self).__init__(**kwargs)
         self.hetr = hetr
         self.default_device = default_device
         self.default_device_id = default_device_id
@@ -51,8 +51,8 @@ class DeviceAssignPass(GraphBuildingPass):
 
 class CommunicationPass(GraphBuildingPass):
 
-    def __init__(self, send_nodes):
-        super(CommunicationPass, self).__init__()
+    def __init__(self, send_nodes, **kwargs):
+        super(CommunicationPass, self).__init__(**kwargs)
         self.send_nodes = send_nodes
 
     def visit(self, op, *op_args):
@@ -73,8 +73,8 @@ class CommunicationPass(GraphBuildingPass):
         # invalidate deps cache as op._args is updated
         op.invalidate_property_cache('all_deps')
 
-    def do_pass(self, ops, transformer):
-        super(CommunicationPass, self).do_pass(ops, transformer)
+    def do_pass(self, ops, **kwargs):
+        super(CommunicationPass, self).do_pass(ops=ops, **kwargs)
         ops.update(self.send_nodes)
 
 
@@ -88,12 +88,12 @@ class DistributedPass(GraphBuildingPass):
         metadata['parallel', 'device_id', ] are present on nodes
     """
 
-    def __init__(self, send_nodes):
-        super(DistributedPass, self).__init__()
+    def __init__(self, send_nodes, **kwargs):
+        super(DistributedPass, self).__init__(**kwargs)
         self.send_nodes = send_nodes
         self.num_devices = 0
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, ops, **kwargs):
 
         ops = OrderedSet(op.forwarded for op in ops)
 

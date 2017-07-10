@@ -26,14 +26,17 @@ except ImportError:
     raise UnsupportedTransformerException("autoflex package not installed")
 
 from ngraph.op_graph.op_graph import Op, Fill, RngOp, TensorSizeOp, AssignOp
+from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.gputransform import GPUTransformer, GPUKernelGroup
 from ngraph.transformers.gputransform import GPUDeviceTensor, GPUDeviceBufferStorage
 from ngraph.transformers.gputransform import ElementWiseKernel
 from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBpropKernel, \
     FlexConvUpdateKernel
+from ngraph.transformers.gpu.flex_pool import FlexPoolFpropKernel, FlexPoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel, FlexAssignKernel
-from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexDECPass, ClearTensorDescriptions
+from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexPropagateEntryPass, \
+    ClearTensorDescriptions
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
@@ -72,23 +75,30 @@ class FlexGPUTransformer(GPUTransformer):
     # set global override tolerances for unit tests
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
-    # TODO haven't investigated how these should be set, start with small tol
-    default_rtol = 2e-05
-    default_atol = 0.20
+    default_rtol = 1e-02
+    default_atol = 1e-05
 
-    def __init__(self, fixed_point=False, flex_verbose=False, **kwargs):
+    def __init__(self, fixed_point=False, flex_verbose=False, collect_flex_data=False, **kwargs):
 
         super(FlexGPUTransformer, self).__init__()
         self.fixed_point = fixed_point
+        self.collect_flex_data = collect_flex_data
 
         # flex passes for setting Op dtypes to flex
         self.register_graph_pass(FlexFusion(), 0)
-        self.register_graph_pass(ClearTensorDescriptions())
+        self.register_graph_pass(ClearTensorDescriptions(transformer=self))
         self.register_graph_pass(FlexDtypePass())
 
         # flex manager manages autoflex mechanics
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
+
+    def set_output_statistics_file(self, statistics_file):
+        if self.collect_flex_data:
+            self.set_flex_data_file(statistics_file)
+
+    def set_flex_data_file(self, data_file):
+        self.flex_manager.set_h5py_file(data_file)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
@@ -99,7 +109,7 @@ class FlexGPUTransformer(GPUTransformer):
     def finish_transform_allocate(self):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
-        FlexDECPass().do_pass(self.ops, self)
+        FlexPropagateEntryPass(transformer=self).do_pass(ops=self.ops)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
@@ -227,6 +237,14 @@ class FlexGPUKernelGroup(GPUKernelGroup):
                                               op.distribution,
                                               op.params))
 
+    @add_kernel.on_type(PoolingOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexPoolFpropKernel(self.transformer, op))
+
+    @add_kernel.on_type(BpropPoolOp)
+    def add_kernel(self, op):
+        self.kernels.append(FlexPoolBpropKernel(self.transformer, op))
+
     @add_kernel.on_type(TensorSizeOp)
     def add_kernel(self, op):
         self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
@@ -315,9 +333,6 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         self.transformer.flex_manager.manage_after_computation(kernel)
 
     def __call__(self):
-
-        # TODO move this once we know where fprop and bprop boundaries are
-        self.transformer.flex_manager.autoflex_count += 1
         self.transformer.flex_manager.autoflex_count += 1
 
         # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)

@@ -211,36 +211,39 @@ class Op(NameableValue):
         """
         Currently ops can have references to other ops anywhere in their __dict__, (not just args,
         but the other typical places handled in serialization's `add_edges`). This function
-        iterates through an ops __dict__ attributes and finds all other ops recursively.
+        iterates through an ops __dict__ attributes and tests if any of them are subclasses of
+        `Op`.
 
-        This is more powerful than the ordered_ops method which only considers args and
-        control_deps.
+        This is 'greedier' than the `ordered_ops` method which only traverses the graph using the
+        `args` and `control_deps` keys of an ops `__dict__`. In addition, the order of ops
+        returned by this method is not guaranteed to be in a valid linear execution ordering.
         """
-        op_set = OrderedSet(ops)
+        op_set = OrderedSet()
+        frontier = OrderedSet(ops)
 
-        def add_op(op):
+        while frontier:
+            op = frontier.pop()
             op_set.add(op)
+
             for key in op.__dict__:
                 val = getattr(op, key)
                 if isinstance(val, Op) and val not in op_set:
-                    add_op(val)
+                    frontier.add(val)
                 elif isinstance(val, dict):
                     for subkey in val:
                         if isinstance(val[subkey], Op) and val[subkey] not in op_set:
-                            add_op(val[subkey])
+                            frontier.add(val[subkey])
                 elif isinstance(val, (list, tuple, set, OrderedSet)):
                     for item in val:
                         if isinstance(item, Op) and item not in op_set:
-                            add_op(item)
-        for op in ops:
-            add_op(op)
+                            frontier.add(item)
         return op_set
 
     @staticmethod
     def ordered_ops(roots):
         """
-        Topological sort of ops reachable from roots. Notes ngraph is using
-        depenency edges rather than dataflow edges, for example,
+        Topological sort of ops reachable from roots. Note that ngraph is
+        using depenency edges rather than dataflow edges, for example,
         `top_sort(a -> b -> c) => [c, b, a]`.
 
         Args:
@@ -365,8 +368,26 @@ class Op(NameableValue):
     @property
     def tensor(self):
         """
+        Deprecated. See effective_tensor_op.
 
         Returns: The op providing the value.
+        """
+        return self.forwarded
+
+    @property
+    def effective_tensor_op(self):
+        """
+        The op that provides the value for this op.
+
+        For example, for a TensorValueOp, the op itself provides the value of the state,
+        while for a SequenceOp, the last op in the sequence will provide the value, or,
+        rather, the effective op comes from it.
+
+        This op deprecates tensor, which does some strange things that require isinstance
+        checks in a number of callers.
+
+        Returns:
+            The op used for the value of this op.
 
         """
         return self.forwarded
@@ -693,6 +714,35 @@ class Op(NameableValue):
         """
         return list(tensor_descriptions(self.args))
 
+    @property
+    def is_commutative(self):
+        """
+
+        Returns: True if the Op is commutative.
+
+        """
+        return False
+
+    @property
+    def is_sequencing_op(self):
+        """
+
+        Returns:
+            True if this op's sole purpose is to influence the sequencing of other ops.
+
+        """
+        return False
+
+    @property
+    def is_state_op(self):
+        """
+
+        Returns:
+            True if this op is state.
+
+        """
+        return False
+
 
 class MutateInsteadOfCopyWithNewArgsMixin(object):
     """
@@ -856,6 +906,16 @@ class ParallelOp(ControlBlockOp):
         super(ParallelOp, self).__init__(**kwargs)
         for op in all:
             self.add_control_dep(op)
+
+    @property
+    def is_sequencing_op(self):
+        """
+
+        Returns:
+            True if this op's sole purpose is to influence the sequencing of other ops.
+
+        """
+        return True
 
 
 def doall(all):
@@ -1191,6 +1251,7 @@ class TensorOp(Op):
         """
         if "layout" in self.metadata:
             return TensorDescription(self.axes,
+                                     op=self,
                                      layout=self.metadata["layout"],
                                      dtype=self.dtype,
                                      is_persistent=self.is_persistent,
@@ -1198,6 +1259,7 @@ class TensorOp(Op):
                                      is_placeholder=self.is_placeholder)
         else:
             return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+                                     op=self,
                                      is_persistent=self.is_persistent,
                                      is_input=self.is_input,
                                      is_placeholder=self.is_placeholder)
@@ -1376,6 +1438,16 @@ class ValueOp(TensorOp, ControlBlockOp):
     def generate_add_delta(self, adjoints, delta):
         self.tensor.generate_add_delta(adjoints, delta)
 
+    @property
+    def effective_tensor_op(self):
+        # Due to hard to correct class hierarchy, state access is wrapped in ValueOp, but we
+        # always want state access wrapped in a state reader such as TensorValueOp, so we
+        # need to resort to some ugliness here.
+        tensor = self._tensor
+        if tensor.is_state_op:
+            return self.forwarded
+        return tensor.effective_tensor_op
+
 
 class SequentialOp(ValueOp):
     """
@@ -1446,6 +1518,16 @@ class SequentialOp(ValueOp):
                     readers[state].add(op_top)
             done_ops.update(ordered_ops)
 
+    @property
+    def is_sequencing_op(self):
+        """
+
+        Returns:
+            True if this op's sole purpose is to influence the sequencing of other ops.
+
+        """
+        return True
+
 
 def sequential(ops=None):
     """
@@ -1484,6 +1566,10 @@ class TensorValueOp(ValueOp):
     @property
     def states_read(self):
         return OrderedSet([self.tensor])
+
+    @property
+    def effective_tensor_op(self):
+        return self.forwarded
 
 
 class PatternLabelOp(TensorOp):
@@ -2246,6 +2332,20 @@ class AssignableTensorOp(TensorOp):
         """
         pass
 
+    @property
+    def is_state_op(self):
+        """
+
+        Returns:
+            True if this op is state.
+
+        """
+        return True
+
+    @property
+    def effective_tensor_op(self):
+        return TensorValueOp(self)
+
 
 def value_of(tensor):
     """
@@ -2678,10 +2778,6 @@ class StopGradient(UnaryElementWiseOp):
         return self.tensor.tensor_description()
 
     @property
-    def is_tensor_op(self):
-        return False
-
-    @property
     def axes(self):
         return self.tensor.axes
 
@@ -2984,105 +3080,466 @@ class BinaryElementWiseOp(ElementWiseOp):
         return len(x.axes) == 0 and len(y.axes) == 0
 
 
-def create_binary_elementwise(name,
-                              func_name=None,
-                              generate_adjoints=None):
-    d = {}
-    if generate_adjoints is not None:
-        d['generate_adjoints'] = generate_adjoints
-    BinClass = type(name, (BinaryElementWiseOp,), d)
+class CommutativeBinaryElementWiseOp(BinaryElementWiseOp):
 
-    def func(*args, **kwargs):
-        return BinClass(*args, **kwargs)
-    func.__name__ = func_name
+    def __init__(self, x, y, **kwargs):
+        super(CommutativeBinaryElementWiseOp, self).__init__(x, y, **kwargs)
 
-    return BinClass, func
+    @property
+    def is_commutative(self):
+        return True
 
 
-def add_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta)
-    y.generate_add_delta(adjoints, delta)
+class Add(CommutativeBinaryElementWiseOp):
+    """
+    Add two tensors.
+
+    Arguments:
+        x: A tensor
+        y: A tensor
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Add, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, delta)
 
 
-Add, add = create_binary_elementwise('Add', 'add', add_adjoints)
+def add(x, y, dtype=None):
+    """
+    Adds two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The type of the result.
+
+    Returns:
+        An Op for x + y.
+
+    """
+    return Add(x, y, dtype=dtype)
 
 
-def subtract_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta)
-    y.generate_add_delta(adjoints, -delta)
+class Subtract(BinaryElementWiseOp):
+    """
+    Subtracts two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Subtract, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta)
+        y.generate_add_delta(adjoints, -delta)
 
 
-Subtract, subtract = create_binary_elementwise('Subtract', 'subtract', subtract_adjoints)
+def subtract(x, y, dtype=None):
+    """
+    Subtracts two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The type of the result.
+
+    Returns:
+        An Op for x - y.
+
+    """
+    return Subtract(x, y, dtype=dtype)
 
 
-def multiply_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * y)
-    y.generate_add_delta(adjoints, x * delta)
+class Multiply(CommutativeBinaryElementWiseOp):
+    """
+    Multiplies two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Multiply, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * y)
+        y.generate_add_delta(adjoints, x * delta)
 
 
-Multiply, multiply = create_binary_elementwise('Multiply', 'multiply', multiply_adjoints)
+def multiply(x, y, dtype=None):
+    """
+    Multiplies two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x * y.
+
+    """
+    return Multiply(x, y, dtype=dtype)
 
 
-def divide_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * self / x)
-    y.generate_add_delta(adjoints, -delta * self / y)
+class Divide(BinaryElementWiseOp):
+    """
+    Divides two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Divide, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * self / x)
+        y.generate_add_delta(adjoints, -delta * self / y)
 
 
-Divide, divide = create_binary_elementwise('Divide', 'divide', divide_adjoints)
+def divide(x, y, dtype=None):
+    """
+    Divides two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x / y.
+
+    """
+    return Divide(x, y, dtype=dtype)
 
 
-def floordivide_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * self // x)
-    y.generate_add_delta(adjoints, -delta * self // y)
+class FloorDivide(BinaryElementWiseOp):
+    """
+    Floor of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(FloorDivide, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * self // x)
+        y.generate_add_delta(adjoints, -delta * self // y)
 
 
-FloorDivide, floordivide = create_binary_elementwise(
-    'FloorDivide', 'floordivide', floordivide_adjoints)
+def floordivide(x, y, dtype=None):
+    """
+    Floor of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for floor(x, y).
+
+    """
+    return FloorDivide(x, y, dtype=dtype)
 
 
-Mod, mod = create_binary_elementwise('Mod', 'mod')
+class Mod(BinaryElementWiseOp):
+    """
+    Mod of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Mod, self).__init__(x, y, **kwargs)
+
+    pass
 
 
-def maximum_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, greater(x, y) * delta)
-    y.generate_add_delta(adjoints, greater(y, x) * delta)
+def mod(x, y, dtype=None):
+    """
+    Mod of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for mod(x, y).
+
+    """
+    return Mod(x, y, dtype=dtype)
 
 
-Maximum, maximum = create_binary_elementwise('Maximum', 'maximum', maximum_adjoints)
+class Maximum(CommutativeBinaryElementWiseOp):
+    """
+    Maximum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Maximum, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, greater(x, y) * delta)
+        y.generate_add_delta(adjoints, greater(y, x) * delta)
 
 
-def minimum_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, less(x, y) * delta)
-    y.generate_add_delta(adjoints, less(y, x) * delta)
+def maximum(x, y, dtype=None):
+    """
+    Maximum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for max(x, y).
+
+    """
+    return Maximum(x, y, dtype=dtype)
 
 
-Minimum, minimum = create_binary_elementwise('Minimum', 'minimum', minimum_adjoints)
+class Minimum(CommutativeBinaryElementWiseOp):
+    """
+    Minimum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Minimum, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, less(x, y) * delta)
+        y.generate_add_delta(adjoints, less(y, x) * delta)
 
 
-def power_adjoints(self, adjoints, delta, x, y):
-    x.generate_add_delta(adjoints, delta * y * self / x)
-    y.generate_add_delta(adjoints, delta * self * log(x))
+def minimum(x, y, dtype=None):
+    """
+    Minimum of two tensors.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: dtype of the result.
+
+    Returns:
+        An Op for min(x, y).
+
+    """
+    return Minimum(x, y, dtype=dtype)
 
 
-Power, power = create_binary_elementwise('Power', 'power', power_adjoints)
+class Power(BinaryElementWiseOp):
+    """
+    Raise one tensor to the power of another.
+
+    Arguments:
+        x: A tensor for the base.
+        y: A tensor for the exponent.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Power, self).__init__(x, y, **kwargs)
+
+    def generate_adjoints(self, adjoints, delta, x, y):
+        x.generate_add_delta(adjoints, delta * y * self / x)
+        y.generate_add_delta(adjoints, delta * self * log(x))
 
 
-Equal, equal = create_binary_elementwise('Equal', 'equal')
+def power(x, y, dtype=None):
+    """
+    Raise one tensor to the power of another.
+
+    Arguments:
+        x: A tensor for the base.
+        y: A tensor for the exponent.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x ** y.
+    """
+    return Power(x, y, dtype=dtype)
 
 
-NotEqual, not_equal = create_binary_elementwise('NotEqual', 'not_equal')
+class Equal(CommutativeBinaryElementWiseOp):
+    """
+    Compares two tensors for element equality..
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Equal, self).__init__(x, y, **kwargs)
 
 
-Greater, greater = create_binary_elementwise('Greater', 'greater')
+def equal(x, y, dtype=None):
+    """
+    Compares two tensors for element equality.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x == y.
+    """
+    return Equal(x, y, dtype=dtype)
 
 
-Less, less = create_binary_elementwise('Less', 'less')
+class NotEqual(CommutativeBinaryElementWiseOp):
+    """
+    Compares two tensors for element non-equality..
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(NotEqual, self).__init__(x, y, **kwargs)
 
 
-GreaterEqual, greater_equal = create_binary_elementwise('GreaterEqual', 'greater_equal')
+def not_equal(x, y, dtype=None):
+    """
+    Compares two tensors for element non-equality.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x != y.
+    """
+    return NotEqual(x, y, dtype=dtype)
 
 
-LessEqual, less_equal = create_binary_elementwise('LessEqual', 'less_equal')
+class Greater(BinaryElementWiseOp):
+    """
+    Compares two tensors for element greater.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Greater, self).__init__(x, y, **kwargs)
+
+
+def greater(x, y, dtype=None):
+    """
+    Compares two tensors for element greater.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x > y.
+
+    """
+    return Greater(x, y, dtype=dtype)
+
+
+class Less(BinaryElementWiseOp):
+    """
+    Compares two tensors for element less.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(Less, self).__init__(x, y, **kwargs)
+
+
+def less(x, y, dtype=None):
+    """
+    Compares two tensors for element less.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x < y.
+
+    """
+    return Less(x, y, dtype=dtype)
+
+
+class GreaterEqual(BinaryElementWiseOp):
+    """
+    Compares two tensors for element greater equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(GreaterEqual, self).__init__(x, y, **kwargs)
+
+
+def greater_equal(x, y, dtype=None):
+    """
+    Compares two tensors for element greater equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x >= y.
+
+    """
+    return GreaterEqual(x, y, dtype=dtype)
+
+
+class LessEqual(BinaryElementWiseOp):
+    """
+    Compares two tensors for element less equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+    """
+    def __init__(self, x, y, **kwargs):
+        super(LessEqual, self).__init__(x, y, **kwargs)
+
+
+def less_equal(x, y, dtype=None):
+    """
+    Compares two tensors for element less equal.
+
+    Arguments:
+        x: A tensor.
+        y: A tensor.
+        dtype: The dtype of the result.
+
+    Returns:
+        An Op for x <= y.
+    """
+    return LessEqual(x, y, dtype=dtype)
 
 
 class ContiguousOp(TensorOp):
@@ -3183,8 +3640,10 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
 class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, bias=None, **kwargs):
-        super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
-        self.bias = bias
+        if bias is None:
+            super(DotLowDimension, self).__init__(args=(x, y), axes=axes, **kwargs)
+        else:
+            super(DotLowDimension, self).__init__(args=(x, y, bias), axes=axes, **kwargs)
 
 
 class SoftmaxOp(ValueOp):
@@ -3833,3 +4292,42 @@ def cross_entropy_binary(y, t, usebits=False, out_axes=None,
     if usebits:
         result = result * np.float(1. / np.log(2.0))
     return result
+
+
+class ReturnOp(Op):
+    """
+    The inputs to a ReturnOp are the values returned from a computation.
+
+    This Op is internal to execution graph compilation.
+    """
+
+    @property
+    def is_device_op(self):
+        return False
+
+
+class LiteralScalarOp(TensorOp):
+    """
+    An in-lined literal scalar.
+
+    This Op is internal to execution graph compilation.
+    """
+    def __init__(self, scalar):
+        super(LiteralScalarOp, self).__init__(axes=[])
+        self.scalar = scalar
+
+
+class WriteOp(TensorOp):
+    """
+    Do one or more writes to a tensor.
+
+    This Op is internal to execution graph compilation.
+    """
+
+
+class ReadOp(TensorOp):
+    """
+    Read a tensor. TensorValueOp is replaced by ReadOp during the SSA pass.
+
+    This Op is internal to execution graph compilation.
+    """

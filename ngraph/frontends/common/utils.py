@@ -96,6 +96,28 @@ def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
         return (0, 0, 0, 0)
 
 
+def remove_ones_axes(inputs):
+    """
+    Removes axes with length of 1 from list of tensors.
+
+    Arguments:
+        inputs: List of inputs to be sliced.
+
+    Returns:
+        Sliced inputs.
+    """
+    sliced_inputs = []
+    for i in inputs:
+        ones = []
+        for axis in i.axes:
+            if axis.length == 1:
+                ones.append(0)
+            else:
+                ones.append(slice(None))
+        sliced_inputs.append(ng.tensor_slice(i, ones))
+    return sliced_inputs
+
+
 class CommonSGDOptimizer(object):
 
     def get_iter_buffer(self):

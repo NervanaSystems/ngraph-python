@@ -19,10 +19,13 @@ Test of the optimizers
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import GradientDescentMomentum, Adam, LearningRateOptimizer
+from ngraph.frontends.neon import GradientDescentMomentum, RMSProp, Adam, LearningRateOptimizer
 from ngraph.testing.execution import ExecutorFactory
 
-pytestmark = [pytest.mark.transformer_dependent, pytest.mark.flex_disabled]
+pytestmark = pytest.mark.transformer_dependent
+
+
+atol = rtol = 1e-5
 
 
 class GDMReference(object):
@@ -45,7 +48,6 @@ class GDMReference(object):
         '''
         if self.velocity is None:
             self.velocity = np.zeros_like(weights)
-
         gradient = self.wdecay * weights - input_data.mean(axis=1)
         self.velocity[:] = self.momentum_coef * self.velocity - self.learning_rate * gradient
 
@@ -54,6 +56,36 @@ class GDMReference(object):
                           self.learning_rate * gradient)
         else:
             weights[:] = weights + self.velocity
+
+        return weights
+
+
+class RMSPropReference(object):
+    '''
+    Simple numpy reference for RMSprop
+    '''
+    def __init__(self, decay_rate, learning_rate, epsilon):
+        self.learning_rate = learning_rate
+        self.epsilon = epsilon
+        self.decay_rate = decay_rate
+        self.state = None
+
+    def __call__(self, input_data, weights):
+        '''
+        input_data in this case is a numpy array with batch_size on axis 1
+        and weights is a matrix with 1 column
+        '''
+        if self.state is None:
+            self.state = np.zeros_like(weights)
+
+        gradient = - input_data.mean(axis=1)
+
+        self.state[:] = self.decay_rate * self.state + \
+            (1.0 - self.decay_rate) * np.square(gradient)
+
+        weights[:] = weights \
+            - gradient * self.learning_rate / (np.sqrt(self.state + self.epsilon)
+                                               + self.epsilon)
 
         return weights
 
@@ -101,7 +133,7 @@ def compare_optimizer(opt_ng, opt_ref):
     data = ng.placeholder([C, N])
     target = ng.placeholder([N])
 
-    # params to be updated using GDM
+    # params to be updated using optimizer to be tested
     np_W = np.random.rand(C.length)
     W = ng.variable([C], initial_value=np_W)
 
@@ -109,21 +141,22 @@ def compare_optimizer(opt_ng, opt_ref):
     cost = ng.sum(target - ng.dot(W, data), out_axis=())
     updated_weights = ng.sequential([opt_ng(cost), W])
 
-    def data_generator(iteration_count):
-        for i in range(iteration_count):
-            yield (np.random.rand(C.length, N.length).astype('float32'),
-                   np.random.rand(N.length).astype('float32'))
-
     # Set up the computation and run the "train" loop
     with ExecutorFactory() as ex:
-        opt_test = ex.transformer.computation(updated_weights, data, target)
-        mock_dataset = data_generator(20)
+        opt_ng_comp = ex.transformer.computation(updated_weights, data, target)
+        mock_dataset = data_generator(20, C.length, N.length)
 
         for x, y in mock_dataset:
-            ng_W = opt_test(x, y)  # updated weights for ngraph optimizer
-            np_W = opt_ref(x, np_W)  # updated weights for reference optimizer
+            ng_W = opt_ng_comp(x, y)  # updated weights for ngraph optimizer
+            np_W = opt_ref(x, np_W)   # updated weights for reference optimizer
 
             ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
+
+
+def data_generator(iteration_count, C, N):
+    for i in range(iteration_count):
+        yield (np.random.rand(C, N).astype('float32'),
+               np.random.rand(N).astype('float32'))
 
 
 # generate fixtures this way so that collection names are deterministic and can
@@ -139,9 +172,10 @@ def random_momentum_coef():
     return np.random.random()
 
 
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
-def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, transformer_factory):
+def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov):
 
     # Setup the baseline and reference optimizers to be tested
     gdm_args = {'learning_rate': random_learning_rate,
@@ -149,11 +183,25 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov, trans
                 'wdecay': wdecay,
                 'nesterov': nesterov}
 
-    gdm_reference = GDMReference(**gdm_args)
+    gdm_ref = GDMReference(**gdm_args)
     gdm = GradientDescentMomentum(**gdm_args)
 
     # test baseline against reference
-    compare_optimizer(gdm, gdm_reference)
+    compare_optimizer(gdm, gdm_ref)
+
+
+@pytest.mark.parametrize("decay_rate", [0.95, 1])
+@pytest.mark.parametrize("epsilon", [1e-6])
+def test_rmsprop(random_learning_rate, decay_rate, epsilon):
+    rmsprop_args = {'learning_rate': random_learning_rate,
+                    'epsilon': epsilon,
+                    'decay_rate': decay_rate}
+
+    rmsprop_ref = RMSPropReference(**rmsprop_args)
+    rms = RMSProp(**rmsprop_args)
+
+    # test baseline against reference
+    compare_optimizer(rms, rmsprop_ref)
 
 
 @pytest.fixture(params=[0, 1])
@@ -166,6 +214,8 @@ def random_beta_2():
     return np.random.uniform(low=0.0, high=1.0)
 
 
+@pytest.config.argon_disabled  # TODO triage
+@pytest.mark.flex_disabled
 @pytest.mark.parametrize("epsilon", [1e-8])
 def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
 
@@ -182,6 +232,7 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, trans
     compare_optimizer(adam, adam_reference)
 
 
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.flex_disabled
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
@@ -232,6 +283,7 @@ def test_learning_policy_fixed_without_input(transformer_factory):
         assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("drop_factor", [0.1,
                                          [0.1, 0.2, 0.3, 0.4, 0.5]])
 def test_learning_policy_schedule(transformer_factory, drop_factor):
@@ -261,3 +313,9 @@ def test_learning_policy_schedule(transformer_factory, drop_factor):
                 scale_factor = drop_factor ** max_step_ind
             reference_value = base_learning_rate * scale_factor
             assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
+
+
+if __name__ == '__main__':
+    test_rmsprop(0.1, 0.95, 1e-6)
+    test_gdm(0.1, 0.1, 0.1, False)
+    test_adam(0.1, 0.5, 0.9, 1e-6, None)

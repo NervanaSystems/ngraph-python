@@ -50,7 +50,7 @@ from ngraph.transformers.passes.layout import AddLayoutConversions
 # from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
-    DeviceBufferReference, DeviceTensor, make_transformer_factory, \
+    DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
@@ -234,12 +234,6 @@ except NameError as error:
         self.transformer.allocate_storage_code.endl()
 
         self.transformer.allocate_code.append("{}()", self.alloc_name)
-
-
-class CPUDeviceBufferReference(DeviceBufferReference):
-
-    def __init__(self, transformer, **kwargs):
-        super(CPUDeviceBufferReference, self).__init__(transformer, **kwargs)
 
 
 class CPUDeviceTensor(DeviceTensor):
@@ -528,8 +522,7 @@ class CPUCodeGenerator(PyGen):
         self.append("np.mod({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(DotLowDimension)
-    def generate_op(self, op, out, x, y):
-        bias = op.bias.tensor.const if op.bias else None
+    def generate_op(self, op, out, x, y, bias=None):
         self.append("mkldnn.innerproduct_fprop('{}', {}, {}, {}, out={})",
                     op.name, x, y, bias, out)
 
@@ -793,14 +786,6 @@ class CPUTransformer(ComputationGraphTransformer):
         Returns: A DeviceBuffer.
         """
         return CPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
-
-    def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
-        """
-        return CPUDeviceBufferReference(self)
 
     def initialize_mkldnn(self):
         self.code.execute("""
