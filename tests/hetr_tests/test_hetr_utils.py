@@ -192,4 +192,4 @@ def test_scatter_gather_node_axes(config):
     assert t['slices'] == gather_recv_op.slices
 
 
-# todo def test_clone_graph():
+# TODO: Add def test_clone_graph() - Issue #1864

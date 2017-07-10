@@ -188,7 +188,7 @@ class AsyncTransformer(Process):
                 if isinstance(e, Empty):
                     pass
                 else:
-                    # TODO handle and exit gracefully
+                    # TODO : Issue #1867 handle and exit gracefully
                     raise
 
 
@@ -334,7 +334,7 @@ class HetrTransformer(ComputationGraphTransformer):
         self.is_closed = True
 
     def register_transformer(self, tname):
-        # TODO change from using tname string to using (ttype, dev_id, host) tuple
+        # TODO: Issue #1866 change from using tname string to using (ttype, dev_id, host) tuple
         if tname not in self.child_transformers:
             if 'cpu' in tname:
                 # trans_client = RPCTransformerClient(tname)

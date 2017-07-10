@@ -371,7 +371,6 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
         return self._shared_queues
 
 
-# TODO : WIP. This will be updated once we define the logic in issue #1378
 class AllReduceOp(CommunicationOp):
     """
     Represents an AllReduce op. Sets reduction axes and out axes.

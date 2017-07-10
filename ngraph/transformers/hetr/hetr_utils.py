@@ -39,7 +39,7 @@ def comm_path_exists(fro, to):
     Note- this is a non-standard traversal, as most traversals stop at a Receiver.
     """
 
-    # TODO: does this correctly handle traversing multiple send-recv junctions
+    # TODO: Issue #1865 does this correctly handle traversing multiple send-recv junctions
     # from fro to to?
 
     visit = OrderedSet(fro.args)
