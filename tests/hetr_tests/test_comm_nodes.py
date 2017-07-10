@@ -216,25 +216,25 @@ def test_broadcast_ops(config):
     {
         'input': 36,
         'func': 'mean',
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
         'input': 36,
         'func': 'sum',
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'expected_result': [[[-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0]]],
     },
     {
         'input': 36,
         'func': 'mean',
-        'device_id': (1, 4, 3, 2),
+        'device_id': (0, 1, 2, 3),
         'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
         'input': 25,
         'func': 'sum',
-        'device_id': (5, 7, 3, 4),
+        'device_id': (0, 1, 2, 3),
         'expected_result': [[[-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0]]],
     },
 ])

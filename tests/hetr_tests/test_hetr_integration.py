@@ -17,6 +17,7 @@ import pytest
 from contextlib import closing
 from ngraph.testing import ExecutorFactory
 from orderedset import OrderedSet
+from test_hetr_passes import check_device_assign_pass, check_communication_pass
 import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp, \
@@ -363,48 +364,38 @@ ax_D = ng.make_axis(24)
         'parallel_axis': ax_A,
     },
     {
-        'axes': ng.make_axes([ax_A]),
-        'device_id': ('1', '2'),
-        'parallel_axis': ax_A,
-    },
-    {
         'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('1', '2'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_A,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_C,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('1', '2', '3'),
+        'device_id': ('0', '1', '2'),
         'parallel_axis': ax_C,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('1', '2', '3'),
+        'device_id': ('0', '1', '2'),
         'parallel_axis': ax_D,
     },
 ])
