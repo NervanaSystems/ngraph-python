@@ -188,3 +188,14 @@ def test_hetr_send_recv_graph_serialization():
     for o1, o2 in zip(sorted(py_graph, key=lambda x: x.uuid),
                       sorted(orig_graph, key=lambda x: x.uuid)):
         assert_object_equality(o1, o2)
+
+
+def test_all_op_references():
+    base_op, simple_graph = get_simple_graph()
+
+    leaf_all_ops = Op.all_op_references([simple_graph])
+    assert base_op in leaf_all_ops
+    assert simple_graph in leaf_all_ops
+    base_all_ops = Op.all_op_references([base_op])
+    assert base_op in base_all_ops
+    assert simple_graph not in base_all_ops
