@@ -15,15 +15,13 @@
 # ----------------------------------------------------------------------------
 import abc
 
-from future.utils import with_metaclass, iteritems, itervalues
-from ngraph.transformers.exop import ExOpBlock, ExOp, literal_scalar_exop, ReturnOp
+from future.utils import with_metaclass, iteritems
+from ngraph.transformers.exop import ExOpBlock, ExOp, literal_scalar_exop
 from ngraph.transformers.passes.passes import GraphPass
 
 from ngraph.op_graph.op_graph import Op, TensorValueOp, AssignOp, IndexOp, Fill, \
     ReadOp, WriteOp
-from ngraph.op_graph.convolution import ConvolutionOp
 from ngraph.util.generics import TypeMethods
-from ngraph.op_graph.comm_nodes import CommunicationOp
 
 
 def exop_method(dispatch_base_type=object, extends=None, next_method_arg=None):

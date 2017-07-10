@@ -1051,7 +1051,6 @@ class Fill(Op):
         return True
 
 
-
 def fill(x, scalar):
     return Fill(x, scalar)
 
