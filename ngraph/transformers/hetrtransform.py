@@ -372,6 +372,7 @@ class HetrTransformer(ComputationGraphTransformer):
     to be a 'Transformer', which it wants to be in order to expose
     the user-facing parts of the Transformer API.
     """
+    # TODO: Refer Issue #978
     def initialize(self):
         pass
 
