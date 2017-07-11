@@ -142,7 +142,7 @@ test_mkldnn:
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -151,7 +151,7 @@ test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -191,6 +191,11 @@ test_mxnet: test_prepare clean
 test_cntk: test_prepare clean
 	echo Running unit tests for cntk frontend...
 	py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
+	coverage xml -i
+
+test_caffe2: test_prepare clean
+	echo Running unit tests for caffe2 frontend...
+	py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CAFFE2)
 	coverage xml -i
 
 test_integration: test_prepare clean
