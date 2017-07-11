@@ -1130,6 +1130,8 @@ class TensorDescription(NameableValue):
             "Sizes must have same number of dimensions as axes"
         assert len(self.full_strides) == self.ndim, \
             "Strides must have same number of dimensions as axes"
+        assert self.shape == self.sizes, \
+             "Shape and sizes must be the same."
 
     def __repr__(self):
         return self.base.name
@@ -1209,7 +1211,7 @@ class TensorDescription(NameableValue):
             new_strides.append(new_stride)
             new_sizes.append(new_size)
 
-        return TensorDescription(
+        self.description = TensorDescription(
             new_axes,
             base=self.base,
             dtype=self.dtype,
@@ -1217,8 +1219,9 @@ class TensorDescription(NameableValue):
             full_sizes=new_sizes,
             offset=self.offset,
             next_tensor_description=self,
-            name=self.name + 'rFlatten',
+            name = self.name + 'rFlatten'
         )
+        return self.description
 
     def unflatten(self, new_axes):
         """
@@ -1511,7 +1514,7 @@ class TensorDescription(NameableValue):
             # TODO: write a test that fails if abs() is removed
             offset += idx * abs(stride)
 
-        return TensorDescription(
+        self.description = TensorDescription(
             new_axes,
             base=self.base,
             dtype=self.dtype,
@@ -1521,6 +1524,7 @@ class TensorDescription(NameableValue):
             next_tensor_description=self,
             name=self.name + "rSlice",
         )
+        return self.description
 
     @property
     def shape(self):

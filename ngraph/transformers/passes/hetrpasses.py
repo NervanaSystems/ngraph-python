@@ -16,6 +16,7 @@ from ngraph.transformers.passes.passes import GraphBuildingPass
 from ngraph.factory.comm_node_factory import get_comm_pattern, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.util.hetr_utils import clone_graph
+from ngraph.op_graph.axes import make_axis
 from orderedset import OrderedSet
 import socket
 
@@ -92,6 +93,7 @@ class DistributedPass(GraphBuildingPass):
         super(DistributedPass, self).__init__(**kwargs)
         self.send_nodes = send_nodes
         self.num_devices = 0
+        self.parallel_axes = None
 
     def do_pass(self, ops, **kwargs):
 
@@ -100,8 +102,11 @@ class DistributedPass(GraphBuildingPass):
         for op in reversed(Op.ordered_ops(ops)):
             if op.metadata.get('marker') == 'gather':
                 # op is GatherRecvOp
-                self.parallel_axes = op.metadata['parallel']
-
+                #self.parallel_axes = op.metadata['parallel']
+                if self.parallel_axes is None:
+                    self.parallel_axes = make_axis(name = op.metadata['parallel'].name,
+                                                   length = op.axes.find_by_name(op.metadata['parallel'].name)[0].length // len(op.from_id),
+                                                    docstring = "HeTr parallel axis")
                 gather_send_op = op.send_nodes[0]
 
                 # clone nodes for each device_id
