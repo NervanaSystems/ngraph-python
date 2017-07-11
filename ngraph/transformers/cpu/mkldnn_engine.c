@@ -323,11 +323,7 @@ void* alloc_aligned_memory(void **buf, size_t size, mkldnn_data_type_t data_type
   else{
     size_to_alloc = size*4;
   }
-
   *buf = aligned_alloc(alignment, size_to_alloc);
-  //test
-  //float **test_buf = (float**)buf;
-
   if (*buf == NULL) {
     printf("Memory allocation failure. Could not allocate %lld bytes aligned to %d bytes\n",
             size * 4, alignment);

@@ -49,7 +49,7 @@ if "MKLDNN_ROOT" in os.environ:
     ext_modules.append(Extension('mkldnn_engine',
                         include_dirs = ['%s/include'%(MKLDNNROOT)],
 			extra_compile_args = ["-std=gnu99"],
-                        extra_link_args = ["-shared", "-lmkldnn","-g", "-Wl,-rpath,%s/lib"%(MKLDNNROOT)],
+                        extra_link_args = ["-shared", "-lmkldnn", "-Wl,-rpath,%s/lib"%(MKLDNNROOT)],
                         library_dirs = ['%s/lib'%(MKLDNNROOT)],
                         sources = ['ngraph/transformers/cpu/convolution.c', \
                                    'ngraph/transformers/cpu/elementwise.c', \
