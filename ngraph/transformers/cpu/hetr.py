@@ -59,6 +59,12 @@ class HetrLocals(object):
     def gather_recv_from_queue_gather_send(self, gather_recv_id, out):
         gather_recv_op = self.gather_recv_nodes[gather_recv_id]
         for i in range(len(gather_recv_op.from_id)):
+            # work around when the length of slices == 0
+            # it indicates that a reduce op was needed instead of a gather op.
+            # since we do not have reduce ops
+            # we use a gather op, but ignore gather functionality
+            if len(gather_recv_op.slices[i]) == 0:
+                continue
             q = gather_recv_op.shared_queues[i]
             x = q.get()
             out[gather_recv_op.slices[i]] = x
