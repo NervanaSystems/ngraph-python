@@ -1130,8 +1130,7 @@ class TensorDescription(NameableValue):
             "Sizes must have same number of dimensions as axes"
         assert len(self.full_strides) == self.ndim, \
             "Strides must have same number of dimensions as axes"
-        assert self.shape == self.sizes, \
-             "Shape and sizes must be the same."
+
 
     def __repr__(self):
         return self.base.name

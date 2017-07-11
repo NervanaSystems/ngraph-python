@@ -42,7 +42,7 @@ def test_calculate_new_axes_single_device():
 def test_calculate_new_axes_no_remainder(axis, num):
     new_axes = calculate_scatter_axes(axes=axes, scatter_axis=axis, num_devices=num)
     expected_axes = ng.make_axes(
-        [a if a != axis else ng.make_axis(length=axis.length / num, name=a.name) for a in axes])
+        [a if a != axis else ng.make_axis(length=axis.length, name=a.name) for a in axes])
     assert new_axes.full_lengths == expected_axes.full_lengths
 
 
@@ -241,7 +241,6 @@ def test_broadcast_ops(config):
 def test_allreduce_hint(config):
     c = config
 
-    pytest.xfail("Ticket to fix this test: #1858")
     with ng.metadata(device_id=c['device_id']):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
