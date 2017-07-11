@@ -31,6 +31,7 @@ from operator import itemgetter
 from orderedset import OrderedSet
 import re
 
+
 class MklReorderOp(TensorOp):
     '''
     Converts op value tensor from MKL layouts to "native" layout
@@ -60,7 +61,7 @@ def get_axes_mkl_order(axes, order):
     axes_list = []
     flattend_axis_flag = False
     for axis in axes:
-        if(axis.is_flattened and len(order)>2):
+        if(axis.is_flattened and len(order) > 2):
             for indx in range(len(unflatten(axis).axes)):
                 axes_list.append(unflatten(axis).axes[indx])
                 flattend_axis_flag = True
@@ -144,8 +145,8 @@ def get_mkl_layout(mkldnn, op, order, use_formats=False):
 
 def dbg_print_kernel(mkldnn, op, op_id):
     if (mkldnn.mkldnn_verbose):
-        print
-        print(op_id, op.name)
+        # print
+        # print(op_id, op.name)
         mkldnn.print_kernel(mkldnn.kernels[op.name])
 
 
@@ -189,12 +190,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             if (len(unflatten_inputs.axes.lengths) != 5):
                 return
         else:
-            if (len(inputs.axes.lengths)!=5):
+            if (len(inputs.axes.lengths) != 5):
                 return
         # Only single precision float supported for now
         if op.dtype != np.float32:
             return
-        #import pdb;pdb.set_trace()
         data_type = self.mkldnn.datatype[op.dtype.type]
         inputs_shape = get_size_mkl_order(unflatten(inputs).axes, [4, 0, 2, 3])
         mean_size = mean.axes.lengths[0]
