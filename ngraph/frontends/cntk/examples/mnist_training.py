@@ -16,24 +16,25 @@
 """
 Example based on CNTK_103A_MNIST_DataLoader and CNTK_103B_MNIST_FeedForwardNetwork tutorials.
 """
-from __future__ import print_function
-from __future__ import division
+from __future__ import division, print_function
 
-import os
 import gzip
+import os
 import struct
-try:
-    from urllib.request import urlretrieve
-except ImportError:
-    from urllib import urlretrieve
 
 import cntk as C
 import numpy as np
 
 import ngraph as ng
-from ngraph.frontends.cntk.cntk_importer.importer import CNTKImporter, \
-    cross_entropy_with_softmax, classification_error
+from ngraph.frontends.cntk.cntk_importer.importer import (CNTKImporter,
+                                                          classification_error,
+                                                          cross_entropy_with_softmax)
 from ngraph.frontends.common.utils import CommonSGDOptimizer
+
+try:
+    from urllib.request import urlretrieve
+except ImportError:
+    from urllib import urlretrieve
 
 
 def loadData(src, cimg):
@@ -111,34 +112,27 @@ def downloadMNIST(data_dir):
 
 
 def create_reader(path, is_training, input_dim, num_label_classes):
+    labelStream = C.io.StreamDef(field='labels', shape=num_label_classes, is_sparse=False)
+    featureStream = C.io.StreamDef(field='features', shape=input_dim, is_sparse=False)
+
+    deserailizer = C.io.CTFDeserializer(
+        path,
+        C.io.StreamDefs(labels=labelStream, features=featureStream)
+    )
+
     return C.io.MinibatchSource(
-        C.io.CTFDeserializer(
-            path,
-            C.io.StreamDefs(
-                labels=C.io.StreamDef(
-                    field='labels',
-                    shape=num_label_classes,
-                    is_sparse=False
-                ),
-                features=C.io.StreamDef(
-                    field='features',
-                    shape=input_dim,
-                    is_sparse=False
-                )
-            )
-        ),
+        deserailizer,
         randomize=is_training,
-        epoch_size=C.io.INFINITELY_REPEAT if is_training else C.io.FULL_DATA_SWEEP
+        max_sweeps=C.io.INFINITELY_REPEAT if is_training else 1
     )
 
 
 def create_model(features, num_hidden_layers, hidden_layers_dim, num_output_classes):
-    with C.layers.default_options(init=C.initializer.glorot_uniform(), activation=C.ops.relu):
+    with C.layers.default_options(init=C.layers.glorot_uniform(), activation=C.ops.relu):
         h = features
         for _ in range(num_hidden_layers):
             h = C.layers.Dense(hidden_layers_dim)(h)
-        r = C.layers.Dense(num_output_classes, activation=None)(h)
-        return r
+        return C.layers.Dense(num_output_classes, activation=None)(h)
 
 
 def train_and_test(data_dir):
@@ -172,13 +166,13 @@ def train_and_test(data_dir):
     # ngraph import begin ==================================================================
     ng_model, ng_placeholders = CNTKImporter(batch_size=batch_size).import_model(z)
 
-    ng_labels = ng.placeholder([ng.make_axis(num_output_classes), ng.make_axis(batch_size, 'N')])
+    ng_labels = ng.placeholder([ng.make_axis(batch_size, 'N'), ng.make_axis(num_output_classes)])
     ng_placeholders.append(ng_labels)
+
+    transformer = ng.transformers.make_transformer()
 
     ng_loss = cross_entropy_with_softmax(ng_model, ng_labels)
     parallel_update = CommonSGDOptimizer(learning_rate).minimize(ng_loss, ng_loss.variables())
-
-    transformer = ng.transformers.make_transformer()
     training_fun = transformer.computation([ng_loss, parallel_update], *ng_placeholders)
 
     ng_error = classification_error(ng_model, ng_labels)
@@ -212,7 +206,7 @@ def train_and_test(data_dir):
         test_result += trainer.test_minibatch(data)
 
     print("Average CNTK test error: {0:.2f}%".format(test_result * 100 / num_minibatches_to_test))
-    z.save_model(data_dir + "MNIST.dnn")
+    z.save(data_dir + "/MNIST.dnn")
 
     # ngraph batch training begin ============================================================
     features_batch = []
@@ -220,7 +214,7 @@ def train_and_test(data_dir):
     for _ in range(0, num_sweeps_to_train_with):
         for line in open(train_file):
             if len(features_batch) == batch_size:
-                training_fun(np.transpose(features_batch), np.transpose(labels_batch))
+                training_fun(np.transpose(features_batch), labels_batch)
                 features_batch.clear()
                 labels_batch.clear()
 
@@ -245,7 +239,7 @@ def train_and_test(data_dir):
     ng_error = 0.0
     for line in open(test_file):
         if len(features_batch) == batch_size:
-            ng_error += test_fun(np.transpose(features_batch), np.transpose(labels_batch))
+            ng_error += test_fun(np.transpose(features_batch), labels_batch)
             features_batch.clear()
             labels_batch.clear()
 

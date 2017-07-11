@@ -12,189 +12,70 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import numpy as np
 import pytest
-
-import ngraph as ng
-from ngraph.op_graph.convolution import bprop_conv, update_conv
-from ngraph.testing import RandomTensorGenerator, executor
-from ngraph.frontends.neon.layer import output_dim
-from ngraph.frontends.neon import ax
+import numpy as np
+from ngraph.testing.flex_util import execute_convolution, id_func
 
 pytestmark = pytest.mark.flex_only
 
-rng = RandomTensorGenerator(0, np.float32)
+bug_1805 = pytest.mark.xfail(strict=True, reason="GitHub issue #1805, LogicError when filter has "
+                                                 "more dimensions than image")
+
+test_data_execute_convolution = (
+    # template: (image_height, image_width, image_3rd_dim,
+    #            filter_height, filter_width, filter_3rd_dim,
+    #            (pad_h, pad_w, pad_d), (str_h, str_w, str_d), description)
+
+    (7, 7, 1, 3, 3, 1, (0, 0, 0), (1, 1, 1), "Image: 7x7, filter: 3x3, padding: 0, stride: 1"),
+    (5, 5, 1, 3, 3, 1, (1, 1, 1), (1, 1, 1), "Image: 5x5, filter: 3x3, padding: 1, stride: 1"),
+    (10, 10, 1, 4, 4, 1, (3, 3, 3), (1, 1, 1), "Image: 10x10, filter: 4x4, padding: 3, stride: 1"),
+    (7, 7, 2, 3, 3, 2, (0, 0, 0), (1, 1, 1), "Image: 7x7x2, filter: 3x3x2, padding: 0, stride: 1"),
+    (8, 8, 1, 4, 4, 1, (0, 0, 0), (2, 2, 2), "Image: 8x8, filter: 4x4, padding: 0, stride: 2"),
+    (10, 10, 1, 3, 3, 1, (1, 1, 1), (3, 3, 3), "Image: 10x10, filter: 3x3, padding: 1, stride: 3"),
+    (7, 7, 1, 3, 3, 1, (1, 2, 3), (1, 1, 1),
+     "Image: 7x7, filter: 3x3, padding: 1, 2, 3, stride: 1"),
+    (7, 7, 1, 3, 3, 1, (0, 3, 0), (1, 1, 1),
+     "Image: 7x7, filter: 3x3, padding: 0, 3, 0, stride: 1"),
+    (7, 7, 1, 3, 3, 1, (0, 0, 0), (3, 1, 1),
+     "Image: 7x7, filter: 3x3, padding: 0, stride: 3, 1, 1"),
+    (7, 7, 1, 3, 3, 1, (0, 0, 0), (1, 2, 3),
+     "Image: 7x7, filter: 3x3, padding: 0, stride: 1, 2, 3"),
+    bug_1805((7, 7, 1, 3, 3, 2, (0, 0, 0), (1, 1, 1), "Filter has more dimensions than image"))
+)
+
+test_data_convolution_limitation = (
+    # template: (filter_count, batch_size, dilation, description )
+
+    (7, 32, 1, "K dim must be multiple of 8"),
+    (8, 31, 1, "N dim must be multiple of 32"),
+    (8, 32, 2, "flexsim does not support dilated convolution")
+)
 
 
-def slicable(dim, pad=0):
-    """
-    colapse outer dimensions into one and preserve inner dimension
-    this allows for easy cpu convolution in numpy
-
-    Arguments:
-        dim (tuple): dimensions list in a tuple
-        pad (int):  how many pixel paddings
-    """
-    dim0 = np.prod(dim[:-1]) + pad
-    return (dim0, dim[-1])
-
-
-def pixel_indices(T, R, S, D, H, W, C, mt, pr, qs):
-    HW = H * W
-    DHW = D * H * W
-    imax = C * DHW
-
-    idx = []
-    for c in range(C):
-        ci = c * DHW
-
-        for t in range(T):
-            z = mt + t
-            zi = ci + z * HW
-            zb = z >= 0 and z < D
-
-            for r in range(R):
-                y = pr + r
-                yi = zi + y * W
-                yb = zb and y >= 0 and y < H
-
-                for s in range(S):
-                    x = qs + s
-                    if yb and x >= 0 and x < W:
-                        xi = yi + x
-                    else:
-                        xi = imax  # out of bounds
-
-                    idx.append(xi)
-    return idx
+@pytest.mark.parametrize("image_height, image_width, image_3rd_dim, "
+                         "filter_height, filter_width, filter_3rd_dim, "
+                         "padding, stride, description",
+                         test_data_execute_convolution, ids=id_func)
+def test_execute_convolution(transformer_factory, image_height, image_width, image_3rd_dim,
+                             filter_height, filter_width, filter_3rd_dim,
+                             padding, stride, description):
+    out, np_out = execute_convolution(image_height=image_height, image_width=image_width,
+                                      image_3rd_dim=image_3rd_dim, filter_height=filter_height,
+                                      filter_width=filter_width, filter_3rd_dim=filter_3rd_dim,
+                                      channel=16, batch_size=32, filter_count=8,
+                                      padding=padding, stride=stride, dilation=1,
+                                      np_comparison=True)
+    print("out: ", out)
+    print("np_out: ", np_out)
+    assert np.array_equal(out, np_out)
 
 
-def reference_conv(C, N, K, D, H, W, T, R, S, M, P, Q,
-                   pad_d, pad_h, pad_w, str_d, str_h, str_w,
-                   valI, valF, valE):
-    dimO = (K, M, P, Q, N)
-    dimI = (C, D, H, W, N)
-    dimF = (C, T, R, S, K)
-    dtype = np.float32
-
-    no_pad_I = slicable(dimI)
-    cpuI = np.zeros(slicable(dimI, 1), dtype=dtype)
-    cpuI[:no_pad_I[0], :] = valI.reshape(no_pad_I)
-
-    cpuF = valF.reshape(slicable(dimF))
-    cpuE = valE
-
-    # ======numpy===========
-    # cpu output arrays
-    cpuO = np.zeros(dimO, dtype=dtype)
-    cpuB = np.zeros(slicable(dimI, 1), dtype=dtype)
-    cpuU = np.zeros(slicable(dimF), dtype=dtype)
-
-    for m in range(M):
-        mt = m * str_d - pad_d
-
-        for p in range(P):
-            pr = p * str_h - pad_h
-
-            for q in range(Q):
-                qs = q * str_w - pad_w
-
-                idx = pixel_indices(T, R, S, D, H, W, C, mt, pr, qs)
-
-                cpuO[:, m, p, q, :] = np.dot(cpuF.T, cpuI[idx, :])
-
-                cpuB[idx, :] += np.dot(cpuF, cpuE[:, m, p, q, :])
-
-                cpuU += np.dot(cpuI[idx, :], cpuE[:, m, p, q, :].T)
-
-    outB = cpuB[:-1, :].reshape(dimI)
-    outU = cpuU.reshape(dimF)
-    return (cpuO, outB, outU)
-
-
-def test_conv(transformer_factory):
-    """
-    TODO: make this more interesting
-    """
-    N, C, K = 64, 32, 32
-    D, H, W = 1, 32, 32
-    T, R, S = 1, 3, 3
-
-    pad_d, pad_h, pad_w = 0, 0, 0
-    str_d, str_h, str_w = 1, 1, 1
-    dil_d, dil_h, dil_w = 1, 1, 1
-
-    M = output_dim(D, T, pad_d, str_d)
-    P = output_dim(H, R, pad_h, str_h)
-    Q = output_dim(W, S, pad_w, str_w)
-
-    padding = dict(pad_d=pad_d, pad_h=pad_h, pad_w=pad_w)
-    strides = dict(str_d=str_d, str_h=str_h, str_w=str_w)
-    dilation = dict(dil_d=dil_d, dil_h=dil_h, dil_w=dil_w)
-    conv_params = padding.copy()
-    conv_params.update(strides)
-    conv_params.update(dilation)
-
-    ax_i = ng.make_axes([
-        ng.make_axis(name='C'),
-        ng.make_axis(name='D'),
-        ng.make_axis(name='H'),
-        ng.make_axis(name='W'),
-        ax.N
-    ])
-
-    ax_f = ng.make_axes([
-        ng.make_axis(name='C'),
-        ng.make_axis(name='D'),
-        ng.make_axis(name='H'),
-        ng.make_axis(name='W'),
-        ng.make_axis(name='K'),
-    ])
-
-    ax_o = ng.make_axes([
-        ng.make_axis(name='C'),
-        ng.make_axis(name='D'),
-        ng.make_axis(name='H'),
-        ng.make_axis(name='W'),
-        ax.N
-    ])
-
-    ax_i.set_shape((C, D, H, W, N))
-    ax_f.set_shape((C, T, R, S, K))
-    ax_o[:-1].set_shape((K, M, P, Q))
-
-    inputs = ng.placeholder(axes=ax_i)
-    filters = ng.placeholder(axes=ax_f)
-
-    # randomly initialize
-    input_value = rng.uniform(-0.5, 0.5, ax_i)
-    filter_value = rng.uniform(-0.5, 0.5, ax_f)
-    error_value = rng.uniform(-0.5, 0.5, ax_o)
-
-    assert input_value.shape == ax_i.lengths
-    assert filter_value.shape == ax_f.lengths
-
-    inputs = ng.placeholder(ax_i)
-    filters = ng.placeholder(ax_f)
-    errors = ng.placeholder(ax_o)
-
-    output = ng.convolution(conv_params, inputs, filters, axes=ax_o)
-    bprop_out = bprop_conv(errors, inputs, filters, output)
-    updat_out = update_conv(errors, inputs, filters, output)
-
-    with executor([output, bprop_out, updat_out], inputs, filters, errors) as conv_executor:
-        result_ng, gradI_ng, gradF_ng = conv_executor(input_value, filter_value, error_value)
-
-    # Compute reference with NumPy
-    result_np, gradI_np, gradF_np = reference_conv(C, N, K, D, H, W, T, R, S, M, P, Q,
-                                                   pad_d, pad_h, pad_w, str_d, str_h, str_w,
-                                                   input_value, filter_value, error_value)
-
-    # Compare fprop
-    assert np.allclose(result_ng, result_np, rtol=0, atol=0.5)
-
-    # Compare bprop
-    assert np.allclose(gradI_ng, gradI_np, rtol=0, atol=0.5)
-
-    # Compare update
-    assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
+@pytest.mark.parametrize("filter_count, batch_size, dilation, description",
+                         test_data_convolution_limitation, ids=id_func)
+def test_convolution_limitation(transformer_factory, filter_count, batch_size, dilation,
+                                description):
+    with pytest.raises(AssertionError) as excinfo:
+        execute_convolution(image_height=7, image_width=7, filter_height=3, filter_width=3,
+                            channel=16, batch_size=batch_size, filter_count=filter_count,
+                            image_3rd_dim=1, filter_3rd_dim=1, dilation=dilation)
+    assert excinfo.match(description)

@@ -110,6 +110,9 @@ class LookupTableOp(TensorOp):
                                             axes=axes,
                                             **kwargs)
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], self.axes, self.update, self.pad_idx)
+
     def generate_adjoints(self, adjoints, delta, lut, idx):
         """
         TODO
@@ -167,6 +170,9 @@ class update_lut(LutDerivOp):
             axes=lut.axes, **kwargs
         )
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
+
 
 class bprop_lut(LutDerivOp):
     def __init__(self, delta, lut, idx, fprop, **kwargs):
@@ -180,3 +186,6 @@ class bprop_lut(LutDerivOp):
             fprop=fprop,
             axes=idx.axes, **kwargs
         )
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)

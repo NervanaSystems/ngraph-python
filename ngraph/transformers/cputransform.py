@@ -50,7 +50,7 @@ from ngraph.transformers.passes.layout import AddLayoutConversions
 # from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
-    DeviceBufferReference, DeviceTensor, make_transformer_factory, \
+    DeviceTensor, make_transformer_factory, \
     set_transformer_factory, Computation
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
@@ -236,12 +236,6 @@ except NameError as error:
         self.transformer.allocate_code.append("{}()", self.alloc_name)
 
 
-class CPUDeviceBufferReference(DeviceBufferReference):
-
-    def __init__(self, transformer, **kwargs):
-        super(CPUDeviceBufferReference, self).__init__(transformer, **kwargs)
-
-
 class CPUDeviceTensor(DeviceTensor):
 
     def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
@@ -334,7 +328,14 @@ class CPUCodeGenerator(PyGen):
             raise ValueError("Op %s must be an instance of ReductionOp" % op)
         input_axes = op.args[0].axes
         reduction_axes = op.reduction_axes
-        np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
+        # TODO: Nishant (figure a better way to deal with reduction axes after fusion)
+        # The reduction axis for the Max Op is Axis_0. The fusion introduces Axis_NG_SHADOW.
+        # So when it tries to index on Axis_0 is gives an exception. This is a hack.
+        # Thats why the TODO.
+        try:
+            np_axis = tuple([input_axes.index(axis) for axis in reduction_axes])
+        except ValueError:
+            np_axis = tuple([0, ])
         return np_axis[0] if len(np_axis) == 1 else np_axis
 
     @property
@@ -399,11 +400,12 @@ class CPUCodeGenerator(PyGen):
         self.conv_slices[op.name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
 
-    @allocate_op.on_type(DeconvDerivOp)
-    def allocate_op(self, op, gI, delta, filters):
-        self.conv_params[op.fprop.forwarded.name] = op.conv_params
-        self.conv_slices[op.fprop.forwarded.name] = \
-            CPUConvEngine.get_slices(delta, filters, gI, op.conv_params)
+    @allocate_op.on_type(DeconvolutionOp)
+    def allocate_op(self, op, outputs, inputs, filters):
+        # get_slices args: Swap outputs and inputs
+        self.conv_params[op.name] = op.conv_params
+        self.conv_slices[op.name] = \
+            CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
@@ -520,9 +522,9 @@ class CPUCodeGenerator(PyGen):
         self.append("np.mod({}, {}, out={})", x, y, out)
 
     @generate_op.on_type(DotLowDimension)
-    def generate_op(self, op, out, x, y):
-        self.append("mkldnn.innerproduct_fprop('{}', {}, {}, out={})",
-                    op.name, x, y, out)
+    def generate_op(self, op, out, x, y, bias=None):
+        self.append("mkldnn.innerproduct_fprop('{}', {}, {}, {}, out={})",
+                    op.name, x, y, bias, out)
 
     @generate_op.on_type(BatchnormOp)
     def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
@@ -784,14 +786,6 @@ class CPUTransformer(ComputationGraphTransformer):
         Returns: A DeviceBuffer.
         """
         return CPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
-
-    def device_buffer_reference(self):
-        """
-        Make a DeviceBufferReference.
-
-        Returns: A DeviceBufferReference.
-        """
-        return CPUDeviceBufferReference(self)
 
     def initialize_mkldnn(self):
         self.code.execute("""

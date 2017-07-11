@@ -28,7 +28,7 @@ STYLE_CHECK_OPTS :=
 STYLE_CHECK_DIRS := ngraph tests examples benchmarks
 
 # pytest options
-TEST_OPTS := --timeout=300 --cov=ngraph --timeout_method=thread
+TEST_OPTS := --timeout=600 --cov=ngraph --timeout_method=thread
 TEST_DIRS := tests/
 TEST_DIRS_NEON := ngraph/frontends/neon/tests
 TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
@@ -36,6 +36,22 @@ TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
 TEST_DIRS_INTEGRATION := integration_tests/
+
+# Set parallel execution by setting the NUM_PROCS variable in the environment
+#	export NUM_PROCS=8
+#	make test_gpu
+# OR
+#	make test_gpu NUM_PROCS=8 
+#
+# If NUM_PROCS is unset, serial excution will be used
+# if NUM_PROCS = 0, serial execution will be used
+#
+PARALLEL_OPTS := ""
+ifdef NUM_PROCS
+ifneq ($(NUM_PROCS),0)
+	PARALLEL_OPTS=-n $(NUM_PROCS)
+endif
+endif
 
 # this variable controls where we publish Sphinx docs to
 DOC_DIR := doc
@@ -109,7 +125,7 @@ test_flex: gpu_prepare test_prepare clean
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
 	and not hetr_only or flex_only" \
 	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
-	$(TEST_DIRS) $(TEST_DIRS_NEON)
+	$(TEST_DIRS) $(TEST_DIRS_NEON) ${TEST_DIRS_TENSORFLOW}
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export PYTHONHASHSEED=0
@@ -126,7 +142,7 @@ test_mkldnn:
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -135,7 +151,7 @@ test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -148,7 +164,7 @@ test_gpu: gpu_prepare test_prepare clean
 	$(TEST_OPTS) $(TEST_DIRS)
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	not separate_execution" \
-	--boxed -n auto --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
+	--boxed $(PARALLEL_OPTS) --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	separate_execution" \
@@ -175,6 +191,11 @@ test_mxnet: test_prepare clean
 test_cntk: test_prepare clean
 	echo Running unit tests for cntk frontend...
 	py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
+	coverage xml -i
+
+test_caffe2: test_prepare clean
+	echo Running unit tests for caffe2 frontend...
+	py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CAFFE2)
 	coverage xml -i
 
 test_integration: test_prepare clean

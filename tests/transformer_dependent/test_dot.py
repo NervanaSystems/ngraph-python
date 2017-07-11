@@ -24,7 +24,6 @@ import pytest
 
 pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
-
 """
 Test ngraph's implementation of the dot product.
 """
@@ -98,6 +97,7 @@ def ngraph_l2_norm(np_array):
 
 
 @raise_all_numpy_errors
+@pytest.config.argon_disabled  # TODO triage
 def test_dot_sum_backprop(transformer_factory):
     delta = 1e-3
     rtol = atol = 1e-2
@@ -113,8 +113,8 @@ def test_dot_sum_backprop(transformer_factory):
     x_np[...] = [[1.0, 0.0, 1.0], [2.0, 0.0, 3.0]]
     y_np[...] = [-1.0, 1.0]
 
-    x = ng.placeholder(x_axes)
-    y = ng.placeholder(y_axes)
+    x = ng.placeholder(x_axes).named('x')
+    y = ng.placeholder(y_axes).named('y')
     d = ng.dot(x, y)
     s = ng.sum(d, out_axes=())
 
@@ -163,6 +163,7 @@ def test_dot_sum_backprop(transformer_factory):
 
 
 @raise_all_numpy_errors
+@pytest.config.argon_disabled  # TODO triage
 def test_tensor_dot_tensor(transformer_factory):
     """TODO."""
     C = ng.make_axis().named('C')

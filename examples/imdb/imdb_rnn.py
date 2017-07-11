@@ -91,7 +91,8 @@ with closing(ngt.make_transformer()) as transformer:
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
     loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
 
-    cbs = make_default_callbacks(output_file=args.output_file,
+    cbs = make_default_callbacks(transformer=transformer,
+                                 output_file=args.output_file,
                                  frequency=args.iter_interval,
                                  train_computation=train_computation,
                                  total_iterations=args.num_iterations,

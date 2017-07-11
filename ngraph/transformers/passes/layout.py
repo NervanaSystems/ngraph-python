@@ -18,18 +18,7 @@ from future.utils import with_metaclass
 
 from ngraph.transformers.passes.passes import PeepholeGraphPass, GraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp, OneHotOp, ReductionOp, \
-    SequentialOp, ReorderAxes, Flatten, TensorSliceOp, TensorSizeOp
-from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
-    DeconvolutionOp, DeconvDerivOp
-from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
-from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
-from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
-from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp 
-from ngraph.op_graph.ctc import CTCOp
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUCudaScatterSendOp, \
-    GPUCudaGatherSendOp, GPUCudaAllReduceOp, CPUQueueSendOp, CPUQueueScatterSendOp, \
-    CPUQueueGatherSendOp, CPUQueueAllReduceOp
+from ngraph.op_graph.op_graph import Op, ContiguousOp, TensorValueOp
 
 
 class LayoutAssignment(with_metaclass(abc.ABCMeta, object)):
@@ -103,46 +92,25 @@ class PruneContiguousPass(PeepholeGraphPass):
     TODO: stop inserting contiguous ops? Need to handle other transformer reqs though
     """
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         pass
 
     @visit.on_type(ContiguousOp)
-    def visit(self, op):
-        self.replace_op(op, op.args[0])
-
-
-def get_device_op(op):
-    """
-    Helper function that traverses through any reshape ops or value ops
-    to return the tensor op
-    """
-    while isinstance(op, SequentialOp):
-        op = op.value_tensor
-
-    if op.is_device_op:
-        return op
-
-    if isinstance(op, TensorValueOp):
-        return op.tensor
-
-    for arg in op.args:
-        dev_op = get_device_op(arg)
-        if dev_op:
-            return dev_op
-
-    return None
+    def visit(self, op, x):
+        self.replace_op(op, x)
 
 
 class GenerateLayoutDomains(PeepholeGraphPass):
     """
     This pass generates possible layouts (domain) for each op in the graph
     """
-    def __init__(self, transformer):
+    def __init__(self, transformer, **kwargs):
+        super(GenerateLayoutDomains, self).__init__(**kwargs)
         self.transformer = transformer
         self.domains = dict()
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         if op.is_device_op:
             self.domains[op] = self.transformer.get_layouts(op)
         elif isinstance(op, TensorValueOp) and op.tensor not in self.domains:
@@ -157,14 +125,15 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
     that maps from a layout choice to a cost. Binary constraints are generated for (op, arg) pairs
     when visiting the op.
     """
-    def __init__(self, transformer):
+    def __init__(self, transformer, **kwargs):
+        super(GenerateLayoutConstraints, self).__init__(**kwargs)
         self.transformer = transformer
         self.unary_constraints = dict()
         self.binary_constraints = dict()
         self.users = dict()
 
     @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *op_args):
         if op.is_device_op:
             # Generate unary constraint by getting the cost function for this op
             self.unary_constraints[op] = self.transformer.get_layout_cost_function(op)
@@ -172,8 +141,8 @@ class GenerateLayoutConstraints(PeepholeGraphPass):
             # Find all args that are device ops and generate binary constraints
             # Binary constraints map each op to a list of tuples storing (argument, constraint)
             self.binary_constraints[op] = []
-            for arg in op.args:
-                arg_op = get_device_op(arg)
+            for arg in op_args:
+                arg_op = self.get_device_op(arg)
                 if arg_op:
                     self.binary_constraints[op].append(
                         (arg_op, self.transformer.get_layout_change_cost_function(op, arg)))
@@ -196,7 +165,8 @@ class AssignLayouts(GraphPass):
     and needs to be implemented as one or more heuristics since branch-and-bound min cost
     search has exponential running time.
     """
-    def __init__(self, domain_pass, constraint_pass):
+    def __init__(self, domain_pass, constraint_pass, **kwargs):
+        super(AssignLayouts, self).__init__(**kwargs)
         self.domain_pass = domain_pass
         self.constraint_pass = constraint_pass
 
@@ -285,7 +255,7 @@ class AssignLayouts(GraphPass):
 
         return self.branch_and_bound(cur_assignment, unassigned, 0, min_assignment, upper_bound)
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, ops, **kwargs):
         # Initialize data needed for layout optimization
         self.domains = self.domain_pass.domains
         self.unary_constraints = self.constraint_pass.unary_constraints
@@ -309,156 +279,17 @@ class AddLayoutConversions(PeepholeGraphPass):
     assignment for the op and a layout assignment for the arg. If a conversion is needed
     the constraint implementation will generate it.
     """
-    def __init__(self, assign_pass):
+    def __init__(self, assign_pass, **kwargs):
+        super(AddLayoutConversions, self).__init__(**kwargs)
         self.assign_pass = assign_pass
         self.binary_constraints = None
         self.visited = set()
 
-    def do_pass(self, ops, transformer):
+    def do_pass(self, ops, **kwargs):
         self.binary_constraints = self.assign_pass.binary_constraints
-        super(AddLayoutConversions, self).do_pass(ops, transformer)
+        super(AddLayoutConversions, self).do_pass(ops=ops, **kwargs)
 
-    @generic_method(dispatch_base_type=Op)
-    def op_from_args(self, op, args):
-        """
-        This generic method creates a new op given an original op and new args. The purpose here
-        is to replace args for an op with layout conversions as needed but keep the op the same
-        otherwise.
-        """
-        op_type = type(op)
-        new_op = op_type(*args)
-        return new_op
-
-    # We cannot create new ops with new layouts for GPUCudaScatterSendOp and GPUCudaGatherSendOp.
-    # The information available at this point is not sufficient to create them (issue #1410).
-    @op_from_args.on_type(GPUQueueSendOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(GPUCudaScatterSendOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(GPUCudaGatherSendOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(GPUCudaAllReduceOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(CPUQueueSendOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(CPUQueueScatterSendOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(CPUQueueGatherSendOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(CPUQueueAllReduceOp)
-    def op_from_args(self, op, args):
-        op._Op__args = args
-        return op
-
-    @op_from_args.on_type(OneHotOp)
-    def op_from_args(self, op, args):
-        return OneHotOp(*args, axis=op.axis)
-
-    @op_from_args.on_type(ReductionOp)
-    def op_from_args(self, op, args):
-        op_type = type(op)
-        new_op = op_type(*args, reduction_axes=op.reduction_axes)
-        return new_op
-
-    @op_from_args.on_type(CTCOp)
-    def op_from_args(self, op, args):
-        return CTCOp(*args, axes=op.axes)
-
-    @op_from_args.on_type(ConvolutionOp)
-    def op_from_args(self, op, args):
-        return ConvolutionOp(op.conv_params, *args, axes=op.axes)
-
-    @op_from_args.on_type(bprop_conv)
-    def op_from_args(self, op, args):
-        return bprop_conv(args[0], op.fprop.args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(update_conv)
-    def op_from_args(self, op, args):
-        return update_conv(args[0], args[1], op.fprop.args[1], op.fprop)
-
-    @op_from_args.on_type(DeconvolutionOp)
-    def op_from_args(self, op, args):
-        return DeconvolutionOp(op.conv_params, *args, axes=op.axes)
-
-    @op_from_args.on_type(DeconvDerivOp)
-    def op_from_args(self, op, args):
-        return DeconvDerivOp(args[0], op.fprop.args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(PoolingOp)
-    def op_from_args(self, op, args):
-        return PoolingOp(op.pool_params, args[0], axes=op.axes)
-
-    @op_from_args.on_type(BpropPoolOp)
-    def op_from_args(self, op, args):
-        return BpropPoolOp(args[0], op.fprop.args[0], op.fprop)
-
-    @op_from_args.on_type(LookupTableOp)
-    def op_from_args(self, op, args):
-        return LookupTableOp(args[0], args[1], op.axes, op.update, op.pad_idx)
-
-    @op_from_args.on_type(update_lut)
-    def op_from_args(self, op, args):
-        return update_lut(args[0], op.fprop.args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(bprop_lut)
-    def op_from_args(self, op, args):
-        return bprop_lut(args[0], args[1], op.fprop.args[1], op.fprop)
-
-    @op_from_args.on_type(ReluOp)
-    def op_from_args(self, op, args):
-        return ReluOp(args[0], op.slope)
-
-    @op_from_args.on_type(BpropReluOp)
-    def op_from_args(self, op, args):
-        return BpropReluOp(args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(BatchnormOp)
-    def op_from_args(self, op, args):
-        return BatchnormOp(args[0], args[1], args[2], args[3], args[4], args[5])
-    
-    @op_from_args.on_type(BpropBatchnormOp)
-    def op_from_args(self, op, args):
-        return BpropBatchnormOp(args[0], args[1], op.fprop)
-
-    @op_from_args.on_type(ReorderAxes)
-    def op_from_args(self, op, args):
-        return ReorderAxes(args[0], axes=op.axes)
-
-    @op_from_args.on_type(Flatten)
-    def op_from_args(self, op, args):
-        return Flatten(args[0], axes=op.axes)
-
-    @op_from_args.on_type(TensorSliceOp)
-    def op_from_args(self, op, args):
-        return TensorSliceOp(args[0], op.slices, op.axes)
-
-    @op_from_args.on_type(TensorSizeOp)
-    def op_from_args(self, op, args):
-        return TensorSizeOp(args[0], op.reduction_axes)
-
-    @generic_method(dispatch_base_type=Op)
-    def visit(self, op):
+    def visit(self, op, *args):
         """
         This pass visits every op with a layout assigned and checks the args against constraints
         to determine whether a layout conversion is needed between the arg and the op. If a
@@ -472,9 +303,9 @@ class AddLayoutConversions(PeepholeGraphPass):
             elif "layout" in op.metadata and "nolayout" not in op.metadata:
                 self.visited.add(op)
                 new_args = []
-                for arg in op.args:
+                for arg in args:
                     b_constraint = None
-                    dev_op = get_device_op(arg)
+                    dev_op = self.get_device_op(arg)
                     orig_arg_op = None
                     if dev_op is None:
                         new_args.append(arg)
@@ -500,7 +331,7 @@ class AddLayoutConversions(PeepholeGraphPass):
 
                 # Replace op if any inputs need to be transformed
                 if any(a is not b for a, b in zip(new_args, list(op.args))):
-                    new_op = self.op_from_args(op, new_args)
+                    new_op = op.copy_with_new_args(new_args)
                     new_op.metadata["layout"] = op.metadata["layout"]
                     self.replace_op(op, new_op)
                     self.visited.add(new_op)

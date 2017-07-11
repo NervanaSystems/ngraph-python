@@ -58,9 +58,9 @@ neon/backends/kernels/dump
 checkpoint
 
 # test
-coverage.xml
+coverage_*.xml
 .coverage*
-testout.xml
+testout_*.xml
 
 # doc
 doc/source/Graph_Introduction.rst
@@ -71,3 +71,5 @@ doc/source/walk_throughs.rst
 # docker
 contrib/docker/.build*
 contrib/docker/autoflex
+
+codegen.py

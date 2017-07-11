@@ -47,7 +47,7 @@ def check_device_assign_pass(default_device, default_device_id,
             metadata {device_id, device} for each op
     :param: graph_op: list of ops to do the graph traversal
     """
-    with ExecutorFactory() as ex:
+    with ExecutorFactory():
         expected_transformers = set()
 
         class MockHetr(object):
@@ -61,7 +61,7 @@ def check_device_assign_pass(default_device, default_device_id,
         hetr = MockHetr()
         obj = DeviceAssignPass(hetr, default_device, default_device_id)
 
-        obj.do_pass(graph_op, ex.transformer)
+        obj.do_pass(ops=graph_op)
 
         for op in graph_op_metadata.keys():
             assert op.metadata['device'] == graph_op_metadata[op][0]
@@ -89,10 +89,10 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
     :param expected_recv_nodes: lits of ops where receive nodes are expected to
            be inserted after the communication pass
     """
-    with ExecutorFactory() as ex:
+    with ExecutorFactory():
         send_nodes = OrderedSet()
         obj = CommunicationPass(send_nodes)
-        obj.do_pass(ops_to_transform, ex.transformer)
+        obj.do_pass(ops_to_transform)
 
         op_list_instance_type = list()
         num_expected_sendnodes = len(expected_recv_nodes)
@@ -180,6 +180,17 @@ def test_distributed_graph_plus_two(transformer_factory):
         computation = ex.executor(x_plus_two, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 2)
+
+
+def test_singleton_device_id(transformer_factory):
+    with ng.metadata(device_id=(['1'])):
+        x = ng.placeholder(())
+    graph_ops = OrderedSet([x])
+
+    graph_op_metadata = {op: list() for op in graph_ops}
+    graph_op_metadata[x] = ["cpu", '1']
+
+    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
 
 
 def test_from_device(transformer_factory):
@@ -306,7 +317,9 @@ def test_recvop_axes_using_dot(transformer_factory):
 
     with ExecutorFactory() as ex:
         computation = ex.executor(result, x, w)
-        assert ng.equal(computation(x_value, w_value), np.dot(x_value, w_value))
+        val_ng = computation(x_value, w_value)
+        val_np = np.dot(x_value, w_value)
+        assert ng.testing.allclose(val_ng, val_np)
 
 
 def test_recvop_tensorupdate(transformer_factory):
@@ -504,6 +517,9 @@ ax_D = ng.make_axis(24)
 ])
 def test_gpu_graph(config):
     pytest.xfail("Multi-GPU testing not enabled yet")
+
+    if 'gpu' not in ngt.transformer_choices():
+        pytest.skip('GPUTransformer not available!')
 
     t = config
     with ng.metadata(device='gpu'):

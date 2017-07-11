@@ -15,6 +15,8 @@
 import os
 import configargparse
 import ngraph.transformers as ngt
+from ngraph.flex.names import flex_gpu_transformer_name
+from ngraph.flex.flexargparser import FlexNgraphArgparser
 
 
 class NgraphArgparser(configargparse.ArgumentParser):
@@ -76,6 +78,8 @@ class NgraphArgparser(configargparse.ArgumentParser):
                           metavar='SEED',
                           help='random number generator seed')
 
+        FlexNgraphArgparser.setup_flex_args(self)
+
     def parse_args(self, *args, **kwargs):
         args = super(NgraphArgparser, self).parse_args(*args, **kwargs)
         self.make_and_set_transformer_factory(args)
@@ -86,5 +90,8 @@ class NgraphArgparser(configargparse.ArgumentParser):
         return args
 
     def make_and_set_transformer_factory(self, args):
-        factory = ngt.make_transformer_factory(args.backend)
-        ngt.set_transformer_factory(factory)
+        if args.backend == flex_gpu_transformer_name:
+                FlexNgraphArgparser.make_and_set_transformer_factory(args)
+        else:
+            factory = ngt.make_transformer_factory(args.backend)
+            ngt.set_transformer_factory(factory)

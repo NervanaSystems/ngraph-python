@@ -40,6 +40,8 @@ class NumpyLogreg(object):
         return grad, loss, self.thetas
 
 
+# Flex disabled - because of the strict tolerance (rtol, atol)
+@pytest.mark.flex_disabled
 def test_logreg(transformer_factory):
     # xs: (C, N), y: (N,)
     xs = np.array([[0.52, 0.88, 0.52, 0.74],
@@ -65,15 +67,14 @@ def test_logreg(transformer_factory):
     log_likelihoods = ng.log(ys_pred) * ys_v + ng.log(1 - ys_pred) * (1 - ys_v)
     loss = -ng.sum(log_likelihoods, reduction_axes=[N])
     grad_comp = ng.deriv(loss, thetas_var)
-    grad = ng.sequential([
+    weight_update = ng.sequential([
         ng.assign(thetas_var, thetas_var - alpha_v * grad_comp),
-        thetas_var,
-        grad_comp
+        thetas_var
     ])
 
     # transformer
     with ExecutorFactory() as ex:
-        train_eval_func = ex.executor([grad, loss, thetas_var],
+        train_eval_func = ex.executor([grad_comp, loss, weight_update],
                                       xs_v, ys_v, alpha_v)
 
         # evaluate
