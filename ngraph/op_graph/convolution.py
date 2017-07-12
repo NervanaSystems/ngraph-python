@@ -69,6 +69,7 @@ class ConvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
+        self.__has_side_effects = False
 
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
@@ -84,6 +85,14 @@ class ConvolutionOp(TensorOp):
         bprop_conv_op.add_control_dep(self)
         filters.generate_add_delta(adjoints, update_conv_op)
         inputs.generate_add_delta(adjoints, bprop_conv_op)
+
+    @property
+    def has_side_effects(self):
+        return self.__has_side_effects
+
+    @has_side_effects.setter
+    def has_side_effects(self, value):
+        self.__has_side_effects = value
 
 
 def deconvolution(conv_params, inputs, filters, axes, docstring=None):
@@ -139,6 +148,15 @@ class DeconvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
+        self.__has_side_effects = False
+
+    @property
+    def has_side_effects(self):
+        return self.__has_side_effects
+
+    @has_side_effects.setter
+    def has_side_effects(self, value):
+        self.__has_side_effects = value
 
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
@@ -163,6 +181,7 @@ class ConvDerivOp(TensorOp):
     def __init__(self, fprop, **kwargs):
         super(ConvDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
+        fprop.has_side_effects = True
 
     @property
     def conv_params(self):

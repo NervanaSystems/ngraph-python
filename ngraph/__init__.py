@@ -15,6 +15,10 @@
 
 from __future__ import print_function
 
+import os
+import json
+import logging
+import logging.config
 import ngraph.transformers as transformers
 from ngraph.op_graph.axes import make_axis, make_axes
 from ngraph.transformers.base import UnsupportedTransformerException
@@ -84,6 +88,17 @@ __all__ = [
     'variance',
 ]
 
+# Set default logging behavior to avoid "No handler found" warnings. And provide sane defaults.
+config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logging.json')
+logging.config.dictConfig(json.load(open(config_path)))
+if os.environ.get('NGRAPH_LOG', None) in ('ERROR', 'WARNING', 'INFO', 'DEBUG', 'TRACE'):
+    for handler in logging.getLogger().handlers:
+        lvl = getattr(logging, os.environ['NGRAPH_LOG'])
+        handler.setLevel(lvl)
+
+# Optionally we can act like a 'good library citizen' and not have any defaults, forcing the user
+# to set everything up:
+# logging.getLogger(__name__).addHandler(NullHandler())
 
 try:
     from ngraph.transformers.gputransform import GPUTransformer
