@@ -126,4 +126,3 @@ def test_hetr_graph_passes(transformer_factory):
     check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
     check_communication_pass(ops_to_transform=graph_ops,
                              expected_recv_nodes=[x_plus_y])
-

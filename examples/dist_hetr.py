@@ -45,4 +45,4 @@ with closing(ngt.make_transformer_factory('hetr')()) as hetr:
 
     # Run the computation
     for i in range(args.iter_count):
-        print(computation(i,i))
+        print(computation(i, i))
