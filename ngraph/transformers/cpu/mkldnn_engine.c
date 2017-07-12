@@ -16,6 +16,7 @@
 #include "mkldnn.h"
 #include "mkldnn_engine.h"
 #include "mkldnn_util.h"
+#include <errno.h>
 
 mkldnn_engine_t init_mkldnn_engine(void) {
   mkldnn_engine_t engine;
@@ -311,24 +312,28 @@ void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int* dims,
   opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-
 void* alloc_aligned_memory(void **buf, size_t size, mkldnn_data_type_t data_type, size_t alignment) {
   size_t size_to_alloc;
-  //------------------------------------------------------------------
-  // Check if the given memory size is the multiple of the alignment,
-  // if not caclulate the new memory size accordingly 
-  if (((size*4)%alignment)!=0){
-    size_to_alloc = (size*4) + (alignment - ((size*4)%alignment));
-  }
-  else{
-    size_to_alloc = size*4;
-  }
-  *buf = aligned_alloc(alignment, size_to_alloc);
-  if (*buf == NULL) {
-    printf("Memory allocation failure. Could not allocate %lld bytes aligned to %d bytes\n",
-            size * 4, alignment);
-    exit(2);
-  }
+  switch (data_type) {
+    case mkldnn_f32:
+    case mkldnn_s32:
+			//------------------------------------------------------------------
+			// allocates memory with the specified alignment
+			size_to_alloc = size * 4;
+			int _status = posix_memalign(buf, alignment, size_to_alloc);
+			if (_status == 0){
+				return;
+			} else if (_status == EINVAL){
+				printf("The value of the alignment parameter is not a power of two or \
+								is not a multiple of sizeof(void *)");
+			} else if (_status = ENOMEM){
+			  printf("There is insufficient memory available with the requested alignment");
+			}
+			exit(2);
+		default:
+			assert(0);
+			;
+	}
 }
 
 void* alloc_memory(size_t size, mkldnn_data_type_t data_type) {

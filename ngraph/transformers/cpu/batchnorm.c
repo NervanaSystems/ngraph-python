@@ -42,20 +42,18 @@ void create_mkldnn_batchnorm_fprop_primitives(
 			MKLDNN layer o/p to bn, we can remove the code which is platform
 			dependent */
 
-	if ((__builtin_cpu_supports("avx2")) || (__builtin_cpu_supports("avx"))){
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-				                  batchnorm_src_sizes, data_type,
-				                  mkldnn_nChw8c));
-	}
-	else if (__builtin_cpu_supports("avx512f")){
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-				                  batchnorm_src_sizes, data_type,
-				                  mkldnn_nChw16c));
-	}
-	else{
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-				                  batchnorm_src_sizes, data_type,
-				                  mkldnn_chwn));
+	if ((__builtin_cpu_supports("avx2")) || (__builtin_cpu_supports("avx"))) {
+	MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
+			                  batchnorm_src_sizes, data_type,
+			                  mkldnn_nChw8c));
+	} else if (__builtin_cpu_supports("avx512f")) {
+	MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
+			                  batchnorm_src_sizes, data_type,
+			                  mkldnn_nChw16c));
+	} else {
+	MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
+			                  batchnorm_src_sizes, data_type,
+			                  mkldnn_chwn));
 	}
 
 	mkldnn_batch_normalization_desc_t batch_norm_desc;
@@ -248,29 +246,27 @@ void create_mkldnn_batchnorm_bprop_primitives(
 			MKLDNN layer o/p to bn, we can remove the code which is platform
 			dependent */
 
-	if ((__builtin_cpu_supports("avx2")) || (__builtin_cpu_supports("avx"))){
+	if ((__builtin_cpu_supports("avx2")) || (__builtin_cpu_supports("avx"))) {
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
+                                      batchnorm_src_sizes, data_type,
+                                      mkldnn_nChw8c));
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
+                                      src_dims, batchnorm_src_sizes, data_type,
+                                      mkldnn_nChw8c));
+	} else if (__builtin_cpu_supports("avx512f")) {
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
+                                      batchnorm_src_sizes, data_type,
+                                      mkldnn_nChw16c));
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
+                                      src_dims, batchnorm_src_sizes, data_type,
+                                      mkldnn_nChw16c));
+	} else {
 		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-				                          batchnorm_src_sizes, data_type,
-				                          mkldnn_nChw8c));
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
-				                          src_dims, batchnorm_src_sizes, data_type,
-				                          mkldnn_nChw8c));
-	}
-	else if (__builtin_cpu_supports("avx512f")){
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-				                          batchnorm_src_sizes, data_type,
-				                          mkldnn_nChw16c));
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
-				                          src_dims, batchnorm_src_sizes, data_type,
-				                          mkldnn_nChw16c));
-	}
-	else{
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-				                          batchnorm_src_sizes, data_type,
-				                          mkldnn_chwn));
-		MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
-				                          src_dims, batchnorm_src_sizes, data_type,
-				                          mkldnn_chwn));
+                                      batchnorm_src_sizes, data_type,
+                                      mkldnn_chwn));
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
+                                      src_dims, batchnorm_src_sizes, data_type,
+                                      mkldnn_chwn));
 	}
 	prim_md = mkldnn_memory_desc_src_md;
 
@@ -470,14 +466,8 @@ void create_mkldnn_batchnorm_bprop_primitives(
 	/* create bprop batchnorm net */
 	if (opkernel->reorder_i[0])
 		opkernel->net[opkernel->net_size++] = opkernel->reorder_i[0];
-	if (opkernel->reorder_i[1])
-		opkernel->net[opkernel->net_size++] = opkernel->reorder_i[1];
-	if (opkernel->reorder_i[2])
-		opkernel->net[opkernel->net_size++] = opkernel->reorder_i[2];
 	if (opkernel->reorder_i[3])
 		opkernel->net[opkernel->net_size++] = opkernel->reorder_i[3];
-	if (opkernel->reorder_i[4])
-		opkernel->net[opkernel->net_size++] = opkernel->reorder_i[4];
 
 	opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 
