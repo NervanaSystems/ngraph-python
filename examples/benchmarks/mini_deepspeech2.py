@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_norm', action='store_true')
     parser.add_argument('--max_iter', type=int, help='Number of  iterations', default=2)
     parser.add_argument('--skip_iter', type=int, help='Number of iterations to skip', default=1)
-    parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[2],
+    parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
     parser.add_argument('--batch_size', type=int, help='Batch size', default=64)
     parser.add_argument('--transformer', default='hetr', help='Type of Transformer')

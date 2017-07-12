@@ -174,14 +174,6 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                 op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
                                                            num_clones)
 
-            if getattr(op, 'axes', None) is not None:
-                for a in op.axes:
-                    # check axis name equal, not length
-                    if a.is_flattened and a.axes.batch_axis() is not None:
-                        a.axes.batch_axis().length = parallel_axis.length
-                        a.length = 1
-                        for l in a.axes.full_lengths:
-                            a.length *= l
             if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
                 op.tensor._axes = calculate_scatter_axes(op.tensor.axes, parallel_axis, num_clones)
 

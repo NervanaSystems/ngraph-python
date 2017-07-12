@@ -29,12 +29,12 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
 def calculate_scatter_axes(axes, scatter_axis, num_devices):
     new_axes = list()
     for a in axes:
-        if scatter_axis == a:
+        if scatter_axis == a and scatter_axis.length == a.length:
             assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
                 .format(scatter_axis, num_devices)
 
-            #new_length = a.length // num_devices
-            new_axis = make_axis(scatter_axis.length, a.name)
+            new_length = a.length // num_devices
+            new_axis = make_axis(new_length, a.name)
             new_axes.append(new_axis)
         else:
             new_axes.append(a)

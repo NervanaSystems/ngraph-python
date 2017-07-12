@@ -1210,7 +1210,7 @@ class TensorDescription(NameableValue):
             new_strides.append(new_stride)
             new_sizes.append(new_size)
 
-        self.description = TensorDescription(
+        return TensorDescription(
             new_axes,
             base=self.base,
             dtype=self.dtype,
@@ -1220,7 +1220,6 @@ class TensorDescription(NameableValue):
             next_tensor_description=self,
             name = self.name + 'rFlatten'
         )
-        return self.description
 
     def unflatten(self, new_axes):
         """
@@ -1513,7 +1512,7 @@ class TensorDescription(NameableValue):
             # TODO: write a test that fails if abs() is removed
             offset += idx * abs(stride)
 
-        self.description = TensorDescription(
+        return TensorDescription(
             new_axes,
             base=self.base,
             dtype=self.dtype,
@@ -1523,7 +1522,6 @@ class TensorDescription(NameableValue):
             next_tensor_description=self,
             name=self.name + "rSlice",
         )
-        return self.description
 
     @property
     def shape(self):
