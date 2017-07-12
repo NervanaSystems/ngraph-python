@@ -96,6 +96,10 @@ class CommunicationOp(TensorOp):
     def is_communication_op(self):
         return True
 
+    @property
+    def has_side_effects(self):
+        return True
+
 
 class SendOp(CommunicationOp):
     """
