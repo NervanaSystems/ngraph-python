@@ -1,7 +1,7 @@
 import os
-import sys
 import subprocess
 import tempfile
+import logging
 
 from collections import Iterable
 
@@ -20,6 +20,9 @@ try:
     TF_IMPORT_SUCCESS = True
 except ImportError:
     TF_IMPORT_SUCCESS = False
+
+
+logger = logging.getLogger(__name__)
 
 
 def ngraph_to_tf_graph_def(graph):
@@ -99,8 +102,14 @@ def ngraph_to_tensorboard(graph, start_tensorboard=False):
     else:
         writer.Close()
 
-    sys.stdout.write('Tensorboard file written to: ' + fname + '\n')
+    logger.warning("Tensorboard output written to %s", fname)
 
     if start_tensorboard:
-        subprocess.check_call(['tensorboard', '--logdir', os.path.dirname(fname)])
+        logger.warning("Starting Tensorboard with `tensorboard --logdir %s`",
+                       os.path.dirname(fname))
+        subprocess.check_call(['tensorboard', '--logdir',
+                              os.path.dirname(fname)])
+    else:
+        logger.warning("You'll need to manually start Tensorboard with `tensorboard --logdir %s`",
+                       os.path.dirname(fname))
     return fname
