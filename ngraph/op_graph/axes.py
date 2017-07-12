@@ -1131,7 +1131,6 @@ class TensorDescription(NameableValue):
         assert len(self.full_strides) == self.ndim, \
             "Strides must have same number of dimensions as axes"
 
-
     def __repr__(self):
         return self.base.name
 
@@ -1218,7 +1217,7 @@ class TensorDescription(NameableValue):
             full_sizes=new_sizes,
             offset=self.offset,
             next_tensor_description=self,
-            name = self.name + 'rFlatten'
+            name=self.name + 'rFlatten'
         )
 
     def unflatten(self, new_axes):
