@@ -317,22 +317,22 @@ void* alloc_aligned_memory(void **buf, size_t size, mkldnn_data_type_t data_type
   switch (data_type) {
     case mkldnn_f32:
     case mkldnn_s32:
-			//------------------------------------------------------------------
-			// allocates memory with the specified alignment
-			size_to_alloc = size * 4;
-			int _status = posix_memalign(buf, alignment, size_to_alloc);
-			if (_status == 0){
-				return;
-			} else if (_status == EINVAL){
-				printf("The value of the alignment parameter is not a power of two or \
-								is not a multiple of sizeof(void *)");
-			} else if (_status = ENOMEM){
-			  printf("There is insufficient memory available with the requested alignment");
-			}
-			exit(2);
-		default:
-			assert(0);
-			;
+    //------------------------------------------------------------------
+    // allocates memory with the specified alignment
+      size_to_alloc = size * 4;
+      int _status = posix_memalign(buf, alignment, size_to_alloc);
+      if (_status == 0){
+          return;
+      } else if (_status == EINVAL){
+        printf("The value of the alignment parameter is not a power of two or \
+                          is not a multiple of sizeof(void *)");
+      } else if (_status = ENOMEM){
+        printf("There is insufficient memory available with the requested alignment");
+      }
+      exit(2);
+    default:
+      assert(0);
+      ;
 	}
 }
 
