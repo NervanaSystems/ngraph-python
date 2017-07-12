@@ -151,7 +151,6 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             elif isinstance(op, (CPUQueueRecvOp, GPUQueueRecvOp)):
                 # Cloning a recv node means we need a broadcast, so simulate one by adding an
                 # additional sender with the same input data as the original sender.
-                # TODO replace with real broadcast #1398 #1399
                 send_op = CPUQueueSendOp(orig_ops[op.uuid].send_node().args[0])
                 op._queue = send_op.queue
                 op._send_node = send_op

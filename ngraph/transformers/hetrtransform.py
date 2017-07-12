@@ -188,7 +188,7 @@ class AsyncTransformer(Process):
                 if isinstance(e, Empty):
                     pass
                 else:
-                    # TODO : Issue #1867 handle and exit gracefully
+                    # TODO : Issue #1796 handle and exit gracefully
                     raise
 
 

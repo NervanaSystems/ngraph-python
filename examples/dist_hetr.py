@@ -31,7 +31,7 @@ weight = ng.make_axis(length=2, name='weight')
 
 x = ng.placeholder(axes=[H, N])
 w = ng.placeholder(axes=[weight, H])
-with ng.metadata(device_id=('1', '2'), parallel=N):
+with ng.metadata(device_id=('0', '1'), parallel=N):
     dot = ng.dot(w, x)
 
 # Select a transformer
