@@ -260,39 +260,6 @@ def test_allreduce_hint(config):
 @pytest.mark.parametrize('config', [
     {
         'input': 1,
-        'func': 'sum',
-        'device_id': (1, 2),
-        'expected_result': [-35.0, -35.0, -35.0, -35.0],
-    },
-])
-def test_one_dot_bprop_allreduce(config):
-    c = config
-
-    pytest.xfail("GPU child transformers generate errors during AssignLayouts graph pass #1651")
-
-    H_axis = ng.make_axis(length=4, name='height')
-    W_axis = ng.make_axis(length=6, name='width')
-    with ng.metadata(step='input'):
-        X = ng.placeholder(axes=[H_axis, W_axis])
-        target = ng.constant(1, axes=[W_axis])
-    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
-        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1))
-        dot = ng.dot(W, X)
-        L = ng.squared_L2(target - dot, out_axes=())
-        grad = ng.deriv(L, W)
-        grad.metadata['reduce_func'] = c['func']
-        update = (W - grad)
-
-    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-        out_comp = hetr.computation([update], X)
-        result = out_comp(c['input'])
-
-        np.testing.assert_array_equal(result, c['expected_result'])
-
-
-@pytest.mark.parametrize('config', [
-    {
-        'input': 1,
         'device_id': (1, 2),
         'result_two': [[4.0, 4.0, 4.0, 4.0],
                        [4.0, 4.0, 4.0, 4.0]],
