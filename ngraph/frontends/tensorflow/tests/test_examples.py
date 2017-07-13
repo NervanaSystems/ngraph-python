@@ -35,8 +35,7 @@ pytestmark = pytest.mark.transformer_dependent
 
 @pytest.mark.usefixtures("transformer_factory")
 class TestExamples(ImporterTester):
-    # Failing test for Flex because of the strict tolerance (rtol, atol)
-    @pytest.mark.flex_disabled
+    @pytest.config.flex_disabled(reason="Flex fail, because learning curve is slightly different")
     def test_logistic_regression(self):
         # args
         parser = argparse.ArgumentParser()
@@ -49,11 +48,11 @@ class TestExamples(ImporterTester):
         ng_cost_vals, tf_cost_vals = logistic_regression(args)
 
         # check
-        assert ng.testing.allclose(
+        ng.testing.assert_allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
-    @pytest.mark.flex_disabled
+    @pytest.config.flex_disabled(reason="Flex fail, because learning curve is slightly different")
     def test_mnist_mlp(self):
         # args
         parser = argparse.ArgumentParser()
@@ -69,11 +68,11 @@ class TestExamples(ImporterTester):
         ng_cost_vals, tf_cost_vals = mnist_mlp(args)
 
         # check
-        assert ng.testing.allclose(
+        ng.testing.assert_allclose(
             np.asarray(ng_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))
 
-    @pytest.mark.flex_disabled
+    @pytest.config.flex_disabled(reason="Flex fail, because learning curve is slightly different")
     def test_mnist_mlp_shaped(self):
         # args
         parser = argparse.ArgumentParser()
@@ -89,6 +88,6 @@ class TestExamples(ImporterTester):
         ns_cost_vals, tf_cost_vals = mnist_mlp_ns(args), mnist_mlp_tf(args)
 
         # check
-        assert ng.testing.allclose(
+        ng.testing.assert_allclose(
             np.asarray(ns_cost_vals).astype(np.float32),
             np.asarray(tf_cost_vals).astype(np.float32))

@@ -67,8 +67,19 @@ def force_serialization_computations(monkeypatch):
         monkeypatch.setattr(ngt.Transformer, 'add_computation', monkey_add_computation)
 
 
+def pass_method(*args, **kwargs):
+    pass
+
+
 def pytest_configure(config):
     # Define a reusable marker
     config.argon_disabled = pytest.mark.xfail(config.getvalue("transformer") == "argon",
-                            reason="Not supported by argon backend",
-                            strict=True)
+                                              reason="Not supported by argon backend",
+                                              strict=True)
+    config.flex_disabled = pytest.mark.xfail(config.getvalue("transformer") == "flexgpu",
+                                             reason="Failing test for Flex",
+                                             strict=True)
+    config.flex_skip = pytest.mark.skipif(config.getvalue("transformer") == "flexgpu",
+                                          reason="Randomly failing test for Flex")
+    config.flex_skip_now = pytest.skip if config.getvalue("transformer") == "flexgpu" \
+        else pass_method
