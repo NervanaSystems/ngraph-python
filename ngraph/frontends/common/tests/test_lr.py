@@ -53,7 +53,7 @@ def test_fixed_lr(iter_buf, max_iter, base_lr):
         ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
-        assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
 def test_step_lr(iter_buf, max_iter, base_lr):
@@ -75,7 +75,7 @@ def test_step_lr(iter_buf, max_iter, base_lr):
         ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
-        assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
 def test_exp_lr(iter_buf, max_iter, base_lr):
@@ -95,7 +95,7 @@ def test_exp_lr(iter_buf, max_iter, base_lr):
         ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
-        assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
 def test_inv_lr(iter_buf, max_iter, base_lr):
@@ -117,7 +117,7 @@ def test_inv_lr(iter_buf, max_iter, base_lr):
         ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
-        assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
 @pytest.config.flex_disabled(reason='Results mismatch')
