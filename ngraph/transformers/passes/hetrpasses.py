@@ -101,7 +101,6 @@ class DistributedPass(GraphBuildingPass):
             if op.metadata.get('marker') == 'gather':
                 # op is GatherRecvOp
                 self.parallel_axes = op.metadata['parallel']
-
                 gather_send_op = op.send_nodes[0]
 
                 # clone nodes for each device_id

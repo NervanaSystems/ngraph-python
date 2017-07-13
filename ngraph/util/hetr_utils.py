@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
-from ngraph.op_graph.op_graph import Op, DotOp
+from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
     GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp, BroadcastRecvOp
 from orderedset import OrderedSet
@@ -173,6 +173,9 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
                 op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
                                                            num_clones)
+
+            if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
+                op.tensor._axes = calculate_scatter_axes(op.tensor.axes, parallel_axis, num_clones)
 
             args_list = list(op.args)
             for arg_idx, arg_op in enumerate(args_list):

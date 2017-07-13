@@ -25,7 +25,7 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := ngraph tests examples benchmarks
+STYLE_CHECK_DIRS := ngraph tests examples
 
 # pytest options
 TEST_OPTS := --timeout=600 --cov=ngraph --timeout_method=thread
