@@ -32,7 +32,7 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
 def calculate_scatter_axes(axes, scatter_axis, num_devices):
     new_axes = list()
     for a in axes:
-        if scatter_axis == a:
+        if scatter_axis == a and scatter_axis.length == a.length:
             assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
                 .format(scatter_axis, num_devices)
 
@@ -97,6 +97,10 @@ class CommunicationOp(TensorOp):
 
     @property
     def is_communication_op(self):
+        return True
+
+    @property
+    def has_side_effects(self):
         return True
 
 

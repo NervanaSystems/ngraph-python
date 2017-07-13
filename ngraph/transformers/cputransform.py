@@ -22,7 +22,7 @@ from operator import itemgetter
 import numpy as np
 import os
 
-from ngraph.util.pygen import PyGen, indenting
+from ngraph.util.pygen import PyModule, PyGen, indenting
 from ngraph.util.generics import generic_method
 
 from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
@@ -31,7 +31,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
     ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
-    ReductionOp
+    ReductionOp, WriteOp, ReadOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
     DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -47,11 +47,17 @@ from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
-# from ngraph.transformers.passes.nviz import VizPass
+from ngraph.transformers.passes.expass import SSAConversion, IndexElision, DeadCodeEliminationPass
+from ngraph.transformers.passes.memlayout import MemLayoutPass
+from ngraph.transformers.passes.memoptimize import MemOptimizePass
+from ngraph.transformers.passes.liveness import LivenessPass
 
-from ngraph.transformers.base import ComputationGraphTransformer, DeviceBufferStorage, \
-    DeviceTensor, make_transformer_factory, \
-    set_transformer_factory, Computation
+from ngraph.transformers.base import make_transformer_factory, \
+    set_transformer_factory
+from ngraph.transformers.extransform import ExecutionGraphTransformer, \
+    DeviceTensor, DeviceTensorView, DeviceComputation
+
+from ngraph.transformers.exop import InputDecl, OutputDecl, LiteralScalarOp
 
 from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
@@ -150,28 +156,25 @@ class CPUPoolEngine(object):
         return (slice(firstI, lastI + 1), lastI - firstI + 1)
 
 
-class CPUComputation(Computation):
-
+class CPUDeviceComputation(DeviceComputation):
     def __init__(self, transformer, computation_op, **kwargs):
-        super(CPUComputation, self).__init__(transformer, computation_op, **kwargs)
+        super(CPUDeviceComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
         self.pool_slices = dict()
         self.conv_params = dict()
         self.conv_slices = dict()
 
 
-class CPUDeviceBufferStorage(DeviceBufferStorage):
+class CPUDeviceTensor(DeviceTensor):
+    """
+    This is the device tensor.
+    """
 
-    def __init__(self, transformer, bytes, dtype, **kwargs):
-        super(CPUDeviceBufferStorage, self).__init__(transformer, bytes, dtype, **kwargs)
-        self.storage = None
+    def __init__(self, transformer, device_computation, tensor, **kwargs):
+        super(CPUDeviceTensor, self).__init__(transformer, device_computation, tensor, **kwargs)
 
-    def create_device_tensor(self, tensor_description):
-        shape_str = "_".join((str(_) for _ in tensor_description.shape))
-        return CPUDeviceTensor(self.transformer, self, tensor_description,
-                               name="{}_v_{}_{}".format(self.name,
-                                                        tensor_description.name,
-                                                        shape_str))
+    def make_device_tensor_view(self, tensor_view_decl):
+        return CPUDeviceTensorView(self, tensor_view_decl)
 
     @property
     def alloc_name(self):
@@ -193,6 +196,18 @@ class CPUDeviceBufferStorage(DeviceBufferStorage):
         :return: name to reference variable.
         """
         return self.name
+
+    def codegen(self):
+        start = self.buffer_pool_offset // 4
+        end = start + self.size // 4
+        pool_name = self.device_computation.computation_op.name
+        pool_name += '_persistent_pool' if self.is_persistent else '_temporary_pool'
+        dtype = self.element_type.dtype
+        self.transformer.exop_codegen_tensor.append("\n# tensor size={}, offset={}",
+                                                    self.size,
+                                                    self.buffer_pool_offset)
+        self.transformer.exop_codegen_tensor.append("{} = {}[{}:{}].view('{}')",
+                                                    self.name, pool_name, start, end, dtype)
 
     def transform_allocate(self):
         self.transformer.init_code.append("{} = None", self.ref_str)
@@ -236,11 +251,13 @@ except NameError as error:
         self.transformer.allocate_code.append("{}()", self.alloc_name)
 
 
-class CPUDeviceTensor(DeviceTensor):
+class CPUDeviceTensorView(DeviceTensorView):
+    """
+    This is a TensorView.
+    """
 
-    def __init__(self, transformer, device_buffer, tensor_description, **kwargs):
-        super(CPUDeviceTensor, self).__init__(transformer, device_buffer, tensor_description,
-                                              **kwargs)
+    def __init__(self, device_tensor, tensor_view_decl, **kwargs):
+        super(CPUDeviceTensorView, self).__init__(device_tensor, tensor_view_decl, **kwargs)
         self.__tensor = None
 
     @property
@@ -256,22 +273,19 @@ class CPUDeviceTensor(DeviceTensor):
         """
         return self.name
 
-    def transform_allocate(self):
-        tensor_description = self.tensor_description
-        self.transformer.init_code.append("{} = None", self.ref_str)
-        self.transformer.allocate_storage_code.append(
-            """global {ref}
-{ref} = np.ndarray(
+    def codegen(self):
+        self.transformer.exop_codegen_tensor_view.append("""\n{ref} = np.ndarray(
     shape={shape},
     dtype=np.{dtype},
-    buffer=buffer,
+    buffer={buffer},
     offset={offset},
     strides={strides})""",
-            ref=self.ref_str,
-            shape=tensor_description.shape,
-            dtype=tensor_description.dtype,
-            offset=tensor_description.offset,
-            strides=tensor_description.strides)
+                                                         ref=self.ref_str,
+                                                         shape=self.tensor_description.shape,
+                                                         dtype=self.tensor_description.dtype,
+                                                         buffer=self.device_buffer.ref_str,
+                                                         offset=self.tensor_description.offset,
+                                                         strides=self.tensor_description.strides)
 
     def get(self, tensor):
         if tensor is None:
@@ -291,7 +305,7 @@ class CPUDeviceTensor(DeviceTensor):
 def get_tensors(f):
     def tensor(x):
         if isinstance(x, CPUDeviceTensor):
-            return x.tensor
+            return x.tensor_decl
         return x
 
     @wraps(f)
@@ -304,15 +318,28 @@ def get_tensors(f):
 class CPUCodeGenerator(PyGen):
 
     def __init__(self, transformer, **kwargs):
-        super(CPUCodeGenerator, self).__init__(prefix="op", **kwargs)
+        super(CPUCodeGenerator, self).__init__(**kwargs)
         self.transformer = transformer
 
+    @generic_method()
     def name(self, x):
-        if isinstance(x, CPUDeviceBufferStorage):
-            return x.ref_str
-        if isinstance(x, CPUDeviceTensor):
-            return x.ref_str
         return x
+
+    @name.on_type(CPUDeviceTensor)
+    def name(self, x):
+        return x.ref_str
+
+    @name.on_type(CPUDeviceTensorView)
+    def name(self, x):
+        return x.ref_str
+
+    @name.on_type(InputDecl)
+    def name(self, x):
+        return self.transformer.device_tensor_view(x.tensor_view_decl).ref_str
+
+    @name.on_type(OutputDecl)
+    def name(self, x):
+        return self.transformer.device_tensor_view(x.tensor_view_decl).ref_str
 
     def np_reduction_axis(self, op):
         """
@@ -340,55 +367,55 @@ class CPUCodeGenerator(PyGen):
 
     @property
     def pool_params(self):
-        return self.transformer.current_computation.pool_params
+        return self.transformer.device_computation.pool_params
 
     @property
     def pool_slices(self):
-        return self.transformer.current_computation.pool_slices
+        return self.transformer.device_computation.pool_slices
 
     @property
     def conv_params(self):
-        return self.transformer.current_computation.conv_params
+        return self.transformer.device_computation.conv_params
 
     @property
     def conv_slices(self):
-        return self.transformer.current_computation.conv_slices
+        return self.transformer.device_computation.conv_slices
 
     @property
     def send_nodes(self):
-        return self.transformer.current_computation.send_nodes
+        return self.transformer.device_computation.send_nodes
 
     @property
     def recv_nodes(self):
-        return self.transformer.current_computation.recv_nodes
+        return self.transformer.device_computation.recv_nodes
 
     @property
     def scatter_send_nodes(self):
-        return self.transformer.current_computation.scatter_send_nodes
+        return self.transformer.device_computation.scatter_send_nodes
 
     @property
     def scatter_recv_nodes(self):
-        return self.transformer.current_computation.scatter_recv_nodes
+        return self.transformer.device_computation.scatter_recv_nodes
 
     @property
     def gather_send_nodes(self):
-        return self.transformer.current_computation.gather_send_nodes
+        return self.transformer.device_computation.gather_send_nodes
 
     @property
     def gather_recv_nodes(self):
-        return self.transformer.current_computation.gather_recv_nodes
+        return self.transformer.device_computation.gather_recv_nodes
 
     @property
     def allreduce_nodes(self):
-        return self.transformer.current_computation.allreduce_nodes
+        return self.transformer.device_computation.allreduce_nodes
 
     @property
     def broadcast_send_nodes(self):
-        return self.transformer.current_computation.broadcast_send_nodes
+        return self.transformer.device_computation.broadcast_send_nodes
 
     @property
     def broadcast_recv_nodes(self):
-        return self.transformer.current_computation.broadcast_recv_nodes
+        return self.transformer.device_computation.broadcast_recv_nodes
 
     @generic_method(Op)
     def allocate_op(self, op, *args):
@@ -412,6 +439,30 @@ class CPUCodeGenerator(PyGen):
         self.pool_params[op.name] = op.pool_params
         self.pool_slices[op.name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
 
+    def generate_op_pre(self, op):
+        pass
+        # exop = self.exop
+        # self.append("\n# {} pre", exop.name)
+        # for input_decl in exop.input_decls:
+        #     input_decl_name = 'a_'+input_decl.tensor.tensor_name
+        #     self.append("#    arg {}", input_decl_name)
+        # for output_decl in exop.output_decls:
+        #     output_decl_name = 'a_'+output_decl.tensor.tensor_name
+        #     self.append("#    output_decl {}", val_name)
+
+    def generate_op_post(self, op):
+        pass
+        # exop = self.exop
+        # self.append("print('{{}}'.format('{}'))", op.name)
+        # for input_decl in exop.input.decls:
+        #     input_decl_name = 'a_'+input_decl.tensor.tensor_name
+        #     self.append("print('   arg {} = {{}}'.format({}))", input_decl_name, arg_name)
+        # for val in exop.output_decls:
+        #     output_decl_name = 'a_'+val.tensor.tensor_name
+        #     self.append("#    output_decl {}", output_decl_name)
+        #     self.append("print('   output_decl {} = {{}}'.format({}))", \
+        #            output_decl_name, output_decl_name)
+
     @generic_method(Op)
     def generate_op(self, op, *args):
         if op.is_device_op:
@@ -423,6 +474,19 @@ class CPUCodeGenerator(PyGen):
                 class_name=self.__class__.__name__,
                 op=op.__class__.__name__,
             ))
+
+    @generate_op.on_type(ReadOp)
+    def generate_op(self, op, out):
+        pass
+
+    @generate_op.on_type(WriteOp)
+    def generate_op(self, op, out, *args):
+        write_args = self.exop.write_args
+        for dest, source in zip(write_args, args):
+            if isinstance(source.source_output_decl.exop.op, LiteralScalarOp):
+                self.append("{}[...] = {}", dest, source.source_output_decl.exop.op.scalar)
+            else:
+                self.append("{}[...] = {}", dest, source)
 
     @generate_op.on_type(AbsoluteOp)
     def generate_op(self, op, out, x):
@@ -729,7 +793,7 @@ class CPUCodeGenerator(PyGen):
                     broadcast_recv_id, out)
 
 
-class CPUTransformer(ComputationGraphTransformer):
+class CPUTransformer(ExecutionGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
 
@@ -751,54 +815,158 @@ class CPUTransformer(ComputationGraphTransformer):
 
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
-        self.current_computation = None
+        self.device_computation = None
         self.conv_engine = CPUConvEngine()
         self.init_code = CPUCodeGenerator(self)
         self.allocate_storage_code = CPUCodeGenerator(self)
         self.allocate_code = CPUCodeGenerator(self)
-        self.compute_code = CPUCodeGenerator(self)
         self.code = CPUCodeGenerator(self)
-        self.globals = self.code.globals
+        self.globals = PyModule(prefix="op")
+        self.initialize_module(self.globals)
         self.n_computations = 0
         self.use_pinned_mem = False
         self.rng_seed = None
-        self.initialize_mkldnn()
-        add_layout_conversion = AddLayoutConversions(None)
-        self.graph_passes = [CPUFusion(),
-                             CPUTensorLayout(),
-                             SimplePrune(),
-                             RequiredTensorShaping(),
-                             CPUTensorShaping()
-                             ]
-        if self.mkldnn.enabled:
-            self.graph_passes.append(MklCreateOpDescriptors(self.mkldnn)),
-            self.graph_passes.append(MklAddLayoutConversions(self.mkldnn, add_layout_conversion))
-        # self.graph_passes.append([VizPass(show_axes=True,view=False)])
 
-    def device_buffer_storage(self, bytes, dtype, name):
+        self.exop_codegen_pools = CPUCodeGenerator(self)
+        self.exop_codegen_tensor = CPUCodeGenerator(self)
+        self.exop_codegen_tensor_view = CPUCodeGenerator(self)
+        self.exop_codegen = CPUCodeGenerator(self)
+        self.exop_codegen_define_length = 0
+        self.prefix = ''
+
+        # from ngraph.transformers.passes.exnviz import ExVizPass
+        # from ngraph.transformers.passes.verify import VerifyPass
+        # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
+        # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
+
+        self.graph_passes = [
+            # ExVizPass(view=True, filename="initial"),
+            CPUFusion(),
+            CPUTensorLayout(),
+            SimplePrune(),
+            RequiredTensorShaping(),
+            CPUTensorShaping(),
+            DeadCodeEliminationPass(),
+        ]
+        add_layout_conversion = AddLayoutConversions(None)
+        if self.mkldnn.enabled:
+            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn)),
+            DeadCodeEliminationPass(),
+            self.graph_passes.append(MklAddLayoutConversions(mkldnn=self.mkldnn,
+                                                             layoutpass=add_layout_conversion)),
+            DeadCodeEliminationPass()
+        self.graph_passes += [
+            SSAConversion(),
+            IndexElision(),
+            # DCE here eliminates return values. Need to figure out why.
+            # DeadCodeEliminationPass(),
+            LivenessPass(),
+            MemOptimizePass(),
+            LivenessPass(),
+            MemLayoutPass()
+        ]
+        # DumpGraphPass(filename=graph_name+'.txt').do_pass(computation_decl)
+
+        # VisualizeMemPass(filename=mem_name+'.html').do_pass(computation_decl)
+        # ExVizPass(view=False, filename=graph_name).do_pass(computation_decl)
+
+    def finish_allocate_computation(self, computation):
+        self.exop_codegen.endl(2)
+
+    def start_define_computation(self, computation_decl):
+        self.exop_codegen.append("class {}(HetrLocals, ConvLocals):",
+                                 computation_decl.computation_op.name)
+        with indenting(self.exop_codegen):
+            self.exop_codegen.append("def __init__(self, **kwargs):")
+            with indenting(self.exop_codegen):
+                self.exop_codegen.append('super({}, self).__init__(**kwargs)',
+                                         computation_decl.computation_op.name)
+                for exop in computation_decl.exop_block:
+                    output_decl = exop.output_decls[0] if len(exop.output_decls) > 0 else None
+                    # TODO better way to deal with multiple values
+                    self.exop_codegen.exop = exop
+                    self.exop_codegen.allocate_op(exop.op, output_decl, *exop.input_decls)
+
+            self.exop_codegen.endl()
+
+        self.exop_codegen.indent(1)
+        self.exop_codegen.append("def __call__(self):")
+        self.exop_codegen.indent(1)
+        self.codegen_define_length = self.exop_codegen.code_length
+
+    def generate_exop(self, exop):
+        value = exop.output_decls[0] if len(exop.output_decls) > 0 else None
+        # TODO better way to deal with multiple values
+        self.exop_codegen.exop = exop
+        self.exop_codegen.generate_op_pre(exop.op)
+        self.exop_codegen.generate_op(exop.op, value, *exop.input_decls)
+        self.exop_codegen.generate_op_post(exop.op)
+
+    def finish_define_computation(self, computation_decl):
+        if self.codegen_define_length == self.exop_codegen.code_length:
+            self.exop_codegen.append('pass')
+        self.exop_codegen.indent(-2)
+
+    def finish_load_computation(self, computation_decl):
+        device_computation = computation_decl.device_computation
+        temp_pool_size = computation_decl.exop_block.memory_footprint() // 4
+        persistent_pool_size = computation_decl.exop_block.persistent_size() // 4
+        self.exop_codegen_pools.append("{}_temporary_pool = np.empty({}, dtype=np.dtype('{}'))",
+                                       computation_decl.computation_op.name, temp_pool_size,
+                                       'float32')
+        self.exop_codegen_pools.append("{}_persistent_pool = np.empty({}, dtype=np.dtype('{}'))",
+                                       computation_decl.computation_op.name, persistent_pool_size,
+                                       'float32')
+
+        code = '#---------------------------------------------\n'
+        code += '# memory pool\n'
+        code += '#---------------------------------------------\n'
+        code += self.exop_codegen_pools.take_code()
+        code += '\n\n#---------------------------------------------\n'
+        code += '# tensor\n'
+        code += '#---------------------------------------------\n'
+        code += self.exop_codegen_tensor.take_code()
+        code += '\n\n#---------------------------------------------\n'
+        code += '# tensor view\n'
+        code += '#---------------------------------------------\n'
+        code += self.exop_codegen_tensor_view.take_code()
+        code += '\n\n#---------------------------------------------\n'
+        code += '# code\n'
+        code += '#---------------------------------------------\n'
+        code += self.exop_codegen.take_code()
+        self.globals.compile(code)
+        cls = self.globals[computation_decl.computation_op.name]
+        executor = cls(conv_params=device_computation.conv_params,
+                       pool_params=device_computation.pool_params,
+                       conv_slices=device_computation.conv_slices,
+                       pool_slices=device_computation.pool_slices,
+                       send_nodes=device_computation.send_nodes,
+                       recv_nodes=device_computation.recv_nodes,
+                       scatter_send_nodes=device_computation.scatter_send_nodes,
+                       scatter_recv_nodes=device_computation.scatter_recv_nodes,
+                       gather_send_nodes=device_computation.gather_send_nodes,
+                       gather_recv_nodes=device_computation.gather_recv_nodes,
+                       allreduce_nodes=device_computation.allreduce_nodes,
+                       broadcast_send_nodes=device_computation.broadcast_send_nodes,
+                       broadcast_recv_nodes=device_computation.broadcast_recv_nodes)
+        return executor
+
+    def make_device_tensor(self, computation, tensor_decl):
         """
-        Make a DeviceBuffer.
+        Make a DeviceTensor.
 
         Arguments:
-            bytes: Size of buffer.
-            alignment: Alignment of buffer.
+            computation:
+            tensor_decl: A TensorDecl.
 
-        Returns: A DeviceBuffer.
+        Returns: A DeviceTensor.
         """
-        return CPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
+        return CPUDeviceTensor(self, computation, tensor_decl)
 
-    def initialize_mkldnn(self):
-        self.code.execute("""
-from ngraph.transformers.cpu.cpuengine import Mkldnn
-""")
-        mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
-        mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
-        self.code.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
-        self.code.execute("mkldnn.open()")
-        self.mkldnn = self.globals.get("mkldnn", None)
-
-    def start_transform_allocate(self):
-        self.code.execute("""import os
+    def initialize_module(self, module):
+        module.execute("""from __future__ import print_function
+from builtins import print
+import os
 import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
@@ -814,11 +982,16 @@ from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals
 from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
-""")
+        """)
 
+        mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
+        mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
+        module.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
+        module.execute("mkldnn.open()")
+        self.mkldnn = module['mkldnn']
         if self.use_mlsl:
-            self.code.execute("mlsl_obj = mlsl.MLSL()")
-            self.code.execute("mlsl_obj.init()")
+            module.execute("mlsl_obj = mlsl.MLSL()")
+            module.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -834,88 +1007,20 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
     def finish_transform_allocate(self):
         pass
 
-    def transform_ordered_ops(self, computation, ordered_ops, name):
-        self.current_computation = computation
-        if name is None:
-            name = "C_" + str(self.n_computations)
-        self.n_computations += 1
-        self.compute_code.append("class {}(HetrLocals, ConvLocals):", name)
-        with indenting(self.compute_code):
-            self.compute_code.append("def __init__(self, **kwargs):")
-            with indenting(self.compute_code):
-                self.compute_code.append('super({}, self).__init__(**kwargs)', name)
-                self.transform_allocate_ops(ordered_ops)
-
-            self.compute_code.endl()
-
-            self.compute_code.append("def __call__(self):")
-            code_length = self.compute_code.code_length
-
-            def tensor_description_value(x):
-                if isinstance(x, TensorDescription):
-                    return self.get_tensor_description_tensor_view(x)
-                return x
-
-            with indenting(self.compute_code):
-                for op in ordered_ops:
-                    out = tensor_description_value(op.forwarded.tensor_description())
-                    call_info = (tensor_description_value(_) for _ in op.call_info())
-                    self.compute_code.generate_op(op, out, *call_info)
-                if code_length == self.compute_code.code_length:
-                    self.compute_code.append("pass")
-            self.compute_code.endl()
-        self.name = name
-        return name
-
-    def finish_transform(self):
-        self.code.append(self.init_code.code)
-        self.code.endl()
-        self.code.endl()
-
-        self.code.append(self.allocate_storage_code.code)
-        self.code.endl(2)
-        self.code.append(self.allocate_code.code)
-        self.code.endl(2)
-        self.code.append(self.compute_code.code)
-        self.code.endl()
-
-        # import os
-        # pid = os.getpid()
-        # with open("code_{}{}.py".format(self.name, pid), "w") as f:
-        #    f.write(self.code.code)
-        # print(self.code.code)
-        self.globals = self.code.compile()
-
-        for computation in self.computations:
-            cls = self.globals[computation.name]
-            executor = cls(conv_params=computation.conv_params,
-                           pool_params=computation.pool_params,
-                           conv_slices=computation.conv_slices,
-                           pool_slices=computation.pool_slices,
-                           send_nodes=computation.send_nodes,
-                           recv_nodes=computation.recv_nodes,
-                           scatter_send_nodes=computation.scatter_send_nodes,
-                           scatter_recv_nodes=computation.scatter_recv_nodes,
-                           gather_send_nodes=computation.gather_send_nodes,
-                           gather_recv_nodes=computation.gather_recv_nodes,
-                           allreduce_nodes=computation.allreduce_nodes,
-                           broadcast_send_nodes=computation.broadcast_send_nodes,
-                           broadcast_recv_nodes=computation.broadcast_recv_nodes)
-            computation.executor = executor
-
     def allocate_storage(self):
         pass
 
     def close(self):
         if self.code is not None:
             try:
-                if self.code.globals.get('mkldnn', None) is not None:
-                    self.code.execute('mkldnn.close()')
-                if self.code.globals.get('mlsl_obj', None) is not None:
+                if self.globals.get('mkldnn', None) is not None:
+                    self.globals.execute('mkldnn.close()')
+                if self.globals.get('mlsl_obj', None) is not None:
                     for device_buffer in self.device_buffers:
-                        self.code.execute("mlsl_obj.free({}.__array_interface__['data'][0])"
-                                          .format(device_buffer.ref_str))
-                    self.code.execute('mlsl_obj.finalize()')
+                        self.globals.execute("mlsl_obj.free({}.__array_interface__['data'][0])"
+                                             .format(device_buffer.ref_str))
+
+                    self.globals.execute('mlsl_obj.finalize()')
             except TypeError:
                 pass
         self.code = None
@@ -932,7 +1037,7 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         devlist[buf_index][:] = hb
 
     def make_computation(self, computation):
-        return CPUComputation(self, computation)
+        return CPUDeviceComputation(self, computation)
 
 
 set_transformer_factory(

@@ -172,7 +172,6 @@ def random_momentum_coef():
     return np.random.random()
 
 
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
 def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov):
@@ -215,7 +214,7 @@ def random_beta_2():
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason='Results mismatch')
 @pytest.mark.parametrize("epsilon", [1e-8])
 def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
 
@@ -233,7 +232,7 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, trans
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Unknown problem yet")
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
     drop_factor = 0.1

@@ -315,6 +315,10 @@ def test_terminate_op(transformer_factory):
         def __init__(self, **kwargs):
             super(TerminateOp, self).__init__(**kwargs)
 
+        @property
+        def has_side_effects(self):
+            return True
+
     baseline = active_children()
     termOp = TerminateOp()
     assert len(baseline) == 0

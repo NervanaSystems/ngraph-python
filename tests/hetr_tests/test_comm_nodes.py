@@ -241,7 +241,7 @@ def test_broadcast_ops(config):
 def test_allreduce_hint(config):
     c = config
 
-    with ng.metadata(device_id=c['device_id']):
+    with ng.metadata(device_id=c['device_id'], parallel=None):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
@@ -249,7 +249,6 @@ def test_allreduce_hint(config):
                             axes=[axis_B]).named('var_B')
         var_B.metadata['reduce_func'] = c['func']
         var_minus = (var_A - var_B).named('var_minus')
-        var_minus.metadata['parallel'] = axis_A
     with closing(ngt.make_transformer_factory('hetr')()) as hetr:
         out_comp = hetr.computation([var_minus]).named('out_comp')
         result = out_comp()
