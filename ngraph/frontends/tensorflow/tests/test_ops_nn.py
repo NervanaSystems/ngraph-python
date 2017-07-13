@@ -109,7 +109,7 @@ def gen_pool_testcase():
 
 class Tester(ImporterTester):
 
-    @pytest.mark.flex_disabled
+    @pytest.config.flex_disabled(reason="Convolution limitation N=32, K=8 - #1843")
     @pytest.mark.parametrize("all_args", gen_conv_testcase())
     def test_conv(self, all_args):
         C, D, H, W, N, T, R, S, K, strides, padding = all_args
@@ -118,7 +118,6 @@ class Tester(ImporterTester):
         result = tf.nn.conv2d(image, weight, strides=strides, padding=padding)
         self.run(result, tf_feed_dict={}, rtol=1e-0, atol=1e-4)
 
-    @pytest.mark.flex_disabled
     @pytest.mark.parametrize("all_args", gen_pool_testcase())
     def test_max_pooling(self, all_args):
         C, D, H, W, N, J, T, R, S, strides, padding = all_args

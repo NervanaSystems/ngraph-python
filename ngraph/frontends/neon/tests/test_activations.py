@@ -189,16 +189,6 @@ def test_derivative(all_inputs, activation_pair, transformer_factory):
     if all_inputs.shape[1] != 1 and isinstance(activation_pair, TanhPair):
         pytest.xfail('Expected tolerance issues for tanh on large-ish values')
 
-    # X-FAIL for Flex's known issues
-    if isinstance(activation_pair, LogisticPair) and \
-            np.array_equal(np.array([[4, 0], [-2, 5]]), all_inputs):
-        if transformer_factory.name == "flexgpu":
-            pytest.xfail('Failing test for Flex: mixed_2d-Logistic')
-    if isinstance(activation_pair, SoftmaxPair) and \
-            np.array_equal(np.array([[4, 0], [-2, 5]]), all_inputs):
-        if transformer_factory.name == "flexgpu":
-            pytest.xfail('Failing test for Flex because of the strict tolerance (rtol, atol)')
-
     ng.testing.assert_allclose(activation_pair.baseline_derivative(all_inputs),
                                activation_pair.reference_derivative(all_inputs),
                                rtol=activation_pair.tolerance)
