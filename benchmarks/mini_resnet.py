@@ -171,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
     parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
-    parser.add_argument('-b', '--bprop', type=int, default=0, help="enable back propagation")
+    parser.add_argument('-b', '--bprop', action="store_true", help="enable back propagation")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
