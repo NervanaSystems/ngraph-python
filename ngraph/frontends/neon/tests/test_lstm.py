@@ -42,7 +42,7 @@ from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
 pytestmark = [pytest.mark.transformer_dependent,
-              pytest.mark.flex_disabled,
+              pytest.config.flex_disabled(reason="LSTM - not supported yet"),
               pytest.config.argon_disabled]
 
 rng = RandomTensorGenerator()

@@ -171,17 +171,14 @@ n2_c1_hw4_2x2_str2_avg = dict(
 @pytest.mark.transformer_dependent
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("pool_args",
-                         [n4_c1_hw4_2x2_max,
+                         [pytest.config.flex_disabled(n4_c1_hw4_2x2_max,
+                             reson = '#1823, flex pooling does not work well when stride = 1'),
                           n2_c1_hw5_3x3_str2_max,
                           n2_c1_hw4_2x2_str2_avg],
                          ids=['n4_c1_hw4_2x2_max',
                               'n2_c1_hw5_3x3_str2_max',
                               'n2_c1_hw4_2x2_str2_avg'])
 def test_gen_reference(transformer_factory, pool_args):
-    # X-FAIL for flex_disabled known issue
-    if pool_args == n4_c1_hw4_2x2_max:
-        if is_flex_factory(transformer_factory):
-            pytest.xfail('GitHub issue #1823, flex pooling does not work well when stride = 1')
 
     pf = PoolParams(**pool_args['settings'])
 

@@ -20,8 +20,7 @@ import numpy as np
 from ngraph.testing import ExecutorFactory
 import pytest
 
-pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module")]
+pytestmark = pytest.mark.transformer_dependent("module")
 
 
 @pytest.fixture
@@ -121,6 +120,7 @@ def test_inv_lr(iter_buf, max_iter, base_lr):
         assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
 
 
+@pytest.config.flex_disabled(reason='Results mismatch')
 def test_poly_lr(iter_buf, max_iter, base_lr):
     # set up
     name = 'poly'
@@ -138,9 +138,10 @@ def test_poly_lr(iter_buf, max_iter, base_lr):
         ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
-        assert(np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
+@pytest.config.flex_disabled(reason='Results mismatch')
 def test_sigmoid_lr(iter_buf, max_iter, base_lr):
     # set up
     name = 'sigmoid'
@@ -160,4 +161,4 @@ def test_sigmoid_lr(iter_buf, max_iter, base_lr):
         ng_lr = [compute_lr(i).item(0) for i in range(max_iter)]
 
         # compare
-        assert (np.allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3))
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)

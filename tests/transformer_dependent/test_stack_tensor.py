@@ -22,8 +22,8 @@ import pytest
 delta = 1e-3
 rtol = atol = 1e-2
 
-
-@pytest.mark.flex_disabled  # Allowed to fail until PR2
+# Flex - Allowed to fail until PR2 - commit: 6714cc5
+@pytest.config.flex_disabled(reason="Placeholders must be supplied to a computation - derivative?")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 def test_stack(transformer_factory):

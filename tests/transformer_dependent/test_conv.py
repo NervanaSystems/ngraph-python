@@ -88,7 +88,7 @@ def test_conv(transformer_factory, n64_hw32_c32_3x3):
     assert np.allclose(gradF_ng, gradF_np, rtol=0, atol=2)
 
 
-@pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
+@pytest.config.flex_disabled(reason="There is no kernel for DeconvolutionOp for flex - #1841")
 @pytest.config.argon_disabled  # DeconvolutionOp not yet supported #1781
 def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf = ConvParams(**deconv_n4_hw4_c1_5x5)
@@ -128,7 +128,7 @@ def test_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     assert np.allclose(gradF_ng, gradF_np, rtol=0.1, atol=0)
 
 
-@pytest.mark.flex_disabled  # There is no kernel for DeconvolutionOp for flex yet
+@pytest.config.flex_disabled(reason="There is no kernel for DeconvolutionOp for flex - #1841")
 @pytest.config.argon_disabled  # DeconvolutionOp not yet supported #1781
 def test_2layer_deconv(transformer_factory, deconv_n4_hw4_c1_5x5):
     cf1 = ConvParams(**deconv_n4_hw4_c1_5x5)
@@ -239,8 +239,8 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
-# GitHub issue #1822 - FlexConvUpdateKernel does not change DEC, it use default from autoflex
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="GitHub issue #1822 - FlexConvUpdateKernel does not change DEC,"
+                                    " it use default from autoflex")
 def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """
     test convolution backprop path
@@ -264,7 +264,7 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
         ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=0.01)
 
 
-@pytest.mark.flex_disabled  # There is no SetItemKernel implementation for flex yet
+@pytest.config.flex_disabled(reason="There is no TensorDescription for this flex entry")
 @pytest.config.argon_disabled  # WIP debugging
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """

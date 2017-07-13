@@ -96,7 +96,6 @@ def test_expand_dims(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
 def test_slice(transformer_factory):
     """TODO."""
 
@@ -186,7 +185,7 @@ def test_reverse_slice(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="There is no TensorDescription for this flex entry")
 def test_multiple_slices(transformer_factory):
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
@@ -229,7 +228,7 @@ def test_multiple_slices(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Placeholders must be supplied to a computation - derivative?")
 def test_padding(transformer_factory):
     """TODO."""
     C = ng.make_axis()
@@ -298,7 +297,7 @@ def test_padding(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="There is no TensorDescription for this flex entry")
 def test_cast_axes(transformer_factory):
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
