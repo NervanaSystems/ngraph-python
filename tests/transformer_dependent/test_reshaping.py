@@ -228,7 +228,7 @@ def test_multiple_slices(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.config.flex_disabled(reason="Placeholders must be supplied to a computation - derivative?")
+@pytest.config.flex_disabled(reason="Placeholders must be supplied - deriv problem?")
 def test_padding(transformer_factory):
     """TODO."""
     C = ng.make_axis()

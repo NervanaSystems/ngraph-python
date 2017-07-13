@@ -183,7 +183,7 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
 
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
     if input_placeholder._axes.lengths == (32, 32):
-        pytest.config.flex_skip_now("because of the strict tolerance (rtol, atol)")
+        pytest.config.flex_skip_now("Results mismatch - too strict tolerance (rtol, atol)")
 
     layer = BatchNorm(**bn_params)
     fprop = layer(input_placeholder)

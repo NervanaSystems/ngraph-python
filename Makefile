@@ -142,7 +142,7 @@ test_mkldnn:
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -151,7 +151,7 @@ test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -165,7 +165,7 @@ test_gpu: gpu_prepare test_prepare clean
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	not separate_execution" \
 	--boxed $(PARALLEL_OPTS) --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)  ${TEST_DIRS_COMMON}
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	separate_execution" \
 	--boxed --junit-xml=testout_test_gpu_tx_dependent_separate_execution_$(PY).xml --cov-append \
@@ -178,7 +178,7 @@ test_hetr: test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)  ${TEST_DIRS_COMMON}
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mxnet: test_prepare clean

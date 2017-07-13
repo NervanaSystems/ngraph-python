@@ -244,7 +244,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                                        rtol=bprop_rtol, atol=bprop_atol)
 
 
-@pytest.config.flex_disabled(reason="Tensor description, placholder - deriv, and tolleranc")
+@pytest.config.flex_disabled(reason="Several: Tensor description, placeholder (deriv), tolerance")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
