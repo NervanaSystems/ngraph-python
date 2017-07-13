@@ -297,7 +297,6 @@ def test_padding(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.config.flex_disabled(reason="There is no TensorDescription for this flex entry")
 def test_cast_axes(transformer_factory):
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
