@@ -239,8 +239,8 @@ def test_first_axes_not_same():
             filters=filters.axes[0])
 
 
-@pytest.config.flex_disabled(reason="GitHub issue #1822 - FlexConvUpdateKernel does not change DEC,"
-                                    " it use default from autoflex")
+@pytest.config.flex_disabled(reason="GitHub #1822 - FlexConvUpdateKernel does not change DEC, "
+                                    "it use default from autoflex")
 def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
     """
     test convolution backprop path
