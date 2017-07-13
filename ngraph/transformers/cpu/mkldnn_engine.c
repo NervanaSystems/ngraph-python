@@ -24,9 +24,10 @@ mkldnn_engine_t init_mkldnn_engine(void) {
   return engine;
 }
 
-size_t product(int* arr, size_t size) {
+size_t product(int *arr, size_t size) {
   size_t prod = 1;
-  for (size_t i = 0; i < size; ++i) prod *= arr[i];
+  for (size_t i = 0; i < size; ++i)
+    prod *= arr[i];
   return prod;
 }
 
@@ -34,10 +35,11 @@ void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
 
-mkldnn_primitive_desc_t create_mkldnn_layout_descriptor(
-    mkldnn_engine_t engine, int ndims, const int* dim_sizes,
-    const int* dim_strides, mkldnn_data_type_t data_type,
-    mkldnn_memory_format_t fmt) {
+mkldnn_primitive_desc_t
+create_mkldnn_layout_descriptor(mkldnn_engine_t engine, int ndims,
+                                const int *dim_sizes, const int *dim_strides,
+                                mkldnn_data_type_t data_type,
+                                mkldnn_memory_format_t fmt) {
   // Create an MKL layout descriptor based on input size and strides
   // Assumes non-blocked layout
   mkldnn_memory_desc_t md;
@@ -47,30 +49,31 @@ mkldnn_primitive_desc_t create_mkldnn_layout_descriptor(
   md.format = fmt;
   md.data_type = data_type;
   switch (fmt) {
-    case mkldnn_blocked:
-      for (size_t i = 0; i < ndims; i++) {
-        md.layout_desc.blocking.block_dims[i] = 1;
-        md.layout_desc.blocking.strides[1][i] = 1;
-        md.layout_desc.blocking.strides[0][i] = dim_strides[i];
-        md.layout_desc.blocking.padding_dims[i] = dim_sizes[i];
-        md.layout_desc.blocking.offset_padding_to_data[i] = 0;
-        md.dims[i] = dim_sizes[i];
-      }
-      md.layout_desc.blocking.offset_padding = 0;
-      break;
-    default:
-      MKL_CHECK(mkldnn_memory_desc_init(&md, ndims, dim_sizes, data_type, fmt));
+  case mkldnn_blocked:
+    for (size_t i = 0; i < ndims; i++) {
+      md.layout_desc.blocking.block_dims[i] = 1;
+      md.layout_desc.blocking.strides[1][i] = 1;
+      md.layout_desc.blocking.strides[0][i] = dim_strides[i];
+      md.layout_desc.blocking.padding_dims[i] = dim_sizes[i];
+      md.layout_desc.blocking.offset_padding_to_data[i] = 0;
+      md.dims[i] = dim_sizes[i];
+    }
+    md.layout_desc.blocking.offset_padding = 0;
+    break;
+  default:
+    MKL_CHECK(mkldnn_memory_desc_init(&md, ndims, dim_sizes, data_type, fmt));
   }
   MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd, &md, engine));
   return pd;
 }
 
-void create_mkldnn_tensor(int ndims, const int* dim_sizes,
+void create_mkldnn_tensor(int ndims, const int *dim_sizes,
                           mkldnn_data_type_t data_type,
                           mkldnn_memory_format_t fmt, mkldnn_engine_t engine,
-                          mkldnn_tensor* tensor) {
+                          mkldnn_tensor *tensor) {
   tensor->ndims = ndims;
-  for (int i = 0; i < ndims; i++) tensor->sizes[i] = dim_sizes[i];
+  for (int i = 0; i < ndims; i++)
+    tensor->sizes[i] = dim_sizes[i];
 
   mkldnn_memory_desc_t md;
   MKL_CHECK(mkldnn_memory_desc_init(&md, ndims, dim_sizes, data_type, fmt));
@@ -78,23 +81,24 @@ void create_mkldnn_tensor(int ndims, const int* dim_sizes,
   MKL_CHECK(mkldnn_primitive_create(&(tensor->prim), tensor->desc, NULL, NULL));
 }
 
-void create_mkldnn_tensor_from_pd(int ndims, const int* dim_sizes,
-                                  mkldnn_memory_desc_t* md,
+void create_mkldnn_tensor_from_pd(int ndims, const int *dim_sizes,
+                                  mkldnn_memory_desc_t *md,
                                   mkldnn_engine_t engine,
-                                  mkldnn_tensor* tensor) {
+                                  mkldnn_tensor *tensor) {
   tensor->ndims = ndims;
-  for (int i = 0; i < ndims; i++) tensor->sizes[i] = dim_sizes[i];
+  for (int i = 0; i < ndims; i++)
+    tensor->sizes[i] = dim_sizes[i];
 
   MKL_CHECK(mkldnn_memory_primitive_desc_create(&(tensor->desc), md, engine));
   MKL_CHECK(mkldnn_primitive_create(&(tensor->prim), tensor->desc, NULL, NULL));
 }
 
 /* Create MKLDNN memory primitives */
-void create_mkldnn_memory_primitive(uint32_t n_dim, const int* dims,
+void create_mkldnn_memory_primitive(uint32_t n_dim, const int *dims,
                                     mkldnn_memory_format_t user_fmt,
                                     mkldnn_data_type_t data_type,
-                                    mkldnn_engine_t engine, float* data,
-                                    mkldnn_primitive_t* memory) {
+                                    mkldnn_engine_t engine, float *data,
+                                    mkldnn_primitive_t *memory) {
   mkldnn_memory_desc_t prim_md;
   mkldnn_primitive_desc_t user_pd;
   MKL_CHECK(
@@ -106,11 +110,11 @@ void create_mkldnn_memory_primitive(uint32_t n_dim, const int* dims,
 }
 
 void create_mkldnn_reorder_primitive(
-    mkldnn_primitive_t* user_memory,               /** in */
-    const_mkldnn_primitive_desc_t* prim_memory_pd, /** in */
+    mkldnn_primitive_t *user_memory,               /** in */
+    const_mkldnn_primitive_desc_t *prim_memory_pd, /** in */
     int dir_is_user_to_prim,         /** in: user -> prim or prim -> user */
-    mkldnn_primitive_t* prim_memory, /** out: memory primitive created */
-    mkldnn_primitive_t* reorder      /** out: reorder primitive created */
+    mkldnn_primitive_t *prim_memory, /** out: memory primitive created */
+    mkldnn_primitive_t *reorder      /** out: reorder primitive created */
     ) {
   const_mkldnn_primitive_desc_t user_memory_pd;
   mkldnn_primitive_get_primitive_desc(*user_memory, &user_memory_pd);
@@ -149,11 +153,11 @@ mkldnn_opkernel_t create_empty_kernel(int id) {
   return op_kernel;
 }
 
-void delete_mkldnn_layout(mkldnn_primitive_desc_t* pd) {
+void delete_mkldnn_layout(mkldnn_primitive_desc_t *pd) {
   MKL_CHECK(mkldnn_primitive_desc_destroy(pd));
 }
 
-void delete_mkldnn_tensor(mkldnn_tensor* tensor) {
+void delete_mkldnn_tensor(mkldnn_tensor *tensor) {
   MKL_CHECK(mkldnn_primitive_desc_destroy(tensor->desc));
   MKL_CHECK(mkldnn_primitive_destroy(tensor->prim));
 }
@@ -179,20 +183,20 @@ void delete_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   MKL_CHECK(mkldnn_primitive_destroy(opkernel->op_prim));
 }
 
-void set_input_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer,
+void set_input_tensor_data_handle(mkldnn_opkernel_t opkernel, void *buffer,
                                   int index) {
   MKL_CHECK(
       mkldnn_memory_set_data_handle(opkernel->inputs[index].prim, buffer));
 }
 
-void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void* buffer,
+void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void *buffer,
                                    int index) {
   MKL_CHECK(
       mkldnn_memory_set_data_handle(opkernel->outputs[index].prim, buffer));
 }
 
 void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
-  void* buf;
+  void *buf;
   printf("ID: %d\n", opkernel->id);
   printf(" INPUTS\n");
   for (int i = 0; i < opkernel->num_inputs; i++) {
@@ -244,12 +248,11 @@ void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel, int verbose) {
   MKL_CHECK(mkldnn_stream_destroy(opkernel->stream));
   if (verbose) {
     clock_gettime(CLOCK_REALTIME, &end);
-    printf(
-        "\nOpkernel%d Exec start: %lld.%lld s end: %lld.%lld s time_taken: "
-        "%.2f ms",
-        opkernel->id, start.tv_sec, start.tv_nsec, end.tv_sec, end.tv_nsec,
-        (end.tv_sec - start.tv_sec) * 1000 +
-            ((double)(end.tv_nsec - start.tv_nsec)) / 1000000);
+    printf("\nOpkernel%d Exec start: %lld.%lld s end: %lld.%lld s time_taken: "
+           "%.2f ms",
+           opkernel->id, start.tv_sec, start.tv_nsec, end.tv_sec, end.tv_nsec,
+           (end.tv_sec - start.tv_sec) * 1000 +
+               ((double)(end.tv_nsec - start.tv_nsec)) / 1000000);
   }
 }
 
@@ -259,7 +262,7 @@ mkldnn_primitive_desc_t query_opkernel_layout(mkldnn_opkernel_t opkernel,
   mkldnn_memory_desc_t md =
       *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
   if (md.format == mkldnn_x || md.format == mkldnn_ihwo ||
-      md.format == mkldnn_chwn) {  // Native formats
+      md.format == mkldnn_chwn) { // Native formats
     return NULL;
   } else {
     return opkernel->outputs[index].desc;
@@ -273,7 +276,7 @@ int compare_layouts(mkldnn_primitive_desc_t a, mkldnn_primitive_desc_t b) {
     return 0;
 }
 
-void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int* dims,
+void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int *dims,
                                   mkldnn_data_type_t data_type,
                                   mkldnn_memory_format_t format,
                                   mkldnn_primitive_desc_t input_pd,
@@ -312,44 +315,48 @@ void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int* dims,
   opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-void* alloc_aligned_memory(void **buf, size_t size, mkldnn_data_type_t data_type, size_t alignment) {
+void *alloc_aligned_memory(void **buf, size_t size,
+                           mkldnn_data_type_t data_type, size_t alignment) {
   size_t size_to_alloc;
   switch (data_type) {
-    case mkldnn_f32:
-    case mkldnn_s32:
+  case mkldnn_f32:
+  case mkldnn_s32:
     //------------------------------------------------------------------
     // allocates memory with the specified alignment
-      size_to_alloc = size * 4;
-      int _status = posix_memalign(buf, alignment, size_to_alloc);
-      if (_status == 0){
-          return;
-      } else if (_status == EINVAL){
-        printf("The value of the alignment parameter is not a power of two or \
+    // sizeof(mkldnn_f32) = 4, should be used while calculating the
+    // total allocation size as below.
+    size_to_alloc = size * 4;
+    int _status = posix_memalign(buf, alignment, size_to_alloc);
+    if (_status == 0) {
+      return;
+    } else if (_status == EINVAL) {
+      printf("The value of the alignment parameter is not a power of two or \
                           is not a multiple of sizeof(void *)");
-      } else if (_status = ENOMEM){
-        printf("There is insufficient memory available with the requested alignment");
-      }
-      exit(2);
-    default:
-      assert(0);
-      ;
-	}
+    } else if (_status = ENOMEM) {
+      printf("There is insufficient memory available with the requested "
+             "alignment");
+    }
+    exit(2);
+  default:
+    assert(0);
+    ;
+  }
 }
 
-void* alloc_memory(size_t size, mkldnn_data_type_t data_type) {
-  void* buf;
+void *alloc_memory(size_t size, mkldnn_data_type_t data_type) {
+  void *buf;
   switch (data_type) {
-    case mkldnn_f32:
-    case mkldnn_s32:
-      buf = malloc(size * 4);
-      if (buf == NULL) {
-        printf("Memory allocation failure. Could not allocate %lld bytes\n",
-               size * 4);
-        exit(2);
-      }
-      return buf;
-    default:
-      assert(0);
-      ;
+  case mkldnn_f32:
+  case mkldnn_s32:
+    buf = malloc(size * 4);
+    if (buf == NULL) {
+      printf("Memory allocation failure. Could not allocate %lld bytes\n",
+             size * 4);
+      exit(2);
+    }
+    return buf;
+  default:
+    assert(0);
+    ;
   }
 }
