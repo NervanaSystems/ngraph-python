@@ -1,12 +1,12 @@
 import grpc
+from six import iteritems
+
 import hetr_pb2
 import hetr_pb2_grpc
-from six import iteritems
+import ngraph.op_graph.hetr_grpc.hetr_pb2 as hetr_pb
 from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, _serialize_graph,\
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
-import ngraph.op_graph.hetr_grpc.hetr_pb2 as hetr_pb
-from ngraph.util.hetr_utils import update_comm_deps
-
+from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 
 _TIMEOUT_SECONDS = 600
 _SLEEP_SECONDS = 1
