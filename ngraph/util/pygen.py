@@ -20,6 +20,89 @@ import os
 from contextlib import contextmanager
 
 
+class PyModule(dict):
+    """
+    A Python module that can be executed, evaluates, and compiled into.
+
+    Arguments:
+        source: A dictionary to be added to the initial environment.
+        prefix: Prefix for files compiled into the environment.
+
+    Attributes:
+        filename: The filename of the last file compiled into the environment.
+        filenames: A list of all files compiled into the environment. These will
+            be deleted at exit.
+        prefix: The prefix for generated files.
+    """
+    def __init__(self, source=None, prefix=""):
+        if source is not None:
+            self.update(source)
+        self.prefix = prefix
+        self.filename = None
+        self.filenames = []
+        atexit.register(self.__exit_handler)
+
+    def __exit_handler(self):
+        for filename in self.filenames:
+            os.unlink(filename)
+        self.filenames = []
+
+    def execute(self, code):
+        """
+        Execute code directly into the environment. This is useful for initializing the
+        environment with imports.
+
+        Arguments:
+            code: Something to execute.
+
+        """
+        exec_(code, self, self)
+
+    def evaluate(self, code):
+        """
+        Evaluate an expression in the environment.
+
+        Arguments:
+            code: An expression to evaluate.
+
+        Returns:
+            The result of the evaluation.
+
+        """
+        return eval(code, self)
+
+    codegen_count = 0
+
+    def compile(self, source):
+        """
+        Compiles self.code and loads it into the environment.
+
+        Returns: The updated environment.
+
+        """
+        if False:
+            # Set to True to get a file with all the generated code
+            f = open('codegen.py', 'w' if PyModule.codegen_count == 0 else 'a')
+            f.write('\n\n')
+            f.write('#========================================================================\n')
+            f.write('# code fragment {}\n'.format(PyModule.codegen_count))
+            f.write('#========================================================================\n')
+            f.write('\n\n')
+            f.write(source)
+            f.close()
+            PyModule.codegen_count += 1
+
+        file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=self.prefix,
+                                           delete=False)
+        self.filename = file.name
+        self.filenames.append(self.filename)
+        file.write(source)
+        file.close()
+
+        code = compile(source, self.filename, "exec")
+        exec_(code, self, self)
+
+
 @contextmanager
 def indenting(code_writer):
     try:
@@ -48,13 +131,8 @@ class PyGen(object):
     def __init__(self, indentation=0, prefix="", **kwargs):
         super(PyGen, self).__init__(**kwargs)
         self.indentation = indentation
-        self.prefix = prefix
-        self.globals = dict()
-        self.filenames = []
         self.__code = list()
-        self.filename = None
         self.indent_strings = ['', '    ', '        ', '            ']
-        atexit.register(self.__exit_handler)
 
     def indent(self, indentation):
         """
@@ -101,11 +179,6 @@ class PyGen(object):
         """
         self.__code.extend(["\n"] * n)
 
-    def __exit_handler(self):
-        for filename in self.filenames:
-            os.unlink(filename)
-        self.filenames = []
-
     @property
     def code(self):
         """
@@ -115,6 +188,11 @@ class PyGen(object):
         """
         return ''.join(self.__code)
 
+    def take_code(self):
+        result = self.code
+        self.__code = []
+        return result
+
     @property
     def code_length(self):
         """
@@ -123,66 +201,3 @@ class PyGen(object):
 
         """
         return len(self.__code)
-
-    def execute(self, code=None):
-        """
-        Execute code directly into the environment. This is useful for initializing the
-        environment with imports.
-
-        Arguments:
-            code: Something to execute.  Defaults to self.code.
-
-        """
-        if code is None:
-            code = self.code
-            self.__code = []
-        exec_(code, self.globals)
-
-    def evaluate(self, code=None):
-        """
-        Evaluate an expression in the environment.
-
-        Arguments:
-            code: An expression to evaluate. Defaults to self.code.
-
-        Returns:
-            The result of the evaluation.
-
-        """
-        if code is None:
-            code = self.code
-            self.__code = []
-        return eval(code, self.globals)
-
-    def write_to_file(self, file):
-        """
-        Writes self.code to a file.
-
-        Args:
-            file: The code.
-
-        """
-        for s in self.__code:
-            file.write(s)
-        self.__code = []
-
-    def compile(self):
-        """
-        Compiles self.code and loads it into the environment.
-
-        Returns: The updated environment.
-
-        """
-        file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=self.prefix,
-                                           delete=False)
-        self.filename = file.name
-        self.filenames.append(self.filename)
-        self.write_to_file(file)
-        file.close()
-
-        with open(self.filename, 'r') as file:
-            source = file.read()
-            code = compile(source, self.filename, "exec")
-            exec_(code, self.globals, self.globals)
-
-        return self.globals

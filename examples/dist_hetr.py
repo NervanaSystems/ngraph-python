@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # ----------------------------------------------------------------------------
 # Copyright 2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,13 +26,13 @@ args = parser.parse_args()
 
 # Build the graph
 H = ng.make_axis(length=4, name='height')
-W = ng.make_axis(length=6, name='width')
+N = ng.make_axis(length=8, name='batch')
+weight = ng.make_axis(length=2, name='weight')
 
-x = ng.placeholder(axes=[H, W])
-with ng.metadata(device_id=('1', '2'), parallel=W):
-    x_plus_one = x + 1
-
-x_plus_two = x_plus_one + 1
+x = ng.placeholder(axes=[H, N])
+w = ng.placeholder(axes=[weight, H])
+with ng.metadata(device_id=('0', '1'), parallel=N):
+    dot = ng.dot(w, x)
 
 # Select a transformer
 with closing(ngt.make_transformer_factory('hetr')()) as hetr:
@@ -42,8 +41,8 @@ with closing(ngt.make_transformer_factory('hetr')()) as hetr:
         hetr.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
 
     # Define a computation
-    plus_two = hetr.computation(x_plus_two, x)
+    computation = hetr.computation(dot, x, w)
 
     # Run the computation
     for i in range(args.iter_count):
-        print(plus_two(i))
+        print(computation(i, i))

@@ -109,31 +109,36 @@ def test_scope_2layer(optimizer_factory, scope_pair, transformer_factory):
         seq_all, x_all, t_all, loss_all = make_network()
         optimizer_all = optimizer_factory()
         updates_all = optimizer_all(loss_all)
-        network_all = ex.executor(updates_all, x_all, t_all)
+        result_list = [updates_all]
+        result_list.append(seq_all.layers[update_layer].linear.W)
+        result_list.append(seq_all.layers[update_layer].bias.W)
+        network_all = ex.executor(result_list, x_all, t_all)
 
         # update only variables in one scope, for same network
         seq_scope, x_scope, t_scope, loss_scope = make_network(scope1='s1', scope2='s2')
         optimizer_scope = optimizer_factory()
         updates_scope = optimizer_scope(loss_scope, variable_scope=update_scope)
-        network_scope = ex.executor(updates_scope, x_scope, t_scope)
+        result_list = [updates_scope]
+        result_list.append(seq_scope.layers[update_layer].linear.W)
+        result_list.append(seq_scope.layers[update_layer].bias.W)
+        result_list.append(seq_scope.layers[no_update_layer].linear.W)
+        result_list.append(seq_scope.layers[no_update_layer].bias.W)
+        network_scope = ex.executor(result_list, x_scope, t_scope)
 
         # one iteration of weight updates
-        network_all(inputs, targets)
-        network_scope(inputs, targets)
+        (_, Wtruth_linear_all, Wtruth_bias_all) = network_all(inputs, targets)
+        (_, Wactual_linear_scope_update,
+         Wactual_bias_scope_update,
+         Wactual_linear_scope_no_update,
+         Wactual_bias_scope_no_update) = network_scope(inputs, targets)
 
-        def get_np_ary(seq, layer_ind, layer_type):
-            return ex.get_tensor_view_value(getattr(seq.layers[layer_ind], layer_type).W)
+        # def get_np_ary(seq, layer_ind, layer_type):
+        #     return ex.get_tensor_view_value(getattr(seq.layers[layer_ind], layer_type).W)
 
         # check variables not in scope have not changed
-        Wactual = get_np_ary(seq_scope, no_update_layer, 'linear')
-        assert np.all(Wactual == W_lin_init[no_update_layer])
-        Wactual = get_np_ary(seq_scope, no_update_layer, 'bias')
-        assert np.all(Wactual == W_bias_init[no_update_layer])
+        assert np.all(Wactual_linear_scope_no_update == W_lin_init[no_update_layer])
+        assert np.all(Wactual_bias_scope_no_update == W_bias_init[no_update_layer])
 
         # check variables in scope have correct updated values
-        Wactual = get_np_ary(seq_scope, update_layer, 'linear')
-        Wtruth = get_np_ary(seq_all, update_layer, 'linear')
-        assert ng.testing.allclose(Wactual, Wtruth)
-        Wactual = get_np_ary(seq_scope, update_layer, 'bias')
-        Wtruth = get_np_ary(seq_all, update_layer, 'bias')
-        assert ng.testing.allclose(Wactual, Wtruth)
+        assert ng.testing.allclose(Wactual_linear_scope_update, Wtruth_linear_all)
+        assert ng.testing.allclose(Wactual_bias_scope_update, Wtruth_bias_all)

@@ -16,6 +16,7 @@ from __future__ import division
 
 import collections
 import weakref
+import logging
 
 import abc
 from builtins import object
@@ -27,6 +28,8 @@ from orderedset import OrderedSet
 
 
 PYCUDA_LOGIC_ERROR_CODE = 4
+
+logger = logging.getLogger(__name__)
 
 
 class UnsupportedTransformerException(Exception):
@@ -48,6 +51,7 @@ class Computation(NameableValue):
 
     def __init__(self, transformer, computation_op, **kwargs):
         super(Computation, self).__init__(**kwargs)
+        logging.info("Creating computation with computation_op: %s", computation_op)
         self.transformer = transformer
         self.computation_op = computation_op
         self.computation_name = None
@@ -675,6 +679,7 @@ class ComputationGraphTransformer(Transformer):
             return
 
         if not self.finalized:
+            logging.info("Finalizing transformer.")
             self._transform_computations()
 
         self.allocate_storage()

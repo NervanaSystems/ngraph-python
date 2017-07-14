@@ -26,7 +26,7 @@ import numpy as np
 import argparse
 
 
-# TODO: Need to refactor and make it shareable with Alex's tests
+# TODO: Refactor mini_resnet #1863
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
         axes=[x.axes.channel_axis()],
@@ -94,6 +94,7 @@ class mini_residual_network(Sequential):
             layers.append(BatchNorm())
         if activation:
             layers.append(Activation(Rectlin()))
+
         layers.append(Pool2D(8, strides=2, op='avg'))
         if dataset == 'cifar10':
             ax.Y.length = 10
@@ -128,29 +129,31 @@ def get_fake_data(dataset, batch_size, n_iter):
 
 
 def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
-                         transformer_type, device, bprop=False, visualize=False):
+                         transformer_type, device, bprop=True, visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
-    model_out = get_mini_resnet(inputs, dataset, device_id)
 
     # Running forward propagation
-    fprop_computation_op = ng.computation(model_out, 'all')
-    benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer_type, device)
-    Benchmark.print_benchmark_results(benchmark_fprop.time(n_iter, n_skip,
-                                                           dataset + '_msra_fprop', visualize))
+    model_out = get_mini_resnet(inputs, dataset, device_id)
 
     # Running back propagation
     if bprop:
-        optimizer = GradientDescentMomentum(0.01, 0.9)
-        train_loss = ng.cross_entropy_multi(model_out,
-                                            ng.one_hot(inputs['label'], axis=ax.Y))
+        with ng.metadata(device_id=device_id, parallel=ax.N):
+            optimizer = GradientDescentMomentum(0.01, 0.9)
+            train_loss = ng.cross_entropy_multi(model_out,
+                                                ng.one_hot(inputs['label'], axis=ax.Y))
 
-        batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-        batch_cost_computation_op = ng.computation(batch_cost, "all")
-
+            batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+            batch_cost_computation_op = ng.computation(batch_cost, "all")
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
                               transformer_type, device)
         Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                          dataset + '_msra_bprop', visualize))
+                                          dataset + '_msra_bprop', visualize, 'device_id'))
+    else:
+        fprop_computation_op = ng.computation(model_out, 'all')
+        benchmark = Benchmark(fprop_computation_op, train_set, inputs,
+                              transformer_type, device)
+        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
+                                          dataset + '_msra_fprop', visualize))
 
 
 if __name__ == "__main__":
@@ -168,6 +171,7 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
     parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
+    parser.add_argument('-b', '--bprop', type=int, default=0, help="enable back propagation")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
@@ -180,4 +184,5 @@ if __name__ == "__main__":
                              device_id=device_id,
                              transformer_type=args.transformer,
                              device=args.device,
+                             bprop=args.bprop != 0,
                              visualize=args.visualize)

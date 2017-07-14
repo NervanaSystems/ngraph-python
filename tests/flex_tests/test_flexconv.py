@@ -18,8 +18,8 @@ from ngraph.testing.flex_util import execute_convolution, id_func
 
 pytestmark = pytest.mark.flex_only
 
-bug_1805 = pytest.mark.xfail(strict=True, reason="GitHub issue #1805, LogicError when filter has "
-                                                 "more dimensions than image")
+bug_1805 = pytest.config.flex_disabled(reason="GitHub issue #1805, LogicError when filter has "
+                                              "more dimensions than image")
 
 test_data_execute_convolution = (
     # template: (image_height, image_width, image_3rd_dim,

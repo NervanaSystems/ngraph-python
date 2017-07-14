@@ -117,7 +117,7 @@ def unhandled_scalar_value(value):
 
 def is_scalar_type(value):
     return value is None or \
-        isinstance(value, (str, six.text_type, float, bool, dict, slice, np.generic)
+        isinstance(value, (str, six.text_type, float, bool, Axis, dict, slice, np.generic)
                    + six.integer_types)
 
 
@@ -153,6 +153,8 @@ def assign_scalar(message, value):
             assign_scalar(message.map_val.map[key], value[key])
         # This encodes an empty dict for deserialization
         assign_scalar(message.map_val.map['_ngraph_map_sentinel_'], '')
+    elif isinstance(value, Axis):
+        message.axis.CopyFrom(axis_to_protobuf(value))
     else:
         raise unhandled_scalar_value(value)
 
@@ -171,8 +173,6 @@ def assign_op_attr(message, value):
         assign_scalar(message.scalar, value)
     elif isinstance(value, Axes):
         message.axes.CopyFrom(axes_to_protobuf(value))
-    elif isinstance(value, Axis):
-        message.axis.CopyFrom(axis_to_protobuf(value))
     elif isinstance(value, np.ndarray):
         message.tensor.CopyFrom(tensor_to_protobuf(value))
     elif isinstance(value, Iterable):
@@ -359,6 +359,8 @@ def protobuf_scalar_to_python(val):
                      val.step.value if val.HasField('step') else None)
     elif scalar_key == 'dtype_val':
         return pb_to_dtype(val.dtype_val)
+    elif scalar_key == 'axis':
+        return pb_to_axis(val.axis)
     return getattr(val, scalar_key)
 
 
@@ -385,8 +387,6 @@ def protobuf_attr_to_python(val):
             return list(map(protobuf_scalar_to_python, val.repeated_scalar.val))
     elif val.HasField('axes'):
         return protobuf_to_axes(val.axes)
-    elif val.HasField('axis'):
-        return pb_to_axis(val.axis)
     else:
         raise ValueError("Cannot convert {} to python attribute value".format(val))
 

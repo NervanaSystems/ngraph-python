@@ -216,32 +216,32 @@ def test_broadcast_ops(config):
     {
         'input': 36,
         'func': 'mean',
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
         'input': 36,
         'func': 'sum',
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'expected_result': [[[-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0]]],
     },
     {
         'input': 36,
         'func': 'mean',
-        'device_id': (1, 4, 3, 2),
+        'device_id': (0, 1, 2, 3),
         'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
         'input': 25,
         'func': 'sum',
-        'device_id': (5, 7, 3, 4),
+        'device_id': (0, 1, 2, 3),
         'expected_result': [[[-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0]]],
     },
 ])
 def test_allreduce_hint(config):
     c = config
 
-    with ng.metadata(device_id=c['device_id']):
+    with ng.metadata(device_id=c['device_id'], parallel=None):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
@@ -249,43 +249,9 @@ def test_allreduce_hint(config):
                             axes=[axis_B]).named('var_B')
         var_B.metadata['reduce_func'] = c['func']
         var_minus = (var_A - var_B).named('var_minus')
-        var_minus.metadata['parallel'] = axis_A
     with closing(ngt.make_transformer_factory('hetr')()) as hetr:
         out_comp = hetr.computation([var_minus]).named('out_comp')
         result = out_comp()
-
-        np.testing.assert_array_equal(result, c['expected_result'])
-
-
-@pytest.mark.parametrize('config', [
-    {
-        'input': 1,
-        'func': 'sum',
-        'device_id': (1, 2),
-        'expected_result': [-35.0, -35.0, -35.0, -35.0],
-    },
-])
-def test_one_dot_bprop_allreduce(config):
-    c = config
-
-    pytest.xfail("GPU child transformers generate errors during AssignLayouts graph pass #1651")
-
-    H_axis = ng.make_axis(length=4, name='height')
-    W_axis = ng.make_axis(length=6, name='width')
-    with ng.metadata(step='input'):
-        X = ng.placeholder(axes=[H_axis, W_axis])
-        target = ng.constant(1, axes=[W_axis])
-    with ng.metadata(device_id=c['device_id'], parallel=W_axis):
-        W = ng.variable(axes=[H_axis], initial_value=UniformInit(1, 1))
-        dot = ng.dot(W, X)
-        L = ng.squared_L2(target - dot, out_axes=())
-        grad = ng.deriv(L, W)
-        grad.metadata['reduce_func'] = c['func']
-        update = (W - grad)
-
-    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-        out_comp = hetr.computation([update], X)
-        result = out_comp(c['input'])
 
         np.testing.assert_array_equal(result, c['expected_result'])
 

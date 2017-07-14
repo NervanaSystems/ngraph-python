@@ -83,7 +83,6 @@ def test_dropout_inference(nin, batch_size, transformer_factory):
         ng.testing.assert_allclose(out1, out2, atol=atol, rtol=rtol)
 
 
-@pytest.mark.flex_disabled
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.5])
@@ -107,4 +106,4 @@ def test_dropout_bprop_single_comp(nin, batch_size, keep, transformer_factory):
         comp = ex.executor([fprop, bprop, layer.mask], inp, mul_factor)
         fout, bout, mask = comp(x, 2)
         # Calculate derivative by hand and compare
-        np.testing.assert_allclose(bout, (x * mask[:, None]).sum(), rtol=1e-6)
+        ng.testing.assert_allclose(bout, (x * mask[:, None]).sum(), rtol=1e-6)

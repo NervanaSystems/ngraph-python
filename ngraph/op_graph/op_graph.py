@@ -72,7 +72,7 @@ def metadata(**metadata):
     for op in ops:
         if isinstance(op, TensorValueOp):
             # make sure tensorvalue op matches thing it reads from
-            op.metadata.update(op.states_read[0].metadata)
+            op.metadata.update(op.value_tensor.metadata)
         else:
             op.metadata.update(metadata)
 
@@ -409,6 +409,17 @@ class Op(NameableValue):
 
         """
         return OrderedSet()
+
+    @property
+    def has_side_effects(self):
+        """
+
+        Returns:
+            True if this Op has side-effects. This will prevent the Op from being eliminated
+            during dead code elimination.
+
+        """
+        return False
 
     def __str__(self):
         return self.graph_label
@@ -830,6 +841,10 @@ class AssignOp(Op):
     def states_read(self):
         return self.args[1].states_read
 
+    @property
+    def has_side_effects(self):
+        return True
+
 
 class AssignOneDOp(Op):
     """
@@ -852,6 +867,10 @@ class AssignOneDOp(Op):
     @property
     def states_read(self):
         return self.args[1].states_read
+
+    @property
+    def has_side_effects(self):
+        return True
 
 
 def assign(lvalue, rvalue):
@@ -1027,6 +1046,10 @@ class Fill(Op):
     def states_read(self):
         return self.args[0].states_read
 
+    @property
+    def has_side_effects(self):
+        return True
+
 
 def fill(x, scalar):
     return Fill(x, scalar)
@@ -1108,7 +1131,6 @@ class TensorOp(Op):
                 deriv_handler = o.deriv_handler
 
                 # find hetr distribution metadata, pass other data if exists
-                # todo add reduce func metadata key when fixed #1436
                 hetr_meta_key = ['device', 'device_id', 'parallel']
                 hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
                                  if o.metadata.get(k) is not None}
@@ -4305,6 +4327,10 @@ class ReturnOp(Op):
     def is_device_op(self):
         return False
 
+    @property
+    def has_side_effects(self):
+        return True
+
 
 class LiteralScalarOp(TensorOp):
     """
@@ -4323,6 +4349,10 @@ class WriteOp(TensorOp):
 
     This Op is internal to execution graph compilation.
     """
+
+    @property
+    def has_side_effects(self):
+        return True
 
 
 class ReadOp(TensorOp):

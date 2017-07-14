@@ -24,9 +24,9 @@ from ngraph.testing import executor
 pytestmark = pytest.mark.flex_only
 
 # Known issues
-bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues:"
-                                                 "modulus and ZeroDivisionError clarification")
-bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
+bug_1064 = pytest.config.flex_disabled(reason="GitHub issue #1064, flex lower priority issues:"
+                                              "modulus and ZeroDivisionError clarification")
+bug_1227 = pytest.config.flex_disabled(reason="GitHub issue #1227, find explanation of results")
 
 test_assign_data = (
     # template: ([(operand, expected_result, *case_description)], test_description),

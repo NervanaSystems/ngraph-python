@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from ngraph.op_graph.comm_nodes import calculate_scatter_axes
-from ngraph.op_graph.op_graph import Op, DotOp
+from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
     GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp, BroadcastRecvOp
 from orderedset import OrderedSet
@@ -39,7 +39,7 @@ def comm_path_exists(fro, to):
     Note- this is a non-standard traversal, as most traversals stop at a Receiver.
     """
 
-    # TODO: does this correctly handle traversing multiple send-recv junctions
+    # TODO: Issue #1865 does this correctly handle traversing multiple send-recv junctions
     # from fro to to?
 
     visit = OrderedSet(fro.args)
@@ -151,7 +151,6 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             elif isinstance(op, (CPUQueueRecvOp, GPUQueueRecvOp)):
                 # Cloning a recv node means we need a broadcast, so simulate one by adding an
                 # additional sender with the same input data as the original sender.
-                # TODO replace with real broadcast #1398 #1399
                 send_op = CPUQueueSendOp(orig_ops[op.uuid].send_node().args[0])
                 op._queue = send_op.queue
                 op._send_node = send_op
@@ -173,6 +172,9 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
                 op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
                                                            num_clones)
+
+            if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
+                op.tensor._axes = calculate_scatter_axes(op.tensor.axes, parallel_axis, num_clones)
 
             args_list = list(op.args)
             for arg_idx, arg_op in enumerate(args_list):
