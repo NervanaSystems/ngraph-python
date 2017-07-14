@@ -32,7 +32,3 @@ setuptools==18.5
 
 # cffi is required to wrap warp-ctc
 cffi>=1.0
-
-# grpc
-grpcio==1.3.5
-grpcio-tools==1.3.5
