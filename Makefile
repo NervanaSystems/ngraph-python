@@ -75,6 +75,7 @@ install_all: gpu_prepare test_prepare examples_prepare doc_prepare install
 
 gpu_prepare:
 	pip install -r gpu_requirements.txt > /dev/null 2>&1
+	pip install -r multinode_requirements.txt > /dev/null 2>&1
 
 test_prepare:
 	pip install -r test_requirements.txt > /dev/null 2>&1
@@ -99,7 +100,8 @@ uninstall:
 
 uninstall_all: uninstall
 	pip uninstall -r gpu_requirements.txt -r test_requirements.txt \
-	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt
+	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt \
+	-r multinode_requirements.txt
 
 clean:
 	find . -name "*.py[co]" -type f -delete
