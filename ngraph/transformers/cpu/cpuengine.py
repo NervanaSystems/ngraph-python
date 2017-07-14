@@ -335,7 +335,10 @@ class Mkldnn(object):
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
-            np.dot(x, y, out=out)
+            if bias is not None:
+                np.add(np.dot(x, y), bias[:, None], out=out)
+            else:
+                np.dot(x, y, out=out)
 
     def elementwise_add(self, name, I_array1, I_array2, O_array):
         if (self.enabled and name in self.kernels):
