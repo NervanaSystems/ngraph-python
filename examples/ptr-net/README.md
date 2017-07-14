@@ -27,7 +27,8 @@ iteration = 32000, train loss = 2.06947231293
 iteration = 36000, train loss = 1.88495159149
 iteration = 40000, train loss = 1.89364993572`
 ## To-dos
-- [] ptr-net inference code
-- [] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
-- [] add LSTM to rnn cell selection
-- [] visualize TSP  
+- [ ] ptr-net inference code
+- [ ] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
+- [ ] add LSTM to rnn cell selection
+- [ ] visualize TSP  
+- [ ] python/shell script to download TSP data
