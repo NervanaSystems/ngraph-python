@@ -81,12 +81,10 @@ _, dec_out_seq = dec(inputs['prev_tgt'], init_state=enc_out)
 
 tmp_axis1 = ng.make_axis(length=hidden_size, name='feature_axis')
 tmp_axis2 = ng.make_axis(length=hidden_size, name='tmp_axis2')
-tmp_axis3 = ng.make_axis(length=time_steps, name='tmp_axis3')
-tmp_axis4 = ng.make_axis(length=time_steps, name='tmp_axis4')
 
-W1 = ng.variable(axes=[tmp_axis1, tmp_axis2, tmp_axis3, tmp_axis4], initial_value=init)
-W2 = ng.variable(axes=[tmp_axis1, tmp_axis2, tmp_axis3, tmp_axis4], initial_value=init)
-v = ng.variable(axes=[tmp_axis2, tmp_axis3, tmp_axis4, ax.Y], initial_value=init)
+W1 = ng.variable(axes=[tmp_axis1, tmp_axis2], initial_value=init)
+W2 = ng.variable(axes=[tmp_axis1, tmp_axis2], initial_value=init)
+v = ng.variable(axes=[tmp_axis2, ax.Y], initial_value=init)
 
 score_out = ng.dot(v, ng.tanh(ng.dot(W1, enc_out_seq) + ng.dot(W2, dec_out_seq)))
 output_prob = ng.softmax(score_out)
@@ -111,6 +109,7 @@ with closing(ngt.make_transformer()) as transformer:
     # bind the computations
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
 
+    # import ipdb; ipdb.set_trace
     # iterate over training set
     for idx, data in enumerate(train_set):
         train_output = train_computation(data)
@@ -118,5 +117,5 @@ with closing(ngt.make_transformer()) as transformer:
         if niter % 4000 == 0:
             print('iteration = {}, train loss = {}'.format(niter, train_output['batch_cost']))
             # uncomment lines below to print the predicted target and true target
-            # print('predicted target = {}'.format(np.argmax(train_output['output_prob'], axis=0).T))
-            # print('true target = {}'.format(tsp_data['train']['tgt_txt'][niter:(niter + args.batch_size)][:]))
+            print('predicted target = {}'.format(np.argmax(train_output['output_prob'], axis=0).T))
+            print('true target = {}'.format(tsp_data['train']['tgt_txt'][niter:(niter + args.batch_size)][:]))
