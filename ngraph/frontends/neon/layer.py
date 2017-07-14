@@ -753,7 +753,7 @@ class Bias(Layer):
             if self.shared and in_obj.axes.channel_axis() is not None:
                 w_axes = ng.make_axes(in_obj.axes.channel_axis())
             self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
-                                    metadata={"label": LABELS["bias"]}).named("bias")
+                                 metadata={"label": LABELS["bias"]}).named("bias")
         return in_obj + self.W
 
 
@@ -782,7 +782,6 @@ class Affine(Layer):
         b_out = self.bias(l_out) if not self.batch_norm else l_out
         bn_out = self.batch_norm_layer(b_out) if self.batch_norm else b_out
         return self.activation_layer(bn_out)
-
 
 
 class Convolution(Layer):
@@ -1461,8 +1460,8 @@ def unroll(cell, num_steps, inputs, init_states=None, reset_cells=True,
                 state_steps = state_steps[::-1]
         outputs = ng.stack(stepped_outputs, recurrent_axis, pos=recurrent_axis_idx)
         if return_cell_states:
-            out_states = [ng.stack(state_steps, recurrent_axis, pos=recurrent_axis_idx)
-                       for state_steps in stepped_states]
+            out_states = [ng.stack(stepped, recurrent_axis, pos=recurrent_axis_idx)
+                          for stepped in stepped_states]
     else:
         outputs = stepped_outputs[-1]
         if return_cell_states:
@@ -1483,7 +1482,6 @@ def unroll(cell, num_steps, inputs, init_states=None, reset_cells=True,
             ]),
             result
         ])
-
 
 
 class BaseRNNCell(Layer):
@@ -1610,10 +1608,10 @@ class RNNCell(BaseRNNCell):
         self.nout = nout
         self.init = init
         self.init_h2h = init_h2h if init_h2h is not None else init
-        self.bias_init=bias_init
-        self.activation =  activation
+        self.bias_init = bias_init
+        self.activation = activation
         self.batch_norm = batch_norm
-        self.reset_cells = reset_cells 
+        self.reset_cells = reset_cells
         self.h2h = Linear(nout=self.nout,
                           init=self.init_h2h)
         self.i2h = Affine(axes=self.h2h.axes,
@@ -1636,11 +1634,10 @@ class RNNCell(BaseRNNCell):
     def __call__(self, inputs, states, reset_cells=True):
         if states is None:
             batch_axis = inputs.axes.batch_axis()
-            states = self.initialize_states(batch_axis, 
+            states = self.initialize_states(batch_axis,
                                             reset_cells=reset_cells)
         # TODO: avoid indexing into states
         h_state = states[0]
         feed_fwd = ng.cast_role(self.i2h(inputs), h_state.axes)
         h_state = self.activation(feed_fwd + self.h2h(h_state))
         return h_state, [h_state]
-

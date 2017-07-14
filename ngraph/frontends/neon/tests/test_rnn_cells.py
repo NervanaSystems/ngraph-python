@@ -149,7 +149,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
     # Generate ngraph RNN
     rnn_ng = RNNCell(hidden_size, init=W_in, init_h2h=W_rec, activation=Tanh(),
-                       reset_cells=True)
+                     reset_cells=True)
 
     # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
@@ -218,13 +218,12 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
 
     # Generate ngraph RNN
     rnn_ng = RNNCell(hidden_size, init=W_in, init_h2h=W_rec, activation=Tanh(),
-                       reset_cells=True)
+                     reset_cells=True)
 
     # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
     out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_state,
                     return_sequence=return_sequence)
-    
     deltas_constant = ng.constant(deltas, axes=out_ng.axes)
     params = [(rnn_ng.i2h.linear.W, W_in),
               (rnn_ng.h2h.W, W_rec),
@@ -275,16 +274,17 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
 
     # Generate ngraph RNN
     rnn_ng = RNNCell(hidden_size, init=W_in, init_h2h=W_rec, activation=Tanh(),
-                       reset_cells=True)
+                     reset_cells=True)
 
-    # fprop ngraph RNN                                                                                                                                                               
+    # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
     out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_state,
                     return_sequence=return_sequence)
 
     params = [(rnn_ng.i2h.linear.W, W_in),
               (rnn_ng.h2h.W, W_rec),
-              (rnn_ng.i2h.bias.W, b)]
+              # (rnn_ng.i2h.bias.W, b)
+              ]
 
     with ExecutorFactory() as ex:
         # Create derivative computations and execute
