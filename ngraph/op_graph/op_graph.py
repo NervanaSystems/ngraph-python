@@ -1131,7 +1131,6 @@ class TensorOp(Op):
                 deriv_handler = o.deriv_handler
 
                 # find hetr distribution metadata, pass other data if exists
-                # todo add reduce func metadata key when fixed #1436
                 hetr_meta_key = ['device', 'device_id', 'parallel']
                 hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
                                  if o.metadata.get(k) is not None}

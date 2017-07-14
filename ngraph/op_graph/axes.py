@@ -1217,7 +1217,7 @@ class TensorDescription(NameableValue):
             full_sizes=new_sizes,
             offset=self.offset,
             next_tensor_description=self,
-            name=self.name + 'rFlatten',
+            name=self.name + 'rFlatten'
         )
 
     def unflatten(self, new_axes):

@@ -105,7 +105,7 @@ def test_tensor_constant(transformer_factory):
     ng.testing.assert_allclose(cval, aval)
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason='Results mismatch')
 def test_placeholder(transformer_factory):
     W = ng.make_axis(length=10)
     H = ng.make_axis(length=20)
@@ -183,11 +183,12 @@ def test_reduction(transformer_factory, reduction, sub_axes):
             red=reduction, axes=reduction_axes)
 
 
-@pytest.mark.flex_disabled
 @pytest.config.argon_disabled  # TODO Triage
 def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     if reduction in ('max', 'min'):
         pytest.skip("max/min needed to be tested differently")
+    if sub_axes in (slice(0, 2, None), slice(1, None, None)) and reduction == "prod":
+        pytest.config.flex_skip_now("Too big values for Flex ( > 32767 )")
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=10),
                          ng.make_axis(length=10)])
@@ -207,7 +208,7 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Too big values for Flex ( > 32767 ) only in last assert")
 @pytest.config.argon_disabled  # TODO Triage
 def test_prod_constant(transformer_factory):
     """
@@ -253,7 +254,7 @@ def test_prod_constant(transformer_factory):
     np.testing.assert_allclose(res_0_1_2_np, res_0_1_2_ng)
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled
 @pytest.config.argon_disabled  # TODO Triage
 def test_prod_deriv(transformer_factory):
     """
@@ -483,12 +484,13 @@ def test_elementwise_unary_ops_matched_args(
         ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
-@pytest.mark.flex_disabled
 def test_elementwise_ops_unmatched_args(
     transformer_factory,
     elementwise_binary_op,
     batch_axis
 ):
+    if elementwise_binary_op == "add":
+        pytest.config.flex_skip_now("There is no TensorDescription for this flex entry")
     """TODO."""
     W = ng.make_axis(length=5)
     H = ng.make_axis(length=5)
@@ -746,8 +748,7 @@ def np_cross_entropy_multi(y, t, axis=None):
     return -np.sum(np.log(y) * t, axis=axis)
 
 
-# Flex disabled - because of the strict tolerance (rtol, atol) and too wide range of input values
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
 @pytest.config.argon_disabled  # TODO triage
 def test_softmax(transformer_factory, input_tensor):
     """TODO."""

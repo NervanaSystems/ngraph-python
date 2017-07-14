@@ -26,7 +26,7 @@ import numpy as np
 import argparse
 
 
-# TODO: Need to refactor and make it shareable with Alex's tests
+# TODO: Refactor mini_resnet #1863
 def cifar_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
         axes=[x.axes.channel_axis()],

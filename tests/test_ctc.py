@@ -23,7 +23,7 @@ from third_party.warp_ctc.ctc import CTC
 import pytest
 
 pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.mark.flex_disabled("module"),
+              pytest.config.flex_disabled(reason="no CTCKernel for Flex"),
               pytest.config.argon_disabled(scope="module")]
 
 rng = RandomTensorGenerator(0, np.float32)
