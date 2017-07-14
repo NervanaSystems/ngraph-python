@@ -99,8 +99,8 @@ if __name__ == "__main__":
         destination = './' + file_name
         download_file_from_google_drive(file_id, destination)
         print('Successfully downloaded {}'.format(file_name))
-        # with zipfile.ZipFile(destination, 'r') as z:
-        #     z.extractall('./')
+        with zipfile.ZipFile(destination, 'r') as z:
+            z.extractall('./')
         """
         TODO: fix .zip file issue. (can't download large file from gdrive, need
         to bypass virus scan...)
