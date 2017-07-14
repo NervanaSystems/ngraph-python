@@ -16,13 +16,14 @@ from __future__ import division, print_function, absolute_import
 from builtins import object
 import functools
 import collections
+import itertools
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
 from ngraph.util.names import NameableValue
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from orderedset import OrderedSet
-
+from ngraph.frontends.neon.initializer import ConstantInit
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
@@ -742,21 +743,18 @@ class Bias(Layer):
     def __init__(self, init, shared=True, **kwargs):
         super(Bias, self).__init__(**kwargs)
         self.W = None
-        self.init = init
+        self.init = init if init is not None else ConstantInit(0)
         self.shared = shared
 
     @wrap_layer()
     def __call__(self, in_obj):
-        if self.init:
-            if not self.initialized:
-                w_axes = in_obj.axes.sample_axes()
-                if self.shared and in_obj.axes.channel_axis() is not None:
-                    w_axes = ng.make_axes(in_obj.axes.channel_axis())
-                self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
-                                     metadata={"label": LABELS["bias"]}).named("bias")
-            return in_obj + self.W
-        else:
-            return in_obj
+        if not self.initialized:
+            w_axes = in_obj.axes.sample_axes()
+            if self.shared and in_obj.axes.channel_axis() is not None:
+                w_axes = ng.make_axes(in_obj.axes.channel_axis())
+            self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
+                                    metadata={"label": LABELS["bias"]}).named("bias")
+        return in_obj + self.W
 
 
 class Affine(Layer):
@@ -772,7 +770,7 @@ class Affine(Layer):
         self.activation = activation
         self.batch_norm = batch_norm
         self.linear = Linear(init=weight_init, nout=nout, axes=axes, **kwargs)
-        self.bias = Bias(init=bias_init)
+        self.bias = Bias(init=bias_init) if not batch_norm else None
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
         self.scope = Layer.active_scope  # only included so all Layers have scope attribute
@@ -780,9 +778,11 @@ class Affine(Layer):
     @wrap_layer()
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
-        b_out = self.bias(l_out)
+        # TODO: This is a bit convoluted. Need to clean it up.
+        b_out = self.bias(l_out) if not self.batch_norm else l_out
         bn_out = self.batch_norm_layer(b_out) if self.batch_norm else b_out
         return self.activation_layer(bn_out)
+
 
 
 class Convolution(Layer):
@@ -1100,7 +1100,13 @@ class Recurrent(Layer):
         else:
             rnn_out = h_list[-1]
 
-        return rnn_out
+        if self.reset_cells is True:
+            return rnn_out
+        else:
+            return ng.sequential([
+                ng.assign(self.h_init, h_list[-1]),
+                rnn_out
+            ])
 
 
 class BiRNN(Layer):
@@ -1384,3 +1390,257 @@ class LSTM(Recurrent):
                 ]),
                 lstm_out
             ])
+
+
+def _cells_state_info(cells):
+    """
+    Given a list of cells, combine the individual state_info's
+    of the cells into a single state_info for the collection of
+    cells, i.e. do the equivalent of
+    sum([c.state_info for c in cells], []),
+    but using itertools instead because it's much faster
+
+    Note: the goal here is to simply convert lists of dicts into
+    a single list of dicts.
+
+    Arguments:
+    ----------
+    cells: list containing cell objects
+    """
+
+    return list(itertools.chain(*[c.state_info for c in cells]))
+
+
+def _cells_initialize_states(cells, batch_axis, **kwargs):
+    """
+    Given a list of cells, initialize the states of the individual
+    cells together by doing the equivalent of
+    sum([c.initialize_states(**kwargs) for c in cells], []),
+    but using itertools instead because it's much faster
+
+    Arguments:
+    ----------
+    cells: list containing cell objects
+    """
+
+    return list(itertools.chain(
+        *[c.initialize_states(batch_axis, **kwargs) for c in cells]))
+
+
+def unroll(cell, num_steps, inputs, init_states=None, reset_cells=True,
+           return_sequence=True, return_cell_states=False, reverse_mode=False):
+    """
+    Unroll the cell for num_steps steps.
+    """
+    if init_states is not None:
+        init_states = init_states if isinstance(init_states,
+                                                collections.MutableSequence) else [init_states]
+
+    recurrent_axis = inputs.axes.recurrent_axis()
+    batch_axis = inputs.axes.batch_axis()
+    out_axes = cell._feature_axes + batch_axis
+    recurrent_axis_idx = len(cell._feature_axes)
+
+    stepped_inputs = get_steps(inputs, recurrent_axis, backward=reverse_mode)
+    stepped_outputs = []
+    stepped_states = [[] for _ in cell.state_info]
+    states = [ng.cast_role(state, out_axes)
+              for state in init_states] if init_states is not None else init_states
+
+    for t in range(num_steps):
+        output, states = cell(stepped_inputs[t], states)
+        stepped_outputs.append(output)
+        assert len(stepped_states) == len(states)
+        for (state_steps, state) in zip(stepped_states, states):
+            state_steps.append(state)
+
+    if return_sequence:
+        if reverse_mode:
+            stepped_outputs = stepped_outputs[::-1]
+            for state_steps in stepped_states:
+                state_steps = state_steps[::-1]
+        outputs = ng.stack(stepped_outputs, recurrent_axis, pos=recurrent_axis_idx)
+        if return_cell_states:
+            out_states = [ng.stack(state_steps, recurrent_axis, pos=recurrent_axis_idx)
+                       for state_steps in stepped_states]
+    else:
+        outputs = stepped_outputs[-1]
+        if return_cell_states:
+            out_states = [state_steps[-1] for state_steps in stepped_states]
+
+    if reset_cells:
+        if return_cell_states:
+            return (outputs, out_states)
+        else:
+            return outputs
+    else:
+        result = (outputs, out_states) if return_cell_states else outputs
+        return ng.sequential([
+            ng.doall([
+                ng.assign(init_state, state_steps[-1])
+                for (init_state, state_steps)
+                in zip(init_states, stepped_states)
+            ]),
+            result
+        ])
+
+
+
+class BaseRNNCell(Layer):
+    """
+    Abstract base class for RNN cells
+
+    Arguments:
+    ----------
+
+    nout (int): Number of hidden/output units
+    init (Initializer): Function to initialize the input-to-hidden weights.
+        By default, this initializer will also be used to initialize recurrent
+        weights unless init_inner is also specified. Biases are always
+        initialized to zero.
+    init_h2h (Initializer, optional): Function to initialize recurrent weights.
+        If absent, will default to using the initializer passed as the init
+        argument.
+    activation (Transform): Activation function used to produce outputs.
+
+    name (str, optional): Assigns given name to the cell.
+    """
+
+    def __init__(self, cell_type=None, **kwargs):
+        super(BaseRNNCell, self).__init__(**kwargs)
+        self.cell_type = cell_type
+
+    def __call__(self, inputs, states):
+        """
+        Unrolls the RNN cell for one time step. By definition,
+        an RNN cell consumes a pair of inputs and states at a
+        given time step to produce states at the next time step.
+
+        Arguments:
+        ----------
+        inputs (Tensor): represents external input to the cell
+
+        states (list of Tensors): each cell is associated with one "external" state
+            and an arbitrary number of "internal" states. The states of a cell are
+            collectively contained in a list, with the first element of the list
+            always corresponding to the "external" state and the remaining
+            elements corresponding to the "internal" states.
+
+        Note: RNN cells only communicate "external" states to other RNN cells.
+            The "internal" states of an RNN cell are invisible to other cells.
+
+        Returns
+        -------
+        states (list of Tensors): nested list representing the new state of
+            the cell after a single step.
+            Since the list of states always contains the "external" state
+            as the first element, we can always read off the extenal output
+            of an RNN cell from the list of states.
+        """
+        raise NotImplementedError()
+
+    @property
+    def state_info(self):
+        """shape and layout information of states"""
+        raise NotImplementedError()
+
+    @property
+    def _feature_axes(self):
+        """shape and layout information of states"""
+        raise NotImplementedError()
+
+    @property
+    def _gate_names(self):
+        """name(s) of gates"""
+        return ()
+
+    def initialize_states(self, batch_axis, reset_cells=True):
+        """
+        Initialize the RNN cell's (external and internal) states.
+
+        Arguments:
+        ----------
+        batch_axis: axis corresponding to the "batch" dimension
+        reset_cells (bool): optional parameter used to determine
+            the appropriate constructor for the states.
+
+        Returns
+        -------
+        states : nested list of Tensors representing the external
+        and internal states of the RNN cell. This is used as the
+        set of initial states when unrolling RNN cells.
+        """
+
+        state_axes = self._feature_axes + batch_axis
+        states = []
+        for info in self.state_info:
+            if reset_cells:
+                state = ng.constant(const=0,
+                                    axes=state_axes).named(info['state_name'])
+            else:
+                state = ng.variable(initial_value=0,
+                                    axes=state_axes).named(info['state_name'])
+            states.append(state)
+        return states
+
+
+class RNNCell(BaseRNNCell):
+    """
+    Vanilla RNN cell.
+
+    Arguments:
+    ----------
+    nout (int): Number of hidden/output units
+    init (Initializer): Function to initialize the input-to-hidden weights.
+        By default, this initializer will also be used to initialize recurrent
+        weights unless init_inner is also specified. Biases are always
+        initialized to zero.
+    init_h2h (Initializer, optional): Function to initialize recurrent weights.
+        If absent, will default to using the initializer passed as the init
+        argument.
+    activation (Transform): Activation function used to produce outputs.
+    batch_norm (bool, optional): Defaults to False. If True, batch normalization
+        is applied to the weighted inputs.
+    name (str, optional): Assigns given name to the cell.
+
+    """
+    def __init__(self, nout, init, init_h2h=None, bias_init=None, activation=None,
+                 batch_norm=False, reset_cells=True, **kwargs):
+        super(RNNCell, self).__init__(**kwargs)
+        self.nout = nout
+        self.init = init
+        self.init_h2h = init_h2h if init_h2h is not None else init
+        self.bias_init=bias_init
+        self.activation =  activation
+        self.batch_norm = batch_norm
+        self.reset_cells = reset_cells 
+        self.h2h = Linear(nout=self.nout,
+                          init=self.init_h2h)
+        self.i2h = Affine(axes=self.h2h.axes,
+                          weight_init=self.init,
+                          bias_init=self.bias_init,
+                          batch_norm=self.batch_norm)
+
+    @property
+    def state_info(self):
+        return [{'state_name': 'h'}]
+
+    @property
+    def _feature_axes(self):
+        return self.h2h.axes.feature_axes()
+
+    @property
+    def _gate_names(self):
+        return ('',)
+
+    def __call__(self, inputs, states, reset_cells=True):
+        if states is None:
+            batch_axis = inputs.axes.batch_axis()
+            states = self.initialize_states(batch_axis, 
+                                            reset_cells=reset_cells)
+        # TODO: avoid indexing into states
+        h_state = states[0]
+        feed_fwd = ng.cast_role(self.i2h(inputs), h_state.axes)
+        h_state = self.activation(feed_fwd + self.h2h(h_state))
+        return h_state, [h_state]
+
