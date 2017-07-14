@@ -223,7 +223,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
     # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
     out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_state,
-                    return_sequence=return_sequence, reverse_mode=backward)
+                    return_sequence=return_sequence)
     
     deltas_constant = ng.constant(deltas, axes=out_ng.axes)
     params = [(rnn_ng.i2h.linear.W, W_in),
