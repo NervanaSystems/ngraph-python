@@ -16,24 +16,39 @@ $ python train.py --train_file tsp5.txt --test_file tsp5_test.txt
 - prelim results on tsp5.txt
 
 `iteration = 4000, train loss = 0.924373149872`
+
 `iteration = 8000, train loss = 0.726571142673`
+
 `iteration = 12000, train loss = 0.6722458601`
+
 `iteration = 16000, train loss = 0.648913919926`
+
 `iteration = 20000, train loss = 0.709739685059`
+
 `iteration = 24000, train loss = 0.64789390564`
+
 `iteration = 28000, train loss = 0.674442708492`
 
 - prelim results on tsp10.txt
 
 `iteration = 4000, train loss = 2.76649451256`
+
 `iteration = 8000, train loss = 2.62935018539`
+
 `iteration = 12000, train loss = 2.36450719833`
+
 `iteration = 16000, train loss = 2.15519189835`
+
 `iteration = 20000, train loss = 2.08786010742`
+
 `iteration = 24000, train loss = 1.92875289917`
+
 `iteration = 28000, train loss = 1.91526651382`
+
 `iteration = 32000, train loss = 2.06947231293`
+
 `iteration = 36000, train loss = 1.88495159149`
+
 `iteration = 40000, train loss = 1.89364993572`
 ## To-dos
 - [ ] ptr-net inference code
