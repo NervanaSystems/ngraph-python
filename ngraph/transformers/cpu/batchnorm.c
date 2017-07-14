@@ -46,16 +46,11 @@ void create_mkldnn_batchnorm_fprop_primitives(
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                       batchnorm_src_sizes, data_type,
                                       mkldnn_nChw8c));
-  } else if (__builtin_cpu_supports("avx512f")) {
-    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-                                      batchnorm_src_sizes, data_type,
-                                      mkldnn_nChw16c));
   } else {
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                       batchnorm_src_sizes, data_type,
-                                      mkldnn_chwn));
+                                      mkldnn_nChw16c));
   }
-
   mkldnn_batch_normalization_desc_t batch_norm_desc;
   MKL_CHECK(mkldnn_batch_normalization_forward_desc_init(
       &batch_norm_desc, mkldnn_forward_training, &mkldnn_memory_desc_src_md,
@@ -255,20 +250,13 @@ void create_mkldnn_batchnorm_bprop_primitives(
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
                                       src_dims, batchnorm_src_sizes, data_type,
                                       mkldnn_nChw8c));
-  } else if (__builtin_cpu_supports("avx512f")) {
-    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
-                                      batchnorm_src_sizes, data_type,
-                                      mkldnn_nChw16c));
-    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
-                                      src_dims, batchnorm_src_sizes, data_type,
-                                      mkldnn_nChw16c));
   } else {
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                       batchnorm_src_sizes, data_type,
-                                      mkldnn_chwn));
+                                      mkldnn_nChw16c));
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_fprop_src_md,
                                       src_dims, batchnorm_src_sizes, data_type,
-                                      mkldnn_chwn));
+                                      mkldnn_nChw16c));
   }
   prim_md = mkldnn_memory_desc_src_md;
 
