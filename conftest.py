@@ -72,7 +72,13 @@ def pass_method(*args, **kwargs):
 
 
 def pytest_configure(config):
-    # Define a reusable marker
+
+    # when marking argon_disabled for a whole test, but flex_disabled only on one
+    # parametrized version of that test, the argon marking disappeared
+    config.flex_and_argon_disabled = pytest.mark.xfail(config.getvalue("transformer") == "flex" or
+                                                       config.getvalue("transformer") == "argon",
+                                                       reason="Not supported by argon or flex backend",
+                                                       strict=True)
     config.argon_disabled = pytest.mark.xfail(config.getvalue("transformer") == "argon",
                                               reason="Not supported by argon backend",
                                               strict=True)
