@@ -75,7 +75,6 @@ install_all: gpu_prepare test_prepare examples_prepare doc_prepare install
 
 gpu_prepare:
 	pip install -r gpu_requirements.txt > /dev/null 2>&1
-	pip install -r multinode_requirements.txt > /dev/null 2>&1
 
 test_prepare:
 	pip install -r test_requirements.txt > /dev/null 2>&1
