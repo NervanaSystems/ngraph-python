@@ -118,7 +118,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [True, False])
+@pytest.mark.parametrize("return_sequence", [pytest.config.flex_disabled(True), False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("extra_axes", [0, 2])
 @pytest.mark.parametrize("backward", [True, False])
@@ -172,9 +172,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-# Flex doesn't support RNN yet, but sometimes test passes (random input) because of the small
-# values during calculations and wide absolute tolerance
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="RNN is not yet supported with Flex")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
@@ -249,7 +247,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                                        rtol=bprop_rtol, atol=bprop_atol)
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Several: Tensor description, placeholder (deriv), tolerance")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
