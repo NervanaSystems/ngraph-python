@@ -21,7 +21,9 @@ from cachetools import cached, keys
 import ngraph as ng
 from ngraph.util.names import NameableValue
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
+from ngraph.frontends.neon.utils import SubGraph, wrap_layer
 from orderedset import OrderedSet
+import parsel
 
 
 # Labels should be added as metadata on specific ops and variables
@@ -61,106 +63,6 @@ def output_dim_deconv(X, S, padding, strides, dilation=1):
     if max_size < 0:
         raise ValueError('output_dim {} can not be < 0'.format(max_size))
     return max_size
-
-
-def wrap_layer(cache_key=keys.hashkey):
-    """
-    A decorator for the __call__ method of neon layers. Supports caching of the output
-    using a specified caching function.
-
-    Arguments:
-        cache_key (function): A function to use for determining the cache's hashkey.
-                              See cachetools.keys.hashkey
-    """
-    def create_decorator(f):
-        @cached({}, key=cache_key)
-        @functools.wraps(f)
-        def layer_wrapper(self, in_obj, *inputs, **kwargs):
-            with ng.Op.all_ops() as ops:
-                output = f(self, in_obj, *inputs, **kwargs)
-            # TODO: This should create unique names for different instances of the same class
-            # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
-            for op in ops:
-                if "neon_layer" not in op.metadata:
-                    op.metadata["neon_layer"] = self.name
-                else:
-                    op.metadata["neon_layer"] = self.name + "/" + op.metadata["neon_layer"]
-            self._subgraph.ops.append(ops)
-
-            return output
-
-        return layer_wrapper
-
-    return create_decorator
-
-
-def _cache_if_initialized(subgraph):
-    # TODO: Should subgraph.ops be mutable?
-    return keys.hashkey(subgraph, len(subgraph.ops) > 0)
-
-
-class SubGraph(object):
-
-    def __init__(self, ops=None):
-        """
-        A connected subset of all ops in the computational graph
-
-        Arguments:
-            ops (list): A list of ops
-        """
-        self.ops = list()
-        if ops is not None:
-            self.ops.append(ops)
-
-    @property
-    @cached({}, key=_cache_if_initialized)
-    def variables(self):
-        """
-        An OrderedSet of all trainable variables created in this layer
-        """
-        if len(self.ops):
-            return OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable)
-        else:
-            return None
-
-    @property
-    @cached({}, key=_cache_if_initialized)
-    def inputs(self):
-        """
-        An OrderedSet of input ops to this layer
-        """
-        if len(self.ops):
-            inputs = OrderedSet()
-            for op in self.ops[0]:
-                if op.tensor.is_trainable:
-                    continue
-                if op.tensor.is_placeholder:
-                    inputs.add(op.tensor)
-                else:
-                    for arg in op.args:
-                        if arg not in self.ops[0]:
-                            inputs.add(arg)
-
-            return inputs
-        else:
-            return None
-
-    @property
-    @cached({}, key=_cache_if_initialized)
-    def side_effects(self):
-        """
-        An OrderedSet of side-effect ops in this layer
-        """
-        if len(self.ops):
-            side_effects = OrderedSet()
-            for op in self.ops[0]:
-                for dep in op.control_deps:
-                    if dep is not op.tensor:
-                        side_effects.add(dep)
-
-            return side_effects
-        else:
-            return None
 
 
 class Layer(NameableValue):
