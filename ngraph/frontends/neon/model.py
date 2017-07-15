@@ -23,7 +23,7 @@ class Sequential(Layer):
         super(Sequential, self).__init__(**kwargs)
         self.layers = layers
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         for l in self.layers:
             in_obj = l(in_obj)

@@ -29,7 +29,7 @@ from future.utils import with_metaclass
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
     default_int_dtype, AxesMap, UnmatchedAxesError
-from ngraph.util.names import NameableValue
+from ngraph.util.names import ScopedNameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
 from cached_property import cached_property
@@ -140,7 +140,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue):
+class Op(ScopedNameableValue):
     """
     Any operation that can be in an AST.
 
@@ -752,6 +752,20 @@ class Op(NameableValue):
         """
         return False
 
+    def _xml_description(self):
+        element = type(self).__name__
+        op_xml = ["<{} id={}".format(element, self.name)]
+        if self.scope is not None:
+            op_xml.append(" scope={}".format(self.scope.name))
+        for attr, val in self.metadata.items():
+            if attr == "label":
+                attr = "class"
+            op_xml.append(" {}={}".format(str(attr), str(val)))
+
+        op_xml.append("></{}>".format(element))
+
+        return "".join(op_xml)
+
 
 class MutateInsteadOfCopyWithNewArgsMixin(object):
     """
@@ -1278,7 +1292,7 @@ class TensorOp(Op):
                                      is_input=self.is_input,
                                      is_placeholder=self.is_placeholder)
         else:
-            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
+            return TensorDescription(self.axes, dtype=self.dtype, name=self.name.replace("/", "_"),
                                      op=self,
                                      is_persistent=self.is_persistent,
                                      is_input=self.is_input,

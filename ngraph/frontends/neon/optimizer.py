@@ -14,10 +14,16 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from builtins import object, zip
+import logging
 import numpy as np
 import ngraph as ng
 import numbers
+from ngraph.util.names import NameScope
 import ngraph.frontends.common.learning_rate_policies as lrp
+from ngraph.frontends.neon.layer import wrap_layer
+from ngraph.frontends.neon.utils import SubGraph, scope_ops
+
+# logger = logging.getLogger(__name__)
 
 
 def get_learning_rate_policy_callback(lr_params):
@@ -33,7 +39,9 @@ def get_learning_rate_policy_callback(lr_params):
                                       policies=lrp.lr_policies.keys())
                                   )
     elif all([x in lr_params.keys() for x in lrp.lr_policies[lr_params['name']]['args']]):
-        return lrp.lr_policies[lr_params['name']]['obj'](lr_params)
+        with scope_ops("LearningRateSchedule"):
+            lr = lrp.lr_policies[lr_params['name']]['obj'](lr_params)
+        return lr
     else:
         raise ValueError("Too few arguments provided to create policy {lr_name}."
                          "\nGiven: {lr_params}"
@@ -96,13 +104,16 @@ def clip_gradient_value(grad, clip_value=None):
         return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
-class Optimizer(object):
+class Optimizer(SubGraph):
     """TODO."""
     metadata = {'layer_type': 'optimizer'}
 
     def __init__(self, name=None, **kwargs):
         super(Optimizer, self).__init__(**kwargs)
-        self.name = name
+        if name is None:
+            name = type(self).__name__
+        self.scope = NameScope(name=name)
+        self.name = self.scope.name
 
     def update_learning_rate(self):
         pass
@@ -114,65 +125,43 @@ class LearningRateOptimizer(Optimizer):
         super(LearningRateOptimizer, self).__init__(**kwargs)
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
-    @ng.with_op_metadata
-    def __call__(self, cost_func, subgraph=None, variables=None, warning=False):
+    @wrap_layer
+    def __call__(self, cost_func, variables=None, warning=False):
         """
         Arguments:
-            subgraph (list of neon Layers or SubGraphs, optional)
-            variables (list of variables, optional)
-                only one of subgraph or variables should be specified
-            warning (bool, optional): for use with subgraph or variables,
-                if True displays warning message if any variables specified by
-                subgraph or variables do not participate in batch cost computation
+            cost_func (Op): The cost function to optimize
+            variables (list of variables): List of variables to optimize
+            warning (bool): If True displays warning message if any variables
+                            specified do not participate in batch cost computation
         """
 
-        # check valid args
-        error_msg = "only subgraph or variables keyword arg can be specified, not both"
-        if subgraph is not None:
-            assert variables is None, error_msg
-        elif variables is not None:
-            assert subgraph is None, error_msg
-
-        self._pre_call_hook()
+        # TODO: Is this necessary? Can _pre_call_hook optimizers just subclass __call__?
+        # self._pre_call_hook()
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
         batch_size = cost_func.axes.batch_axis().length
 
         # determine variables to optimize
-        all_variables = batch_cost.variables()
-        if subgraph is not None:
-            selected_variables = set()
-            for sg in subgraph:
-                selected_variables.update(all_variables & sg.variables)
-        elif variables is not None:
+        if variables is None:
+            variables = batch_cost.variables()
+        elif variables is not None and warning is True:
+            all_variables = batch_cost.variables()
             selected_variables = all_variables & set(variables)
-        else:
-            selected_variables = all_variables
+            if len(selected_variables) < len(variables):
+                logger.warn("not all selected variables participate in cost computation")
 
-        # warning if specified variables do not participate in batch cost computation
-        if warning and (subgraph or variables):
-            if subgraph:
-                num_specified = sum([len(sg) for sg in subgraph])
-            else:
-                num_specified = len(variables)
-            if len(selected_variables) < num_specified:
-                print("warning: not all selected variables participate in cost computation")
 
         # gradients
-        selected_variables = list(selected_variables)
-        grads = [ng.deriv(batch_cost, v) / batch_size for v in selected_variables]
+        grads = [ng.deriv(batch_cost, v) / batch_size for v in variables]
         scale_factor = clip_gradient_norm(grads, self.gradient_clip_norm)
 
         # updates
-        for variable, grad in zip(selected_variables, grads):
+        for variable, grad in zip(variables, grads):
             updates = self.variable_update(variable, grad, scale_factor)
             all_updates.append(updates)
         updates = ng.doall(all_updates)
         grads = ng.doall(grads)
         return ng.sequential([grads, updates, 0])
-
-    def _pre_call_hook(self):
-        pass
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
@@ -342,16 +331,24 @@ class Adam(LearningRateOptimizer):
                                                    Defaults to None.
         """
         super(Adam, self).__init__(learning_rate, **kwargs)
-        self.beta_1 = ng.constant(beta_1, dtype=np.float32)
-        self.beta_2 = ng.constant(beta_2, dtype=np.float32)
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
         self.epsilon = epsilon
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
-        self.t = ng.persistent_tensor(axes=(), initial_value=0)
 
-    def _pre_call_hook(self):
+    @wrap_layer
+    def __call__(self, *args, **kwargs):
+
+        if len(self.ops) == 0:
+            self.beta_1 = ng.constant(self.beta_1, dtype=np.float32)
+            self.beta_2 = ng.constant(self.beta_2, dtype=np.float32)
+            self.t = ng.persistent_tensor(axes=(), initial_value=0)
+
         self.t = ng.sequential([ng.assign(self.t, self.t + 1), self.t])
-        self.ell = self.lrate * ng.sqrt(1 - self.beta_2**self.t) / (1 - self.beta_1**self.t)
+        self.ell = self.lrate * ng.sqrt(1 - self.beta_2 ** self.t) / (1 - self.beta_1 ** self.t)
+
+        return super(Adam, self).__call__(*args, **kwargs)
 
     def variable_update(self, variable, grad, scale_factor):
         m = ng.persistent_tensor(axes=grad.axes, initial_value=0.)

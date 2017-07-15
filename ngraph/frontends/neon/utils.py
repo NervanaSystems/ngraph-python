@@ -7,7 +7,7 @@ from builtins import object
 import functools
 from cachetools import cached, keys
 from contextlib import contextmanager
-from ngraph.util.names import NameableValue
+from ngraph.util.names import NameableValue, name_scope
 
 
 def make_convolution_placeholder(shape=None):
@@ -24,141 +24,147 @@ def make_convolution_placeholder(shape=None):
     return x
 
 
-def wrap_layer(cache_key=keys.hashkey):
-    """
-    A decorator for the __call__ method of neon layers. Supports caching of the output
-    using a specified caching function.
-
-    Arguments:
-        cache_key (function): A function to use for determining the cache's hashkey.
-                              See cachetools.keys.hashkey
-    """
-
-    def create_decorator(f):
-        @cached({}, key=cache_key)
-        @functools.wraps(f)
-        def layer_wrapper(self, in_obj, *inputs, **kwargs):
-            with ng.Op.all_ops() as ops:
-                output = f(self, in_obj, *inputs, **kwargs)
-            # TODO: Ensure that this matches the tensorflow "scope" spec for use in tensorboard
-            for op in ops:
-                if "neon_layer" not in op.metadata:
-                    op.metadata["neon_layer"] = self.name
-                else:
-                    op.metadata["neon_layer"] = self.name + "/" + op.metadata["neon_layer"]
-            self._subgraph.ops.append(ops)
-
-            return output
-
-        return layer_wrapper
-
-    return create_decorator
-
-
 @contextmanager
-def scope_ops(name=None, **metadata):
+def scope_ops(name=None, mode=None, subgraph=None, metadata=None):
     """
     All ops created within the context manager will be added to a subgraph
 
     Arguments:
-        name (str): neon layer name added to metadata
-        
-        Any additional key-value pairs are added as metadata on all captured ops
+        name (str): variable scope to use for all created ops
+        mode (str): mode (e.g. "inference", "training") to annotate on all created ops
+        subgraph (SubGraph): subgraph instance to add ops to. If not provided, one will be created
+        metadata (dict): a dictionary of metadata to add to all created ops
 
-    Returns:  # RP: doesn't really "return" SubGraph; yielded by context manager
+    Yields:
         instance of SubGraph
     """
+    if subgraph is None:
+        subgraph = SubGraph()
 
-    subgraph = SubGraph()
-    with ng.Op.all_ops() as ops:
-        yield (subgraph)
+    if metadata is None:
+        metadata = dict()
 
-    if name is not None:
-        for op in ops:
-            if "neon_layer" not in op.metadata:
-                op.metadata["neon_layer"] = name
-            else:
-                op.metadata["neon_layer"] = name + "/" + op.metadata["neon_layer"]
-            op.metadata.update(**metadata)
+    if mode is not None:
+        metadata["mode"] = mode
 
-    subgraph.ops.append(ops)
+    with name_scope(name=name, reuse_scope=True):
+        with ng.Op.all_ops() as ops:
+            with ng.metadata(**metadata):
+                yield (subgraph)
 
-
-def _cache_if_initialized(subgraph):
-    # TODO: Should subgraph.ops be mutable?
-    return keys.hashkey(subgraph, len(subgraph.ops) > 0)
+    subgraph.ops.extend(ops)
 
 
-class OpList(NameableValue):
+def _cache_ops_length(graph):
+    return keys.hashkey(graph, len(graph.ops))
+
+
+class ComputationalGraph(object):
+
     def __init__(self, ops=None, **kwargs):
         """
-        A connected subset of all ops in the computational graph
-
+        A representation of connected set of ops forming a computational graph
+        
         Arguments:
-            ops (OrderedSet): An OrderedSet of ops
+            ops (list): A list of ops. If not provided, all subsequently created ops will be added. 
         """
-        super(OpList, self).__init__(**kwargs)
-        self.ops = list()
-        if ops is not None:
-            self.ops.append(ops)
+        if ops is None:
+            ops = list()
+            all_ops = ng.Op.get_all_ops()
+            all_ops.append(ops)
+        self.ops = ops
 
     def __iter__(self):
-
-        if len(self.ops) > 0:
-            return iter(self.ops[0])
-        else:
-            return iter([])
+        return iter(self.ops)
 
     @property
-    @cached({}, key=_cache_if_initialized)
+    @cached({}, key=_cache_ops_length)
     def variables(self):
         """
-        An OpList of all trainable variables created in this layer
+        A dictionary of all trainable variables as name:variable pairs
         """
-        if len(self.ops):
-            return OpList(OrderedSet(op.tensor for op in self.ops[0] if op.tensor.is_trainable))
-        else:
-            return None
+        return {op.tensor.name: op.tensor for op in self if op.tensor.is_trainable}
 
-    @cached({}, key=_cache_if_initialized)
+    @property
+    @cached({}, key=_cache_ops_length)
+    def placeholders(self):
+        """
+        A dictionary of all placeholder ops as name:op pairs
+        """
+        return {op.tensor.name: op.tensor for op in self if op.tensor.is_placeholder}
+
+    @property
+    @cached({}, key=_cache_ops_length)
+    def computations(self):
+        """
+        A dictionary of all defined computations as name:computation pairs
+        """
+        # return {op.name: op for op in self.select("ComputationOp")}
+        return {op.name: op for op in self if isinstance(op, ng.ComputationOp)}
+
+    @property
+    @cached({}, key=_cache_ops_length)
+    def inputs(self):
+        return self.placeholders
+
+    @property
+    @cached({}, key=_cache_ops_length)
+    def scopes(self):
+        #TODO: How to extract nested values from the nested xml
+        # scopes = [selected.root.attrib["id"] for selected in self._to_xml().css(".scope")]
+        # scopes = {scope_name: SubGraph(self.select("[scope={}]".format(scope_name)))
+        #           for scope_name in scopes}
+
+        scopes = dict()
+        for op in self.select("[scope]"):
+            scope_name = op.scope.name
+            scopes.setdefault(scope_name, SubGraph()).ops.append(op)
+
+        return scopes
+
+    @property
+    @cached({}, key=_cache_ops_length)
+    def modes(self):
+        modes = dict()
+        for op in self.select("[mode]"):
+            mode_name = op.metadata["mode"]
+            modes.setdefault(mode_name, list()).append(op)
+
+        return {mode: ComputationalGraph(ng.Op.all_op_references(ops)) for mode, ops in modes.items()}
+
+    @cached({}, key=_cache_ops_length)
     def _to_xml(self):
-
-        nest_key = "neon_layer"
-
         xml = ['<?xml version="1.0" encoding="UTF-8" ?>',
                '<subgraph>']
+        # __ops is a list of ops at any specific nesting level
         xml_dict = {"__ops": list()}
 
+        # TODO: Should xml_dict be an ordered dictionary?
+
         def unravel_join(xml):
+            """
+            Unravels a dictionary of dictionaries and joins all of the strings
+            """
             unraveled = xml.pop("__ops")
             for key, subxml in xml.items():
-                unraveled.append("<{}>".format(key))
+                unraveled.append("<{key} id={key} class=scope>".format(key=key))
                 unraveled.append(unravel_join(subxml))
                 unraveled.append("</{}>".format(key))
             return "\n".join(unraveled)
 
-        def nest_xml(op_xml, nesting, xml_dict):
-            nest_list = nesting.split("/")
+        def nest_xml(op_xml, scope):
+            """
+            Places op_xml at the right nesting level, creating levels if necessary.
+            """
             start_dict = xml_dict
-            if nesting is not None:
+            if scope is not None:
+                nest_list = scope.name.split("/")
                 for key in nest_list:
-                    start_dict = start_dict.setdefault(key.split("_")[0], {"__ops": list()})
+                    start_dict = start_dict.setdefault(key, {"__ops": list()})
             start_dict["__ops"].append(op_xml)
 
-        for index, op in enumerate(self.ops[0]):
-            nesting = None
-
-            element = op.__class__.__name__
-            op_xml = ["<{} op_index={} id={}".format(element, index, op.name)]
-            for attr, val in op.metadata.items():
-                if attr == "label":
-                    attr = "class"
-                if attr == nest_key:
-                    nesting = val
-                    continue
-                op_xml.append("{}={}".format(str(attr), str(val)))
-            op_xml.append("></{}>".format(element))
-            nest_xml("\n".join(op_xml), nesting, xml_dict)
+        for op in self:
+            nest_xml(op._xml_description(), op.scope)
 
         xml.append(unravel_join(xml_dict))
         xml.append("</subgraph>")
@@ -166,7 +172,7 @@ class OpList(NameableValue):
 
     def select(self, css):
         """
-        Select ops from the subgraph using css-like selectors. The available selectors and corresponding op 
+        Select ops from the subgraph using css-like selectors. The available selectors and corresponding op
         attributes are:
             - element: Op type
             - id: Op name
@@ -174,7 +180,7 @@ class OpList(NameableValue):
             - attribute: Any key-value pair from op metadata
 
         Arguments:
-            css (str): A css selector string 
+            css (str): A css selector string
 
         Returns:
             list of ops
@@ -186,81 +192,99 @@ class OpList(NameableValue):
             # Get the op named "conv_filter'
             subgraph.select("#conv_filter")
 
-            # Get all TensorValueOp's
+            # Get all TensorValueOps
             subgraph.select("TensorValueOp")
 
             # Get all ops with metadata "key=value"
             subgraph.select("[key=value]")
         """
 
-        if len(self.ops) > 0:
+        ops = list()
+        for selected in self._to_xml().css(css):
+            op = self._selector_to_op(selected)
+            if op is not None:
+                ops.append(op)
+
+        return ops
+
+    @staticmethod
+    def _selector_to_op(selector):
+        op = selector.root.attrib.get("id", None)
+        if op is not None:
+            op = NameableValue.get_object_by_name(op)
+
+        return op
+
+
+class SubGraph(ComputationalGraph):
+
+    def __init__(self, ops=None, **kwargs):
+        """
+        A representation of connected subset of ops from the full computational graph
+        Arguments:
+            ops (list): An list of ops
+        """
+
+        if ops is None:
             ops = list()
-            for selected in self._to_xml().css(css):
-                if "op_index" in selected.root.attrib:
-                    ops.append(self.ops[0][int(selected.root.attrib["op_index"])])
-
-        return OpList(ops)
-
-
-class SubGraph(OpList):
-
-    def __init__(self, **kwargs):
-        super(SubGraph, self).__init__(**kwargs)
+        super(SubGraph, self).__init__(ops=ops, **kwargs)
 
     @property
-    @cached({}, key=_cache_if_initialized)
+    @cached({}, key=_cache_ops_length)
     def inputs(self):
         """
-        An OrderedSet of input ops to this layer
+        A list of input ops to this subgraph. Inputs are defined as matching 1 of 2 criteria:
+            1. Placeholder ops
+            2. Arguments to ops in the subgraph that aren't themselves in the subgraph
         """
-        if len(self.ops):
-            inputs = OrderedSet()
-            for op in self.ops[0]:
-                if op.tensor.is_trainable:
-                    continue
-                if op.tensor.is_placeholder:
-                    inputs.add(op.tensor)
-                else:
-                    for arg in op.args:
-                        if arg not in self.ops[0]:
-                            inputs.add(arg)
+        # TODO: Should these be OrderedDicts?
 
-            return OpList(inputs)
-        else:
-            return None
+        inputs = dict()
+        for op in self:
+            if op.tensor.is_trainable:
+                continue
+            if op.tensor.is_placeholder:
+                inputs[op.tensor.name] = op.tensor
+            else:
+                for arg in op.args:
+                    if arg not in self.ops:
+                        inputs[arg.name] = arg
+
+        return inputs
 
     @property
-    @cached({}, key=_cache_if_initialized)
+    @cached({}, key=_cache_ops_length)
     def outputs(self):
         """
-        An OrderedSet of output ops from this layer.
-        """
-        if len(self.ops):
-            outputs = OrderedSet(self.ops[0])
-            for op in self.ops[0]:
-                if isinstance(op, ng.AssignableTensorOp):
-                    outputs.discard(op)
-                else:
-                    for arg_op in op.args + tuple(op.control_deps):
-                        outputs.discard(arg_op)
+        A list of output ops from this subgraph. Outputs are defined as matching 1 of 2 criteria:
+            1. Ops in the subgraph that aren't depended on by any other ops in the subgraph
+            2. Not a variable or placeholder op
 
-            return OpList(outputs)
-        else:
-            return None
+        """
+        op_args = set()
+        ops = set()
+        for op in self:
+            if isinstance(op, ng.AssignableTensorOp):
+                continue
+            ops.add(op)
+            for arg_op in op.args + tuple(op.control_deps):
+                op_args.add(arg_op)
+
+        return {op.name: op for op in set.difference(ops, op_args)}
 
     @property
-    @cached({}, key=_cache_if_initialized)
+    @cached({}, key=_cache_ops_length)
     def side_effects(self):
         """
-        An OrderedSet of side-effect ops in this layer
-        """
-        if len(self.ops):
-            side_effects = OrderedSet()
-            for op in self.ops[0]:
-                for dep in op.control_deps:
-                    if dep is not op.tensor:
-                        side_effects.add(dep)
+        A list of side effect ops from this subgraph.
 
-            return OpList(side_effects)
-        else:
-            return None
+        Returns:
+            OpList of side effect ops from the subgraph
+        """
+        side_effects = dict()
+        for op in self.ops:
+            for dep in op.control_deps:
+                if dep is not op.tensor:
+                    side_effects[dep.name] = dep
+
+        return side_effects

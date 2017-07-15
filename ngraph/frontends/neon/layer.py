@@ -19,9 +19,10 @@ import collections
 from contextlib import contextmanager
 from cachetools import cached, keys
 import ngraph as ng
-from ngraph.util.names import NameableValue
+from ngraph.util.names import NameScope
+from ngraph.frontends.neon.initializer import get_variable
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
-from ngraph.frontends.neon.utils import SubGraph, wrap_layer
+from ngraph.frontends.neon.utils import SubGraph, scope_ops
 from orderedset import OrderedSet
 import parsel
 
@@ -30,6 +31,29 @@ import parsel
 # Hopefully these can be used to efficiently display and filter the computational graph
 LABELS = {"weight": "weight",
           "bias": "bias"}
+
+
+def wrap_layer(f):
+    """
+    A decorator for the __call__ method of neon layers. This adds all ops created during the __call__ to the 
+    layer's scope and adds any layer metadata.
+    """
+
+    @functools.wraps(f)
+    def layer_wrapper(self, in_obj, *inputs, **kwargs):
+        metadata = getattr(self, "metadata", dict())
+        # mode is an optional string that separates created graphs into distinct use cases.
+        # e.g. inference mode vs training mode
+        mode = kwargs.pop("mode", None)
+        if (mode is None) and Layer.inference_mode:
+            mode = "inference"
+
+        with scope_ops(self.name, subgraph=self, mode=mode, metadata=metadata):
+            output = f(self, in_obj, *inputs, **kwargs)
+
+        return output
+
+    return layer_wrapper
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -65,7 +89,7 @@ def output_dim_deconv(X, S, padding, strides, dilation=1):
     return max_size
 
 
-class Layer(NameableValue):
+class Layer(SubGraph):
     """
     Base class from which all other layers should inherit.
 
@@ -85,9 +109,12 @@ class Layer(NameableValue):
     inference_mode = False
     metadata = {}
 
-    def __init__(self, name=None):
-        super(Layer, self).__init__(name=name, graph_label_type="neon_layer")
-        self._subgraph = SubGraph(name=self.name)
+    def __init__(self, name=None, inherit_scope=None):
+        super(Layer, self).__init__()
+        if name is None:
+            name = type(self).__name__
+        self.scope = NameScope(name=name)
+        self.name = self.scope.name
 
     def __call__(self, in_obj, reuse=True):
         raise NotImplementedError()
@@ -97,27 +124,7 @@ class Layer(NameableValue):
         """
         True if the layer's __call__ method has been successfully executed
         """
-        return len(self._subgraph.ops) > 0
-
-    @property
-    def ops(self):
-        return self._subgraph.ops
-
-    @property
-    def inputs(self):
-        return self._subgraph.inputs
-
-    @property
-    def variables(self):
-        return self._subgraph.variables
-
-    @property
-    def side_effects(self):
-        return self._subgraph.side_effects
-
-    @property
-    def scope(self):
-        return self._subgraph.name
+        return len(self.ops) > 0
 
     @staticmethod
     @contextmanager
@@ -153,7 +160,7 @@ class Preprocess(Layer):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
-    @wrap_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer
     def __call__(self, in_obj, **kwargs):
         return self.functor(in_obj)
 
@@ -243,7 +250,7 @@ class Linear(Layer):
         self.init = init
         self.W = None
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj, reuse=True):
 
         if not self.initialized:
@@ -251,7 +258,7 @@ class Linear(Layer):
                                        in_obj.axes.feature_axes()),
                                  initial_value=self.init,
                                  metadata={"label": LABELS["weight"]},
-                                 ).named('LinW')
+                                 ).named('W')
 
         # in the event that the in_obj feature axes and the output feature axes
         # share axis names, self.W will have duplicate axes, which are not
@@ -298,7 +305,7 @@ class LookupTable(Layer):
             init_w[:, pad_idx] = 0
         return init_w
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         """
         Arguments:
@@ -405,7 +412,7 @@ class ConvBase(Layer):
                               self.W,
                               axes=self._output_axes(in_obj))
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         in_obj = reorder_spatial_axes(in_obj)
 
@@ -540,7 +547,7 @@ class Activation(Layer):
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         # An activation layer with no transform defaults to identity
         if self.transform:
@@ -575,7 +582,7 @@ class PoolBase(Layer):
 
         self.o_axes = None
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
@@ -636,7 +643,7 @@ class Bias(Layer):
         self.init = init
         self.shared = shared
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         if self.init:
             if not self.initialized:
@@ -662,12 +669,12 @@ class Affine(Layer):
         self.bias_init = bias_init
         self.activation = activation
         self.batch_norm = batch_norm
-        self.linear = Linear(init=weight_init, nout=nout, axes=axes, **kwargs)
+        self.linear = Linear(init=weight_init, nout=nout, axes=axes)
         self.bias = Bias(init=bias_init)
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
         b_out = self.bias(l_out)
@@ -692,7 +699,7 @@ class Convolution(Layer):
         self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
                                 deconv=False, **kwargs)
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj):
         l_out = self.conv(in_obj)
         b_out = self.bias(l_out)
@@ -751,7 +758,7 @@ class BatchNorm(Layer):
         self.gmean = None
         self.gvar = None
 
-    @wrap_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer
     def __call__(self, in_obj):
 
         in_axes = in_obj.axes
@@ -762,7 +769,6 @@ class BatchNorm(Layer):
 
         out_axes = in_axes - red_axes
 
-        in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
         if not self.initialized:
             self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0)
             self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0)
@@ -773,6 +779,7 @@ class BatchNorm(Layer):
                                     initial_value=self.init_beta,
                                     metadata={"label": LABELS["bias"]}).named('beta')
 
+        in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
         xmean = ng.mean(in_obj, out_axes=out_axes)
         xvar = ng.variance(in_obj, out_axes=out_axes)
 
@@ -804,7 +811,7 @@ class Dropout(Layer):
         self.keep = keep
         self.mask = None
 
-    @wrap_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return self.keep * in_obj
@@ -913,7 +920,7 @@ class Recurrent(Layer):
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
-    @wrap_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1029,7 +1036,7 @@ class BiRNN(Layer):
                                  batch_norm=batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence, backward=True)
 
-    @wrap_layer()
+    @wrap_layer
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1152,7 +1159,7 @@ class LSTM(Recurrent):
         h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
-    @wrap_layer(cache_key=Layer.inference_mode_key)
+    @wrap_layer
     def __call__(self, in_obj, init_state=None, return_cell_state=False):
         """
         Sets shape based parameters of this layer given an input tuple or int

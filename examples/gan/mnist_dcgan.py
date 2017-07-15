@@ -102,43 +102,42 @@ noise_generator = Noise(train_set.ndata, shape=noise_dim + (args.batch_size,), s
 g_scope = 'generator'
 filter_init = GaussianInit(var=0.05)
 relu = Rectlin(slope=0)
-with Layer.variable_scope(g_scope) as scope:
-    deconv_layers = [Deconvolution((1, 1, 16), filter_init, strides=1, padding=0,
-                                   activation=relu, batch_norm=True),
-                     Deconvolution((3, 3, 192), filter_init, strides=1, padding=0,
-                                   activation=relu, batch_norm=True, deconv_out_shape=(1, 5, 5)),
-                     Deconvolution((3, 3, 192), filter_init, strides=2, padding=0,
-                                   activation=relu, batch_norm=True, deconv_out_shape=(1, 11, 11)),
-                     Deconvolution((3, 3, 192), filter_init, strides=1, padding=0,
-                                   activation=relu, batch_norm=True, deconv_out_shape=(1, 13, 13)),
-                     Deconvolution((3, 3, 96), filter_init, strides=2, padding=0,
-                                   activation=relu, batch_norm=True, deconv_out_shape=(1, 27, 27)),
-                     Deconvolution((3, 3, 96), filter_init, strides=1, padding=0,
-                                   activation=relu, batch_norm=True, deconv_out_shape=(1, 28, 28)),
-                     Deconvolution((3, 3, 1), filter_init, strides=1, padding=1,
-                                   activation=Tanh(), batch_norm=False,
-                                   deconv_out_shape=(1, 28, 28))]
-    generator = Sequential(deconv_layers)
+
+deconv_layers = [Deconvolution((1, 1, 16), filter_init, strides=1, padding=0,
+                               activation=relu, batch_norm=True),
+                 Deconvolution((3, 3, 192), filter_init, strides=1, padding=0,
+                               activation=relu, batch_norm=True, deconv_out_shape=(1, 5, 5)),
+                 Deconvolution((3, 3, 192), filter_init, strides=2, padding=0,
+                               activation=relu, batch_norm=True, deconv_out_shape=(1, 11, 11)),
+                 Deconvolution((3, 3, 192), filter_init, strides=1, padding=0,
+                               activation=relu, batch_norm=True, deconv_out_shape=(1, 13, 13)),
+                 Deconvolution((3, 3, 96), filter_init, strides=2, padding=0,
+                               activation=relu, batch_norm=True, deconv_out_shape=(1, 27, 27)),
+                 Deconvolution((3, 3, 96), filter_init, strides=1, padding=0,
+                               activation=relu, batch_norm=True, deconv_out_shape=(1, 28, 28)),
+                 Deconvolution((3, 3, 1), filter_init, strides=1, padding=1,
+                               activation=Tanh(), batch_norm=False,
+                               deconv_out_shape=(1, 28, 28))]
+generator = Sequential(deconv_layers, name="Generator")
 
 # discriminator network
-d_scope = 'discriminator'
 lrelu = Rectlin(slope=0.1)
-with Layer.variable_scope(d_scope) as scope:
-    conv_layers = [Convolution((3, 3, 96), filter_init, strides=1, padding=1,
-                               activation=lrelu, batch_norm=True),
-                   Convolution((3, 3, 96), filter_init, strides=2, padding=1,
-                               activation=lrelu, batch_norm=True),
-                   Convolution((3, 3, 192), filter_init, strides=1, padding=1,
-                               activation=lrelu, batch_norm=True),
-                   Convolution((3, 3, 192), filter_init, strides=2, padding=1,
-                               activation=lrelu, batch_norm=True),
-                   Convolution((3, 3, 192), filter_init, strides=1, padding=1,
-                               activation=lrelu, batch_norm=True),
-                   Convolution((1, 1, 16), filter_init, strides=1, padding=0,
-                               activation=lrelu, batch_norm=True),
-                   Convolution((7, 7, 1), filter_init, strides=1, padding=0,
-                               activation=Logistic(), batch_norm=False)]
-    discriminator = Sequential(conv_layers)
+
+conv_layers = [Convolution((3, 3, 96), filter_init, strides=1, padding=1,
+                           activation=lrelu, batch_norm=True),
+               Convolution((3, 3, 96), filter_init, strides=2, padding=1,
+                           activation=lrelu, batch_norm=True),
+               Convolution((3, 3, 192), filter_init, strides=1, padding=1,
+                           activation=lrelu, batch_norm=True),
+               Convolution((3, 3, 192), filter_init, strides=2, padding=1,
+                           activation=lrelu, batch_norm=True),
+               Convolution((3, 3, 192), filter_init, strides=1, padding=1,
+                           activation=lrelu, batch_norm=True),
+               Convolution((1, 1, 16), filter_init, strides=1, padding=0,
+                           activation=lrelu, batch_norm=True),
+               Convolution((7, 7, 1), filter_init, strides=1, padding=0,
+                           activation=Logistic(), batch_norm=False)]
+discriminator = Sequential(conv_layers, name="Discriminator")
 
 # noise placeholder
 N = ng.make_axis(name='N', length=args.batch_size)
@@ -168,8 +167,8 @@ mean_cost_g = ng.mean(loss_g, out_axes=[])
 
 optimizer_d = make_optimizer(name='discriminator_optimizer')
 optimizer_g = make_optimizer(name='generator_optimizer')
-updates_d = optimizer_d(loss_d, variable_scope=d_scope)
-updates_g = optimizer_g(loss_g, variable_scope=g_scope)
+updates_d = optimizer_d(loss_d, variables=list(discriminator.variables.values()))
+updates_g = optimizer_g(loss_g, variables=list(generator.variables.values()))
 
 # compile computations
 generator_train_inputs = {'noise': z}
