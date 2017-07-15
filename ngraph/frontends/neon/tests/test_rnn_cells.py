@@ -20,7 +20,7 @@ and backward pass.
 The test runs a single layer of recurrent layer and compare numerical values
 The reference model handles batch_size as 1 only
 
-The following are made sure to be the same in both recurrent layers
+The following values are required to be the same for both recurrent layers
     -   initial h values (all zeros)
     -   initial W, b (ones or random values)
     -   input data (random data matrix)
@@ -64,7 +64,7 @@ def weight_initializer(request):
 @pytest.fixture(params=["zeros"])
 def bias_initializer(request):
     # TODO: Add useful bias init.
-    # For now, bias is initialized to 0 since there is not control within the RNN layer
+    # TODO: add more bias initializers for testing
     if request.param == "zeros":
         return lambda hidden_axis: np.zeros(hidden_axis.length)
 
