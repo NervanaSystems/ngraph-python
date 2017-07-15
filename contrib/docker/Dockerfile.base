@@ -32,11 +32,6 @@ ENV PATH="/usr/local/mpi/bin:$PATH"
 ENV LD_LIBRARY_PATH="/usr/local/mpi/lib:$LD_LIBRARY_PATH"
 ENV MPI_ROOT="/usr/local/mpi"
 
-# Get and install CNTK Binary Distribution
-RUN if [ "$(python -c 'import sys; print(sys.version_info[0])')" = "3" ]; then \
-    pip install https://cntk.ai/PythonWheel/CPU-Only/cntk-2.0-cp34-cp34m-linux_x86_64.whl ; else \
-    pip install --trusted-host cntk.ai https://cntk.ai/PythonWheel/CPU-Only/cntk-2.0-cp27-cp27mu-linux_x86_64.whl ; fi
-
 # build ngraph requirements
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
