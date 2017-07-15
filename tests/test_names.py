@@ -1,5 +1,4 @@
-import pytest
-from ngraph.util.names import ScopedNameableValue, NameableValue, NameScope, name_scope
+from ngraph.util.names import ScopedNameableValue, name_scope
 
 
 def test_nested_namescope():

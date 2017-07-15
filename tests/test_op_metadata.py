@@ -15,6 +15,7 @@
 import ngraph as ng
 from ngraph.util.names import NameableValue
 
+
 class Dummy(NameableValue):
     metadata = {"layer_type": "convolution"}
 

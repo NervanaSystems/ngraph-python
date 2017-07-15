@@ -147,7 +147,7 @@ def test_scope_ops(input_placeholder):
         z = y + 4
         v1 = ng.persistent_tensor(w.axes, initial_value=0, name="effect1")
         v2 = ng.persistent_tensor(w.axes, initial_value=0, name="effect2")
-        o = ng.sequential([ng.assign(v1, w), ng.assign(v2, w), z]).named("output")
+        ng.sequential([ng.assign(v1, w), ng.assign(v2, w), z]).named("output")
 
     assert len(subgraph.inputs) == 1
     assert input_placeholder.name in subgraph.inputs
@@ -168,7 +168,7 @@ def test_mode_setting(input_placeholder):
     """
     w = ng.variable(ng.make_axis(), initial_value=1, name="W")
     with scope_ops(name="mode_scope", mode="test") as subgraph:
-        y = w * input_placeholder
+        w * input_placeholder
 
     for op in subgraph:
         if not isinstance(op, ng.TensorValueOp):
@@ -188,7 +188,7 @@ def test_layer_mode_setting(input_placeholder):
     """
     layer = SimpleLayer()
     with Layer.inference_mode_on():
-        out = layer(input_placeholder)
+        layer(input_placeholder)
 
     assert "inference" in layer.modes
     # Make sure all ops in subgraph are in mode
@@ -242,7 +242,7 @@ def test_subgraph_scopes_attribute(input_placeholder):
     subgraph = SubGraph()
     with scope_ops("scope1", subgraph=subgraph):
         w1 = ng.variable(ng.make_axis(), initial_value=1)
-        y1 = w1 * input_placeholder
+        w1 * input_placeholder
 
     assert len(subgraph.scopes) == 1
     assert "scope1" in subgraph.scopes
@@ -250,7 +250,7 @@ def test_subgraph_scopes_attribute(input_placeholder):
 
     with scope_ops("scope2", subgraph=subgraph):
         w2 = ng.variable(ng.make_axis(), initial_value=1)
-        y2 = w2 * input_placeholder
+        w2 * input_placeholder
 
     assert len(subgraph.scopes) == 2
     assert "scope2" in subgraph.scopes

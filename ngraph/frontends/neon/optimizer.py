@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
-from builtins import object, zip
+from __future__ import division, absolute_import
 import logging
 import numpy as np
 import ngraph as ng
@@ -23,7 +22,7 @@ import ngraph.frontends.common.learning_rate_policies as lrp
 from ngraph.frontends.neon.layer import wrap_layer
 from ngraph.frontends.neon.utils import SubGraph, scope_ops
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def get_learning_rate_policy_callback(lr_params):
@@ -149,7 +148,6 @@ class LearningRateOptimizer(Optimizer):
             selected_variables = all_variables & set(variables)
             if len(selected_variables) < len(variables):
                 logger.warn("not all selected variables participate in cost computation")
-
 
         # gradients
         grads = [ng.deriv(batch_cost, v) / batch_size for v in variables]

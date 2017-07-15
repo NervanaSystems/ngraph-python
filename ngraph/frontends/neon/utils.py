@@ -1,10 +1,8 @@
 from __future__ import absolute_import
 import ngraph as ng
 from .axis import ax
-from orderedset import OrderedSet
 import parsel
-from builtins import object
-import functools
+from builtins import object, unicode
 from cachetools import cached, keys
 from contextlib import contextmanager
 from ngraph.util.names import NameableValue, name_scope
@@ -64,9 +62,9 @@ class ComputationalGraph(object):
     def __init__(self, ops=None, **kwargs):
         """
         A representation of connected set of ops forming a computational graph
-        
+
         Arguments:
-            ops (list): A list of ops. If not provided, all subsequently created ops will be added. 
+            ops (list): A list of ops. If not provided, all subsequently created ops will be added.
         """
         if ops is None:
             ops = list()
@@ -110,7 +108,7 @@ class ComputationalGraph(object):
     @property
     @cached({}, key=_cache_ops_length)
     def scopes(self):
-        #TODO: How to extract nested values from the nested xml
+        # TODO: How to extract nested values from the nested xml
         # scopes = [selected.root.attrib["id"] for selected in self._to_xml().css(".scope")]
         # scopes = {scope_name: SubGraph(self.select("[scope={}]".format(scope_name)))
         #           for scope_name in scopes}
@@ -130,7 +128,8 @@ class ComputationalGraph(object):
             mode_name = op.metadata["mode"]
             modes.setdefault(mode_name, list()).append(op)
 
-        return {mode: ComputationalGraph(ng.Op.all_op_references(ops)) for mode, ops in modes.items()}
+        return {mode: ComputationalGraph(ng.Op.all_op_references(ops))
+                for mode, ops in modes.items()}
 
     @cached({}, key=_cache_ops_length)
     def _to_xml(self):
@@ -172,8 +171,8 @@ class ComputationalGraph(object):
 
     def select(self, css):
         """
-        Select ops from the subgraph using css-like selectors. The available selectors and corresponding op
-        attributes are:
+        Select ops from the subgraph using css-like selectors. The available selectors
+        and corresponding op attributes are:
             - element: Op type
             - id: Op name
             - class: Op label

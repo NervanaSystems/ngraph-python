@@ -20,8 +20,9 @@ import numpy as np
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import Sequential, Layer, Deconvolution, Convolution, \
-    Rectlin, Logistic, Tanh, GaussianInit, Adam, ArrayIterator, make_bound_computation
+from ngraph.frontends.neon import (Sequential, Deconvolution, Convolution,
+                                   Rectlin, Logistic, Tanh, GaussianInit,
+                                   Adam, ArrayIterator, make_bound_computation)
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import MNIST
 try:

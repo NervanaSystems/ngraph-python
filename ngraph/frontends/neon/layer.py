@@ -13,18 +13,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function, absolute_import
-from builtins import object
 import functools
 import collections
 from contextlib import contextmanager
-from cachetools import cached, keys
 import ngraph as ng
 from ngraph.util.names import NameScope
-from ngraph.frontends.neon.initializer import get_variable
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.utils import SubGraph, scope_ops
-from orderedset import OrderedSet
-import parsel
 
 
 # Labels should be added as metadata on specific ops and variables
@@ -35,8 +30,8 @@ LABELS = {"weight": "weight",
 
 def wrap_layer(f):
     """
-    A decorator for the __call__ method of neon layers. This adds all ops created during the __call__ to the 
-    layer's scope and adds any layer metadata.
+    A decorator for the __call__ method of neon layers. This adds all ops created
+    during the __call__ to the layer's scope and adds any layer metadata.
     """
 
     @functools.wraps(f)
@@ -141,15 +136,6 @@ class Layer(SubGraph):
         Layer.inference_mode = True
         yield Layer.inference_mode
         Layer.inference_mode = False
-
-    @staticmethod
-    def inference_mode_key(*args, **kwargs):
-        """
-        cachetools.cached key function to ensure that caching takes into account the current value
-        of Layer.inference_mode.
-        """
-
-        return keys.hashkey(inference_mode=Layer.inference_mode, *args, **kwargs)
 
 
 class Preprocess(Layer):

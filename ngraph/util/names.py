@@ -54,9 +54,9 @@ class NameableValue(object):
     def get_object_by_name(name):
         """
         Returns the object with the given name, if it hasn't been garbage collected.
-        
+
         Arguments:
-            name (str): Unique object name  
+            name (str): Unique object name
 
         Returns:
             instance of NameableValue
@@ -173,6 +173,7 @@ def get_full_scope_name():
     else:
         return None
 
+
 @contextmanager
 def name_scope(name=None, reuse_scope=False, nest_scope=False):
     """
@@ -230,4 +231,3 @@ class NameScope(NameableValue):
             pass
 
         return NameScope(name)
-
