@@ -24,32 +24,17 @@ from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
 import numpy as np
 import argparse
+from examples.cifar10.cifar10_msra import cifar_mean_subtract, conv_params
 
 
 # TODO: Refactor mini_resnet #1863
-def cifar_mean_subtract(x):
-    bgr_mean = ng.persistent_tensor(
-        axes=[x.axes.channel_axis()],
-        initial_value=np.array([104., 119., 127.]))
-    return (x - bgr_mean) / 255.
-
-
-def conv_params(fsize, nfm, strides=1, relu=False, batch_norm=False):
-    return dict(fshape=(fsize, fsize, nfm),
-                strides=strides,
-                padding=(1 if fsize > 1 else 0),
-                activation=(Rectlin() if relu else None),
-                filter_init=KaimingInit(),
-                batch_norm=batch_norm)
-
-
 class f_module(object):
     def __init__(self, nfm, first=False, strides=1, batch_norm=False):
 
         self.trunk = None
         self.side_path = None
-        main_path = [Convolution(**conv_params(1, nfm, strides=strides)),
-                     Convolution(**conv_params(3, nfm)),
+        main_path = [Convolution(**conv_params(1, nfm, strides=strides, batch_norm=batch_norm)),
+                     Convolution(**conv_params(3, nfm, batch_norm=batch_norm)),
                      Convolution(**conv_params(1, nfm * 4, relu=False, batch_norm=False))]
 
         if first or strides == 2:
