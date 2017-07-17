@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 
+
 STARTUP_TIME = 0.5
 
 
@@ -10,9 +11,8 @@ class Launcher(object):
     execute mpirun cmd
     close process for mpirun
     """
-    def __init__(self, ports=None):
-        self.port_list = ports if ports else\
-            ['52051', '52052', '52053', '52054', '52055', '52056', '52057', '52058']
+    def __init__(self, ports):
+        self.port_list = ports
         self.mpirun_proc = None
 
     def launch(self):

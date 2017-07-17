@@ -32,6 +32,7 @@ from ngraph.transformers.base import ComputationGraphTransformer
 from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.base import make_transformer_factory
 from ngraph.transformers.hetr.mpilauncher import Launcher
+from ngraph.transformers.hetr.hetr_utils import get_available_ports
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
@@ -41,14 +42,14 @@ try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
 except Exception:
-    logging.error("Install mpi4py")
+    logging.error("mpi4py is not installed but required for HeTr")
     assert False
 
 try:
     assert subprocess.call("type mpirun", shell=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0
 except Exception:
-    logging.error("Install mpi command line utils")
+    logging.error("mpi command line utils are not installed but required for HeTr")
     assert False
 
 
@@ -325,9 +326,10 @@ class HetrTransformer(ComputationGraphTransformer):
                              CommunicationPass(self.send_nodes),
                              DistributedPass(self.send_nodes)]
 
-        self.mpilauncher = Launcher()
+        self.rpc_ports = get_available_ports()
+        self.rpc_port_idx = 0
+        self.mpilauncher = Launcher(self.rpc_ports)
         self.mpilauncher.launch()
-        self.port_idx = 0
 
     def close(self):
         self.mpilauncher.close()
@@ -350,8 +352,8 @@ class HetrTransformer(ComputationGraphTransformer):
             else:
                 from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
                 trans_client = RPCTransformerClient(tname,
-                                                    self.mpilauncher.port_list[self.port_idx])
-                self.port_idx += 1
+                                                    self.rpc_ports[self.rpc_port_idx])
+                self.rpc_port_idx += 1
             self.child_transformers[tname] = trans_client
 
     def transformer(self, tname):

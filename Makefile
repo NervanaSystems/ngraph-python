@@ -99,8 +99,7 @@ uninstall:
 
 uninstall_all: uninstall
 	pip uninstall -r gpu_requirements.txt -r test_requirements.txt \
-	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt \
-	-r multinode_requirements.txt
+	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt
 
 clean:
 	find . -name "*.py[co]" -type f -delete

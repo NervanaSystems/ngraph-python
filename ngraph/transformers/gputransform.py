@@ -368,7 +368,7 @@ class GPUKernelGroup(object):
             GPU elementwise kernels for this computation
     """
 
-    def __init__(self, transformer, name, comm):
+    def __init__(self, transformer, name, comm=None):
         self.transformer = transformer
         self.kernels = []
         self.name = name

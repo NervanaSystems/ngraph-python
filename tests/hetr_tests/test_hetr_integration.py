@@ -512,9 +512,6 @@ class ClosingHetrServers():
 
 
 def test_rpc_transformer():
-    if 'gpu' not in ngt.transformer_choices():
-        pytest.skip("multinode_requirements not available")
-
     rpc_client_list = list()
     port_list = ['50111', '50112']
     num_procs = len(port_list)
@@ -526,9 +523,6 @@ def test_rpc_transformer():
 
 
 def test_mpilauncher():
-    if 'gpu' not in ngt.transformer_choices():
-        pytest.skip("multinode_requirements not available")
-
     port_list = ['51111', '51112']
     num_procs = len(port_list)
     os.environ["HETR_SERVER_GPU_NUM"] = str(num_procs)
@@ -536,11 +530,15 @@ def test_mpilauncher():
     mpilauncher = Launcher(port_list)
     mpilauncher.launch()
 
-    # Check if process has terminated -- returns None if it hasn't completed
-    if mpilauncher.mpirun_proc.poll() is not None:
-        assert False
+    # Check if process has launched
+    assert mpilauncher.mpirun_proc.poll() is None
 
     mpilauncher.close()
 
-    if mpilauncher.mpirun_proc.poll() is None:
-        assert False
+    # Check if process has completed
+    assert mpilauncher.mpirun_proc.poll() is not None
+
+
+
+
+
