@@ -513,12 +513,12 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
         self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
-                    op.safe_name, op.fprop.forwarded.name, delta, filters, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
         self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={})",
-                    op.safe_name, op.fprop.forwarded.name, inputs, delta, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, inputs, delta, outputs)
 
     @generate_op.on_type(DeconvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
@@ -528,7 +528,7 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(DeconvDerivOp)
     def generate_op(self, op, outputs, delta, filters):
         self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                    op.safe_name, op.fprop.forwarded.name, delta, filters, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, filters, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
@@ -538,7 +538,7 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
         self.append("mkldnn.bprop_pool('{}', self.pool_slices['{}'], arrE={}, arrD={})",
-                    op.safe_name, op.fprop.forwarded.name, delta, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, outputs)
 
     @generate_op.on_type(LookupTableOp)
     def generate_op(self, op, outputs, lut, idx):
