@@ -101,10 +101,10 @@ def axes_to_protobuf(axes):
 
 def tensor_to_protobuf(tensor):
     pb_tensor = ops_pb.Tensor()
-    pb_tensor.dtype = dtype_to_protobuf(tensor.dtype)
-    pb_tensor.shape.extend(tensor.shape)
+    pb_tensor.info.dtype = dtype_to_protobuf(tensor.dtype)
+    pb_tensor.info.shape.extend(tensor.shape)
     if isinstance(tensor, (np.ndarray, np.generic)):
-        pb_tensor.raw_data = tensor.tobytes()
+        pb_tensor.data = tensor.tobytes()
     else:
         raise ValueError("Unknown tensor value of {}".format(tensor))
     return pb_tensor
@@ -117,8 +117,8 @@ def unhandled_scalar_value(value):
 
 def is_scalar_type(value):
     return value is None or \
-        isinstance(value, (str, six.text_type, float, bool, Axis, dict, slice, np.generic)
-                   + six.integer_types)
+        isinstance(value, (str, six.text_type, float, bool, Axis, dict, slice, np.generic) +
+                   six.integer_types)
 
 
 def assign_scalar(message, value):
@@ -334,13 +334,18 @@ def pb_to_dict(map_val):
             if key != '_ngraph_map_sentinel_'}
 
 
-def pb_to_tensor(pb_tensor):
-    np_dtype = pb_to_dtype(pb_tensor.dtype)
-    data = np.fromstring(pb_tensor.raw_data, dtype=np_dtype)
-    if len(pb_tensor.shape) == 0:
-        return np_dtype.type(data[0])
+def data_to_tensor(data, info):
+    np_dtype = pb_to_dtype(info.dtype)
+    data_array = np.fromstring(data, dtype=np_dtype)
+    # data_array = np.fromstring(''.join(data[:]), dtype=np_dtype)
+    if len(info.shape) == 0:
+        return data_array[0]
     else:
-        return np.array(data, dtype=np_dtype).reshape(pb_tensor.shape)
+        return data_array.reshape(info.shape)
+
+
+def pb_to_tensor(pb_tensor):
+    return data_to_tensor(pb_tensor.data, pb_tensor.info)
 
 
 def protobuf_scalar_to_python(val):
@@ -377,6 +382,7 @@ def protobuf_to_axes(msg):
 def protobuf_attr_to_python(val):
     if val.HasField('scalar'):
         return protobuf_scalar_to_python(val.scalar)
+
     if val.HasField('tensor'):
         return pb_to_tensor(val.tensor)
     elif val.HasField('repeated_scalar'):
