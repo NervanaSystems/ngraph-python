@@ -749,7 +749,7 @@ class Bias(Layer):
     def __call__(self, in_obj):
         if self.init:
             if not self.initialized:
-                w_axes = in_obj.axes.sample_axes()
+                w_axes = in_obj.axes.feature_axes()
                 if self.shared and in_obj.axes.channel_axis() is not None:
                     w_axes = ng.make_axes(in_obj.axes.channel_axis())
                 self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
