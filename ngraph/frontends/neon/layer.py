@@ -13,42 +13,17 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function, absolute_import
-import functools
 import collections
 from contextlib import contextmanager
 import ngraph as ng
-from ngraph.util.names import NameScope
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
-from ngraph.frontends.neon.utils import SubGraph, scope_ops
+from ngraph.frontends.neon.utils import SubGraph
 
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
 LABELS = {"weight": "weight",
           "bias": "bias"}
-
-
-def wrap_layer(f):
-    """
-    A decorator for the __call__ method of neon layers. This adds all ops created
-    during the __call__ to the layer's scope and adds any layer metadata.
-    """
-
-    @functools.wraps(f)
-    def layer_wrapper(self, in_obj, *inputs, **kwargs):
-        metadata = getattr(self, "metadata", dict())
-        # mode is an optional string that separates created graphs into distinct use cases.
-        # e.g. inference mode vs training mode
-        mode = kwargs.pop("mode", None)
-        if (mode is None) and Layer.inference_mode:
-            mode = "inference"
-
-        with scope_ops(self.name, subgraph=self, mode=mode, metadata=metadata):
-            output = f(self, in_obj, *inputs, **kwargs)
-
-        return output
-
-    return layer_wrapper
 
 
 def output_dim(X, S, padding, strides, pooling=False, dilation=1):
@@ -100,18 +75,13 @@ class Layer(SubGraph):
         inference_mode_key - cachetools hashing function that accounts for the value of
                              inference mode
     """
-
     inference_mode = False
     metadata = {}
 
-    def __init__(self, name=None, inherit_scope=None):
-        super(Layer, self).__init__()
-        if name is None:
-            name = type(self).__name__
-        self.scope = NameScope(name=name)
-        self.name = self.scope.name
+    def __init__(self, name=None, **kwargs):
+        super(Layer, self).__init__(name=name, **kwargs)
 
-    def __call__(self, in_obj, reuse=True):
+    def __call__(self, in_obj):
         raise NotImplementedError()
 
     @property
@@ -134,7 +104,8 @@ class Layer(SubGraph):
                 eval_loss = ng.squared_l2(target - model(input))
         """
         Layer.inference_mode = True
-        yield Layer.inference_mode
+        with ng.metadata(mode="inference"):
+            yield
         Layer.inference_mode = False
 
 
@@ -146,7 +117,7 @@ class Preprocess(Layer):
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj, **kwargs):
         return self.functor(in_obj)
 
@@ -236,7 +207,7 @@ class Linear(Layer):
         self.init = init
         self.W = None
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj, reuse=True):
 
         if not self.initialized:
@@ -291,7 +262,7 @@ class LookupTable(Layer):
             init_w[:, pad_idx] = 0
         return init_w
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         """
         Arguments:
@@ -398,7 +369,7 @@ class ConvBase(Layer):
                               self.W,
                               axes=self._output_axes(in_obj))
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         in_obj = reorder_spatial_axes(in_obj)
 
@@ -533,7 +504,7 @@ class Activation(Layer):
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         # An activation layer with no transform defaults to identity
         if self.transform:
@@ -568,7 +539,7 @@ class PoolBase(Layer):
 
         self.o_axes = None
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         ppm = self.poolparams.copy()
         in_obj = reorder_spatial_axes(in_obj)
@@ -629,7 +600,7 @@ class Bias(Layer):
         self.init = init
         self.shared = shared
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         if self.init:
             if not self.initialized:
@@ -660,7 +631,7 @@ class Affine(Layer):
         self.batch_norm_layer = BatchNorm() if batch_norm else None
         self.activation_layer = Activation(transform=self.activation)
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         l_out = self.linear(in_obj)
         b_out = self.bias(l_out)
@@ -685,7 +656,7 @@ class Convolution(Layer):
         self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
                                 deconv=False, **kwargs)
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         l_out = self.conv(in_obj)
         b_out = self.bias(l_out)
@@ -744,7 +715,7 @@ class BatchNorm(Layer):
         self.gmean = None
         self.gvar = None
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
 
         in_axes = in_obj.axes
@@ -797,7 +768,7 @@ class Dropout(Layer):
         self.keep = keep
         self.mask = None
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         if Layer.inference_mode:
             return self.keep * in_obj
@@ -906,7 +877,7 @@ class Recurrent(Layer):
         h_rec = ng.cast_role(ng.dot(self.W_recur, states), self.out_axes)
         return self.activation(h_rec + h_ff + self.b)
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1022,7 +993,7 @@ class BiRNN(Layer):
                                  batch_norm=batch_norm, reset_cells=reset_cells,
                                  return_sequence=return_sequence, backward=True)
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj, init_state=None):
         """
         Sets shape based parameters of this layer given an input tuple or int
@@ -1145,7 +1116,7 @@ class LSTM(Recurrent):
         h = ng.cast_role(h, self.out_axes)
         return [h, c]
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj, init_state=None, return_cell_state=False):
         """
         Sets shape based parameters of this layer given an input tuple or int

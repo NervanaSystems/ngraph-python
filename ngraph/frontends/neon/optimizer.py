@@ -19,8 +19,7 @@ import ngraph as ng
 import numbers
 from ngraph.util.names import NameScope
 import ngraph.frontends.common.learning_rate_policies as lrp
-from ngraph.frontends.neon.layer import wrap_layer
-from ngraph.frontends.neon.utils import SubGraph, scope_ops
+from ngraph.frontends.neon.utils import SubGraph
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +37,7 @@ def get_learning_rate_policy_callback(lr_params):
                                       policies=lrp.lr_policies.keys())
                                   )
     elif all([x in lr_params.keys() for x in lrp.lr_policies[lr_params['name']]['args']]):
-        with scope_ops("LearningRateSchedule"):
-            lr = lrp.lr_policies[lr_params['name']]['obj'](lr_params)
-        return lr
+        return lrp.lr_policies[lr_params['name']]['obj'](lr_params)
     else:
         raise ValueError("Too few arguments provided to create policy {lr_name}."
                          "\nGiven: {lr_params}"
@@ -124,7 +121,7 @@ class LearningRateOptimizer(Optimizer):
         super(LearningRateOptimizer, self).__init__(**kwargs)
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, cost_func, variables=None, warning=False):
         """
         Arguments:
@@ -134,8 +131,6 @@ class LearningRateOptimizer(Optimizer):
                             specified do not participate in batch cost computation
         """
 
-        # TODO: Is this necessary? Can _pre_call_hook optimizers just subclass __call__?
-        # self._pre_call_hook()
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
         batch_size = cost_func.axes.batch_axis().length
@@ -335,7 +330,7 @@ class Adam(LearningRateOptimizer):
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, *args, **kwargs):
 
         if len(self.ops) == 0:

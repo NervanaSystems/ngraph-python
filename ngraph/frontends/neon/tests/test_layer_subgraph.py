@@ -1,13 +1,13 @@
 import pytest
 import ngraph as ng
-from ngraph.frontends.neon.layer import wrap_layer, LABELS, Layer
+from ngraph.frontends.neon.layer import LABELS, Layer
 from ngraph.frontends.neon.utils import scope_ops, ComputationalGraph, SubGraph
 
 
 class SimpleLayer(Layer):
     metadata = {"foo": "bar"}
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         if not self.initialized:
             w_axis = ng.make_axis()
@@ -30,7 +30,7 @@ class NestedLayer(Layer):
             inner_layer = SimpleLayer(inherit_scope=self.scope)
         self.inner_layer = inner_layer
 
-    @wrap_layer
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         return self.inner_layer(in_obj)
 

@@ -1,14 +1,25 @@
 from __future__ import absolute_import
+import functools
 import ngraph as ng
 from .axis import ax
 import parsel
 from builtins import object, unicode
 from cachetools import cached, keys
 from contextlib import contextmanager
-from ngraph.util.names import NameableValue, name_scope
+from ngraph.util.names import NameableValue, name_scope, NameScope
 
 
 def make_convolution_placeholder(shape=None):
+    """
+    Create a placeholder op for inputs to a convolution layer
+
+    Arguments:
+        shape (tuple): The desired shape of the placeholder,
+                       with axes in the order of C, D, H, W, N
+
+    Returns:
+        5-D placeholder op
+    """
 
     H = ng.make_axis(name="H", docstring="Height")
     W = ng.make_axis(name="W", docstring="Width")
@@ -54,6 +65,15 @@ def scope_ops(name=None, mode=None, subgraph=None, metadata=None):
 
 
 def _cache_ops_length(graph):
+    """
+    Cachetools hashkey function that hashes graph properties based on len(graph.ops)
+
+    Arguments:
+        graph (ComputationalGraph): A computational graph instance
+
+    Returns:
+        A hashkey using cachetools.keys.hashkey
+    """
     return keys.hashkey(graph, len(graph.ops))
 
 
@@ -65,6 +85,17 @@ class ComputationalGraph(object):
 
         Arguments:
             ops (list): A list of ops. If not provided, all subsequently created ops will be added.
+
+        Attributes:
+            variables: A dictionary of all trainable variables in the graph
+            placeholders: A dictionary of all placeholder ops in the graph
+            computations: A dictionary of all computations in the graph
+            inputs: Same as placeholders
+            scopes: A dictionary of all defined scopes in the graph
+            modes: A dictionary of all defined modes in the graph (e.g. training, inference)
+
+        Methods:
+            select: Select ops from the graph using css-like selectors.
         """
         if ops is None:
             ops = list()
@@ -79,7 +110,7 @@ class ComputationalGraph(object):
     @cached({}, key=_cache_ops_length)
     def variables(self):
         """
-        A dictionary of all trainable variables as name:variable pairs
+        A dictionary of all trainable variables in the graph as "name:variable" pairs
         """
         return {op.tensor.name: op.tensor for op in self if op.tensor.is_trainable}
 
@@ -87,7 +118,7 @@ class ComputationalGraph(object):
     @cached({}, key=_cache_ops_length)
     def placeholders(self):
         """
-        A dictionary of all placeholder ops as name:op pairs
+        A dictionary of all placeholder ops in the graph as "name:op" pairs
         """
         return {op.tensor.name: op.tensor for op in self if op.tensor.is_placeholder}
 
@@ -95,7 +126,7 @@ class ComputationalGraph(object):
     @cached({}, key=_cache_ops_length)
     def computations(self):
         """
-        A dictionary of all defined computations as name:computation pairs
+        A dictionary of all computations in the graph as "name:computation" pairs
         """
         # return {op.name: op for op in self.select("ComputationOp")}
         return {op.name: op for op in self if isinstance(op, ng.ComputationOp)}
@@ -103,11 +134,17 @@ class ComputationalGraph(object):
     @property
     @cached({}, key=_cache_ops_length)
     def inputs(self):
+        """
+        A dictionary of all input ops in the graph as "name:op" pairs
+        """
         return self.placeholders
 
     @property
     @cached({}, key=_cache_ops_length)
     def scopes(self):
+        """
+        A dictionary of all defined scopes in the graph as "scope:subgraph" pairs
+        """
         # TODO: How to extract nested values from the nested xml
         # scopes = [selected.root.attrib["id"] for selected in self._to_xml().css(".scope")]
         # scopes = {scope_name: SubGraph(self.select("[scope={}]".format(scope_name)))
@@ -123,6 +160,10 @@ class ComputationalGraph(object):
     @property
     @cached({}, key=_cache_ops_length)
     def modes(self):
+        """
+        A dictionary of all defined modes in the graph (e.g. training, inference) as
+        "mode:computational graph" pairs.
+        """
         modes = dict()
         for op in self.select("[mode]"):
             mode_name = op.metadata["mode"]
@@ -135,10 +176,9 @@ class ComputationalGraph(object):
     def _to_xml(self):
         xml = ['<?xml version="1.0" encoding="UTF-8" ?>',
                '<subgraph>']
+
         # __ops is a list of ops at any specific nesting level
         xml_dict = {"__ops": list()}
-
-        # TODO: Should xml_dict be an ordered dictionary?
 
         def unravel_join(xml):
             """
@@ -146,7 +186,9 @@ class ComputationalGraph(object):
             """
             unraveled = xml.pop("__ops")
             for key, subxml in xml.items():
-                unraveled.append("<{key} id={key} class=scope>".format(key=key))
+                unraveled.append("<{short_name} id={name} "
+                                 "class=scope>".format(short_name=key.split("_")[0],
+                                                       name=key))
                 unraveled.append(unravel_join(subxml))
                 unraveled.append("</{}>".format(key))
             return "\n".join(unraveled)
@@ -171,12 +213,13 @@ class ComputationalGraph(object):
 
     def select(self, css):
         """
-        Select ops from the subgraph using css-like selectors. The available selectors
+        Select ops from the graph using css-like selectors. The available selectors
         and corresponding op attributes are:
             - element: Op type
             - id: Op name
             - class: Op label
             - attribute: Any key-value pair from op metadata
+            - hierarchy: Scopes provide op hierarchy
 
         Arguments:
             css (str): A css selector string
@@ -190,6 +233,9 @@ class ComputationalGraph(object):
 
             # Get the op named "conv_filter'
             subgraph.select("#conv_filter")
+
+            # Get the "bias" ops within Affine layers
+            subgraph.select("Affine .bias")
 
             # Get all TensorValueOps
             subgraph.select("TensorValueOp")
@@ -217,24 +263,70 @@ class ComputationalGraph(object):
 
 class SubGraph(ComputationalGraph):
 
-    def __init__(self, ops=None, **kwargs):
+    def __init__(self, ops=None, name=None, **kwargs):
         """
-        A representation of connected subset of ops from the full computational graph
+        A representation of connected subset of ops sharing a common scope
+
         Arguments:
             ops (list): An list of ops
+
+        Attributes:
+            variables: A dictionary of all trainable variables in the graph
+            placeholders: A dictionary of all placeholder ops in the graph
+            computations: A dictionary of all computations in the graph
+            inputs: A dictionary of all inputs to the graph
+            outputs: A dictionary of all outputs from the graph
+            side_effects: A dictionary of all side-effect ops in the graph
+            scopes: A dictionary of all defined scopes in the graph
+            modes: A dictionary of all defined modes in the graph (e.g. training, inference)
+
+        Methods:
+            select: Select ops from the graph using css-like selectors.
+            scope_op_creation: Wraps a method of the subgraph so that all ops created
+                               within are added to the subgraph's scope and ops list.
+                               The __call__ method is wrapped by default.
         """
 
         if ops is None:
             ops = list()
         super(SubGraph, self).__init__(ops=ops, **kwargs)
 
+        if name is None:
+            name = type(self).__name__
+        self.scope = NameScope(name=name)
+        self.name = self.scope.name
+
+    @staticmethod
+    def scope_op_creation(method):
+        """
+        Wraps a method of the subgraph so that all ops created within are added
+        to the subgraph's scope and ops list.
+
+        Arguments:
+            method (callable): Function that takes inputs and creates ops in the
+                               computational graph
+        """
+
+        @functools.wraps(method)
+        def scope_ops_wrapper(self, *args, **kwargs):
+            metadata = getattr(self, "metadata", dict())
+            with scope_ops(self.name, subgraph=self, metadata=metadata):
+                output = method(self, *args, **kwargs)
+
+            return output
+
+        return scope_ops_wrapper
+
     @property
     @cached({}, key=_cache_ops_length)
     def inputs(self):
         """
-        A list of input ops to this subgraph. Inputs are defined as matching 1 of 2 criteria:
-            1. Placeholder ops
-            2. Arguments to ops in the subgraph that aren't themselves in the subgraph
+        A dictionary of all input ops as "name:op" pairs
+
+        Notes:
+            Inputs are defined as matching 1 of 2 criteria:
+                1. Placeholder ops
+                2. Arguments to ops in the subgraph that aren't themselves in the subgraph
         """
         # TODO: Should these be OrderedDicts?
 
@@ -255,10 +347,12 @@ class SubGraph(ComputationalGraph):
     @cached({}, key=_cache_ops_length)
     def outputs(self):
         """
-        A list of output ops from this subgraph. Outputs are defined as matching 1 of 2 criteria:
-            1. Ops in the subgraph that aren't depended on by any other ops in the subgraph
-            2. Not a variable or placeholder op
+        A dictionary of all output ops as "name:op" pairs
 
+        Notes:
+            Outputs are defined as matching 1 of 2 criteria:
+                1. Ops in the subgraph that aren't depended on by any other ops in the subgraph
+                2. Not a variable or placeholder op
         """
         op_args = set()
         ops = set()
@@ -275,10 +369,7 @@ class SubGraph(ComputationalGraph):
     @cached({}, key=_cache_ops_length)
     def side_effects(self):
         """
-        A list of side effect ops from this subgraph.
-
-        Returns:
-            OpList of side effect ops from the subgraph
+        A dictionary of all side-effect ops as "name:op" pairs.
         """
         side_effects = dict()
         for op in self.ops:

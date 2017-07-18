@@ -1292,8 +1292,8 @@ class TensorOp(Op):
                                      is_input=self.is_input,
                                      is_placeholder=self.is_placeholder)
         else:
-            return TensorDescription(self.axes, dtype=self.dtype, name=self.name.replace("/", "_"),
-                                     op=self,
+            return TensorDescription(self.axes, dtype=self.dtype,
+                                     name=self.safe_name, op=self,
                                      is_persistent=self.is_persistent,
                                      is_input=self.is_input,
                                      is_placeholder=self.is_placeholder)
