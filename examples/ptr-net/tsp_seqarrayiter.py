@@ -76,7 +76,7 @@ class TSPSequentialArrayIterator(object):
     def make_placeholders(self):
         batch_axis = ng.make_axis(length=self.batch_size, name="N")
         time_axis = ng.make_axis(length=self.time_steps, name="REC")
-        feature_axis = ng.make_axis(length=self.nfeatures, name="feature_axisjiji")
+        feature_axis = ng.make_axis(length=self.nfeatures, name="feature_axis")
 
         dict = {}
         for k in self.data_arrays.keys():
