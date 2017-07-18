@@ -27,7 +27,7 @@ import numpy as np
 from tsp import TSP
 from custom_recurrent import Recurrent
 from tsp_seqarrayiter import TSPSequentialArrayIterator
-from utils import get_first_example
+from utils import first_example
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
@@ -42,7 +42,7 @@ args = parser.parse_args()
 args.batch_size = 50
 args.num_iterations = 40000
 
-hidden_size = 64
+hidden_size = 128
 gradient_clip_value = 15
 num_features = 2  # for planer TSP, each city's location is represented by 2-d coordinate
 
@@ -52,20 +52,23 @@ print('Loading and preprocessing TSP data...')
 tsp_data = tsp.load_data()
 
 # take a look at the first TSP input-target example pair
-one_input_example, one_target_example = get_first_example(tsp_data)
+one_input_example, one_target_example = first_example(tsp_data)
 print('First input example = {}'.format(one_input_example))
 print('First target example = {}'.format(one_target_example))
 
-# number of time steps equal to number of points (cities) in a example
-time_steps = one_input_example.shape[0]
 
+# number of time steps equal to number of points (cities) in each example
+time_steps = one_input_example.shape[0]
+# import ipdb; ipdb.set_trace()
 # create iterator and placeholders for training data
 train_set = TSPSequentialArrayIterator(tsp_data['train'],
                                     nfeatures=num_features,
                                     batch_size=args.batch_size,
                                     time_steps=time_steps,
-                                    total_iterations=args.num_iterations,
-                                    get_prev_target=True)
+                                    total_iterations=args.num_iterations)
+print(train_set.data_arrays['inp_txt'][0][0])
+print(train_set.data_arrays['tgt_txt'][0][0])
+print(train_set.data_arrays['teacher_tgt'][0][0])
 inputs = train_set.make_placeholders()
 ax.Y.length = time_steps + 1
 
@@ -77,7 +80,7 @@ enc = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=True, return_s
 dec = Recurrent(hidden_size, init, activation=Tanh(), reset_cells=True, return_sequence=True)
 
 enc_out, enc_out_seq = enc(inputs['inp_txt'])
-_, dec_out_seq = dec(inputs['prev_tgt'], init_state=enc_out)
+_, dec_out_seq = dec(inputs['teacher_tgt'], init_state=enc_out)
 
 tmp_axis1 = ng.make_axis(length=hidden_size, name='feature_axis')
 tmp_axis2 = ng.make_axis(length=hidden_size, name='tmp_axis2')
@@ -101,7 +104,8 @@ optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
 updates = optimizer(loss)
 
 # provide outputs for bound computation
-train_outputs = dict(batch_cost=mean_cost, updates=updates, output_prob=output_prob)
+train_outputs = dict(batch_cost=mean_cost, updates=updates, output_prob=output_prob,
+                    score_out=score_out, W1=W1, W2=W2)
 
 ######################
 # Train Loop
@@ -109,7 +113,7 @@ with closing(ngt.make_transformer()) as transformer:
     # bind the computations
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
 
-    # import ipdb; ipdb.set_trace
+    import ipdb; ipdb.set_trace()
     # iterate over training set
     for idx, data in enumerate(train_set):
         train_output = train_computation(data)
