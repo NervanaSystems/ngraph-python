@@ -152,8 +152,8 @@ if __name__ == "__main__":
                         help="number of iterations to skip")
     parser.add_argument('-m', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
-    parser.add_argument('--device', default='cpu', choices=['cpu', 'gpu'],
-                        help="device to run on")
+    parser.add_argument('--hetr_device', default='cpu', choices=['cpu', 'gpu'],
+                        help="device to run HeTr")
     parser.add_argument('--bprop', action="store_true", help="enable back propagation")
     parser.add_argument('--graph_vis', action="store_true", help="enable graph visualization")
     args = parser.parse_args()
@@ -167,6 +167,6 @@ if __name__ == "__main__":
                              batch_size=args.batch_size,
                              device_id=device_id,
                              transformer_type=args.backend,
-                             device=args.device,
+                             device=args.hetr_device,
                              bprop=args.bprop,
                              visualize=args.graph_vis)
