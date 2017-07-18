@@ -19,7 +19,7 @@ from fake_data_generator import generate_data
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax
+from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
 import numpy as np
@@ -142,32 +142,29 @@ def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = NgraphArgparser(description='Train deep residual network')
     parser.add_argument('-data', '--data_set', default='cifar10',
                         choices=['cifar10', 'i1k'], help="data set name")
-    parser.add_argument('-v', '--visualize', action="store_true",
-                        help="enable graph visualization")
-    parser.add_argument('-bs', '--batch_size', type=int, default=128, help="batch size")
-    parser.add_argument('-i', '--max_iter', type=int, default=10, help="max number of iterations")
     parser.add_argument('-s', '--skip_iter', type=int, default=1,
                         help="number of iterations to skip")
-    parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
+    parser.add_argument('-m', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
-    parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
-    parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
+    parser.add_argument('--transformer', default='hetr', help="transformer name")
+    parser.add_argument('--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
-    parser.add_argument('-b', '--bprop', type=int, default=0, help="enable back propagation")
+    parser.add_argument('--bprop', action="store_true", help="enable back propagation")
+    parser.add_argument('--graph_vis', action="store_true", help="enable graph visualization")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
     for device_id in device_ids:
         run_resnet_benchmark(dataset=args.data_set,
-                             n_iter=args.max_iter,
+                             n_iter=args.num_iterations,
                              n_skip=args.skip_iter,
                              batch_size=args.batch_size,
                              device_id=device_id,
                              transformer_type=args.transformer,
                              device=args.device,
-                             bprop=args.bprop != 0,
-                             visualize=args.visualize)
+                             bprop=args.bprop,
+                             visualize=args.graph_vis)
