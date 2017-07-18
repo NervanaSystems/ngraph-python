@@ -22,7 +22,6 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
 from ngraph.transformers.hetr.mpilauncher import Launcher
-from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
 from multiprocessing import active_children
 import threading
 import time
@@ -31,6 +30,7 @@ import subprocess
 
 
 pytestmark = pytest.mark.hetr_only
+STARTUP_TIME = 1.0
 
 
 def test_distributed_graph_plus_one(transformer_factory):
@@ -491,7 +491,7 @@ def test_allreduce_cpu_op(config):
 
 
 class ClosingHetrServers():
-    def __init__(self, ports, startup_time=0.5):
+    def __init__(self, ports):
         self.processes = []
         for p in ports:
             hetr_server = os.path.dirname(os.path.realpath(__file__)) +\
@@ -499,12 +499,15 @@ class ClosingHetrServers():
             command = ["python", hetr_server, "-p", p]
             try:
                 proc = subprocess.Popen(command)
+                time.sleep(STARTUP_TIME)
                 self.processes.append(proc)
-            except:
-                assert False
-        time.sleep(startup_time)
+            except Exception as e:
+                print(e)
 
     def close(self):
+        for p in self.processes:
+            p.terminate()
+            time.sleep(STARTUP_TIME)
         for p in self.processes:
             p.kill()
         for p in self.processes:
@@ -512,6 +515,7 @@ class ClosingHetrServers():
 
 
 def test_rpc_transformer():
+    from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
     rpc_client_list = list()
     port_list = ['50111', '50112']
     num_procs = len(port_list)
@@ -537,8 +541,3 @@ def test_mpilauncher():
 
     # Check if process has completed
     assert mpilauncher.mpirun_proc.poll() is not None
-
-
-
-
-

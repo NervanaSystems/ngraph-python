@@ -13,10 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import collections
-import logging
 import os
 import signal
-import subprocess
 import sys
 import time
 from multiprocessing import Process, Manager, Event
@@ -37,20 +35,6 @@ from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
-
-try:
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-except Exception:
-    logging.error("mpi4py is not installed but required for HeTr")
-    assert False
-
-try:
-    assert subprocess.call("type mpirun", shell=True,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0
-except Exception:
-    logging.error("mpi command line utils are not installed but required for HeTr")
-    assert False
 
 
 def build_transformer(name, comm=None):

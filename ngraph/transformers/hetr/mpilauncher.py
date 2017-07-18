@@ -3,7 +3,7 @@ import subprocess
 import time
 
 
-STARTUP_TIME = 0.5
+STARTUP_TIME = 1.0
 
 
 class Launcher(object):
@@ -29,6 +29,7 @@ class Launcher(object):
             subprocess.call(mpirun_str, shell=True)
         elif (hetr_server_gpu_num is not None):
             cmd = ['mpirun',
+                   '--allow-run-as-root',
                    '-n', hetr_server_gpu_num,
                    'python', hetr_server_path,
                    '-p'] + self.port_list

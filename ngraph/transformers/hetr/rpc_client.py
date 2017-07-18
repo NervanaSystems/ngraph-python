@@ -1,8 +1,8 @@
 import grpc
 from six import iteritems
 
-import hetr_pb2
-import hetr_pb2_grpc
+from . import hetr_pb2
+from . import hetr_pb2_grpc
 from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, _serialize_graph,\
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
@@ -13,7 +13,7 @@ _SLEEP_SECONDS = 1
 
 def is_channel_ready(channel):
     status = channel._channel.check_connectivity_state(True)
-    return status  # 0: IDLE, 2: READY
+    return ((status == 0) or (status == 2))  # 0: IDLE, 2: READY
 
 
 class RPCComputationClient(object):
@@ -66,6 +66,9 @@ class RPCTransformerClient(object):
 
         options = [('grpc.max_send_message_length', -1)]
         channel = grpc.insecure_channel('localhost:' + port, options=options)
+        if not is_channel_ready(channel):
+            raise RuntimeError("gRPC channel is not ready...")
+
         self.RPC = hetr_pb2_grpc.HetrStub(channel)
         response = self.RPC.BuildTransformer(
             hetr_pb2.BuildRequest(transformer_type=transformer_type),
