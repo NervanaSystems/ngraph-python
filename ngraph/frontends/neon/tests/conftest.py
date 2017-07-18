@@ -1,3 +1,6 @@
+"""
+07/18/2017:Krishna: Added fixtures for input_placeholder_bn to test for more than 2 axis  in batchnorm
+"""
 import pytest
 import ngraph as ng
 
@@ -47,6 +50,23 @@ def spatial_axes(height, width):
 @pytest.fixture
 def channel_axis(input_size):
     return ng.make_axis(length=input_size, name="C")
+
+#Adding fixtures to test multi dimensional axes in batchnorm
+@pytest.fixture
+def c_axis(c=3):
+    return ng.make_axis(length=c,name="C")
+
+@pytest.fixture
+def h_axis(height):
+    return ng.make_axis(length=height,name="H")
+
+@pytest.fixture
+def w_axis(width):
+    return ng.make_axis(length=width,name="W")
+
+@pytest.fixture
+def input_placeholder_bn(c_axis,h_axis,w_axis,batch_axis):
+    return ng.placeholder([c_axis,h_axis,w_axis,batch_axis])
 
 
 @pytest.fixture
