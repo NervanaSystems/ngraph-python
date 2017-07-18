@@ -30,7 +30,6 @@ import ngraph as ng
 from examples.cifar10.cifar10_msra import cifar_mean_subtract, conv_params
 
 
-# TODO: Refactor mini_resnet #1863
 class f_module(object):
     def __init__(self, nfm, first=False, strides=1, batch_norm=False):
 
