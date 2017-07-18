@@ -49,16 +49,19 @@ class TSP(object):
                 pass
 
             with open(filepath, 'r') as f:
-                X, y = [], []
+                X, y, y_teacher = [], [], []
                 for i, line in tqdm(enumerate(f)):
                     inputs, outputs = line.split('output')
-                    X.append(np.array([float(i) for i in inputs.split()]).reshape([-1, 2]))
-                    y.append(np.array([int(i) for i in outputs.split()])[:-1]) # delete last
+                    X.append(np.array([float(j) for j in inputs.split()]).reshape([-1, 2]))
+                    y.append(np.array([int(j) for j in outputs.split()])[:-1]) # delete last
+                    # teacher forcing array as decoder's input while training
+                    y_teacher.append([X[i][j - 1] for j in y[i]])
                     # if i % 100000 == 0:
                     #     print('loading {} line {}.'.format(phase, i))
             X = np.array(X)
             y = np.array(y)
-            self.data_dict[phase] = {'inp_txt': X, 'tgt_txt': y}
+            y_teacher = np.array(y_teacher)
+            self.data_dict[phase] = {'inp_txt': X, 'tgt_txt': y, 'teacher_tgt': y_teacher}
 
         return self.data_dict
                 # line = list(islice(myfile, 3))
