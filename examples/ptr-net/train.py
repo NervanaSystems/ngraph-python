@@ -113,7 +113,7 @@ with closing(ngt.make_transformer()) as transformer:
     # bind the computations
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
 
-    import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
     # iterate over training set
     for idx, data in enumerate(train_set):
         train_output = train_computation(data)
@@ -121,5 +121,5 @@ with closing(ngt.make_transformer()) as transformer:
         if niter % 4000 == 0:
             print('iteration = {}, train loss = {}'.format(niter, train_output['batch_cost']))
             # uncomment lines below to print the predicted target and true target
-            print('predicted target = {}'.format(np.argmax(train_output['output_prob'], axis=0).T))
-            print('true target = {}'.format(tsp_data['train']['tgt_txt'][niter:(niter + args.batch_size)][:]))
+            # print('predicted target = {}'.format(np.argmax(train_output['output_prob'], axis=0).T))
+            # print('true target = {}'.format(tsp_data['train']['tgt_txt'][niter:(niter + args.batch_size)][:]))
