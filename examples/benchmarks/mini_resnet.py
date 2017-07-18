@@ -105,20 +105,20 @@ def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
     return model_out
 
 
-def get_fake_data(dataset, batch_size, n_iter):
+def get_fake_data(dataset, batch_size, num__iterations):
     x_train, y_train = generate_data(dataset, batch_size)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'height', 'width')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
-    train_set = ArrayIterator(train_data, batch_size, total_iterations=n_iter)
+    train_set = ArrayIterator(train_data, batch_size, total_iterations=num__iterations)
     inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 
 
-def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
+def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
                          transformer_type, device, bprop=True, visualize=False):
-    inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
+    inputs, data, train_set = get_fake_data(dataset, batch_size, num_iterations)
 
     # Running forward propagation
     model_out = get_mini_resnet(inputs, dataset, device_id)
@@ -134,14 +134,16 @@ def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
             batch_cost_computation_op = ng.computation(batch_cost, "all")
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
                               transformer_type, device)
-        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                          dataset + '_msra_bprop', visualize, 'device_id'))
+        Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
+                                                         dataset + '_msra_bprop',
+                                                         visualize, 'device_id'))
     else:
         fprop_computation_op = ng.computation(model_out, 'all')
         benchmark = Benchmark(fprop_computation_op, train_set, inputs,
                               transformer_type, device)
-        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                          dataset + '_msra_fprop', visualize))
+        Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
+                                                         dataset + '_msra_fprop',
+                                                         visualize))
 
 
 if __name__ == "__main__":
@@ -162,7 +164,7 @@ if __name__ == "__main__":
                   for num_devices in args.num_devices]
     for device_id in device_ids:
         run_resnet_benchmark(dataset=args.data_set,
-                             n_iter=args.num_iterations,
+                             num_iterations=args.num_iterations,
                              n_skip=args.skip_iter,
                              batch_size=args.batch_size,
                              device_id=device_id,
