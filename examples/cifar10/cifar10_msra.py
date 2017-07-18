@@ -137,18 +137,21 @@ if __name__ == "__main__":
     # Create the dataloader
     if args.use_aeon:
         from data import make_aeon_loaders
-        train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size, args.num_iterations)
+        train_set, valid_set = make_aeon_loaders(args.data_dir,
+                                                 args.batch_size,
+                                                 args.num_iterations)
     else:
         from ngraph.frontends.neon import ArrayIterator  # noqa
         from ngraph.frontends.neon import CIFAR10  # noqa
         train_data, valid_data = CIFAR10(args.data_dir).load_data()
-        train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
+        train_set = ArrayIterator(train_data, args.batch_size,
+                                  total_iterations=args.num_iterations)
         valid_set = ArrayIterator(valid_data, args.batch_size)
 
-    # we need to ask the dataset to create an iteration placeholder for our learning rate schedule
+    # we need to ask the dataset to create an iteration
+    # placeholder for our learning rate schedule
     inputs = train_set.make_placeholders(include_iteration=True)
     ax.Y.length = 10
-
 
     resnet = residual_network(args.stage_depth)
 

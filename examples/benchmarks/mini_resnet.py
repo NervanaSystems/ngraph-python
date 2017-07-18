@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+Run it using
+
+python examples/benchmarks/mini_resnet.py -data cifar10 -b hetr -d cpu -m 2 -z 64 -t 2 -s 1 --bprop
+"""
 from __future__ import division
 from __future__ import print_function
 from benchmark import Benchmark
@@ -22,8 +27,6 @@ from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescent
 from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
-import numpy as np
-import argparse
 from examples.cifar10.cifar10_msra import cifar_mean_subtract, conv_params
 
 
@@ -149,7 +152,6 @@ if __name__ == "__main__":
                         help="number of iterations to skip")
     parser.add_argument('-m', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
-    parser.add_argument('--transformer', default='hetr', help="transformer name")
     parser.add_argument('--device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run on")
     parser.add_argument('--bprop', action="store_true", help="enable back propagation")
@@ -164,7 +166,7 @@ if __name__ == "__main__":
                              n_skip=args.skip_iter,
                              batch_size=args.batch_size,
                              device_id=device_id,
-                             transformer_type=args.transformer,
+                             transformer_type=args.backend,
                              device=args.device,
                              bprop=args.bprop,
                              visualize=args.graph_vis)
