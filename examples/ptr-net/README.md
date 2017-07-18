@@ -51,7 +51,7 @@ $ python train.py --train_file tsp5.txt --test_file tsp5_test.txt
 
 `iteration = 40000, train loss = 1.89364993572`
 ## To-dos
-- [ ] change decoder input to coordinates for teacher forcing  
+- [X] change decoder input to coordinates for teacher forcing  
 - [ ] ptr-net inference code
 - [ ] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
 - [ ] add LSTM to rnn cell selection
