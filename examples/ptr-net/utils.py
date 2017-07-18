@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+<<<<<<< HEAD
 import numpy as np
 
 def first_example(tsp_data):
@@ -87,3 +88,7 @@ if __name__ == '__main__':
 
     travel_dist = travel_distance(inputs, pred_travel_index)
     print(travel_dist)
+=======
+def get_first_example(tsp_data):
+    return tsp_data['train']['inp_txt'][0], tsp_data['train']['tgt_txt'][0]
+>>>>>>> 4b7eb0159d671ed0226fe820069655d9a2aeb6d4

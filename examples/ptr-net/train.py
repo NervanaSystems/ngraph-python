@@ -39,7 +39,7 @@ parser.add_argument('--test_file', default='tsp5_test.txt',
                     help='specify training filename')
 parser.set_defaults()
 args = parser.parse_args()
-args.batch_size = 50
+args.batch_size = 128
 args.num_iterations = 40000
 
 hidden_size = 128
