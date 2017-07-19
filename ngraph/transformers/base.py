@@ -399,6 +399,9 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
         pass
 
     def save_output_statistics_file(self):
+        """
+        Save collected statistics data to file  
+        """
         pass
 
     # Old interface

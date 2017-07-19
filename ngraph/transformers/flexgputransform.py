@@ -339,8 +339,4 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def __call__(self):
         self.transformer.flex_manager.autoflex_count += 1
 
-        # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)
-        # has been called before loop_train in example file
-        # where cbs is CallbackContainer instance returned by make_default_callbacks
-
         super(FlexGPUKernelGroup, self).__call__()
