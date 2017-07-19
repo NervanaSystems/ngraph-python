@@ -153,7 +153,8 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
     # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
-    out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_state,
+    init_states = {'h': init_state} if init_state is not None else init_state
+    out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_states,
                     return_sequence=return_sequence, reverse_mode=backward)
 
     with ExecutorFactory() as ex:
@@ -220,7 +221,8 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
 
     # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
-    out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_state,
+    init_states = {'h': init_state} if init_state is not None else init_state
+    out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_states,
                     return_sequence=return_sequence)
     deltas_constant = ng.constant(deltas, axes=out_ng.axes)
     params = [(rnn_ng.i2h.linear.W, W_in),
@@ -276,7 +278,8 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
 
     # fprop ngraph RNN
     num_steps = input_placeholder.axes.recurrent_axis().length
-    out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_state,
+    init_states = {'h': init_state} if init_state is not None else init_state
+    out_ng = unroll(rnn_ng, num_steps, input_placeholder, init_states=init_states,
                     return_sequence=return_sequence)
 
     params = [(rnn_ng.i2h.linear.W, W_in),

@@ -1427,61 +1427,45 @@ def _cells_initialize_states(cells, batch_axis, **kwargs):
 
 
 def unroll(cell, num_steps, inputs, init_states=None, reset_cells=True,
-           return_sequence=True, return_cell_states=False, reverse_mode=False):
+           return_sequence=True, reverse_mode=False):
     """
     Unroll the cell for num_steps steps.
-    """
-    if init_states is not None:
-        init_states = init_states if isinstance(init_states,
-                                                collections.MutableSequence) else [init_states]
 
+    Arguments:
+    ----------
+    init_states: either None or a dictionary containing states
+    """
     recurrent_axis = inputs.axes.recurrent_axis()
+    recurrent_axis_idx = len(cell.feature_axes)
     batch_axis = inputs.axes.batch_axis()
-    out_axes = cell._feature_axes + batch_axis
-    recurrent_axis_idx = len(cell._feature_axes)
+    out_axes = cell.feature_axes + batch_axis
+    if init_states is not None:
+        states = {k: ng.cast_role(v, out_axes) for (k, v) in init_states.items()}
+    else:
+        states = init_states
 
     stepped_inputs = get_steps(inputs, recurrent_axis, backward=reverse_mode)
     stepped_outputs = []
-    stepped_states = [[] for _ in cell.state_info]
-    states = [ng.cast_role(state, out_axes)
-              for state in init_states] if init_states is not None else init_states
 
     for t in range(num_steps):
         output, states = cell(stepped_inputs[t], states)
         stepped_outputs.append(output)
-        assert len(stepped_states) == len(states)
-        for (state_steps, state) in zip(stepped_states, states):
-            state_steps.append(state)
+
+    if reverse_mode:
+        if return_sequence:
+            stepped_outputs.reverse()
 
     if return_sequence:
-        if reverse_mode:
-            stepped_outputs = stepped_outputs[::-1]
-            for state_steps in stepped_states:
-                state_steps = state_steps[::-1]
         outputs = ng.stack(stepped_outputs, recurrent_axis, pos=recurrent_axis_idx)
-        if return_cell_states:
-            out_states = [ng.stack(stepped, recurrent_axis, pos=recurrent_axis_idx)
-                          for stepped in stepped_states]
     else:
         outputs = stepped_outputs[-1]
-        if return_cell_states:
-            out_states = [state_steps[-1] for state_steps in stepped_states]
 
-    if reset_cells:
-        if return_cell_states:
-            return (outputs, out_states)
-        else:
-            return outputs
-    else:
-        result = (outputs, out_states) if return_cell_states else outputs
-        return ng.sequential([
-            ng.doall([
-                ng.assign(init_state, state_steps[-1])
-                for (init_state, state_steps)
-                in zip(init_states, stepped_states)
-            ]),
-            result
-        ])
+    if not reset_cells:
+        update_inits = ng.doall([
+            ng.assign(aa, zz) for (aa, zz) in zip(init_states.items(), states.items())])
+        outputs = ng.sequential([update_inits, outputs])
+
+    return outputs
 
 
 class BaseRNNCell(Layer):
@@ -1510,7 +1494,7 @@ class BaseRNNCell(Layer):
 
     def __call__(self, inputs, states):
         """
-        Unrolls the RNN cell for one time step. By definition,
+        Update the RNN cell for one time step. By definition,
         an RNN cell consumes a pair of inputs and states at a
         given time step to produce states at the next time step.
 
@@ -1518,22 +1502,13 @@ class BaseRNNCell(Layer):
         ----------
         inputs (Tensor): represents external input to the cell
 
-        states (list of Tensors): each cell is associated with one "external" state
-            and an arbitrary number of "internal" states. The states of a cell are
-            collectively contained in a list, with the first element of the list
-            always corresponding to the "external" state and the remaining
-            elements corresponding to the "internal" states.
-
-        Note: RNN cells only communicate "external" states to other RNN cells.
-            The "internal" states of an RNN cell are invisible to other cells.
+        states (dict of Tensors): The states of a cell are collectively
+            contained in a dictionary.
 
         Returns
         -------
-        states (list of Tensors): nested list representing the new state of
-            the cell after a single step.
-            Since the list of states always contains the "external" state
-            as the first element, we can always read off the extenal output
-            of an RNN cell from the list of states.
+        states (dict of Tensors): representing the new state of the cell
+            after a single step.
         """
         raise NotImplementedError()
 
@@ -1543,7 +1518,7 @@ class BaseRNNCell(Layer):
         raise NotImplementedError()
 
     @property
-    def _feature_axes(self):
+    def feature_axes(self):
         """shape and layout information of states"""
         raise NotImplementedError()
 
@@ -1564,21 +1539,20 @@ class BaseRNNCell(Layer):
 
         Returns
         -------
-        states : nested list of Tensors representing the external
-        and internal states of the RNN cell. This is used as the
-        set of initial states when unrolling RNN cells.
+        states (dict of Tensors): The initial states of the cell
+            collectively contained in a dictionary.
         """
 
-        state_axes = self._feature_axes + batch_axis
-        states = []
+        state_axes = self.feature_axes + batch_axis
+        states = {}
         for info in self.state_info:
+            name = info['state_name']
             if reset_cells:
-                state = ng.constant(const=0,
-                                    axes=state_axes).named(info['state_name'])
+                states[name] = ng.constant(const=0,
+                                           axes=state_axes).named(name)
             else:
-                state = ng.variable(initial_value=0,
-                                    axes=state_axes).named(info['state_name'])
-            states.append(state)
+                states[name] = ng.variable(initial_value=0,
+                                           axes=state_axes).named(name)
         return states
 
 
@@ -1624,7 +1598,7 @@ class RNNCell(BaseRNNCell):
         return [{'state_name': 'h'}]
 
     @property
-    def _feature_axes(self):
+    def feature_axes(self):
         return self.h2h.axes.feature_axes()
 
     @property
@@ -1636,8 +1610,6 @@ class RNNCell(BaseRNNCell):
             batch_axis = inputs.axes.batch_axis()
             states = self.initialize_states(batch_axis,
                                             reset_cells=reset_cells)
-        # TODO: avoid indexing into states
-        h_state = states[0]
-        feed_fwd = ng.cast_role(self.i2h(inputs), h_state.axes)
-        h_state = self.activation(feed_fwd + self.h2h(h_state))
-        return h_state, [h_state]
+        feed_fwd = ng.cast_role(self.i2h(inputs), states['h'].axes)
+        states['h'] = self.activation(feed_fwd + self.h2h(states['h']))
+        return states['h'], states
