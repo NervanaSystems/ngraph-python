@@ -16,18 +16,27 @@ $ python ptr-net.py --train_file tsp5.txt --test_file tsp5_test.txt
 - prelim results on tsp5.txt
 
 >iteration = 4000, train loss = 1.59555494785
-iteration = 8000, train loss = 1.11453413963
-iteration = 12000, train loss = 0.834193050861
-iteration = 16000, train loss = 0.63794618845
-iteration = 20000, train loss = 0.486799806356
-iteration = 24000, train loss = 0.381220757961
-iteration = 28000, train loss = 0.352742105722
-iteration = 32000, train loss = 0.354856789112
-iteration = 36000, train loss = 0.37286776304d2
-iteration = 40000, train loss = 0.333687841892
+>iteration = 8000, train loss = 1.11453413963
+>iteration = 12000, train loss = 0.834193050861
+>iteration = 16000, train loss = 0.63794618845
+>iteration = 20000, train loss = 0.486799806356
+>iteration = 24000, train loss = 0.381220757961
+>iteration = 28000, train loss = 0.352742105722
+>iteration = 32000, train loss = 0.354856789112
+>iteration = 36000, train loss = 0.37286776304d2
+>iteration = 40000, train loss = 0.333687841892
 
 - prelim results on tsp10.txt
-
+>iteration = 4000, train loss = 2.84992647171
+iteration = 8000, train loss = 2.5995900631
+iteration = 12000, train loss = 2.06361722946
+iteration = 16000, train loss = 1.65947604179
+iteration = 20000, train loss = 1.38155913353
+iteration = 24000, train loss = 1.33677077293
+iteration = 28000, train loss = 1.21467912197
+iteration = 32000, train loss = 1.07581210136
+iteration = 36000, train loss = 1.01050698757
+iteration = 40000, train loss = 1.04400646687
 
 ## To-dos
 - [X] change decoder input to coordinates for teacher forcing  
