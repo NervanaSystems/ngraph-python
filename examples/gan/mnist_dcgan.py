@@ -168,8 +168,8 @@ mean_cost_g = ng.mean(loss_g, out_axes=[])
 
 optimizer_d = make_optimizer(name='discriminator_optimizer')
 optimizer_g = make_optimizer(name='generator_optimizer')
-updates_d = optimizer_d(loss_d, variables=list(discriminator.variables.values()))
-updates_g = optimizer_g(loss_g, variables=list(generator.variables.values()))
+updates_d = optimizer_d(loss_d, subgraph=discriminator)
+updates_g = optimizer_g(loss_g, subgraph=generator)
 
 # compile computations
 generator_train_inputs = {'noise': z}
