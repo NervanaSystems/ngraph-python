@@ -19,7 +19,7 @@ import ngraph as ng
 import numbers
 from ngraph.util.names import NameScope
 import ngraph.frontends.common.learning_rate_policies as lrp
-from ngraph.frontends.neon.utils import SubGraph
+from ngraph.frontends.neon.graph import SubGraph
 
 logger = logging.getLogger(__name__)
 
@@ -122,13 +122,20 @@ class LearningRateOptimizer(Optimizer):
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
     @SubGraph.scope_op_creation
-    def __call__(self, cost_func, variables=None, warning=False):
+    def __call__(self, cost_func, variables=None, subgraph=None, warning=False):
         """
         Arguments:
             cost_func (Op): The cost function to optimize
             variables (list of variables): List of variables to optimize
+            subgraph (SubGraph): A subgraph instance containing all variables to optimize
             warning (bool): If True displays warning message if any variables
                             specified do not participate in batch cost computation
+
+        Notes:
+            If subgraph is provided, the variables to optimize will be taken from it.
+            Otherwise, they can be provided explicitly by passing a list as `variables`.
+            If neither `subgraph` nor `variables` is provided, the variables to optimize will be
+            all trainable variables on which `cost` depends.
         """
 
         all_updates = []
@@ -136,6 +143,9 @@ class LearningRateOptimizer(Optimizer):
         batch_size = cost_func.axes.batch_axis().length
 
         # determine variables to optimize
+        if subgraph is not None:
+            variables = list(subgraph.variables.values())
+
         if variables is None:
             variables = batch_cost.variables()
         elif variables is not None and warning is True:

@@ -14,8 +14,8 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-from ngraph.frontends.neon.utils import SubGraph
 from operator import itemgetter
+from ngraph.frontends.neon.graph import SubGraph
 
 
 class Sequential(SubGraph):

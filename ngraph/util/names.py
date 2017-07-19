@@ -102,7 +102,8 @@ class NameableValue(object):
 
     @property
     def safe_name(self):
-        return re.subn(r"[^\w]", "_", self.name)[0]
+        if self.name is not None:
+            return re.subn(r"[^\w]", "_", self.name)[0]
 
     def named(self, name):
         self.name = name

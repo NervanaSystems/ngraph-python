@@ -1,7 +1,8 @@
 import pytest
 import ngraph as ng
 from ngraph.frontends.neon.layer import LABELS, Layer
-from ngraph.frontends.neon.utils import scope_ops, ComputationalGraph, SubGraph
+from ngraph.frontends.neon import SubGraph
+from ngraph.frontends.neon.graph import scope_ops, ComputationalGraph
 
 
 class SimpleLayer(Layer):

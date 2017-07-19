@@ -17,8 +17,7 @@ import collections
 from contextlib import contextmanager
 import ngraph as ng
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
-from ngraph.frontends.neon.utils import SubGraph
-
+from ngraph.frontends.neon.graph import SubGraph
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
