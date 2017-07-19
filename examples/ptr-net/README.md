@@ -10,51 +10,30 @@ $ unzip '*.zip'
 ```
 3. Run training script
 ```
-$ python train.py --train_file tsp5.txt --test_file tsp5_test.txt
+$ python ptr-net.py --train_file tsp5.txt --test_file tsp5_test.txt
 ```
 ## Results
 - prelim results on tsp5.txt
 
-`iteration = 4000, train loss = 0.924373149872`
-
-`iteration = 8000, train loss = 0.726571142673`
-
-`iteration = 12000, train loss = 0.6722458601`
-
-`iteration = 16000, train loss = 0.648913919926`
-
-`iteration = 20000, train loss = 0.709739685059`
-
-`iteration = 24000, train loss = 0.64789390564`
-
-`iteration = 28000, train loss = 0.674442708492`
+>iteration = 4000, train loss = 1.59555494785
+iteration = 8000, train loss = 1.11453413963
+iteration = 12000, train loss = 0.834193050861
+iteration = 16000, train loss = 0.63794618845
+iteration = 20000, train loss = 0.486799806356
+iteration = 24000, train loss = 0.381220757961
+iteration = 28000, train loss = 0.352742105722
+iteration = 32000, train loss = 0.354856789112
+iteration = 36000, train loss = 0.37286776304d2
+iteration = 40000, train loss = 0.333687841892
 
 - prelim results on tsp10.txt
 
-`iteration = 4000, train loss = 2.76649451256`
 
-`iteration = 8000, train loss = 2.62935018539`
-
-`iteration = 12000, train loss = 2.36450719833`
-
-`iteration = 16000, train loss = 2.15519189835`
-
-`iteration = 20000, train loss = 2.08786010742`
-
-`iteration = 24000, train loss = 1.92875289917`
-
-`iteration = 28000, train loss = 1.91526651382`
-
-`iteration = 32000, train loss = 2.06947231293`
-
-`iteration = 36000, train loss = 1.88495159149`
-
-`iteration = 40000, train loss = 1.89364993572`
 ## To-dos
 - [X] change decoder input to coordinates for teacher forcing  
 - [ ] ptr-net inference code
 - [ ] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
-- [ ] add LSTM to rnn cell selection
+- [X] use LSTM as enc/dec rnn cell
 - [ ] script to calculate travel distance and compare with original paper
 - [ ] visualize TSP  
 - [ ] python/shell script to download TSP data
