@@ -1,7 +1,7 @@
 from __future__ import print_function
+from collections import deque
 
 import numpy as np
-from collections import deque
 
 
 def rl_loop_train(environment, agent, episodes, render=False):

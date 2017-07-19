@@ -1,6 +1,7 @@
 import gym
 import ngraph as ng
-from ngraph.frontends.neon import dqn, rl_loop
+from ngraph.examples.dqn import dqn
+from ngraph.examples.dqn import rl_loop
 from ngraph.frontends import neon
 
 

@@ -1,6 +1,6 @@
+from ngraph.examples.dqn import dqn
 import pytest
 import numpy as np
-from ngraph.frontends.neon import dqn
 from ngraph.frontends import neon
 
 

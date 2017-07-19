@@ -1,12 +1,10 @@
 from __future__ import division
-
-import numpy as np
 import random
 from collections import deque
 
-from gym import spaces
-
 import ngraph as ng
+import numpy as np
+from gym import spaces
 from ngraph.frontends import neon
 
 
