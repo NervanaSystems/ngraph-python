@@ -61,11 +61,11 @@ class Mkldnn(object):
                 self.mkllib.create_empty_kernel
             self.create_empty_kernel.argtypes = [ct.c_int]
             self.create_empty_kernel.restype = ct.c_void_p
-            self.create_layout_pd = \
+            self.create_layout_md = \
                 self.mkllib.create_mkldnn_layout_descriptor
-            self.create_layout_pd.argtypes = \
+            self.create_layout_md.argtypes = \
                 [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_void_p, ct.c_int]
-            self.create_layout_pd.restype = ct.c_void_p
+            self.create_layout_md.restype = ct.c_void_p
             self.output_layout = self.mkllib.query_opkernel_layout
             self.output_layout.argtypes = [ct.c_void_p, ct.c_int]
             self.output_layout.restype = ct.c_void_p
@@ -164,7 +164,7 @@ class Mkldnn(object):
 
             self.reorder_kernel = self.mkllib.create_mkldnn_reorder_kernel
             self.reorder_kernel.argtypes = \
-                [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_int, ct.c_int,
+                [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_int,
                  ct.c_void_p, ct.c_void_p, ct.c_void_p]
 
     def open(self):

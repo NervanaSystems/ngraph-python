@@ -129,7 +129,7 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
             if stride_order == [N, C]:
                 memory_format = mkldnn.memory_format['nc']
 
-    native_layout = mkldnn.create_layout_pd(
+    native_layout = mkldnn.create_layout_md(
         mkldnn.mkldnn_engine,
         len(mkl_shape), mkl_shape_arg,
         mkl_strides_arg, data_type, memory_format)
@@ -147,7 +147,7 @@ def get_mkl_layout(mkldnn, op, order, use_formats=False):
 def dbg_print_kernel(mkldnn, op, op_id):
     if (mkldnn.mkldnn_verbose):
         # print
-        # print(op_id, op.name)
+        # print(op_id, op.name, op.axes)
         mkldnn.print_kernel(mkldnn.kernels[op.name])
 
 
@@ -736,7 +736,6 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             self.mkldnn.mkldnn_engine,
             ndims, dims_arg,
             self.mkldnn.datatype[op.dtype.type],
-            self.mkldnn.memory_format['blocked'],
             mkl_layout, out_layout,
             self.mkldnn.kernels[op.name]
         )
