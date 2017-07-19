@@ -40,7 +40,7 @@ parser.add_argument('--test_file', default='tsp5_test.txt',
 parser.set_defaults()
 args = parser.parse_args()
 args.batch_size = 128
-args.num_iterations = 40000
+args.num_iterations = 400000
 
 hidden_size = 128
 gradient_clip_value = 15
@@ -99,7 +99,7 @@ loss = ng.cross_entropy_multi(output_prob,
                               usebits=True)
 
 mean_cost = ng.mean(loss, out_axes=[])
-optimizer = RMSProp(decay_rate=0.95, learning_rate=2e-3, epsilon=1e-6,
+optimizer = RMSProp(decay_rate=0.95, learning_rate=1e-3, epsilon=1e-6,
                     gradient_clip_value=gradient_clip_value)
 updates = optimizer(loss)
 

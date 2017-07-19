@@ -35,6 +35,7 @@ class TSPSequentialArrayIterator(object):
                  total_iterations=None):
         self.batch_size = batch_size
         self.time_steps = time_steps
+        self.nfeatures = nfeatures
         self.index = 0
 
         # make sure input is in dict format
