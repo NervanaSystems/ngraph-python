@@ -400,7 +400,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
 
     def save_output_statistics_file(self):
         """
-        Save collected statistics data to file  
+        Save collected statistics data to file
         """
         pass
 
