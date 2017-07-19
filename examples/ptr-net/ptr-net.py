@@ -36,7 +36,7 @@ parser.add_argument('--train_file', default='tsp5.txt',
                     help='specify training filename')
 parser.add_argument('--test_file', default='tsp5_test.txt',
                     choices=['tsp5_test.txt', 'tsp10_test.txt'],
-                    help='specify training filename')
+                    help='specify testing filename')
 parser.set_defaults()
 args = parser.parse_args()
 args.batch_size = 128
@@ -59,16 +59,13 @@ print('First target example = {}'.format(one_target_example))
 
 # number of time steps equal to number of points (cities) in each example
 time_steps = one_input_example.shape[0]
-# import ipdb; ipdb.set_trace()
+
 # create iterator and placeholders for training data
 train_set = TSPSequentialArrayIterator(tsp_data['train'],
                                     nfeatures=num_features,
                                     batch_size=args.batch_size,
                                     time_steps=time_steps,
                                     total_iterations=args.num_iterations)
-print(train_set.data_arrays['inp_txt'][0][0])
-print(train_set.data_arrays['tgt_txt'][0][0])
-print(train_set.data_arrays['teacher_tgt'][0][0])
 inputs = train_set.make_placeholders()
 ax.Y.length = time_steps + 1
 
@@ -82,7 +79,7 @@ dec = LSTM(hidden_size, init, activation=Tanh(), reset_cells=True,
             gate_activation=Logistic(), return_sequence=True)
 
 (enc_h_out, enc_c_out), (enc_h_out_seq, enc_c_out_seq) = enc(inputs['inp_txt'], return_cell_state=True)
-# import ipdb; ipdb.set_trace()
+
 _, dec_h_out_seq = dec(inputs['teacher_tgt'], init_state=(enc_h_out, enc_c_out), return_cell_state=False)
 
 tmp_axis1 = ng.make_axis(length=hidden_size, name='feature_axis')
@@ -116,7 +113,6 @@ with closing(ngt.make_transformer()) as transformer:
     # bind the computations
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
 
-    # import ipdb; ipdb.set_trace()
     # iterate over training set
     for idx, data in enumerate(train_set):
         train_output = train_computation(data)
