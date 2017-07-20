@@ -1,7 +1,6 @@
 import examples.dqn.gym_wrapper
 import numpy as np
 import gym
-import dqn_atari
 
 
 class MockEnvironment(object):

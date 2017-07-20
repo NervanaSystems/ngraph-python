@@ -1,12 +1,11 @@
-from collections import deque
-
 import gym
 import ngraph as ng
 import dqn
 import rl_loop
 from baselines.common.atari_wrappers_deprecated import wrap_dqn
-from examples.dqn.gym_wrapper import ReshapeWrapper, ClipRewardWrapper, RepeatWrapper, TerminateOnEndOfLifeWrapper, \
-    DimShuffleWrapper
+from examples.dqn.gym_wrapper import ReshapeWrapper, ClipRewardWrapper
+from examples.dqn.gym_wrapper import RepeatWrapper, TerminateOnEndOfLifeWrapper
+from examples.dqn.gym_wrapper import DimShuffleWrapper
 from ngraph.frontends import neon
 
 # factory = ng.transformers.make_transformer_factory('gpu')
