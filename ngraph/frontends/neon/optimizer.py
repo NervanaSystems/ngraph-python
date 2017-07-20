@@ -105,11 +105,7 @@ class Optimizer(SubGraph):
     metadata = {'layer_type': 'optimizer'}
 
     def __init__(self, name=None, **kwargs):
-        super(Optimizer, self).__init__(**kwargs)
-        if name is None:
-            name = type(self).__name__
-        self.scope = NameScope(name=name)
-        self.name = self.scope.name
+        super(Optimizer, self).__init__(name=name, **kwargs)
 
     def update_learning_rate(self):
         pass
