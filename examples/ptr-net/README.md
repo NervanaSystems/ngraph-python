@@ -1,7 +1,7 @@
 ## Pointer Networks
-- Pointer Net deal with problems that each output token in the output sequence is corresponding to the positions in the input sequence. Sorting, convex hull and Traveling Salesman Problem fall under this kind of problems.
+- Pointer Net deal with problems that each output token in the output sequence is corresponding to positions in the input sequence. Sorting, convex hull and Traveling Salesman Problem fall under this kind of problems.
 - Pointer Net uses attention as a pointer to select a member of the input sequence as the output.
-- The repository shows ngraph implementation of Pointer Net to approximate Planer Traveling Salesman Problem. 
+- The repository shows ngraph implementation of Pointer Net to approximate Planer Traveling Salesman Problem.
 - reference paper: https://arxiv.org/pdf/1506.03134.pdf
 
 ## How to run
