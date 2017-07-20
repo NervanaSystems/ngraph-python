@@ -1,7 +1,7 @@
 import gym
 import simple_environments  # NOQA
-from ngraph.examples.dqn import dqn
-from ngraph.examples.dqn import rl_loop
+import dqn
+import rl_loop
 from ngraph.frontends import neon
 import numpy as np
 
