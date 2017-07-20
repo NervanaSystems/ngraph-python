@@ -1461,8 +1461,8 @@ def unroll(cell, num_steps, inputs, init_states=None, reset_cells=True,
         outputs = stepped_outputs[-1]
 
     if not reset_cells:
-        update_inits = ng.doall([
-            ng.assign(aa, zz) for (aa, zz) in zip(init_states.items(), states.items())])
+        update_inits = ng.doall([ng.assign(initial, states[name])
+                                 for (name, initial) in init_states.items()])
         outputs = ng.sequential([update_inits, outputs])
 
     return outputs
