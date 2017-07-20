@@ -143,6 +143,7 @@ def bn_params(request):
                 init_gamma=request.param[0],
                 init_beta=request.param[1])
 
+
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
 def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
     """This checks that that we are doing batch norm across a feature make_axis
@@ -174,10 +175,11 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
             # Compute ngraph fprop and stats
             out = fprop_function(x)
             gm, gv = stats_function()
-    	            
+
             assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
             assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
             assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
+
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
 def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params, transformer_factory):
@@ -197,7 +199,7 @@ def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params, transformer_fac
         # Initial conditions for tracked variables
         bn_params['gmean'] = 0.0
         bn_params['gvar'] = 1.0
-        bn_params['axis']=(1,2,3,)
+        bn_params['axis'] = (1, 2, 3, )
         # Test over 2 iterations to make sure values update properly
         for i in range(2):
             # Generate data
@@ -210,7 +212,6 @@ def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params, transformer_fac
             # Compute ngraph fprop and stats
             out = fprop_function(x)
             gm, gv = stats_function()
-    	            
             assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
             assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
             assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
