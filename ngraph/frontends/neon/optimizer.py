@@ -139,6 +139,8 @@ class LearningRateOptimizer(Optimizer):
 
         # determine variables to optimize
         if subgraph is not None:
+            if variables is not None:
+                raise ValueError("variables and subgraph cannot both be specified.")
             variables = list(subgraph.variables.values())
 
         if variables is None:
