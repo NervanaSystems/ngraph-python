@@ -18,20 +18,20 @@ class MockEnvironment(object):
     def reset(self):
         return self.observations.next()
 
-    def _step(self, action):
+    def step(self, action):
         return self.observations.next(), 0, False, None
 
 
 def test_repeat_wrapper_reset():
     environment = MockEnvironment(range(10))
-    environment = examples.dqn.gym_wrapper.RepeatWrapper(frames=2)(environment)
+    environment = examples.dqn.gym_wrapper.RepeatWrapper(environment, frames=2)
 
-    assert list(environment._reset()) == [0, 1]
+    assert list(np.array(environment._reset())) == [0, 1]
 
 
 def test_repeat_wrapper_step():
     environment = MockEnvironment(range(10))
-    environment = examples.dqn.gym_wrapper.RepeatWrapper(frames=2)(environment)
+    environment = examples.dqn.gym_wrapper.RepeatWrapper(environment, frames=2)
     environment.reset()
 
     assert (environment.step(1)[0] == np.array([1, 2])).all()

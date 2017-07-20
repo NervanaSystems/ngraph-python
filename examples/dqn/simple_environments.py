@@ -112,14 +112,14 @@ class DependentEnv(gym.Env):
 
 register(
     id='ConstantEnv-v0',
-    entry_point='simple_environments:ConstantEnv',
+    entry_point='examples.dqn.simple_environments:ConstantEnv',
 )
 
 register(
     id='RandomInputConstantGoalEnv-v0',
-    entry_point='simple_environments:RandomInputConstantGoalEnv',
+    entry_point='examples.dqn.simple_environments:RandomInputConstantGoalEnv',
 )
 register(
     id='DependentEnv-v0',
-    entry_point='simple_environments:DependentEnv',
+    entry_point='examples.dqn.simple_environments:DependentEnv',
 )
