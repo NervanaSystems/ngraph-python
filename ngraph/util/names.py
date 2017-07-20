@@ -176,20 +176,16 @@ def get_full_scope_name():
 
 
 @contextmanager
-def name_scope(name=None, reuse_scope=False, nest_scope=False):
+def name_scope(name=None, reuse_scope=False):
     """
     Create and use a new name scope
     Arguments:
         name (str): Create a new name scope within the current name scope
-        reuse_scope (bool): Reuse scope if name already exists
+        reuse_scope (bool): Reuse scope if name already exists. If False (default) and the name 
+                            does exist, then create a new scope with a unique version of name
     Returns:
         NameScope: The name scope.
     """
-    if nest_scope:
-        current_scope = get_full_scope_name()
-        if current_scope:
-            name = "/".join([current_scope, name])
-
     if reuse_scope:
         scope = NameScope.get_or_create_scope(name)
     else:

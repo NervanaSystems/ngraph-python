@@ -17,7 +17,6 @@ import logging
 import numpy as np
 import ngraph as ng
 import numbers
-from ngraph.util.names import NameScope
 import ngraph.frontends.common.learning_rate_policies as lrp
 from ngraph.frontends.neon.graph import SubGraph
 
