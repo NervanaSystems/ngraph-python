@@ -14,8 +14,6 @@
 # ----------------------------------------------------------------------------
 '''
 Test of the batchnorm layer
-07/18/12:Krishna: Changed from input_placeholder to input_placeholder_bn to test for multiple
-Axes
 '''
 import pytest
 import numpy as np
@@ -59,14 +57,14 @@ class BatchNormReference(object):
 
 class RNNHelper(object):
 
-    def __init__(self, input_placeholder_bn, output_size, RNN, bn_params):
+    def __init__(self, input_placeholder_batchnorm, output_size, RNN, bn_params):
 
         # Set up axes
-        F, T, N = tuple(input_placeholder_bn.axes)
+        F, T, N = tuple(input_placeholder_batchnorm.axes)
         H = ng.make_axis(length=output_size, name="hidden")
         H2 = ng.make_axis(length=output_size, name="hidden_tmp")
 
-        self.input_placeholder_bn = input_placeholder_bn
+        self.input_placeholder_batchnorm = input_placeholder_batchnorm
 
         # Make reference placeholder
         self.reference_input = ng.placeholder(axes=[H, T, N])
@@ -146,17 +144,17 @@ def bn_params(request):
                 init_beta=request.param[1])
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
-def test_batchnorm_fprop(input_placeholder_bn, bn_params, transformer_factory):
+def test_batchnorm_fprop(input_placeholder_batchnorm, bn_params, transformer_factory):
     """This checks that that we are doing batch norm across a feature make_axis
     and properly tracking the side effect variables
     """
 
     layer = BatchNorm(**bn_params)
-    fprop = layer(input_placeholder_bn)
+    fprop = layer(input_placeholder_batchnorm)
 
     with ExecutorFactory() as ex:
         # Compute executors
-        fprop_function = ex.executor(fprop, input_placeholder_bn)
+        fprop_function = ex.executor(fprop, input_placeholder_batchnorm)
         stats_function = ex.executor([ng.value_of(layer.gmean),
                                       ng.value_of(layer.gvar)])
 
@@ -167,7 +165,7 @@ def test_batchnorm_fprop(input_placeholder_bn, bn_params, transformer_factory):
         # Test over 2 iterations to make sure values update properly
         for i in range(2):
             # Generate data
-            x = rng.uniform(0, 1, input_placeholder_bn.axes)
+            x = rng.uniform(0, 1, input_placeholder_batchnorm.axes)
 
             # Compute reference fprop and stats
             batch_norm_reference = BatchNormReference(x, **bn_params)
@@ -182,25 +180,25 @@ def test_batchnorm_fprop(input_placeholder_bn, bn_params, transformer_factory):
             assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
-def test_batchnorm_bprop(input_placeholder_bn, bn_params, transformer_factory):
-    if input_placeholder_bn._axes.lengths == (32, 32):
+def test_batchnorm_bprop(input_placeholder_batchnorm, bn_params, transformer_factory):
+    if input_placeholder_batchnorm._axes.lengths == (32, 32):
         pytest.config.flex_skip_now("Results mismatch - too strict tolerance (rtol, atol)")
 
     layer = BatchNorm(**bn_params)
-    fprop = layer(input_placeholder_bn)
+    fprop = layer(input_placeholder_batchnorm)
 
     # Derivatives to check
-    bprop_vars = [input_placeholder_bn, layer.gamma, layer.beta]
+    bprop_vars = [input_placeholder_batchnorm, layer.gamma, layer.beta]
 
     delta_placeholder = ng.placeholder(fprop.axes)
     bprops = [ng.deriv(fprop, var, delta_placeholder) for var in bprop_vars]
 
     with ExecutorFactory() as ex:
         # Create derivative executor
-        bprop_function = ex.executor(bprops, input_placeholder_bn, delta_placeholder)
+        bprop_function = ex.executor(bprops, input_placeholder_batchnorm, delta_placeholder)
 
         # Generate data
-        x = rng.uniform(0, 1, input_placeholder_bn.axes)
+        x = rng.uniform(0, 1, input_placeholder_batchnorm.axes)
         delta = rng.uniform(-.1, .1, delta_placeholder.axes)
 
         # Compute reference bprop

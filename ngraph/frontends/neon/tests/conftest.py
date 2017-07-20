@@ -1,6 +1,3 @@
-"""
-07/18/2017:Krishna: Added fixtures for input_placeholder_bn to test for more than 2 axis  in batchnorm
-"""
 import pytest
 import ngraph as ng
 
@@ -65,7 +62,7 @@ def w_axis(width):
     return ng.make_axis(length=width,name="W")
 
 @pytest.fixture
-def input_placeholder_bn(c_axis,h_axis,w_axis,batch_axis):
+def input_placeholder_batchnorm(c_axis,h_axis,w_axis,batch_axis):
     return ng.placeholder([c_axis,h_axis,w_axis,batch_axis])
 
 
