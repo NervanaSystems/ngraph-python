@@ -181,7 +181,7 @@ def name_scope(name=None, reuse_scope=False):
     Create and use a new name scope
     Arguments:
         name (str): Create a new name scope within the current name scope
-        reuse_scope (bool): Reuse scope if name already exists. If False (default) and the name 
+        reuse_scope (bool): Reuse scope if name already exists. If False (default) and the name
                             does exist, then create a new scope with a unique version of name
     Returns:
         NameScope: The name scope.
