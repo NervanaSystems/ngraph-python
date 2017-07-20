@@ -48,23 +48,6 @@ def spatial_axes(height, width):
 def channel_axis(input_size):
     return ng.make_axis(length=input_size, name="C")
 
-#Adding fixtures to test multi dimensional axes in batchnorm
-@pytest.fixture
-def c_axis(c=3):
-    return ng.make_axis(length=c,name="C")
-
-@pytest.fixture
-def h_axis(height):
-    return ng.make_axis(length=height,name="H")
-
-@pytest.fixture
-def w_axis(width):
-    return ng.make_axis(length=width,name="W")
-
-@pytest.fixture
-def input_placeholder_batchnorm(c_axis,h_axis,w_axis,batch_axis):
-    return ng.placeholder([c_axis,h_axis,w_axis,batch_axis])
-
 
 @pytest.fixture
 def input_placeholder(input_axis, batch_axis, extra_feature_axes):
