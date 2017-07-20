@@ -17,49 +17,76 @@ import os
 import numpy as np
 
 
-class PTB(object):
+class Shakespeare(object):
     """
-    Penn Treebank data set from http://arxiv.org/pdf/1409.2329v5.pdf
-
+    Shakespeare Dataset from http://cs.stanford.edu/people/karpathy/char-rnn/shakespeare_input.txt
     Arguments:
-        path (string): Data directory to find the data, if not existing, will
+        path (string): Data directory to find the data, if does not exist, will
                        download the data
-        shift_target (boolean): Set the target to be the same sequence of shifted
-                                version of the sequence. Default to be True, for
-                                language models.
+        url (string): path to the text file to be downloaded
+        filename (string): name of the text file
+        train_split (float): Value between 0 and 1
+                            Ratio of the text to set aside for training
+
     """
-    def __init__(self, path='.', shift_target=True):
+    def __init__(self, path='./data/', url=None, filename=None, train_split=.9):
         self.path = path
-        self.url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data'
-        self.filemap = dict(train=dict(filename='ptb.train.txt', size=5101618),
-                            test=dict(filename='ptb.test.txt', size=449945),
-                            valid=dict(filename='ptb.valid.txt', size=399782))
-        self.shift_target = shift_target
+        self.vocab = None
+        if(url is None):
+            self.url = 'http://cs.stanford.edu/people/karpathy/char-rnn/'
+            self.filename = 'shakespeare_input.txt'
+
+        self.train_split = train_split
+
+        # Load the text and split to train and test
+        self.train, self.test = self.load_data()
+
+        # Digitize the train set (convert letters to integers)
+        self.train = self.digitize(text=self.train)
+        # Digitize the test set using train set vocab (convert letters to integers)
+        self.test = self.digitize(text=self.test, vocab=self.vocab)
 
     def load_data(self):
         self.data_dict = {}
-        self.vocab = None
-        for phase in ['train', 'test', 'valid']:
-            filename, filesize = self.filemap[phase]['filename'], self.filemap[phase]['size']
-            workdir, filepath = valid_path_append(self.path, '', filename)
-            if not os.path.exists(filepath):
-                fetch_file(self.url, filename, filepath, filesize)
+        workdir, filepath = valid_path_append(self.path, '', self.filename)
+        if not os.path.exists(filepath):
+            fetch_file(self.url, self.filename, filepath)
 
-            tokens = open(filepath).read()  # add tokenization here if necessary
+        tokens = open(filepath).read()
 
-            self.vocab = sorted(set(tokens if self.vocab is None else self.vocab))
+        train_samples = int(self.train_split * len(tokens))
+        train = tokens[:train_samples]
+        test = tokens[train_samples:]
 
-            # vocab dicts
-            self.token_to_index = dict((t, i) for i, t in enumerate(self.vocab))
-            self.index_to_token = dict((i, t) for i, t in enumerate(self.vocab))
+        return train, test
 
-            # map tokens to indices
-            X = np.asarray([self.token_to_index[t] for t in tokens], dtype=np.uint32)
-            if self.shift_target:
-                y = np.concatenate((X[1:], X[:1]))
-            else:
-                y = X.copy()
+    def build_vocab(self, text=None):
+        '''
+            Build a vocabulary from given text and store as the object's vocab
+            If no text given, build the vocab from self.train
+        '''
+        if text is None:
+            self.vocab = sorted(set(self.train))
+        else:
+            self.vocab = sorted(set(text))
 
-            self.data_dict[phase] = {'inp_txt': X, 'tgt_txt': y}
+        # vocab dicts
+        self.token_to_index = dict((t, i + 1) for i, t in enumerate(self.vocab))
+        self.index_to_token = dict((i + 1, t) for i, t in enumerate(self.vocab))
 
-        return self.data_dict
+        # Add zero as unknown token
+        self.index_to_token[0] = 'NaN'
+
+    def digitize(self, text=None, vocab=None):
+        '''
+            Convert given text to a sequence of digits (indices) using the given vocab
+            If no vocab given, it is built from the text
+        '''
+        if self.vocab is None:
+            self.build_vocab(text=text)
+
+        # map tokens to indices
+        # if the token is not in the vocabulary, put a zero (unknown)
+        text_dig = np.asarray([self.token_to_index[t] if t in self.vocab else 0 for t in text],
+                              dtype=np.uint32)
+        return text_dig
