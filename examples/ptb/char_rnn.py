@@ -70,11 +70,6 @@ if args.layer_type == "rnn":
 elif args.layer_type == "birnn":
     rlayer = BiRNN(hidden_size, init, activation=Tanh(), return_sequence=True, sum_out=True)
 
-if args.use_lut:
-    layer_0 = LookupTable(50, 100, init, update=False)
-else:
-    layer_0 = Preprocess(functor=expand_onehot)
-
 # model initialization
 seq1 = Sequential([layer_0,
                    rlayer,
