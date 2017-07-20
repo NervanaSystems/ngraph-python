@@ -27,7 +27,7 @@ export MKLDNN_ROOT=/path/to/mkldnn/root
 ```
 
 ### Multinode Support
-MPI is required for multinode support. Intel-MPI is available for free download - follow the instructions [here](https://software.intel.com/en-us/intel-mpi-library).
+MPI is required for multinode support. Follow the instructions [here](https://www.open-mpi.org/) for Open-MPI.
 ```
 export MPI_ROOT=/path/to/mpi
 ```
