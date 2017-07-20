@@ -53,6 +53,12 @@ class CPUFusion(GraphRewritePass):
 
     def construct_conv_and_bias_pattern_bprop(self):
         """
+        Add(Conv, bias) is replaced by mkldnn Conv(which incorporates
+        the bias) in 'fuse_conv_and_bias_callback'. During the
+        fusion the new Conv op is stored in a dict so that
+        the bprop.fprop pointer can be changed to refer to the new
+        Conv op, thus removing the dependency on the old conv and
+        avoiding having duplicate conv kernels.
         """
         self.conv_bprop_label = "B"
 
@@ -77,6 +83,12 @@ class CPUFusion(GraphRewritePass):
 
     def construct_conv_and_bias_pattern_update_conv(self):
         """
+        Add(Conv, bias) is replaced by mkldnn Conv(which incorporates
+        the bias) in 'fuse_conv_and_bias_callback'. During the
+        fusion the new Conv op is stored in a dict so that
+        the update_conv.fprop pointer can be changed to refer to the new
+        Conv op, thus removing the dependency on the old conv and
+        avoiding having duplicate conv kernels.
         """
         self.conv_update_label = "B"
         update_conv_op = PatternLabelOp(self.conv_update_label,

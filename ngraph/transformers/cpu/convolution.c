@@ -192,14 +192,15 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
 
   /* Allocate memory for internal format conversions */
   if (opkernel->reorder_i[0]) {
-    void* tmp_buf = alloc_memory(product(src_sizes, src_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(src_sizes, src_dims), data_type, 64);
     opkernel->internal_inputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                             tmp_buf));
   }
   if (opkernel->reorder_i[1]) {
-    void* tmp_buf =
-        alloc_memory(product(weights_sizes, weights_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(weights_sizes, weights_dims), data_type, 64);
     opkernel->internal_inputs[1].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                             tmp_buf));
@@ -207,8 +208,8 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
   if(bias_sizes)
   {
     if (opkernel->reorder_i[2]) {
-      void* tmp_buf =
-          alloc_memory(product(bias_sizes, bias_dims), data_type);
+      void* tmp_buf;
+      alloc_aligned_memory(&tmp_buf, product(bias_sizes, bias_dims), data_type, 64);
       opkernel->internal_inputs[2].buffer = tmp_buf;
       MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[2].prim,
                                               tmp_buf));
@@ -216,7 +217,8 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
   }
 
   if (opkernel->reorder_o[0]) {
-    void* tmp_buf = alloc_memory(product(dst_sizes, dst_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(dst_sizes, dst_dims), data_type, 64);
     opkernel->internal_outputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_outputs[0].prim,
                                             tmp_buf));
@@ -369,14 +371,15 @@ void create_mkldnn_conv_bprop_data_kernel(
 
   /* Allocate memory for internal format conversions */
   if (opkernel->reorder_i[0]) {
-    void* tmp_buf = alloc_memory(product(src_sizes, src_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(src_sizes, src_dims), data_type, 64);
     opkernel->internal_inputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                             tmp_buf));
   }
   if (opkernel->reorder_i[1]) {
-    void* tmp_buf =
-        alloc_memory(product(weights_sizes, weights_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(weights_sizes, weights_dims), data_type, 64);
     opkernel->internal_inputs[1].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                             tmp_buf));
@@ -527,20 +530,22 @@ void create_mkldnn_conv_bprop_weights_kernel(
 
   /* Allocate memory for internal format conversions */
   if (opkernel->reorder_i[0]) {
-    void* tmp_buf = alloc_memory(product(src_sizes, src_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(src_sizes, src_dims), data_type, 64);
     opkernel->internal_inputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[0].prim,
                                             tmp_buf));
   }
   if (opkernel->reorder_i[1]) {
-    void* tmp_buf = alloc_memory(product(dst_sizes, dst_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(dst_sizes, dst_dims), data_type, 64);
     opkernel->internal_inputs[1].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
                                             tmp_buf));
   }
   if (opkernel->reorder_o[0]) {
-    void* tmp_buf =
-        alloc_memory(product(weights_sizes, weights_dims), data_type);
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(weights_sizes, weights_dims), data_type, 64);
     opkernel->internal_outputs[0].buffer = tmp_buf;
     MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_outputs[0].prim,
                                             tmp_buf));
