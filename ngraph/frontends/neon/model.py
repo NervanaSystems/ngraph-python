@@ -14,16 +14,16 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-from ngraph.frontends.neon import wrap_layer, Layer
 from operator import itemgetter
+from ngraph.frontends.neon.graph import SubGraph
 
 
-class Sequential(Layer):
-    def __init__(self, layers, **kwargs):
-        super(Sequential, self).__init__(**kwargs)
+class Sequential(SubGraph):
+    def __init__(self, layers, name=None, **kwargs):
+        super(Sequential, self).__init__(name=name, **kwargs)
         self.layers = layers
 
-    @wrap_layer()
+    @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         for l in self.layers:
             in_obj = l(in_obj)

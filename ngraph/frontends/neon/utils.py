@@ -1,9 +1,20 @@
 from __future__ import absolute_import
+
 import ngraph as ng
 from .axis import ax
 
 
 def make_convolution_placeholder(shape=None):
+    """
+    Create a placeholder op for inputs to a convolution layer
+
+    Arguments:
+        shape (tuple): The desired shape of the placeholder,
+                       with axes in the order of C, D, H, W, N
+
+    Returns:
+        5-D placeholder op
+    """
 
     H = ng.make_axis(name="H", docstring="Height")
     W = ng.make_axis(name="W", docstring="Width")
