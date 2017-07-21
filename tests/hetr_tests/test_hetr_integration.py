@@ -30,7 +30,7 @@ import subprocess
 
 
 pytestmark = pytest.mark.hetr_only
-STARTUP_TIME = 2 
+STARTUP_TIME = 2
 
 
 def test_distributed_graph_plus_one(transformer_factory):
