@@ -48,7 +48,7 @@ class CPUFusion(GraphRewritePass):
             bias = label_map[self.conv_bias_label]
             conv_new_op = ConvolutionOp(conv_op.conv_params, conv_op.args[0],
                                         conv_op.args[1], bias, axes=conv_op.axes)
-            self.tensor_to_op_dict[conv_op] = conv_new_op
+            self.op_replacement_dict[conv_op] = conv_new_op
             self.replace_op(op, conv_new_op)
 
     def construct_conv_and_bias_pattern_bprop(self):
@@ -75,7 +75,7 @@ class CPUFusion(GraphRewritePass):
                                            op.args[1],
                                            op.fprop)
             try:
-                new_conv_fprop_op = self.tensor_to_op_dict[op.fprop]
+                new_conv_fprop_op = self.op_replacement_dict[op.fprop]
                 bprop_conv_new_op.fprop = new_conv_fprop_op
                 self.replace_op(op, bprop_conv_new_op)
             except KeyError:
@@ -104,7 +104,7 @@ class CPUFusion(GraphRewritePass):
                                              op.fprop.args[1],
                                              op.fprop)
             try:
-                new_conv_fprop_op = self.tensor_to_op_dict[op.fprop]
+                new_conv_fprop_op = self.op_replacement_dict[op.fprop]
                 update_conv_new_op.fprop = new_conv_fprop_op
                 self.replace_op(op, update_conv_new_op)
             except KeyError:
@@ -193,7 +193,7 @@ class CPUFusion(GraphRewritePass):
             relu_fwd_op = ReluOp(x, slope.tensor.const)
             # We need to store relu_fwd_op in a dictionary so that backward Relu
             # can access it.
-            self.tensor_to_op_dict[x] = relu_fwd_op
+            self.op_replacement_dict[x] = relu_fwd_op
             self.replace_op(op, relu_fwd_op)
 
     def construct_relu_bprop_pattern(self):
@@ -241,7 +241,7 @@ class CPUFusion(GraphRewritePass):
             # Matched Relu pattern, do the replacement here.
             x = label_map[self.relu_bwd_x_label]
             delta = label_map[self.relu_bwd_delta_label]
-            relu_fprop = self.tensor_to_op_dict[x]
+            relu_fprop = self.op_replacement_dict[x]
             self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
     def fuse_batchnorm_bprop_callback(self, op, label_map_op_list):
@@ -252,8 +252,8 @@ class CPUFusion(GraphRewritePass):
             # Matched bprop batchnorm pattern, do the replacement here.
             input_tensor = label_map[self.batchnorm_bprop_input_tensor]
             delta = label_map[self.batchnorm_bprop_delta]
-            if input_tensor in self.tensor_to_op_dict:
-                batchnorm_fprop = self.tensor_to_op_dict[input_tensor]
+            if input_tensor in self.op_replacement_dict:
+                batchnorm_fprop = self.op_replacement_dict[input_tensor]
                 self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
             else:
                 assert("No matching fprop BatchnormOp for the input_tensor \
@@ -413,12 +413,12 @@ class CPUFusion(GraphRewritePass):
             batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
 
             # book keep the fprop batchnorm op to use during back propogation
-            self.tensor_to_op_dict[inputs] = batchnorm_fwd_op
+            self.op_replacement_dict[inputs] = batchnorm_fwd_op
             self.replace_op(op, batchnorm_fwd_op)
 
     def __init__(self, **kwargs):
         super(CPUFusion, self).__init__(**kwargs)
-        self.tensor_to_op_dict = dict()
+        self.op_replacement_dict = dict()
 
         # Register Relu fprop pattern
         pattern_relu_fprop = self.construct_relu_fprop_pattern()

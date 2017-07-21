@@ -33,32 +33,22 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
                                     weights_dims, weights_sizes, data_type,
                                     mkldnn_any));
+  int * bias_desc = NULL;
   if (bias_sizes)
   {
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_bias_md, bias_dims,
                                       bias_sizes, data_type, mkldnn_x));
+    bias_desc = &mkldnn_memory_desc_bias_md;
   }
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, dst_dims,
                                     dst_sizes, data_type, mkldnn_any));
-  
   mkldnn_convolution_desc_t conv_desc;
-  if(bias_sizes)
-  {
-    MKL_CHECK(mkldnn_convolution_forward_desc_init(
-        &conv_desc, mkldnn_forward, mkldnn_convolution_direct,
-        &mkldnn_memory_desc_src_md, &mkldnn_memory_desc_weights_md, &mkldnn_memory_desc_bias_md,
-        &mkldnn_memory_desc_dst_md, strides, padding, padding,
-        mkldnn_padding_zero));
+  MKL_CHECK(mkldnn_convolution_forward_desc_init(
+      &conv_desc, mkldnn_forward, mkldnn_convolution_direct,
+      &mkldnn_memory_desc_src_md, &mkldnn_memory_desc_weights_md, bias_desc,
+      &mkldnn_memory_desc_dst_md, strides, padding, padding,
+      mkldnn_padding_zero));
 
-  }
-  else
-  {
-    MKL_CHECK(mkldnn_convolution_forward_desc_init(
-        &conv_desc, mkldnn_forward, mkldnn_convolution_direct,
-        &mkldnn_memory_desc_src_md, &mkldnn_memory_desc_weights_md, NULL,
-        &mkldnn_memory_desc_dst_md, strides, padding, padding,
-        mkldnn_padding_zero));
-  }
   MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &conv_desc, engine,
                                          NULL));
 
@@ -245,19 +235,12 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
   const_mkldnn_primitive_t conv_dsts[] = {mkldnn_memory_prim_dst};
 
   mkldnn_primitive_at_t conv_srcs[3];
-  /* create a convolution primitive */
-  if (bias_sizes)
-  {
-    conv_srcs[0] = mkldnn_primitive_at(mkldnn_memory_prim_src, 0);
-    conv_srcs[1] = mkldnn_primitive_at(mkldnn_memory_prim_weights, 0);
-    conv_srcs[2] = mkldnn_primitive_at(mkldnn_memory_prim_bias, 0);  
-  }
-  else
-  {
-    mkldnn_primitive_at_t conv_srcs[] = {
-        mkldnn_primitive_at(mkldnn_memory_prim_src, 0),
-        mkldnn_primitive_at(mkldnn_memory_prim_weights, 0)};
-  }
+  conv_srcs[0] = mkldnn_primitive_at(mkldnn_memory_prim_src, 0);
+  conv_srcs[1] = mkldnn_primitive_at(mkldnn_memory_prim_weights, 0);
+
+  if (bias_sizes) 
+      conv_srcs[2] = mkldnn_primitive_at(mkldnn_memory_prim_bias, 0);
+  
   MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc,
                                     conv_srcs, conv_dsts));
 
