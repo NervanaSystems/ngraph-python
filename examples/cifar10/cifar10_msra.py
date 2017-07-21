@@ -35,29 +35,6 @@ from ngraph.frontends.neon import make_bound_computation, make_default_callbacks
 from tqdm import tqdm
 import ngraph.transformers as ngt
 
-parser = NgraphArgparser(description='Train deep residual network on cifar10 dataset')
-parser.add_argument('--stage_depth', type=int, default=2,
-                    help='depth of each stage (network depth will be 9n+2)')
-parser.add_argument('--use_aeon', action='store_true', help='whether to use aeon dataloader')
-args = parser.parse_args()
-
-np.random.seed(args.rng_seed)
-
-# Create the dataloader
-if args.use_aeon:
-    from data import make_aeon_loaders
-    train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size, args.num_iterations)
-else:
-    from ngraph.frontends.neon import ArrayIterator  # noqa
-    from ngraph.frontends.neon import CIFAR10  # noqa
-    train_data, valid_data = CIFAR10(args.data_dir).load_data()
-    train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
-    valid_set = ArrayIterator(valid_data, args.batch_size)
-
-# we need to ask the dataset to create an iteration placeholder for our learning rate schedule
-inputs = train_set.make_placeholders(include_iteration=True)
-ax.Y.length = 10
-
 ######################
 # Model specification
 
@@ -148,54 +125,82 @@ def loop_eval(dataset, computation, metric_names):
     return reduced_results
 
 
-resnet = residual_network(args.stage_depth)
+if __name__ == "__main__":
+    parser = NgraphArgparser(description='Train deep residual network on cifar10 dataset')
+    parser.add_argument('--stage_depth', type=int, default=2,
+                        help='depth of each stage (network depth will be 9n+2)')
+    parser.add_argument('--use_aeon', action='store_true', help='whether to use aeon dataloader')
+    args = parser.parse_args()
 
-learning_rate_policy = {'name': 'schedule',
-                        'schedule': [32000, 48000],
-                        'gamma': 0.1,
-                        'base_lr': 0.1}
+    np.random.seed(args.rng_seed)
 
-optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                    momentum_coef=0.9,
-                                    wdecay=0.0001,
-                                    iteration=inputs['iteration'])
-label_indices = inputs['label']
-train_loss = ng.cross_entropy_multi(resnet(inputs['image']),
-                                    ng.one_hot(label_indices, axis=ax.Y))
-batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-train_computation = ng.computation(batch_cost, "all")
+    # Create the dataloader
+    if args.use_aeon:
+        from data import make_aeon_loaders
+        train_set, valid_set = make_aeon_loaders(args.data_dir,
+                                                 args.batch_size,
+                                                 args.num_iterations)
+    else:
+        from ngraph.frontends.neon import ArrayIterator  # noqa
+        from ngraph.frontends.neon import CIFAR10  # noqa
+        train_data, valid_data = CIFAR10(args.data_dir).load_data()
+        train_set = ArrayIterator(train_data, args.batch_size,
+                                  total_iterations=args.num_iterations)
+        valid_set = ArrayIterator(valid_data, args.batch_size)
 
-with Layer.inference_mode_on():
-    inference_prob = resnet(inputs['image'])
-    errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
-    eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(label_indices, axis=ax.Y))
-    eval_loss_names = ['cross_ent_loss', 'misclass']
-    eval_computation = ng.computation([eval_loss, errors], "all")
+    # we need to ask the dataset to create an iteration
+    # placeholder for our learning rate schedule
+    inputs = train_set.make_placeholders(include_iteration=True)
+    ax.Y.length = 10
 
-# Now bind the computations we are interested in
-transformer = ngt.make_transformer()
-train_function = transformer.add_computation(train_computation)
-eval_function = transformer.add_computation(eval_computation)
+    resnet = residual_network(args.stage_depth)
 
-tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
-interval_cost = 0.0
+    learning_rate_policy = {'name': 'schedule',
+                            'schedule': [32000, 48000],
+                            'gamma': 0.1,
+                            'base_lr': 0.1}
 
-for step, data in enumerate(train_set):
-    data['iteration'] = step
-    feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
-    output = train_function(feed_dict=feed_dict)
+    optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
+                                        momentum_coef=0.9,
+                                        wdecay=0.0001,
+                                        iteration=inputs['iteration'])
+    label_indices = inputs['label']
+    train_loss = ng.cross_entropy_multi(resnet(inputs['image']),
+                                        ng.one_hot(label_indices, axis=ax.Y))
+    batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+    train_computation = ng.computation(batch_cost, "all")
 
-    tpbar.update(1)
-    tpbar.set_description("Training {:0.4f}".format(output[()]))
-    interval_cost += output[()]
-    if (step + 1) % args.iter_interval == 0 and step > 0:
-        tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                   "Avg Train Cost {cost:0.4f}".format(
-                       interval=step // args.iter_interval,
-                       iteration=step,
-                       cost=interval_cost / args.iter_interval))
-        interval_cost = 0.0
-        eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
-        tqdm.write("Avg losses: {}".format(eval_losses))
+    with Layer.inference_mode_on():
+        inference_prob = resnet(inputs['image'])
+        errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
+        eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(label_indices, axis=ax.Y))
+        eval_loss_names = ['cross_ent_loss', 'misclass']
+        eval_computation = ng.computation([eval_loss, errors], "all")
 
-print("Training complete.")
+    # Now bind the computations we are interested in
+    transformer = ngt.make_transformer()
+    train_function = transformer.add_computation(train_computation)
+    eval_function = transformer.add_computation(eval_computation)
+
+    tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
+    interval_cost = 0.0
+
+    for step, data in enumerate(train_set):
+        data['iteration'] = step
+        feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
+        output = train_function(feed_dict=feed_dict)
+
+        tpbar.update(1)
+        tpbar.set_description("Training {:0.4f}".format(output[()]))
+        interval_cost += output[()]
+        if (step + 1) % args.iter_interval == 0 and step > 0:
+            tqdm.write("Interval {interval} Iteration {iteration} complete. "
+                       "Avg Train Cost {cost:0.4f}".format(
+                           interval=step // args.iter_interval,
+                           iteration=step,
+                           cost=interval_cost / args.iter_interval))
+            interval_cost = 0.0
+            eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            tqdm.write("Avg losses: {}".format(eval_losses))
+
+    print("Training complete.")
