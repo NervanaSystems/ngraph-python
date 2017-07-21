@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import gym
 import ngraph as ng
 from ngraph.examples.dqn import dqn

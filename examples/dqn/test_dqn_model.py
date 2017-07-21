@@ -94,7 +94,7 @@ def test_epsilon_linear():
     )
 
     target = [float(i) for i in range(10)]
-    found = [epsilon_linear.next() for _ in range(10)]
+    found = [next(epsilon_linear) for _ in range(10)]
     np.testing.assert_allclose(found, target)
 
 
@@ -106,21 +106,21 @@ def test_epsilon_linear_after_end():
     )
 
     target = [0, 1, 2, 2, 2]
-    found = [epsilon_linear.next() for _ in range(5)]
+    found = [next(epsilon_linear) for _ in range(5)]
     np.testing.assert_allclose(found, target)
 
 
 def test_decay_generator_minimum():
     generator = dqn.decay_generator(1, 1, 2)
 
-    assert generator.next() == 2
+    assert next(generator) == 2
 
 
 def test_decay_generator_simple():
     generator = dqn.decay_generator(1, 0.5, 0.125)
 
-    assert generator.next() == 1
-    assert generator.next() == 0.5
-    assert generator.next() == 0.25
-    assert generator.next() == 0.125
-    assert generator.next() == 0.125
+    assert next(generator) == 1
+    assert next(generator) == 0.5
+    assert next(generator) == 0.25
+    assert next(generator) == 0.125
+    assert next(generator) == 0.125
