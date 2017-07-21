@@ -110,7 +110,7 @@ class Optimizer(object):
 
 class LearningRateOptimizer(Optimizer):
 
-    def __init__(self, learning_rate, iteration=None, **kwargs):
+    def __init__(self, learning_rate, iteration=0, **kwargs):
         super(LearningRateOptimizer, self).__init__(**kwargs)
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
