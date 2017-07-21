@@ -12,27 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import signal
-import sys
-import os
-import time
-from six import itervalues, iteritems
-from multiprocessing import Process, Manager, Event
-from queue import Empty
 import collections
-from orderedset import OrderedSet
-from ngraph.op_graph.op_graph import Op, TensorValueOp
-from ngraph.op_graph.comm_nodes import ResultOp
-# from ngraph.op_graph.hetr_grpc.rpc_client import RPCTransformerClient
-from ngraph.util.hetr_utils import update_comm_deps
-from ngraph.transformers.base import ComputationGraphTransformer
-from ngraph.transformers.base import make_transformer_factory
-from ngraph.transformers.base import Computation
-from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
-from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
-from ngraph.transformers.passes.hetrpasses import CommunicationPass
-from ngraph.transformers.passes.hetrpasses import DistributedPass
+import os
+import signal
 import subprocess
+import sys
+import time
+from multiprocessing import Process, Manager, Event
+
+from orderedset import OrderedSet
+from queue import Empty
+from six import itervalues, iteritems
+
+from ngraph.op_graph.comm_nodes import ResultOp
+from ngraph.op_graph.op_graph import Op, TensorValueOp
+from ngraph.transformers.base import Computation
+from ngraph.transformers.base import ComputationGraphTransformer
+from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
+from ngraph.transformers.base import make_transformer_factory
+from ngraph.transformers.hetr.hetr_utils import update_comm_deps
+from ngraph.transformers.passes.hetrpasses import CommunicationPass
+from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
+from ngraph.transformers.passes.hetrpasses import DistributedPass
 
 
 def build_transformer(name):
@@ -187,7 +188,7 @@ class AsyncTransformer(Process):
                 if isinstance(e, Empty):
                     pass
                 else:
-                    # TODO handle and exit gracefully
+                    # TODO : Issue #1796 handle and exit gracefully
                     raise
 
 
@@ -333,7 +334,7 @@ class HetrTransformer(ComputationGraphTransformer):
         self.is_closed = True
 
     def register_transformer(self, tname):
-        # TODO change from using tname string to using (ttype, dev_id, host) tuple
+        # TODO: Issue #1866 change from using tname string to using (ttype, dev_id, host) tuple
         if tname not in self.child_transformers:
             if 'cpu' in tname:
                 # trans_client = RPCTransformerClient(tname)
@@ -371,6 +372,7 @@ class HetrTransformer(ComputationGraphTransformer):
     to be a 'Transformer', which it wants to be in order to expose
     the user-facing parts of the Transformer API.
     """
+    # TODO: Refer Issue #978
     def initialize(self):
         pass
 

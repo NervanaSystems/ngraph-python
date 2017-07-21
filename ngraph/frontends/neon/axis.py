@@ -28,7 +28,7 @@ class Namespace():
 ax = Namespace()
 ax.N = ng.make_axis(name='N', docstring="minibatch size")
 ax.REC = ng.make_axis(name='REC', docstring="recurrent axis")
-ax.Y = ng.make_axis(docstring="target")
+ax.Y = ng.make_axis(name="Y", docstring="target")
 
 
 def shadow_axes_map(axes):

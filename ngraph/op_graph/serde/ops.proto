@@ -29,7 +29,6 @@ message OpAttr {
     FilterParams pool_params = 6;
     Axes axes = 7;
     Tensor tensor = 8;
-    Axis axis = 9;
   }
 }
 
@@ -53,6 +52,7 @@ message Scalar {
     bool null_val = 8; // Sentinel for Python None values
     Slice slice_val = 9; // Python slices
     DTYPE dtype_val = 10;
+    Axis axis = 11;
   }
 }
 
@@ -105,24 +105,25 @@ enum DTYPE {
   FLEX16 = 10;
 }
 
-message Tensor {
-  //  tensor will be encoded in binary format
-  UUID uuid = 1;
+message TensorInfo {
   DTYPE dtype = 2;
   repeated uint32 shape = 3;
-  // TODO(jknight) storing the data inline like this is currently a short term solution for
-  // constants.
-  bytes raw_data = 8;
 }
 
-message TensorDescription {
-  UUID uuid   = 1;
-  Axes axes    = 2;
-  UUID base   = 3;  // uuid of the base
-  DTYPE dtype  = 4;
-  int32 offset = 5;
-  repeated int32 full_strides = 6;
-  repeated int32 full_sizes   = 7;
+message Tensor {
+  TensorInfo info = 1;
+  bytes data = 2;
+}
+
+message TensorManifest {
+  // a map<UUID, TensorInfo> would be better but protobuf doesn't
+  // support bytes in the key of a map.
+  repeated TensorInfoUUIDPair pairs = 1;
+}
+
+message TensorInfoUUIDPair {
+  UUID uuid = 1;
+  TensorInfo info = 2;
 }
 
 message Axes {

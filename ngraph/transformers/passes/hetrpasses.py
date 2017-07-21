@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.transformers.passes.passes import GraphBuildingPass
+import socket
+
+from orderedset import OrderedSet
+
 from ngraph.factory.comm_node_factory import get_comm_pattern, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
-from ngraph.util.hetr_utils import clone_graph
-from orderedset import OrderedSet
-import socket
+from ngraph.transformers.hetr.hetr_utils import clone_graph
+from ngraph.transformers.passes.passes import GraphBuildingPass
 
 
 class DeviceAssignPass(GraphBuildingPass):
@@ -101,7 +103,6 @@ class DistributedPass(GraphBuildingPass):
             if op.metadata.get('marker') == 'gather':
                 # op is GatherRecvOp
                 self.parallel_axes = op.metadata['parallel']
-
                 gather_send_op = op.send_nodes[0]
 
                 # clone nodes for each device_id

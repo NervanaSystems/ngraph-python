@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+Run it using
+
+python examples/benchmarks/mini_resnet.py -data cifar10 -b hetr -d cpu -m 2 -z 64 -t 2 -s 1 --bprop
+"""
 from __future__ import division
 from __future__ import print_function
 from benchmark import Benchmark
@@ -19,28 +24,10 @@ from fake_data_generator import generate_data
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
-from ngraph.frontends.neon import ax
+from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
-import numpy as np
-import argparse
-
-
-# TODO: Need to refactor and make it shareable with Alex's tests
-def cifar_mean_subtract(x):
-    bgr_mean = ng.persistent_tensor(
-        axes=[x.axes.channel_axis()],
-        initial_value=np.array([104., 119., 127.]))
-    return (x - bgr_mean) / 255.
-
-
-def conv_params(fsize, nfm, strides=1, relu=False, batch_norm=False):
-    return dict(fshape=(fsize, fsize, nfm),
-                strides=strides,
-                padding=(1 if fsize > 1 else 0),
-                activation=(Rectlin() if relu else None),
-                filter_init=KaimingInit(),
-                batch_norm=batch_norm)
+from examples.cifar10.cifar10_msra import cifar_mean_subtract, conv_params
 
 
 class f_module(object):
@@ -48,8 +35,8 @@ class f_module(object):
 
         self.trunk = None
         self.side_path = None
-        main_path = [Convolution(**conv_params(1, nfm, strides=strides)),
-                     Convolution(**conv_params(3, nfm)),
+        main_path = [Convolution(**conv_params(1, nfm, strides=strides, batch_norm=batch_norm)),
+                     Convolution(**conv_params(3, nfm, batch_norm=batch_norm)),
                      Convolution(**conv_params(1, nfm * 4, relu=False, batch_norm=False))]
 
         if first or strides == 2:
@@ -117,20 +104,20 @@ def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
     return model_out
 
 
-def get_fake_data(dataset, batch_size, n_iter):
+def get_fake_data(dataset, batch_size, num__iterations):
     x_train, y_train = generate_data(dataset, batch_size)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'height', 'width')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
-    train_set = ArrayIterator(train_data, batch_size, total_iterations=n_iter)
+    train_set = ArrayIterator(train_data, batch_size, total_iterations=num__iterations)
     inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 
 
-def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
+def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
                          transformer_type, device, bprop=True, visualize=False):
-    inputs, data, train_set = get_fake_data(dataset, batch_size, n_iter)
+    inputs, data, train_set = get_fake_data(dataset, batch_size, num_iterations)
 
     # Running forward propagation
     model_out = get_mini_resnet(inputs, dataset, device_id)
@@ -146,43 +133,41 @@ def run_resnet_benchmark(dataset, n_iter, n_skip, batch_size, device_id,
             batch_cost_computation_op = ng.computation(batch_cost, "all")
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
                               transformer_type, device)
-        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                          dataset + '_msra_bprop', visualize, 'device_id'))
+        Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
+                                                         dataset + '_msra_bprop',
+                                                         visualize, 'device_id'))
     else:
         fprop_computation_op = ng.computation(model_out, 'all')
         benchmark = Benchmark(fprop_computation_op, train_set, inputs,
                               transformer_type, device)
-        Benchmark.print_benchmark_results(benchmark.time(n_iter, n_skip,
-                                          dataset + '_msra_fprop', visualize))
+        Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
+                                                         dataset + '_msra_fprop',
+                                                         visualize))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = NgraphArgparser(description='Train deep residual network')
     parser.add_argument('-data', '--data_set', default='cifar10',
                         choices=['cifar10', 'i1k'], help="data set name")
-    parser.add_argument('-v', '--visualize', action="store_true",
-                        help="enable graph visualization")
-    parser.add_argument('-bs', '--batch_size', type=int, default=128, help="batch size")
-    parser.add_argument('-i', '--max_iter', type=int, default=10, help="max number of iterations")
     parser.add_argument('-s', '--skip_iter', type=int, default=1,
                         help="number of iterations to skip")
-    parser.add_argument('-n', '--num_devices', nargs='+', type=int, default=[1],
+    parser.add_argument('-m', '--num_devices', nargs='+', type=int, default=[1],
                         help="number of devices to run the benchmark on")
-    parser.add_argument('-t', '--transformer', default='hetr', help="transformer name")
-    parser.add_argument('-d', '--device', default='cpu', choices=['cpu', 'gpu'],
-                        help="device to run on")
-    parser.add_argument('-b', '--bprop', type=int, default=0, help="enable back propagation")
+    parser.add_argument('--hetr_device', default='cpu', choices=['cpu', 'gpu'],
+                        help="device to run HeTr")
+    parser.add_argument('--bprop', action="store_true", help="enable back propagation")
+    parser.add_argument('--graph_vis', action="store_true", help="enable graph visualization")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
     for device_id in device_ids:
         run_resnet_benchmark(dataset=args.data_set,
-                             n_iter=args.max_iter,
+                             num_iterations=args.num_iterations,
                              n_skip=args.skip_iter,
                              batch_size=args.batch_size,
                              device_id=device_id,
-                             transformer_type=args.transformer,
-                             device=args.device,
-                             bprop=args.bprop != 0,
-                             visualize=args.visualize)
+                             transformer_type=args.backend,
+                             device=args.hetr_device,
+                             bprop=args.bprop,
+                             visualize=args.graph_vis)

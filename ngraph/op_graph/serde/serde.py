@@ -101,10 +101,10 @@ def axes_to_protobuf(axes):
 
 def tensor_to_protobuf(tensor):
     pb_tensor = ops_pb.Tensor()
-    pb_tensor.dtype = dtype_to_protobuf(tensor.dtype)
-    pb_tensor.shape.extend(tensor.shape)
+    pb_tensor.info.dtype = dtype_to_protobuf(tensor.dtype)
+    pb_tensor.info.shape.extend(tensor.shape)
     if isinstance(tensor, (np.ndarray, np.generic)):
-        pb_tensor.raw_data = tensor.tobytes()
+        pb_tensor.data = tensor.tobytes()
     else:
         raise ValueError("Unknown tensor value of {}".format(tensor))
     return pb_tensor
@@ -117,8 +117,8 @@ def unhandled_scalar_value(value):
 
 def is_scalar_type(value):
     return value is None or \
-        isinstance(value, (str, six.text_type, float, bool, dict, slice, np.generic)
-                   + six.integer_types)
+        isinstance(value, (str, six.text_type, float, bool, Axis, dict, slice, np.generic) +
+                   six.integer_types)
 
 
 def assign_scalar(message, value):
@@ -153,6 +153,8 @@ def assign_scalar(message, value):
             assign_scalar(message.map_val.map[key], value[key])
         # This encodes an empty dict for deserialization
         assign_scalar(message.map_val.map['_ngraph_map_sentinel_'], '')
+    elif isinstance(value, Axis):
+        message.axis.CopyFrom(axis_to_protobuf(value))
     else:
         raise unhandled_scalar_value(value)
 
@@ -171,8 +173,6 @@ def assign_op_attr(message, value):
         assign_scalar(message.scalar, value)
     elif isinstance(value, Axes):
         message.axes.CopyFrom(axes_to_protobuf(value))
-    elif isinstance(value, Axis):
-        message.axis.CopyFrom(axis_to_protobuf(value))
     elif isinstance(value, np.ndarray):
         message.tensor.CopyFrom(tensor_to_protobuf(value))
     elif isinstance(value, Iterable):
@@ -334,13 +334,18 @@ def pb_to_dict(map_val):
             if key != '_ngraph_map_sentinel_'}
 
 
-def pb_to_tensor(pb_tensor):
-    np_dtype = pb_to_dtype(pb_tensor.dtype)
-    data = np.fromstring(pb_tensor.raw_data, dtype=np_dtype)
-    if len(pb_tensor.shape) == 0:
-        return np_dtype.type(data[0])
+def data_to_tensor(data, info):
+    np_dtype = pb_to_dtype(info.dtype)
+    data_array = np.fromstring(data, dtype=np_dtype)
+    # data_array = np.fromstring(''.join(data[:]), dtype=np_dtype)
+    if len(info.shape) == 0:
+        return data_array[0]
     else:
-        return np.array(data, dtype=np_dtype).reshape(pb_tensor.shape)
+        return data_array.reshape(info.shape)
+
+
+def pb_to_tensor(pb_tensor):
+    return data_to_tensor(pb_tensor.data, pb_tensor.info)
 
 
 def protobuf_scalar_to_python(val):
@@ -359,6 +364,8 @@ def protobuf_scalar_to_python(val):
                      val.step.value if val.HasField('step') else None)
     elif scalar_key == 'dtype_val':
         return pb_to_dtype(val.dtype_val)
+    elif scalar_key == 'axis':
+        return pb_to_axis(val.axis)
     return getattr(val, scalar_key)
 
 
@@ -375,6 +382,7 @@ def protobuf_to_axes(msg):
 def protobuf_attr_to_python(val):
     if val.HasField('scalar'):
         return protobuf_scalar_to_python(val.scalar)
+
     if val.HasField('tensor'):
         return pb_to_tensor(val.tensor)
     elif val.HasField('repeated_scalar'):
@@ -385,8 +393,6 @@ def protobuf_attr_to_python(val):
             return list(map(protobuf_scalar_to_python, val.repeated_scalar.val))
     elif val.HasField('axes'):
         return protobuf_to_axes(val.axes)
-    elif val.HasField('axis'):
-        return pb_to_axis(val.axis)
     else:
         raise ValueError("Cannot convert {} to python attribute value".format(val))
 
