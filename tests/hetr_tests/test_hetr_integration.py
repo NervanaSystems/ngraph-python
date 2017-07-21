@@ -30,7 +30,7 @@ import subprocess
 
 
 pytestmark = pytest.mark.hetr_only
-STARTUP_TIME = 1.0
+STARTUP_TIME = 2 
 
 
 def test_distributed_graph_plus_one(transformer_factory):
@@ -499,15 +499,15 @@ class ClosingHetrServers():
             command = ["python", hetr_server, "-p", p]
             try:
                 proc = subprocess.Popen(command)
-                time.sleep(STARTUP_TIME)
                 self.processes.append(proc)
             except Exception as e:
                 print(e)
+            time.sleep(STARTUP_TIME)
 
     def close(self):
         for p in self.processes:
             p.terminate()
-            time.sleep(STARTUP_TIME)
+        time.sleep(STARTUP_TIME)
         for p in self.processes:
             p.kill()
         for p in self.processes:
