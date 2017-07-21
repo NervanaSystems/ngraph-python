@@ -125,12 +125,6 @@ class ScopedNameableValue(NameableValue):
     def scope(self):
         return self.__scope
 
-    @scope.setter
-    def scope(self, scope):
-        self.__scope = NameScope.get_or_create_scope(scope)
-        # Rename to unscoped name so that it will pick up the new scope value
-        self.name = self.name.rsplit("/", 1)[-1]
-
     @property
     def name(self):
         return super(ScopedNameableValue, self).name
