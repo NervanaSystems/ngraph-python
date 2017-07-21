@@ -72,9 +72,8 @@ iteration = 100000, train loss = 0.716338455677
 
 ## To-dos
 - [X] change decoder input to coordinates for teacher forcing  
-- [ ] ptr-net inference code
 - [ ] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
 - [X] use LSTM as enc/dec rnn cell
-- [ ] script to calculate travel distance and compare with original paper
+- [ ] function to calculate travel distance
+- [ ] ptr-net inference code
 - [ ] visualize TSP  
-- [ ] python/shell script to download TSP data
