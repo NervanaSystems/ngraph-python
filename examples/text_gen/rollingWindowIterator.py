@@ -18,7 +18,8 @@ import numpy as np
 
 class RollingWindowIterator(object):
 
-    def __init__(self, data_array, batch_size, seq_len, total_iterations=None, stride=1):
+    def __init__(self, data_array, batch_size, seq_len,
+                 return_sequences=False, total_iterations=None, stride=1):
         """
         Given an input sequence, generates overlapping windows of samples
 
@@ -26,30 +27,44 @@ class RollingWindowIterator(object):
             data_array : Numpy array of shape (N,D).
                                 N is length of sequence
                                 D is input feature dimension
-        Output of each iteration: Dictionary of of input and output samples
+        Output of each iteration: Dictionary of input and output samples
             samples['X'] has size (batch_size, seq_len, D)
-            samples['y'] has size (batch_size, 1, D)
+            samples['y'] has size (batch_size, 1, D) (if return_sequences is False)
+            samples['y'] has size (batch_size, seq_len, D) (if return_sequences is True)
 
         Example:
             data_array is a numpy array with shape (N,1): [a1, a2, ..., aN]
-            Each generated sample will be an input sequence / output single point pairs such as:
-                Sample0: Input:  [a1, a2, ..., a(seq_len)]
-                         Output: a(seq_len + 1)
-                Sample1: Input:  [a(stride +1), a(stride+2), ..., a(stride+seq_len)]
-                         Output: a(stride+seq_len +1)
-                        ...
-            Each iteration will return batch_size number of samples
+            If return_sequences is False:
+                Each generated sample will be an input sequence / output single point pairs:
+                    Sample0: Input:  [a1, a2, ..., a(seq_len)]
+                             Output: a(seq_len + 1)
+                    Sample1: Input:  [a(stride +1), a(stride+2), ..., a(stride+seq_len)]
+                             Output: a(stride+seq_len +1)
+                            ...
+                Each iteration will return batch_size number of samples
 
-        If stride = 1, the window will shift by one
-            Hence Sample0 and Sample1 will have (seq_len - 1) elements that are the same
-        If stride = seq_len, Sample0 and Sample1 will have no overlapping elements
+                If stride = 1, the window will shift by one
+                    Hence Sample0 and Sample1 will have (seq_len - 1) elements that are the same
+                If stride = seq_len, Sample0 and Sample1 will have no overlapping elements
 
+            If return_sequences is True:
+                Each generated sample will be an input sequence / output sequence pairs such as:
+                    Sample0: Input:  [a1, a2, ..., a(seq_len)]
+                             Output: [a2, a3, ..., a(seq_len + 1)
+                    Sample1: Input:  [a(stride +1), a(stride+2), ..., a(stride+seq_len)]
+                             Output: [a(stride + 2), a(stride + 3), ..., a(stride+seq_len +1)]
+                            ...
+                Each iteration will return batch_size number of samples
+
+                If stride = 1, the window will shift by one
+                    Hence Sample0 and Sample1 will have (seq_len - 1) elements that are the same
+                If stride = seq_len, Sample0 and Sample1 will have no overlapping elements
         seq_len: Width of the rolling window requested
         batch_size: how many samples to return for each iteration
         total_iterations: number of batches to retrieve from the sequence (roll over if necessary)
                          If set to None, will rotate through the whole sequence only once
         """
-
+        self.return_seq = return_sequences
         self.data_array = data_array
         self.seq_len = seq_len
         if (len(data_array.shape) == 1):
@@ -100,8 +115,13 @@ class RollingWindowIterator(object):
                 samples['X']: Features, with shape (batch_size, seq_len, feature_dim)
                 samples['y']: Labels, with shape (batch_size, 1, feature_dim)
         """
+        if (self.return_seq is False):
+            out_seq_len = 1
+        else:
+            out_seq_len = self.seq_len
+
         samples = {'X': np.zeros((self.batch_size, self.seq_len, self.feature_dim)),
-                   'y': np.zeros((self.batch_size, 1, self.feature_dim))}
+                   'y': np.zeros((self.batch_size, out_seq_len, self.feature_dim))}
         stride = self.stride
         while self.index < self.total_iterations:
             strt_idx = (self.start + self.index * self.batch_size * stride)
@@ -112,7 +132,10 @@ class RollingWindowIterator(object):
                 idcs = np.arange(strt_idx + (batch_idx * stride),
                                  end_idx + (batch_idx * stride)) % self.ndata
                 samples['X'][sample_id] = self.data_array[idcs]
-                samples['y'][sample_id] = self.data_array[(idcs[-1] + 1) % self.ndata]
+                if (self.return_seq is False):
+                    samples['y'][sample_id] = self.data_array[(idcs[-1] + 1) % self.ndata]
+                else:
+                    samples['y'][sample_id] = self.data_array[(idcs + 1) % self.ndata]
                 sample_id += 1
             samples['iteration'] = self.index
             yield samples

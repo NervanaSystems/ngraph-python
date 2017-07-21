@@ -19,6 +19,16 @@
 
  Uses Shakespeare text sample to train an LSTM based model to predict the next character
  Uses the trained model to generate own text
+ Options:
+    --recurrent_units : Number of cells in the LSTM (default 128)
+    --seq_len : Length of each string input to the LSTM (number of chars, default 32)
+    --predict_seq : If set to True, the output of the LSTM will be a sequence
+                    If set to False, only the next character is predicted
+        Example:
+            predict_seq True:
+                Input ['My name is Georg'], Ground Truth Output: ['y name is George']
+            predict_seq False:
+                Input ['My name is Georg'], Ground Truth Output: ['e']
 '''
 from __future__ import division, print_function
 from builtins import range
@@ -122,7 +132,10 @@ def generate_text(generation_function, seed_txt, gen_txt_length=250):
         gen_chars = generation_function(feed_dict=feed_dict)
 
         # Get the probability for each character for the first sample
-        gen_chars = gen_chars[:, 0]
+        if(predict_seq is False):
+            gen_chars = gen_chars[:, 0]
+        else:
+            gen_chars = gen_chars[:, -1, 0]
         # Scale the probabilites of all characters so that they sum up to 1
         gen_chars = gen_chars / (gen_chars.sum() + 1e-6)
 
@@ -165,6 +178,9 @@ if __name__ == "__main__":
     parser.set_defaults()
     args = parser.parse_args()
 
+    # Predict sequences rather than just next character
+    predict_seq = args.predict_seq
+
     # Recurrent units
     recurrent_units = args.recurrent_units
 
@@ -185,9 +201,11 @@ if __name__ == "__main__":
     # if stride is set to seq_len, windows are non-overlapping
     stride = seq_len // 2
     shakes_train = RollingWindowIterator(data_array=shakes.train, total_iterations=num_iterations,
-                                         seq_len=seq_len, batch_size=batch_size, stride=stride)
+                                         seq_len=seq_len, batch_size=batch_size, stride=stride,
+                                         return_sequences=predict_seq)
     shakes_test = RollingWindowIterator(data_array=shakes.test,
-                                        seq_len=seq_len, batch_size=batch_size, stride=stride)
+                                        seq_len=seq_len, batch_size=batch_size, stride=stride,
+                                        return_sequences=predict_seq)
 
     # ********************
     # NAME AND CREATE AXES
@@ -209,7 +227,10 @@ if __name__ == "__main__":
     # RollingWindowIterator gives an output of (batch_size, 1) for each iteration
     # Thus create an axis of that size
     # We will later convert this output to onehot
-    out_axes = ng.make_axes([batch_axis])
+    if(predict_seq is True):
+        out_axes = ng.make_axes([batch_axis, time_axis])
+    else:
+        out_axes = ng.make_axes([batch_axis])
 
     # Build placeholders for the created axes
     inputs = {'X': ng.placeholder(in_axes), 'y': ng.placeholder(out_axes),
@@ -221,7 +242,7 @@ if __name__ == "__main__":
     seq1 = Sequential([Preprocess(functor=expand_onehot),
                        LSTM(nout=recurrent_units, init=init_uni, backward=False,
                        reset_cells=True,
-                       activation=Logistic(), gate_activation=Tanh(), return_sequence=False),
+                       activation=Logistic(), gate_activation=Tanh(), return_sequence=predict_seq),
                        Affine(weight_init=init_uni, bias_init=init_uni,
                        activation=Softmax(), axes=out_axis)])
     '''
@@ -241,24 +262,29 @@ if __name__ == "__main__":
     learning_rate_policy = {'name': 'exp',
                             'gamma': 0.98,
                             'base_lr': 0.01}
-    optimizer = RMSProp(gradient_clip_value=1, learning_rate=learning_rate_policy,
-                        iteration=inputs['iteration'] // 1000)
     '''
     # Below is an alternate optimization procedure that reduces learning rate at a given schedule
-    # Initial learning rate is 0.02 (base_lr)
-    # At iteration (num_iterations * .1), learning rate is multiplied by gamma (new lr = .002)
-    # At iteration (num_iterations * .2), it is reduced by gamma again (new lr = .0002)
+    # Initial learning rate is 0.01 (base_lr)
+    # At iteration (num_iterations // 75), lr is multiplied by gamma (new lr = .95 * .01)
+    # At iteration (num_iterations * 2 // 75), it is reduced by gamma again
     # So on..
-    schedule = [.1* num_iterations * i for i in range(1,10,1)]
+    '''
+    no_steps = 75
+    step = num_iterations // no_steps
+    schedule = list(np.arange(step, num_iterations, step))
     learning_rate_policy = {'name': 'schedule',
                             'schedule': schedule,
-                            'gamma': 0.1,
+                            'gamma': 0.95,
                             'base_lr': 0.01}
+    '''
     optimizer = GradientDescentMomentum(momentum_coef=.9,
                                         learning_rate=learning_rate_policy,
                                         iteration=inputs['iteration'],
                                         gradient_clip_value=5)
     '''
+
+    optimizer = RMSProp(gradient_clip_value=1, learning_rate=learning_rate_policy,
+                        iteration=inputs['iteration'])
 
     # Define the loss function (Cross entropy loss)
     # Note that we convert the integer values of input['y'] to one hot here
