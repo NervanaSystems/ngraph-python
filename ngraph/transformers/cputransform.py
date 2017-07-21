@@ -839,15 +839,18 @@ class CPUTransformer(ExecutionGraphTransformer):
         # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
         # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
 
-        self.graph_passes = [
+        self.graph_passes = []
+        if self.mkldnn.enabled:
+            self.graph_passes.append(CPUFusion())
+        self.graph_passes += [
             # ExVizPass(view=True, filename="initial"),
-            CPUFusion(),
             CPUTensorLayout(),
             SimplePrune(),
             RequiredTensorShaping(),
             CPUTensorShaping(),
             DeadCodeEliminationPass(),
         ]
+
         add_layout_conversion = AddLayoutConversions(None)
         if self.mkldnn.enabled:
             self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn)),
