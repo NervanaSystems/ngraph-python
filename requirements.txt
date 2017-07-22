@@ -32,3 +32,6 @@ setuptools==18.5
 
 # cffi is required to wrap warp-ctc
 cffi>=1.0
+
+# neon frontend
+parsel==1.2.0
