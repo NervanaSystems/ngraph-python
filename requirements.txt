@@ -1,5 +1,5 @@
 # These come over from neon
-numpy==1.11.1
+numpy==1.13.1
 h5py==2.6.0
 appdirs==1.4.0
 
