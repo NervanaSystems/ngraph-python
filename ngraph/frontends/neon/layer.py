@@ -607,7 +607,7 @@ class Bias(Layer):
             w_axes = in_obj.axes.sample_axes()
             if self.shared and in_obj.axes.channel_axis() is not None:
                 w_axes = ng.make_axes(in_obj.axes.channel_axis())
-            self.W = ng.variable(axes=w_axes, initial_value=self.init, scope=self.scope,
+            self.W = ng.variable(axes=w_axes, initial_value=self.init,
                                  metadata={"label": LABELS["bias"]}).named("bias")
         return in_obj + self.W
 
