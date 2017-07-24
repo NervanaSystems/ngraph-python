@@ -135,7 +135,10 @@ class LearningRateOptimizer(Optimizer):
 
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
-        batch_size = cost_func.axes.batch_axis().length
+        if cost_func.axes.batch_axis() is None:
+            batch_size = 1
+        else:
+            batch_size = cost_func.axes.batch_axis().length
 
         # determine variables to optimize
         if subgraph is not None:
