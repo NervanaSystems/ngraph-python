@@ -3,13 +3,10 @@ import ngraph as ng
 import dqn
 import rl_loop
 from baselines.common.atari_wrappers_deprecated import wrap_dqn
-from examples.dqn.gym_wrapper import ReshapeWrapper, ClipRewardWrapper
-from examples.dqn.gym_wrapper import RepeatWrapper, TerminateOnEndOfLifeWrapper
-from examples.dqn.gym_wrapper import DimShuffleWrapper
+from gym_wrapper import ReshapeWrapper, ClipRewardWrapper
+from gym_wrapper import RepeatWrapper, TerminateOnEndOfLifeWrapper
+from gym_wrapper import DimShuffleWrapper
 from ngraph.frontends import neon
-
-# factory = ng.transformers.make_transformer_factory('gpu')
-# mg.transformers.set_transformer_factory(factory)
 
 
 def model(action_axes):
@@ -89,4 +86,8 @@ def main():
 
 
 if __name__ == "__main__":
+    from ngraph.frontends.neon import NgraphArgparser
+
+    parser = NgraphArgparser()
+    parser.parse_args()
     main()

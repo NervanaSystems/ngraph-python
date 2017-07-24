@@ -2,8 +2,8 @@ from __future__ import print_function
 
 import gym
 import ngraph as ng
-from ngraph.examples.dqn import dqn
-from ngraph.examples.dqn import rl_loop
+import dqn
+import rl_loop
 from ngraph.frontends import neon
 
 
@@ -80,4 +80,8 @@ def main():
 
 
 if __name__ == "__main__":
+    from ngraph.frontends.neon import NgraphArgparser
+
+    parser = NgraphArgparser()
+    parser.parse_args()
     main()

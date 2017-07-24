@@ -1,7 +1,13 @@
 from __future__ import print_function
+import logging
 from collections import deque
 
 import numpy as np
+from ngraph.frontends.neon.logging import ProgressBar, PBStreamHandler
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(PBStreamHandler(level=logging.INFO))
 
 
 def rl_loop_train(environment, agent, episodes, render=False):
@@ -14,7 +20,8 @@ def rl_loop_train(environment, agent, episodes, render=False):
     """
     total_steps = 0
     rewards = deque(maxlen=500)
-    for episode in range(episodes):
+    progress_bar = ProgressBar(unit="episodes", ncols=100, total=episodes)
+    for episode in progress_bar(iter(range(episodes))):
         state = environment.reset()
         done = False
         step = 0
@@ -40,6 +47,7 @@ def rl_loop_train(environment, agent, episodes, render=False):
 
         agent.end_of_episode()
         rewards.append(total_reward)
+        progress_bar.set_description("Average Reward {:0.4f}".format(np.mean(rewards)))
         # we would like to evaluate the model at a consistent time measured
         # in update steps, but we can't start an evaluation in the middle of an
         # episode.  if we have accumulated enough updates to warrant an evaluation
@@ -48,7 +56,7 @@ def rl_loop_train(environment, agent, episodes, render=False):
         if trigger_evaluation:
             trigger_evaluation = False
 
-            print({
+            logger.info({
                 'type': 'training episode',
                 'episode': episode,
                 'total_steps': total_steps,
@@ -62,7 +70,7 @@ def rl_loop_train(environment, agent, episodes, render=False):
                     environment, agent, render, epsilon
                 )
 
-                print({
+                logger.info({
                     'type': 'evaluation episode',
                     'epsilon': epsilon,
                     'total_steps': total_steps,

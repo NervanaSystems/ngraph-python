@@ -97,7 +97,7 @@ class ModelWrapper(object):
                     ng.cast_axes(variable, target_variable.axes)
                 )
                 for target_variable, variable in zip(
-                    self.q_function_target.variables, self.q_function.variables
+                    self.q_function_target.variables.values(), self.q_function.variables.values()
                 )
             ])
         )
