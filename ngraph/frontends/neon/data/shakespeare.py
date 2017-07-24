@@ -23,10 +23,10 @@ class Shakespeare(object):
     Arguments:
         path (string): Data directory to find the data, if does not exist, will
                        download the data
-        url (string): path to the text file to be downloaded
-        filename (string): name of the text file
+        url (string, optional): path to the text file to be downloaded
+        filename (string, optional): name of the text file
         train_split (float): Value between 0 and 1
-                            Ratio of the text to set aside for training
+                             Ratio of the text to set aside for training
 
     """
     def __init__(self, path='./data/', url=None, filename=None, train_split=.9):
@@ -35,6 +35,9 @@ class Shakespeare(object):
         if(url is None):
             self.url = 'http://cs.stanford.edu/people/karpathy/char-rnn/'
             self.filename = 'shakespeare_input.txt'
+        else:
+            self.url = url
+            self.filename = filename
 
         self.train_split = train_split
 
@@ -60,7 +63,7 @@ class Shakespeare(object):
 
         return train, test
 
-    def build_vocab(self, text=None):
+    def build_vocab(self, text):
         '''
             Build a vocabulary from given text and store as the object's vocab
             If no text given, build the vocab from self.train
@@ -75,11 +78,12 @@ class Shakespeare(object):
         self.index_to_token = dict((i + 1, t) for i, t in enumerate(self.vocab))
 
         # Add zero as unknown token
-        self.index_to_token[0] = 'NaN'
+        self.index_to_token[0] = '<UNK>'
+        self.token_to_index['<UNK>'] = 0
 
-    def digitize(self, text=None, vocab=None):
+    def digitize(self, text, vocab=None):
         '''
-            Convert given text to a sequence of digits (indices) using the given vocab
+            Convert given text to a sequence of integers (indices) using the given vocab
             If no vocab given, it is built from the text
         '''
         if self.vocab is None:

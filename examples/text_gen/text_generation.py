@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 '''
  Usage:
-    python text_generation.py -z 128 -b gpu -t 100000
+    python text_generation.py -z 128 -b gpu -t 100000 --predict_seq
 
  Uses Shakespeare text sample to train an LSTM based model to predict the next character
  Uses the trained model to generate own text
@@ -32,13 +32,13 @@
 '''
 from __future__ import division, print_function
 from builtins import range
+from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Sequential, LSTM, Affine, Softmax, Preprocess
 from ngraph.frontends.neon import UniformInit, Tanh, Logistic, RMSProp
 from ngraph.frontends.neon import NgraphArgparser
 import ngraph.transformers as ngt
-from contextlib import closing
 from rollingWindowIterator import RollingWindowIterator
 from ngraph.frontends.neon import Shakespeare
 
@@ -180,26 +180,21 @@ if __name__ == "__main__":
 
     # Predict sequences rather than just next character
     predict_seq = args.predict_seq
-
     # Recurrent units
     recurrent_units = args.recurrent_units
-
     # Batch size
     batch_size = args.batch_size
-
     # Sequence length
     seq_len = args.seq_len
-
     # Iterations
     num_iterations = args.num_iterations
-
     # Create the object that includes the sample text
     shakes = Shakespeare(train_split=train_ratio)
 
     # Build an iterator that gets seq_len long chunks of characters
     # Stride is by how many characters the window moves in each step
     # if stride is set to seq_len, windows are non-overlapping
-    stride = seq_len // 2
+    stride = seq_len // 8
     shakes_train = RollingWindowIterator(data_array=shakes.train, total_iterations=num_iterations,
                                          seq_len=seq_len, batch_size=batch_size, stride=stride,
                                          return_sequences=predict_seq)
@@ -207,9 +202,7 @@ if __name__ == "__main__":
                                         seq_len=seq_len, batch_size=batch_size, stride=stride,
                                         return_sequences=predict_seq)
 
-    # ********************
-    # NAME AND CREATE AXES
-    # ********************
+    # Name and create axes
     # Our input is of size (batch_size, seq_len)
     # Create two axis, with each having corresponding sizes
     # batch_axis must be named N
@@ -221,7 +214,6 @@ if __name__ == "__main__":
     # Unique tokens is equal to the vocabulary size
     # We add one more output element just in case we come across an unknown token
     out_axis = ng.make_axis(length=len(shakes.vocab) + 1, name="out_feature_axis")
-
     in_axes = ng.make_axes([batch_axis, time_axis])
 
     # RollingWindowIterator gives an output of (batch_size, 1) for each iteration
@@ -236,39 +228,28 @@ if __name__ == "__main__":
     inputs = {'X': ng.placeholder(in_axes), 'y': ng.placeholder(out_axes),
               'iteration': ng.placeholder(axes=())}
 
-    # ******************
-    # NETWORK DEFINITION
-    # ******************
+    # Network Definition
     seq1 = Sequential([Preprocess(functor=expand_onehot),
-                       LSTM(nout=recurrent_units, init=init_uni, backward=False,
-                       reset_cells=True,
-                       activation=Logistic(), gate_activation=Tanh(), return_sequence=predict_seq),
+                       LSTM(nout=recurrent_units, init=init_uni, backward=False, reset_cells=True,
+                            activation=Logistic(), gate_activation=Tanh(),
+                            return_sequence=predict_seq),
                        Affine(weight_init=init_uni, bias_init=init_uni,
-                       activation=Softmax(), axes=out_axis)])
+                              activation=Softmax(), axes=out_axis)])
     '''
     # Below is an alternate topology that uses an embedding (LookupTable) layer as the first layer
     embedding_dim = 8
     seq1 = Sequential([LookupTable(len(shakes.vocab) + 1, embedding_dim, init_uni, update=True),
                        LSTM(nout=recurrent_units, init=init_uni, backward=True,
-                       activation=Logistic(), gate_activation=Tanh(), return_sequence=False),
+                            activation=Logistic(), gate_activation=Tanh(), return_sequence=False),
                        Affine(weight_init=init_uni, bias_init=init_uni,
-                       activation=Softmax(), axes=out_axis)])
+                              activation=Softmax(), axes=out_axis)])
     '''
 
-    # ***************************
-    # OPTIMIZER AND LOSS FUNCTION
-    # ***************************
-
-    learning_rate_policy = {'name': 'exp',
-                            'gamma': 0.98,
-                            'base_lr': 0.01}
-    '''
-    # Below is an alternate optimization procedure that reduces learning rate at a given schedule
+    # Optimizer and loss function
     # Initial learning rate is 0.01 (base_lr)
     # At iteration (num_iterations // 75), lr is multiplied by gamma (new lr = .95 * .01)
     # At iteration (num_iterations * 2 // 75), it is reduced by gamma again
     # So on..
-    '''
     no_steps = 75
     step = num_iterations // no_steps
     schedule = list(np.arange(step, num_iterations, step))
@@ -276,13 +257,6 @@ if __name__ == "__main__":
                             'schedule': schedule,
                             'gamma': 0.95,
                             'base_lr': 0.01}
-    '''
-    optimizer = GradientDescentMomentum(momentum_coef=.9,
-                                        learning_rate=learning_rate_policy,
-                                        iteration=inputs['iteration'],
-                                        gradient_clip_value=5)
-    '''
-
     optimizer = RMSProp(gradient_clip_value=1, learning_rate=learning_rate_policy,
                         iteration=inputs['iteration'])
 
@@ -294,7 +268,7 @@ if __name__ == "__main__":
                                         ng.one_hot(inputs['y'], axis=out_axis),
                                         usebits=True)
 
-    # Cost calculation
+    # Train cost computation
     batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
     train_computation = ng.computation([batch_cost, fwd_prop], "all")
     train_outputs = dict(batch_cost=batch_cost)
@@ -311,11 +285,10 @@ if __name__ == "__main__":
 
     # Computation for text generation - this is pure inference (fwd prop)
     gen_computation = ng.computation(inference_prop, "all")
-    # *******************
-    # DEFINE COMPUTATIONS
-    # *******************
+
     print('Start training ...')
     with closing(ngt.make_transformer()) as transformer:
+        # Add computations to the transformer
         train_function = transformer.add_computation(train_computation)
         eval_function = transformer.add_computation(eval_computation)
         generate_function = transformer.add_computation(gen_computation)
@@ -323,9 +296,7 @@ if __name__ == "__main__":
         # Determine printout interval of the validation set loss during training
         iter_interval = min(4000, num_iterations // 20)
 
-        # ***************
-        # TRAINING LOOP
-        # ***************
+        # Training Loop
         train_cost = train_loop(shakes_train, train_function, shakes_test,
                                 eval_function, generate_function,
                                 shakes.index_to_token, shakes.token_to_index)

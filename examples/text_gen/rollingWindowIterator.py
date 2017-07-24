@@ -24,8 +24,8 @@ class RollingWindowIterator(object):
         Given an input sequence, generates overlapping windows of samples
 
         Input: numpy array
-            data_array : Numpy array of shape (N,D).
-                                N is length of sequence
+            data_array : Numpy array of shape (S, D).
+                                S is length of sequence
                                 D is input feature dimension
         Output of each iteration: Dictionary of input and output samples
             samples['X'] has size (batch_size, seq_len, D)
@@ -33,7 +33,7 @@ class RollingWindowIterator(object):
             samples['y'] has size (batch_size, seq_len, D) (if return_sequences is True)
 
         Example:
-            data_array is a numpy array with shape (N,1): [a1, a2, ..., aN]
+            data_array is a numpy array with shape (S, 1): [a1, a2, ..., aS]
             If return_sequences is False:
                 Each generated sample will be an input sequence / output single point pairs:
                     Sample0: Input:  [a1, a2, ..., a(seq_len)]
