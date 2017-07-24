@@ -22,6 +22,7 @@ from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 
 import uuid
 import collections
+import os
 
 
 def get_iterable(x):
@@ -195,3 +196,10 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             op.uuid = uuid.uuid4()
 
     return new_root, new_send_nodes, replaced_send_nodes
+
+
+def get_available_ports():
+    if "HETR_SERVER_PORTS" in os.environ:
+        return os.getenv("HETR_SERVER_PORTS")
+    else:
+        return ['52051', '52052', '52053', '52054', '52055', '52056', '52057', '52058']
