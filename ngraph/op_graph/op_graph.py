@@ -838,7 +838,7 @@ class AssignOp(Op):
         # TODO: requires explicit broadcast in future
         if len(val.axes - tensor.axes) > 0:
             raise ValueError(
-                "tensor(LHS) has axes %s, val(RHS) has axes %s,"
+                "tensor(LHS) has axes %s. val(RHS) has axes %s. "
                 "val's axes should be subset of tensor's axes" %
                 (val.axes, tensor.axes))
         val = broadcast(val, tensor.axes)

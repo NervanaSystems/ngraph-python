@@ -1,8 +1,10 @@
 import functools
 from contextlib import contextmanager
+from collections import OrderedDict
 
 import parsel
 from cachetools import keys, cached
+from orderedset import OrderedSet
 
 import ngraph as ng
 from ngraph.util.names import name_scope, NameableValue, NameScope
@@ -86,7 +88,7 @@ class ComputationalGraph(object):
         """
         A dictionary of all trainable variables in the graph as "name:variable" pairs
         """
-        return {op.tensor.name: op.tensor for op in self if op.tensor.is_trainable}
+        return OrderedDict((op.tensor.name, op.tensor) for op in self if op.tensor.is_trainable)
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -94,7 +96,7 @@ class ComputationalGraph(object):
         """
         A dictionary of all placeholder ops in the graph as "name:op" pairs
         """
-        return {op.tensor.name: op.tensor for op in self if op.tensor.is_placeholder}
+        return OrderedDict((op.tensor.name, op.tensor) for op in self if op.tensor.is_placeholder)
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -102,7 +104,7 @@ class ComputationalGraph(object):
         """
         A dictionary of all computations in the graph as "name:computation" pairs
         """
-        return {op.name: op for op in self if isinstance(op, ng.ComputationOp)}
+        return OrderedDict((op.name, op) for op in self if isinstance(op, ng.ComputationOp))
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -293,9 +295,7 @@ class SubGraph(ComputationalGraph):
                 1. Placeholder ops
                 2. Arguments to ops in the subgraph that aren't themselves in the subgraph
         """
-        # TODO: Should these be OrderedDicts?
-
-        inputs = dict()
+        inputs = OrderedDict()
         for op in self:
             if op.tensor.is_trainable:
                 continue
@@ -319,8 +319,8 @@ class SubGraph(ComputationalGraph):
                 1. Ops in the subgraph that aren't depended on by any other ops in the subgraph
                 2. Not a variable or placeholder op
         """
-        op_args = set()
-        ops = set()
+        op_args = OrderedSet()
+        ops = OrderedSet()
         for op in self:
             if isinstance(op, ng.AssignableTensorOp):
                 continue
@@ -328,7 +328,7 @@ class SubGraph(ComputationalGraph):
             for arg_op in op.args + tuple(op.control_deps):
                 op_args.add(arg_op)
 
-        return {op.name: op for op in set.difference(ops, op_args)}
+        return OrderedDict((op.name, op) for op in ops.difference(op_args))
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -336,8 +336,8 @@ class SubGraph(ComputationalGraph):
         """
         A dictionary of all side-effect ops as "name:op" pairs.
         """
-        side_effects = dict()
-        for op in self.ops:
+        side_effects = OrderedDict()
+        for op in self:
             for dep in op.control_deps:
                 if dep is not op.tensor:
                     side_effects[dep.name] = dep
