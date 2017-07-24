@@ -217,7 +217,6 @@ class Mkldnn(object):
             gamma_scale = gamma / np.sqrt(variance + epsilon)[:, None]
             xhat = (inputs - mean) / np.sqrt(variance + epsilon)[:, None]
             m = np.prod([inputs.shape[ii] for ii in axis])
-
             dgamma = np.sum(delta * xhat, **red_args)
             dbeta = np.sum(delta, **red_args)
             dx = gamma_scale * (delta - (xhat * dgamma + dbeta) / m)
@@ -337,10 +336,7 @@ class Mkldnn(object):
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
-            if bias is not None:
-                np.add(np.dot(x, y), bias[:, None], out=out)
-            else:
-                np.dot(x, y, out=out)
+            np.dot(x, y, out=out)
 
     def elementwise_add(self, name, I_array1, I_array2, O_array):
         if (self.enabled and name in self.kernels):
@@ -352,22 +348,19 @@ class Mkldnn(object):
             np.add(I_array1, I_array2, out=O_array)
 
     def fprop_relu(self, name, inputs, out, slope):
-        if (self.enabled and name in self.kernels):
-            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
-            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
-        else:
-            np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
+        assert(self.enabled)
+        assert(name in self.kernels)
+        self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
+        self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+        self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
 
     def bprop_relu(self, name, inputs, out, fpropSrc, slope):
-        if (self.enabled and name in self.kernels):
-            self.set_input_tensor(self.kernels[name], fpropSrc.ctypes.data, 0)
-            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 1)
-            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
-            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
-        else:
-            np.add(inputs * np.greater(fpropSrc, 0), inputs * slope *
-                   np.less(fpropSrc, 0), out=out)
+        assert(self.enabled)
+        assert(name in self.kernels)
+        self.set_input_tensor(self.kernels[name], fpropSrc.ctypes.data, 0)
+        self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 1)
+        self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+        self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
 
     def mkl_reorder(self, name, output, input):
         assert self.enabled
