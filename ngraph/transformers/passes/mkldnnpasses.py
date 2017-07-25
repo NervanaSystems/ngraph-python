@@ -83,7 +83,7 @@ def get_strides_mkl_order(td, order):
     flattend_axis_flag = False
     for axis in td.axes:
         if (axis.is_flattened and len(order) > 2):
-                flattend_axis_flag = True
+            flattend_axis_flag = True
     if flattend_axis_flag:
         for each_stride in td.full_strides:
             if isinstance(each_stride, tuple):
@@ -111,8 +111,6 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     mkl_strides = [stride // elem_size for stride in get_strides_mkl_order(td, order)]
     # TODO(jbobba) - Handle views for tensors that are not fully materialized
     mkl_axes = [axis for axis in get_axes_mkl_order(op_axes, order)]
-    mkl_shape_arg = ((ct.c_int) * len(mkl_shape))(*mkl_shape)
-    mkl_strides_arg = ((ct.c_int) * len(mkl_strides))(*mkl_strides)
     memory_format = mkldnn.memory_format['blocked']
     if use_formats:
         # Look for canned formats
@@ -131,8 +129,8 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
 
     native_layout = mkldnn.create_layout_md(
         mkldnn.mkldnn_engine,
-        len(mkl_shape), mkl_shape_arg,
-        mkl_strides_arg, data_type, memory_format)
+        len(mkl_shape), get_ctypes_arg(mkl_shape),
+        get_ctypes_arg(mkl_strides), data_type, memory_format)
     mkldnn.native_layouts[td] = native_layout
     return (native_layout, mkl_axes)
 
@@ -149,6 +147,10 @@ def dbg_print_kernel(mkldnn, op, op_id):
         # print
         # print(op_id, op.name, op.axes)
         mkldnn.print_kernel(mkldnn.kernels[op.name])
+
+
+def get_ctypes_arg(x):
+    return ((ct.c_int) * len(x))(*x) if x else None
 
 
 class MklCreateOpDescriptors(PeepholeGraphPass):
@@ -210,9 +212,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd
         # dimension contains beta parameter.
         weights_shape = [gamma_shape, bias_shape]
-        weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
-        input_shape_arg = ((ct.c_int) * len(inputs_shape))(*inputs_shape)
-        outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
 
         (inputs_layout, mkl_axes) = get_mkl_layout(
             self.mkldnn, inputs, mkl_order, True)
@@ -231,9 +230,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             variance_dims,
             mean_size,
             variance_size,
-            input_shape_arg,
-            weights_shape_arg,
-            outputs_shape_arg,
+            get_ctypes_arg(inputs_shape),
+            get_ctypes_arg(weights_shape),
+            get_ctypes_arg(outputs_shape),
             op.eps,
             inputs_layout,
             None,
@@ -261,7 +260,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                     return
                 else:
                     outputs_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
-                    outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
                     axis_len_5d = True
             else:
                 return
@@ -272,14 +270,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         variance_size = variance.axes.lengths[0]
 
         delta_shape = get_size_mkl_order(delta.axes, [4, 0, 2, 3])
-        delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
 
         # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd
         # dimension contains beta parameter.
         gamma_shape = gamma.axes.lengths[0]
         bias_shape = bias.axes.lengths[0]
         weights_shape = [gamma_shape, bias_shape]
-        weights_shape_arg = ((ct.c_int) * len(weights_shape))(*weights_shape)
 
         if (axis_len_5d):
             (delta_layout, mkl_axes) = get_mkl_layout(
@@ -307,9 +303,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             len(weights_shape),
             mean_dims,
             variance_dims,
-            delta_shape_arg,
-            outputs_shape_arg,
-            weights_shape_arg,
+            get_ctypes_arg(delta_shape),
+            get_ctypes_arg(outputs_shape),
+            get_ctypes_arg(weights_shape),
             mean_size,
             variance_size,
             op.fprop.eps,
@@ -348,23 +344,25 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_h, pad_w]
         stride = [str_h, str_w]
-        input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
-        filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
-        output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-        stride_arg = ((ct.c_int) * len(stride))(*stride)
-        pad_arg = ((ct.c_int) * len(pad))(*pad)
         (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
         filter_layout = None
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.conv_fprop_kernel(
             self.mkldnn.mkldnn_engine,
-            len(input_shape), len(filter_shape), len(output_shape),
-            input_shape_arg, filter_shape_arg, output_shape_arg,
-            stride_arg, pad_arg,
-            input_layout, filter_layout,
+            len(input_shape),
+            len(filter_shape),
+            len(output_shape),
+            get_ctypes_arg(input_shape),
+            get_ctypes_arg(filter_shape),
+            get_ctypes_arg(output_shape),
+            get_ctypes_arg(stride),
+            get_ctypes_arg(pad),
+            input_layout,
+            filter_layout,
             data_type,
-            self.mkldnn.kernels[op.name])
+            self.mkldnn.kernels[
+                op.name])
         mkl_order = [4, 0, 2, 3]
         out_axes = get_axes_mkl_order(op.axes, mkl_order)
         self.set_mkl_layout_data(op, out_axes)
@@ -391,23 +389,25 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         pad = [pad_h, pad_w]
         stride = [str_h, str_w]
 
-        input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
-        filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
-        output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-        stride_arg = ((ct.c_int) * len(stride))(*stride)
-        pad_arg = ((ct.c_int) * len(pad))(*pad)
         (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
         filter_layout = None
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.conv_bprop_kernel(
             self.mkldnn.mkldnn_engine,
-            len(input_shape), len(filter_shape), len(output_shape),
-            input_shape_arg, filter_shape_arg, output_shape_arg,
-            stride_arg, pad_arg,
-            input_layout, filter_layout,
+            len(input_shape),
+            len(filter_shape),
+            len(output_shape),
+            get_ctypes_arg(input_shape),
+            get_ctypes_arg(filter_shape),
+            get_ctypes_arg(output_shape),
+            get_ctypes_arg(stride),
+            get_ctypes_arg(pad),
+            input_layout,
+            filter_layout,
             data_type,
-            self.mkldnn.kernels[op.name])
+            self.mkldnn.kernels[
+                op.name])
         mkl_order = [4, 0, 2, 3]
         out_axes = get_axes_mkl_order(op.axes, mkl_order)
         self.set_mkl_layout_data(op, out_axes)
@@ -434,11 +434,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         pad = [pad_h, pad_w]
         stride = [str_h, str_w]
 
-        inputs_shape_arg = ((ct.c_int) * len(inputs_shape))(*inputs_shape)
-        filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
-        delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
-        stride_arg = ((ct.c_int) * len(stride))(*stride)
-        pad_arg = ((ct.c_int) * len(pad))(*pad)
         (delta_layout, mkl_axes) = get_mkl_layout(self.mkldnn, delta, [4, 0, 2, 3], True)
         filter_layout = None
         (inputs_layout, mkl_axes) = get_mkl_layout(self.mkldnn, inputs, [4, 0, 2, 3], True)
@@ -446,12 +441,20 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.update_conv_kernel(
             self.mkldnn.mkldnn_engine,
-            len(delta_shape), len(filter_shape), len(inputs_shape),
-            delta_shape_arg, filter_shape_arg, inputs_shape_arg,
-            stride_arg, pad_arg,
-            delta_layout, filter_layout, inputs_layout,
+            len(delta_shape),
+            len(filter_shape),
+            len(inputs_shape),
+            get_ctypes_arg(delta_shape),
+            get_ctypes_arg(filter_shape),
+            get_ctypes_arg(inputs_shape),
+            get_ctypes_arg(stride),
+            get_ctypes_arg(pad),
+            delta_layout,
+            filter_layout,
+            inputs_layout,
             data_type,
-            self.mkldnn.kernels[op.name])
+            self.mkldnn.kernels[
+                op.name])
         # Output is in ngraph layout. We dont need set_mkl_layout
         dbg_print_kernel(self.mkldnn, op, op_id)
 
@@ -537,11 +540,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         pool_type = 0
         if op_type['op'] == 'avg':
             pool_type = 1
-        input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
-        output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-        kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
-        pad_data = ((ct.c_int) * len(pad))(*pad)
-        stride_data = ((ct.c_int) * len(stride))(*stride)
         (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
 
         op_id = len(self.mkldnn.kernels)
@@ -549,8 +547,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.pool_fprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(input_shape), len(output_shape),
-            input_shape_arg, kernel_sizes, output_shape_arg,
-            stride_data, pad_data, pool_type,
+            get_ctypes_arg(input_shape), get_ctypes_arg(kernel), get_ctypes_arg(output_shape),
+            get_ctypes_arg(stride), get_ctypes_arg(pad), pool_type,
             input_layout, data_type, self.mkldnn.kernels[op.name])
         mkl_order = get_order_from_axes(input.axes, mkl_axes)
         out_axes = get_axes_mkl_order(op.axes, mkl_order)
@@ -583,11 +581,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         pool_type = 0
         if op_type['op'] == 'avg':
             pool_type = 1
-        input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
-        output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
-        kernel_sizes = ((ct.c_int) * len(kernel))(*kernel)
-        pad_data = ((ct.c_int) * len(pad))(*pad)
-        stride_data = ((ct.c_int) * len(stride))(*stride)
         (input_layout, mkl_axes) = get_mkl_layout(self.mkldnn, input, [4, 0, 2, 3], True)
 
         op_id = len(self.mkldnn.kernels)
@@ -595,8 +588,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.pool_bprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(input_shape), len(output_shape),
-            input_shape_arg, kernel_sizes, output_shape_arg,
-            stride_data, pad_data, pool_type,
+            get_ctypes_arg(input_shape), get_ctypes_arg(kernel), get_ctypes_arg(output_shape),
+            get_ctypes_arg(stride), get_ctypes_arg(pad), pool_type,
             input_layout, data_type,
             self.mkldnn.kernels[op.fprop.forwarded.name],
             self.mkldnn.kernels[op.name])
@@ -623,12 +616,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         o_shape = get_size_mkl_order(op.axes, [1, 0])
         bias_shape = [o_shape[1]] if bias else None
 
-        x_shape_arg = ((ct.c_int) * len(x_shape))(*x_shape)
-        y_shape_arg = ((ct.c_int) * len(y_shape))(*y_shape)
-        bias_shape_arg = ((ct.c_int) * len(bias_shape))(*bias_shape) if bias else None
-        o_shape_arg = ((ct.c_int) * len(o_shape))(*o_shape)
         (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [0, 1], True)
-        (y_layout, _) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
+        (y_layout, mkl_axes_1) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
+        if len(mkl_axes_1) != 2:
+            return
         bias_layout = None
         data_type = self.mkldnn.datatype[op.dtype.type]
 
@@ -637,7 +628,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.innerproduct_fprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(x_shape), len(y_shape), 1, len(o_shape),
-            x_shape_arg, y_shape_arg, bias_shape_arg, o_shape_arg,
+            get_ctypes_arg(x_shape), get_ctypes_arg(y_shape),
+            get_ctypes_arg(bias_shape), get_ctypes_arg(o_shape),
             x_layout, y_layout, bias_layout,
             data_type, self.mkldnn.kernels[op.name])
 
@@ -660,10 +652,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         array2_shape = I_array2.axes.lengths
         out_shape = op.axes.lengths
 
-        input1_shape = ((ct.c_int) * len(array1_shape))(*array1_shape)
-        input2_shape = ((ct.c_int) * len(array2_shape))(*array2_shape)
-        output_shape = ((ct.c_int) * len(out_shape))(*out_shape)
-
         (input1_layout, mkl_axes) = \
             get_mkl_layout(self.mkldnn, I_array1, list(range(len(I_array1.axes))))
         (input2_layout, _) = \
@@ -675,7 +663,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.add_kernel(
             self.mkldnn.mkldnn_engine,
             len(I_array1.shape), len(I_array2.shape), len(output_shape),
-            input1_shape, input2_shape, output_shape,
+            get_ctypes_arg(array1_shape), get_ctypes_arg(array2_shape),
+            get_ctypes_arg(out_shape),
             input1_layout, input2_layout,
             2,
             data_type, self.mkldnn.kernels[op.name])
@@ -729,12 +718,11 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             dims = get_size_mkl_order(unflatten(op).axes, mkl_axes_order)
         else:
             dims = get_size_mkl_order(op.axes, mkl_axes_order)
-        dims_arg = ((ct.c_int) * ndims)(*dims)
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.reorder_kernel(
             self.mkldnn.mkldnn_engine,
-            ndims, dims_arg,
+            ndims, get_ctypes_arg(dims),
             self.mkldnn.datatype[op.dtype.type],
             mkl_layout, out_layout,
             self.mkldnn.kernels[op.name]
@@ -764,9 +752,9 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         # ex: ConvolutionOp -> MKL_reorder_Op ->Flatten -> bn_op can be reduced to
         # ConvolutionOp -> Flatten -> bn_op
         if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
-                metadata = op.metadata["neon_layer"].split("/")
-                if re.search("BatchNorm(_\d+)", metadata[-1]):
-                    return
+            metadata = op.metadata["neon_layer"].split("/")
+            if re.search("BatchNorm(_\d+)", metadata[-1]):
+                return
         replace = False
         new_args = []
         for arg in args:
