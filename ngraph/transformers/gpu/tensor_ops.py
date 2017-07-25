@@ -22,7 +22,6 @@ from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transp
 from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.op_graph.axes import TensorDescription
 from ngraph.op_graph.op_graph import AssignOp
-from queue import Empty
 import numpy as np
 import pycuda.driver as drv
 import pycuda.gpuarray as gpuarray
@@ -32,36 +31,27 @@ from pycuda.driver import event_flags
 
 SLEEP_S = 0.1
 ITEMS_PER_THREAD = 32
+TAG_IPC = 11
+TAG_GATHER = 22
+TAG_SCATTER = 33
 
 
-def set_ipc_handle(op, shared_queue, handle, local=False):
-    lock = drv.mem_alloc(1)
-    drv.memset_d8(lock, 0, 1)
-    if local:
-        buf_ipc_hdl = int(handle)
-        lock_ipc_hdl = int(lock)
+def setup_ipc_handle(op, comm, cmd, handle=None, dest=None):
+    if cmd == 'send':
+        for d in dest:
+            if op.metadata['device_id'] == int(d):
+                local = True
+                buf_ipc_hdl = int(handle)
+            else:
+                local = False
+                buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
+            comm.send((local, buf_ipc_hdl), dest=int(d), tag=TAG_IPC)
     else:
-        buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
-        lock_ipc_hdl = drv.mem_get_ipc_handle(lock)
-    shared_queue.put((local, buf_ipc_hdl, lock_ipc_hdl))
-    return (lock)
-
-
-def open_ipc_handle(shared_queue):
-    while True:
-        try:
-            (is_local, buf_ipc_hdl, lock_ipc_hdl) = shared_queue.get(timeout=SLEEP_S)
-            if is_local:
-                return buf_ipc_hdl, lock_ipc_hdl
-            else:
-                buf_hdl = drv.IPCMemoryHandle(buf_ipc_hdl)
-                lock = drv.IPCMemoryHandle(lock_ipc_hdl)
-                return (buf_hdl, lock)
-        except Exception as e:
-            if isinstance(e, Empty):
-                pass
-            else:
-                raise
+        (local, buf_ipc_hdl) = comm.recv(source=op.source_id, tag=TAG_IPC)
+        if local:
+            return (buf_ipc_hdl)
+        else:
+            return (drv.IPCMemoryHandle(buf_ipc_hdl))
 
 
 def _reduction_kernel(op):
@@ -314,10 +304,11 @@ class QueueRecvKernel(GPUKernel):
 
 class CudaScatterSendKernel(GPUKernel):
 
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, comm, op):
         super(CudaScatterSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
+        self.comm = comm
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
@@ -326,26 +317,26 @@ class CudaScatterSendKernel(GPUKernel):
         # signal the recv kernel to get the new ipc handle.
         # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
-        self.send_ready = list()
-        for i, to_id in enumerate(self.op.to_id):
-            self.send_ready.append(
-                set_ipc_handle(
-                    self.op,
-                    self.op._shared_queues[i],
-                    self.tensor.tensor.gpudata,
-                    local=self.op.metadata['device_id'] == int(to_id)))
+        setup_ipc_handle(
+            op=self.op,
+            comm=self.comm,
+            handle=self.tensor.tensor.gpudata,
+            cmd='send',
+            dest=self.op.to_id)
 
     def execute(self):
-        for i in range(len(self.op.to_id)):
-            drv.memset_d8(self.send_ready[i], 1, 1)
+        ready = True
+        for i in self.op.to_id:
+            self.comm.send(ready, dest=int(i), tag=TAG_SCATTER)
 
 
 class CudaScatterRecvKernel(GPUKernel):
 
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, comm, op):
         super(CudaScatterRecvKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
+        self.comm = comm
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
@@ -356,30 +347,30 @@ class CudaScatterRecvKernel(GPUKernel):
         # since sender/recvr are in the same process in this case,
         # set_ipc_handle must be called before open_ipc_handle to avoid a hang,
         # hence doing set_ in bind_buffers and open_ in execute.
-        (self.tnsr_ipc_hdl, self.sender_ready) = open_ipc_handle(self.op._shared_queues
-                                                                 [self.op.idx])
+        self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
     def execute(self):
-        sender_ready = drv.from_device(self.sender_ready, (1,), np.int8)
-        while (sender_ready == 0):
-            sender_ready = drv.from_device(self.sender_ready, (1,), np.int8)
-        drv.memcpy_dtod(
-            self.tensor.tensor.gpudata,
-            self.sender_buf,
-            self.tensor.tensor.size * self.op.dtype.itemsize)
-        drv.memset_d8(self.sender_ready, 0, 1)
+        ready = self.comm.recv(source=self.op.source_id, tag=TAG_SCATTER)
+        if ready:
+            drv.memcpy_dtod(
+                self.tensor.tensor.gpudata,
+                self.sender_buf,
+                self.tensor.tensor.size * self.op.dtype.itemsize)
+        else:
+            raise RuntimeError("Synchronization failed!")
 
 
 class CudaGatherSendKernel(GPUKernel):
 
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, comm, op):
         super(CudaGatherSendKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.args[0].tensor_description()
         self.recvr_buf = None
+        self.comm = comm
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
@@ -391,51 +382,48 @@ class CudaGatherSendKernel(GPUKernel):
             # set_ipc_handle must be called before open_ipc_handle in certain cases to avoid a
             # hang, hence calling set_ in bind_buffers and open_ in execute.
             # See corresponding comment in ScatterRecv kernel for details.
-            (self.tnsr_ipc_hdl, self.send_ready) = open_ipc_handle(self.op._shared_queues
-                                                                   [self.op.idx])
+            self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
             self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
-
         # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
         # is least contiguous.
         drv.memcpy_dtod(
             self.recvr_buf,
             self.tensor.tensor.gpudata,
             self.tensor.tensor.size * self.op.dtype.itemsize)
-        drv.memset_d8(self.send_ready, 1, 1)
+        ready = True
+        self.comm.send(ready, dest=int(self.op.source_id), tag=TAG_GATHER)
 
 
 class CudaGatherRecvKernel(GPUKernel):
 
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, comm, op):
         super(CudaGatherRecvKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
+        self.comm = comm
 
     def bind_buffers(self):
         super(CudaGatherRecvKernel, self).bind_buffers()
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        self.sender_ready = list()
-        for i, from_id in enumerate(self.op.from_id):
-            self.sender_ready.append(
-                set_ipc_handle(
-                    self.op,
-                    self.op._shared_queues[i],
-                    self.tensor.tensor.gpudata,
-                    local=int(from_id) == self.op.metadata['device_id']))
+        setup_ipc_handle(
+            op=self.op,
+            comm=self.comm,
+            handle=self.tensor.tensor.gpudata,
+            cmd='send',
+            dest=self.op.from_id)
 
     def execute(self):
-        for i in range(len(self.op.from_id)):
-            sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
-            while (sender_ready == 0):
-                sender_ready = drv.from_device(self.sender_ready[i], (1,), np.int8)
-            drv.memset_d8(self.sender_ready[i], 0, 1)
+        for i in self.op.from_id:
+            ready = self.comm.recv(source=int(i), tag=TAG_GATHER)
+            if not ready:
+                raise RuntimeError("Synchronization failed!")
 
 
 class CudaAllReduceKernel(GPUKernel):
 
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, comm, op):
         super(CudaAllReduceKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
@@ -445,6 +433,7 @@ class CudaAllReduceKernel(GPUKernel):
         self.output_buff_dict = {}
         self.scratch_buff_dict = {}
         self.event_buff_dict = {}
+        self.comm = comm
         self.init_buffers()
 
     def init_buffers(self):
@@ -463,22 +452,21 @@ class CudaAllReduceKernel(GPUKernel):
         scratch_ipc_hdl = drv.mem_get_ipc_handle(self.scratch_buff.gpudata)
         event_ipc_hdl = self.event.ipc_handle()
 
-        # Put handles in queues
-        for i in self.op.shared_queues.keys():
-            if i != self.device_id:
-                self.op.shared_queues[i].put(
-                    (self.device_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl))
+        # Broadcast handles to others
+        msg = (self.device_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl)
+        self.comm.bcast(msg, root=self.device_id)
 
         # Get handles from others
-        q = self.op.shared_queues[self.device_id]
-        for i in range(len(self.op.shared_queues) - 1):
-            peer_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl = q.get()
-            output_hdl = drv.IPCMemoryHandle(output_ipc_hdl)
-            scratch_hdl = drv.IPCMemoryHandle(scratch_ipc_hdl)
-            event_hdl = drv.Event.from_ipc_handle(event_ipc_hdl)
-            self.output_buff_dict[peer_id] = output_hdl
-            self.scratch_buff_dict[peer_id] = scratch_hdl
-            self.event_buff_dict[peer_id] = event_hdl
+        for i in self.op.device_ids:
+            if i != self.device_id:
+                (peer_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl) =\
+                    self.comm.bcast(msg, root=i)
+                output_hdl = drv.IPCMemoryHandle(output_ipc_hdl)
+                scratch_hdl = drv.IPCMemoryHandle(scratch_ipc_hdl)
+                event_hdl = drv.Event.from_ipc_handle(event_ipc_hdl)
+                self.output_buff_dict[peer_id] = output_hdl
+                self.scratch_buff_dict[peer_id] = scratch_hdl
+                self.event_buff_dict[peer_id] = event_hdl
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
@@ -545,7 +533,7 @@ class CudaAllReduceKernel(GPUKernel):
         self.event.record(self.stream)
 
         # Sync with other devices
-        self.process_sync()
+        self.comm.Barrier()
 
         # Wait for other GPUs events
         for peer_id in self.op.device_ids:
@@ -591,7 +579,7 @@ class CudaAllReduceKernel(GPUKernel):
 
             self.event.record(self.stream)
 
-            self.process_sync()
+            self.comm.Barrier()
 
             # Wait for other GPUs events
             for peer_id in self.op.device_ids:
@@ -615,7 +603,7 @@ class CudaAllReduceKernel(GPUKernel):
             self.event.record(self.stream)
 
             # Sync with other devices
-            self.process_sync()
+            self.comm.Barrier()
 
             # Wait for other GPUs events
             for peer_id in self.op.device_ids:
@@ -623,16 +611,6 @@ class CudaAllReduceKernel(GPUKernel):
                     continue
                 self.event_buff_dict[peer_id].synchronize()
             self.event.synchronize()
-
-    def process_sync(self):
-        x = None
-        queues = self.op.shared_queues
-        ndevs = len(self.op.device_ids)
-        for peer_id in self.op.device_ids:
-            if peer_id != self.device_id:
-                queues[peer_id].put(x)
-        for i in range(ndevs - 1):
-            x = queues[self.device_id].get()
 
 
 class RngFillKernel(GPUKernel):

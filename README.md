@@ -25,6 +25,17 @@ follow the rest of the steps to install Nervana Graph.
 ```
 export MKLDNN_ROOT=/path/to/mkldnn/root
 ```
+
+### Multinode Support
+MPI is required for multinode support. Follow the instructions [here](https://www.open-mpi.org/) for Open-MPI.
+```
+export MPI_ROOT=/path/to/mpi
+```
+Then, run
+```
+make multinode_prepare
+```
+
 We recommend installing Nervana Graph inside a virtual environment.
 
 To create and activate a Python 3 virtualenv:
