@@ -67,14 +67,15 @@ class RollingWindowIterator(object):
         self.return_seq = return_sequences
         self.data_array = data_array
         self.seq_len = seq_len
-        if (len(data_array.shape) == 1):
-            self.data_array = self.data_array[:, np.newaxis]
 
         if (stride is None):
             self.stride = 1
         else:
             self.stride = stride
-        self.feature_dim = self.data_array.shape[1]
+        if (len(data_array.shape) == 1):
+            self.feature_dim = 1
+        else:
+            self.feature_dim = data_array.shape[1]
 
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
@@ -120,8 +121,8 @@ class RollingWindowIterator(object):
         else:
             out_seq_len = self.seq_len
 
-        samples = {'X': np.zeros((self.batch_size, self.seq_len, self.feature_dim)),
-                   'y': np.zeros((self.batch_size, out_seq_len, self.feature_dim))}
+        samples = {'X': np.squeeze(np.zeros((self.batch_size, self.seq_len, self.feature_dim))),
+                   'y': np.squeeze(np.zeros((self.batch_size, out_seq_len, self.feature_dim)))}
         stride = self.stride
         while self.index < self.total_iterations:
             strt_idx = (self.start + self.index * self.batch_size * stride)

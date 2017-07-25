@@ -142,14 +142,16 @@ def generate_text(inputs, generation_function, seed_txt, index_to_token,
             gen_chars = gen_chars[:, 0]
         else:
             gen_chars = gen_chars[:, -1, 0]
-        # Scale the probabilites of all characters so that they sum up to 1
+        # Due to rounding errors, sum of softmax output could be very slightly above 1
+        # This throws an error in np.random.multinomial
+        # Scale softmax outputs so they sum up to 1
         gen_chars = gen_chars / (gen_chars.sum() + 1e-6)
         # Sample the next character from the scaled distribution
         pred_char = np.argmax(np.random.multinomial(1, gen_chars, 1))
 
         # Append the sampled char to the seed_txt's first sample
-        seed_txt[0, :-1, 0] = seed_txt[0, 1:, 0]
-        seed_txt[0, -1, 0] = pred_char
+        seed_txt[0, :-1] = seed_txt[0, 1:]
+        seed_txt[0, -1] = pred_char
         feed_dict = {inputs['X']: seed_txt}
 
         # Append the sampled character to generated text
