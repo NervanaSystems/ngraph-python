@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division
-from builtins import object, zip
+from __future__ import division, absolute_import
+import logging
 import numpy as np
 import ngraph as ng
 import numbers
 import ngraph.frontends.common.learning_rate_policies as lrp
+from ngraph.frontends.neon.graph import SubGraph
+
+logger = logging.getLogger(__name__)
 
 
 def get_learning_rate_policy_callback(lr_params):
@@ -96,13 +99,12 @@ def clip_gradient_value(grad, clip_value=None):
         return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
-class Optimizer(object):
+class Optimizer(SubGraph):
     """TODO."""
     metadata = {'layer_type': 'optimizer'}
 
     def __init__(self, name=None, **kwargs):
-        super(Optimizer, self).__init__(**kwargs)
-        self.name = name
+        super(Optimizer, self).__init__(name=name, **kwargs)
 
     def update_learning_rate(self):
         pass
@@ -114,28 +116,55 @@ class LearningRateOptimizer(Optimizer):
         super(LearningRateOptimizer, self).__init__(**kwargs)
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
 
-    @ng.with_op_metadata
-    def __call__(self, cost_func, variable_scope=None):
-        self._pre_call_hook()
+    @SubGraph.scope_op_creation
+    def __call__(self, cost_func, variables=None, subgraph=None, warning=False):
+        """
+        Arguments:
+            cost_func (Op): The cost function to optimize
+            variables (list of variables): List of variables to optimize
+            subgraph (SubGraph): A subgraph instance containing all variables to optimize
+            warning (bool): If True displays warning message if any variables
+                            specified do not participate in batch cost computation
+
+        Notes:
+            If subgraph is provided, the variables to optimize will be taken from it.
+            Otherwise, they can be provided explicitly by passing a list as `variables`.
+            If neither `subgraph` nor `variables` is provided, the variables to optimize will be
+            all trainable variables on which `cost` depends.
+        """
+
         all_updates = []
         batch_cost = ng.sum(cost_func, out_axes=())
-        batch_size = cost_func.axes.batch_axis().length
+        if cost_func.axes.batch_axis() is None:
+            batch_size = 1
+        else:
+            batch_size = cost_func.axes.batch_axis().length
 
-        selected_variables = batch_cost.variables()
-        if variable_scope is not None:
-            selected_variables = [op for op in selected_variables if op.scope == variable_scope]
-        grads = [ng.deriv(batch_cost, v) / batch_size for v in selected_variables]
+        # determine variables to optimize
+        if subgraph is not None:
+            if variables is not None:
+                raise ValueError("variables and subgraph cannot both be specified.")
+            variables = list(subgraph.variables.values())
+
+        if variables is None:
+            variables = batch_cost.variables()
+        elif variables is not None and warning is True:
+            all_variables = batch_cost.variables()
+            selected_variables = all_variables & set(variables)
+            if len(selected_variables) < len(variables):
+                logger.warn("not all selected variables participate in cost computation")
+
+        # gradients
+        grads = [ng.deriv(batch_cost, v) / batch_size for v in variables]
         scale_factor = clip_gradient_norm(grads, self.gradient_clip_norm)
 
-        for variable, grad in zip(selected_variables, grads):
+        # updates
+        for variable, grad in zip(variables, grads):
             updates = self.variable_update(variable, grad, scale_factor)
             all_updates.append(updates)
         updates = ng.doall(all_updates)
         grads = ng.doall(grads)
         return ng.sequential([grads, updates, 0])
-
-    def _pre_call_hook(self):
-        pass
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
@@ -305,16 +334,24 @@ class Adam(LearningRateOptimizer):
                                                    Defaults to None.
         """
         super(Adam, self).__init__(learning_rate, **kwargs)
-        self.beta_1 = ng.constant(beta_1, dtype=np.float32)
-        self.beta_2 = ng.constant(beta_2, dtype=np.float32)
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
         self.epsilon = epsilon
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
-        self.t = ng.persistent_tensor(axes=(), initial_value=0)
 
-    def _pre_call_hook(self):
+    @SubGraph.scope_op_creation
+    def __call__(self, *args, **kwargs):
+
+        if len(self.ops) == 0:
+            self.beta_1 = ng.constant(self.beta_1, dtype=np.float32)
+            self.beta_2 = ng.constant(self.beta_2, dtype=np.float32)
+            self.t = ng.persistent_tensor(axes=(), initial_value=0)
+
         self.t = ng.sequential([ng.assign(self.t, self.t + 1), self.t])
-        self.ell = self.lrate * ng.sqrt(1 - self.beta_2**self.t) / (1 - self.beta_1**self.t)
+        self.ell = self.lrate * ng.sqrt(1 - self.beta_2 ** self.t) / (1 - self.beta_1 ** self.t)
+
+        return super(Adam, self).__call__(*args, **kwargs)
 
     def variable_update(self, variable, grad, scale_factor):
         m = ng.persistent_tensor(axes=grad.axes, initial_value=0.)

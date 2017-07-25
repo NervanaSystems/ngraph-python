@@ -1032,7 +1032,7 @@ class TensorDecl(ExecutionGraphElt):
 
     @property
     def name(self):
-        return str(id(self)) if self.op is None else '{}'.format(self.op.name)
+        return str(id(self)) if self.op is None else '{}'.format(self.op.safe_name)
 
     def __repr__(self):
         return self.tensor_description_base.name
@@ -1064,7 +1064,7 @@ class TensorViewDecl(ExecutionGraphElt):
     def name(self):
         shape_str = "x".join((str(_) for _ in self.tensor_description.shape))
         return "{}_v_{}_{}".format(self.tensor_decl.variable_name,
-                                   self.tensor_description.name,
+                                   self.tensor_description.safe_name,
                                    shape_str)
 
     @property

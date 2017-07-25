@@ -15,6 +15,8 @@
 # set empty to prevent any implicit rules from firing.
 .SUFFIXES:
 
+SHELL := /bin/bash
+
 # Extract Python version
 PY := $(shell python --version 2>&1  | cut -c8)
 ifeq ($(PY), 2)
@@ -76,6 +78,9 @@ install_all: gpu_prepare test_prepare examples_prepare doc_prepare install
 gpu_prepare:
 	pip install -r gpu_requirements.txt > /dev/null 2>&1
 
+multinode_prepare:
+	pip install -r multinode_requirements.txt > /dev/null 2>&1
+
 test_prepare:
 	pip install -r test_requirements.txt > /dev/null 2>&1
 
@@ -99,7 +104,8 @@ uninstall:
 
 uninstall_all: uninstall
 	pip uninstall -r gpu_requirements.txt -r test_requirements.txt \
-	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt
+	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt \
+	-r multinode_requirements.txt
 
 clean:
 	find . -name "*.py[co]" -type f -delete
@@ -132,13 +138,17 @@ test_mkldnn: export PYTHONHASHSEED=0
 test_mkldnn: export MKL_TEST_ENABLE=1
 test_mkldnn: export LD_PRELOAD+=:./mkldnn_engine.so
 test_mkldnn: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
-test_mkldnn: test_prepare clean
+test_mkldnn: multinode_prepare test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
+	unset http_proxy && \
+	unset https_proxy && \
+	unset HTTP_PROXY && \
+	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
@@ -174,8 +184,12 @@ test_gpu: gpu_prepare test_prepare clean
 
 test_hetr: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_hetr: export PYTHONHASHSEED=0
-test_hetr: test_prepare clean
+test_hetr: multinode_prepare test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
+	unset http_proxy && \
+	unset https_proxy && \
+	unset HTTP_PROXY && \
+	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
