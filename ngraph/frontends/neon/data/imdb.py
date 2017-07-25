@@ -87,7 +87,7 @@ class IMDB(object):
     """
 
     def __init__(self, path='.', vocab_size=20000, sentence_length=128,
-                 pad_idx=0, shuffle=False):
+                 pad_idx=0, shuffle=True):
         self.path = path
         self.url = 'https://s3.amazonaws.com/text-datasets'
         self.filename = 'imdb.pkl'
@@ -112,8 +112,10 @@ class IMDB(object):
             X, pad_idx=self.pad_idx, pad_to_len=self.sentence_length, pad_from='left')
 
         if self.shuffle:
-            np.random.shuffle(X)
-            np.random.shuffle(y)
+            indices = np.arange(len(y))
+            np.random.shuffle(indices)
+            X = X[indices]
+            y = np.asarray(y)[indices]
 
         # split the data
         X_train = X[:int(len(X) * (1 - test_split))]
