@@ -42,8 +42,7 @@ from ngraph.frontends.neon import Layer, Sequential, LSTM, Affine, Softmax, Prep
 from ngraph.frontends.neon import UniformInit, Tanh, Logistic, RMSProp
 from ngraph.frontends.neon import NgraphArgparser
 import ngraph.transformers as ngt
-from rollingWindowIterator import RollingWindowIterator
-from ngraph.frontends.neon import Shakespeare
+from ngraph.frontends.neon import Shakespeare, RollingWindowIterator
 
 
 def eval_loop(inputs, eval_set, eval_function):
