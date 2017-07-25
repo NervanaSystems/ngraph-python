@@ -21,11 +21,11 @@ class Shakespeare(object):
     """
     Shakespeare Dataset from http://cs.stanford.edu/people/karpathy/char-rnn/shakespeare_input.txt
     Arguments:
-        path (string): Data directory to find the data, if does not exist, will
+        path (string, optional): Data directory to find the data, if does not exist, will
                        download the data
         url (string, optional): path to the text file to be downloaded
         filename (string, optional): name of the text file
-        train_split (float): Value between 0 and 1
+        train_split (float, optional): Value between 0 and 1
                              Ratio of the text to set aside for training
 
     """
@@ -40,14 +40,12 @@ class Shakespeare(object):
             self.filename = filename
 
         self.train_split = train_split
-
         # Load the text and split to train and test
         self.train, self.test = self.load_data()
-
-        # Digitize the train set (convert letters to integers)
+        # Digitize the train set (convert letters to integers).
         self.train = self.digitize(text=self.train)
         # Digitize the test set using train set vocab (convert letters to integers)
-        self.test = self.digitize(text=self.test, vocab=self.vocab)
+        self.test = self.digitize(text=self.test)
 
     def load_data(self):
         self.data_dict = {}
@@ -56,7 +54,6 @@ class Shakespeare(object):
             fetch_file(self.url, self.filename, filepath)
 
         tokens = open(filepath).read()
-
         train_samples = int(self.train_split * len(tokens))
         train = tokens[:train_samples]
         test = tokens[train_samples:]
@@ -64,14 +61,10 @@ class Shakespeare(object):
         return train, test
 
     def build_vocab(self, text):
-        '''
-            Build a vocabulary from given text and store as the object's vocab
-            If no text given, build the vocab from self.train
-        '''
-        if text is None:
-            self.vocab = sorted(set(self.train))
-        else:
-            self.vocab = sorted(set(text))
+        """
+        Build a vocabulary from given text and store as the object's vocab
+        """
+        self.vocab = sorted(set(text))
 
         # vocab dicts
         self.token_to_index = dict((t, i + 1) for i, t in enumerate(self.vocab))
@@ -81,11 +74,11 @@ class Shakespeare(object):
         self.index_to_token[0] = '<UNK>'
         self.token_to_index['<UNK>'] = 0
 
-    def digitize(self, text, vocab=None):
-        '''
-            Convert given text to a sequence of integers (indices) using the given vocab
-            If no vocab given, it is built from the text
-        '''
+    def digitize(self, text):
+        """
+        Convert given text to a sequence of integers (indices)
+        Builds a vocabulary if one doesn't already exist
+        """
         if self.vocab is None:
             self.build_vocab(text=text)
 
