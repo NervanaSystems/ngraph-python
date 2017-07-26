@@ -39,7 +39,7 @@ class TSP(object):
                 for i, line in tqdm(enumerate(f)):
                     inputs, outputs = line.split('output')
                     X.append(np.array([float(j) for j in inputs.split()]).reshape([-1, 2]))
-                    y.append(np.array([int(j) for j in outputs.split()])[:-1]) # delete last
+                    y.append(np.array([int(j) - 1 for j in outputs.split()])[:-1]) # delete last
                     # teacher forcing array as decoder's input while training
                     y_teacher.append([X[i][j - 1] for j in y[i]])
                     if i == nrows:
