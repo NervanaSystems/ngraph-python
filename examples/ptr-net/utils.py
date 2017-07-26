@@ -13,12 +13,15 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 def first_example(tsp_data):
     return tsp_data['train']['inp_txt'][0], tsp_data['train']['tgt_txt'][0]
 
 def avg_travel_distance(inputs_array, pred_travel_index_array):
-    """on going function"""
+    """WIP"""
 
     avg_travel_distance = 0
     num_of_examples = 0
@@ -69,6 +72,15 @@ def distance(coord_a, coord_b):
 
     return dist
 
+def save_plot(niters, loss, args):
+    name = 'train-{}_test-{}_hs-{}_lr-{}_bs-{}'.format(args.train_file, args.test_file, args.hs, args.lr, args.batch_size)
+    print(name)
+    plt.title(name)
+    plt.plot(niters, loss)
+    plt.xlabel('iteration')
+    plt.ylabel('loss')
+    plt.savefig(name + '.jpg')
+    print('{} saved!'.format(name + '.jpg'))
 
 if __name__ == '__main__':
     # test case
