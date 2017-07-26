@@ -12,63 +12,63 @@ $ unzip '*.zip'
 ```
 3. Run training script
 ```
-$ python ptr-net.py --train_file tsp5.txt --test_file tsp5_test.txt
+$ python ptr-net.py --train_file tsp5.txt --test_file tsp5_test.txt -b gpu
 ```
 ## Results
 - prelim results training on tsp5.txt
 
->iteration = 4000, train loss = 1.59592020512
-iteration = 8000, train loss = 1.06542396545
-iteration = 12000, train loss = 0.864562988281
-iteration = 16000, train loss = 0.696883380413
-iteration = 20000, train loss = 0.496299445629
-iteration = 24000, train loss = 0.43381780386
-iteration = 28000, train loss = 0.372637659311
-iteration = 32000, train loss = 0.33082139492
-iteration = 36000, train loss = 0.349985271692
-iteration = 40000, train loss = 0.341779232025
-iteration = 44000, train loss = 0.33200699091
-iteration = 48000, train loss = 0.352579593658
-iteration = 52000, train loss = 0.286086380482
-iteration = 56000, train loss = 0.284330248833
-iteration = 60000, train loss = 0.331149876118
-iteration = 64000, train loss = 0.265735834837
-iteration = 68000, train loss = 0.245906025171
-iteration = 72000, train loss = 0.283038437366
-iteration = 76000, train loss = 0.296033680439
-iteration = 80000, train loss = 0.234311491251
-iteration = 84000, train loss = 0.280319094658
-iteration = 88000, train loss = 0.241472199559
-iteration = 92000, train loss = 0.263256013393
-iteration = 96000, train loss = 0.275329083204
-iteration = 100000, train loss = 0.235205605626
+>iteration = 2000, train loss = 1.57829642296
+iteration = 4000, train loss = 1.43903386593
+iteration = 6000, train loss = 1.02534890175
+iteration = 8000, train loss = 0.931654274464
+iteration = 10000, train loss = 0.785848796368
+iteration = 12000, train loss = 0.824071228504
+iteration = 14000, train loss = 0.760764241219
+iteration = 16000, train loss = 0.723568558693
+iteration = 18000, train loss = 0.612337231636
+iteration = 20000, train loss = 0.533858776093
+iteration = 22000, train loss = 0.520471572876
+iteration = 24000, train loss = 0.419541060925
+iteration = 26000, train loss = 0.433132320642
+iteration = 28000, train loss = 0.470048248768
+iteration = 30000, train loss = 0.489885240793
+iteration = 32000, train loss = 0.509543120861
+iteration = 34000, train loss = 0.397153705359
+iteration = 36000, train loss = 0.41118773818
+iteration = 38000, train loss = 0.330927848816
+iteration = 40000, train loss = 0.34331125021
+iteration = 42000, train loss = 0.376413494349
+iteration = 44000, train loss = 0.388570189476
+iteration = 46000, train loss = 0.327951878309
+iteration = 48000, train loss = 0.379947990179
+iteration = 50000, train loss = 0.317634046078
 
 - prelim results training on tsp10.txt
->iteration = 4000, train loss = 2.84994125366
-iteration = 8000, train loss = 2.63330841064
-iteration = 12000, train loss = 2.16516757011
-iteration = 16000, train loss = 1.8092457056
-iteration = 20000, train loss = 1.46874678135
-iteration = 24000, train loss = 1.30825471878
-iteration = 28000, train loss = 1.18671369553
-iteration = 32000, train loss = 1.0799434185
-iteration = 36000, train loss = 1.01472973824
-iteration = 40000, train loss = 0.994896769524
-iteration = 44000, train loss = 0.957517623901
-iteration = 48000, train loss = 0.952610969543
-iteration = 52000, train loss = 0.927261054516
-iteration = 56000, train loss = 0.892623126507
-iteration = 60000, train loss = 0.782183647156
-iteration = 64000, train loss = 0.802037835121
-iteration = 68000, train loss = 0.839537620544
-iteration = 72000, train loss = 0.769252955914
-iteration = 76000, train loss = 0.874385476112
-iteration = 80000, train loss = 0.818211376667
-iteration = 84000, train loss = 0.815545678139
-iteration = 88000, train loss = 0.720605194569
-iteration = 92000, train loss = 0.729014635086
-iteration = 96000, train loss = 0.736841499805
-iteration = 100000, train loss = 0.716338455677
+>iteration = 2000, train loss = 2.85296750069
+iteration = 4000, train loss = 2.84532856941
+iteration = 6000, train loss = 2.66449666023
+iteration = 8000, train loss = 2.56625890732
+iteration = 10000, train loss = 2.19565153122
+iteration = 12000, train loss = 1.94617462158
+iteration = 14000, train loss = 2.06753349304
+iteration = 16000, train loss = 1.78943669796
+iteration = 18000, train loss = 1.67663383484
+iteration = 20000, train loss = 1.63309168816
+iteration = 22000, train loss = 1.68619692326
+iteration = 24000, train loss = 1.50074219704
+iteration = 26000, train loss = 1.50416409969
+iteration = 28000, train loss = 1.4880001545
+iteration = 30000, train loss = 1.43878722191
+iteration = 32000, train loss = 1.34956288338
+iteration = 34000, train loss = 1.36554932594
+iteration = 36000, train loss = 1.36947906017
+iteration = 38000, train loss = 1.34887468815
+iteration = 40000, train loss = 1.38094007969
+iteration = 42000, train loss = 1.22148537636
+iteration = 44000, train loss = 1.33542692661
+iteration = 46000, train loss = 1.23805546761
+iteration = 48000, train loss = 1.19426417351
+iteration = 50000, train loss = 1.30143654346
 
 ## To-dos
 - [X] change decoder input to coordinates for teacher forcing  
