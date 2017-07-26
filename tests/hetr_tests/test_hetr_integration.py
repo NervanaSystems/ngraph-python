@@ -20,14 +20,17 @@ from orderedset import OrderedSet
 from test_hetr_passes import check_device_assign_pass, check_communication_pass
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp, \
-    GPUCudaAllReduceOp
-from multiprocessing import active_children, Process, Event, Queue
+from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
+from ngraph.transformers.hetr.mpilauncher import Launcher
+from multiprocessing import active_children
 import threading
 import time
+import os
+import subprocess
 
 
 pytestmark = pytest.mark.hetr_only
+STARTUP_TIME = 3
 
 
 def test_distributed_graph_plus_one(transformer_factory):
@@ -419,6 +422,8 @@ def test_gpu_graph(config):
     with ng.metadata(device='gpu'):
         x_plus_two = x_plus_one + 1
 
+    os.environ["HETR_SERVER_GPU_NUM"] = str(len(t['device_id']))
+
     np_x = np.random.randint(100, size=t['axes'].full_lengths)
     with closing(ngt.make_transformer_factory('hetr')()) as transformer:
         computation = transformer.computation(x_plus_two, x)
@@ -485,86 +490,54 @@ def test_allreduce_cpu_op(config):
     np.testing.assert_array_equal(results, c['results'])
 
 
-@pytest.mark.hetr_gpu_only
-@pytest.mark.parametrize('config', [
-    {
-        'device_id': (0, 1),
-        'x_input': np.arange(24),
-        'func': 'mean',
-    },
-    {
-        'device_id': (0, 1),
-        'x_input': np.arange(32),
-        'func': 'sum',
-    },
-    {
-        'device_id': (0, 1, 2, 3),
-        'x_input': np.arange(48),
-        'func': 'mean',
-    },
-    {
-        'device_id': (0, 1, 2, 3),
-        'x_input': np.arange(64),
-        'func': 'sum',
-    }
-])
-def test_allreduce_gpu_op(config):
-    class myProcess(Process):
-        def __init__(self, y, device_id, queue):
-            Process.__init__(self)
-            self.y = y
-            self.device_id = device_id
-            self.exit = Event()
-            self.queue = queue
+class ClosingHetrServers():
+    def __init__(self, ports):
+        self.processes = []
+        for p in ports:
+            hetr_server = os.path.dirname(os.path.realpath(__file__)) +\
+                "/../../ngraph/transformers/hetr/hetr_server.py"
+            command = ["python", hetr_server, "-p", p]
+            try:
+                proc = subprocess.Popen(command)
+                self.processes.append(proc)
+            except Exception as e:
+                print(e)
+            time.sleep(STARTUP_TIME)
 
-        def run(self):
-            with closing(ngt.make_transformer_factory('gpu', device_id=self.device_id)()) as t:
-                comp = t.computation(self.y)
-                self.queue.put(comp())
+    def close(self):
+        for p in self.processes:
+            p.terminate()
+        time.sleep(STARTUP_TIME)
+        for p in self.processes:
+            p.kill()
+        for p in self.processes:
+            p.wait()
 
-            while not self.exit.is_set():
-                time.sleep(0.1)
 
-    pytest.xfail("Multi-GPU testing not enabled yet")
+def test_rpc_transformer():
+    from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
+    rpc_client_list = list()
+    port_list = ['50111', '50112']
+    num_procs = len(port_list)
 
-    if 'gpu' not in ngt.transformer_choices():
-        pytest.skip('GPUTransformer not available!')
+    with closing(ClosingHetrServers(port_list)):
+        for p in range(num_procs):
+            rpc_client_list.append(RPCTransformerClient('cpu' + str(p), port_list[p]))
+            np.testing.assert_equal(rpc_client_list[p].initialized, True)
 
-    c = config
-    x = list()
-    y = list()
-    input_list = list()
-    process_list = list()
-    result_list = list()
-    np_result_list = list()
-    queue = Queue()
 
-    with ng.metadata(device='gpu', device_id=c['device_id'],
-                     transformer='None', host_transformer='None'):
-        for i in range(len(c['device_id'])):
-            x_input = c['x_input'] * (i + 1)
-            x.append(ng.constant(x_input))
-            input_list.append(x_input)
+def test_mpilauncher():
+    port_list = ['51111', '51112']
+    num_procs = len(port_list)
+    os.environ["HETR_SERVER_GPU_NUM"] = str(num_procs)
 
-    for i in range(len(c['device_id'])):
-        ar_op = GPUCudaAllReduceOp(x[i], c['func'])
-        if (i != 0):
-            ar_op._shared_queues = y[0].shared_queues
-        y.append(ar_op)
+    mpilauncher = Launcher(port_list)
+    mpilauncher.launch()
 
-    if c['func'] == 'mean':
-        np_result = np.mean(input_list, axis=0)
-    elif c['func'] == 'sum':
-        np_result = np.sum(input_list, axis=0)
+    # Check if process has launched
+    assert mpilauncher.mpirun_proc.poll() is None
 
-    for i, d in enumerate(c['device_id']):
-        process_list.append(myProcess(y[i], d, queue))
-        process_list[i].start()
+    mpilauncher.close()
 
-    for p in reversed(process_list):
-        np_result_list.append(np_result)
-        result_list.append(queue.get())
-        p.exit.set()
-        p.join()
-
-    np.testing.assert_array_equal(result_list, np_result_list)
+    # Check if process has completed
+    assert mpilauncher.mpirun_proc.poll() is not None
