@@ -31,7 +31,6 @@ from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import ArrayIterator
 from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
-from toygan import ToyGAN
 
 
 def affine_layer(h_dim, activation, name):
@@ -104,23 +103,19 @@ batch_size = 12
 num_examples = num_iterations * batch_size
 
 # generator
-g_scope = 'generator'
-with Layer.variable_scope(g_scope):
-    generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
-                        affine_layer(1, Identity(), name='g1')]
-    generator = Sequential(generator_layers)
+generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
+                    affine_layer(1, Identity(), name='g1')]
+generator = Sequential(generator_layers)
 
 # discriminator
-d_scope = 'discriminator'
-with Layer.variable_scope(d_scope):
-    discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
-                            affine_layer(2 * h_dim, Tanh(), name='d1')]
-    if minibatch_discrimination:
-        raise NotImplementedError
-    else:
-        discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2'))
-    discriminator_layers.append(affine_layer(1, Logistic(), name='d3'))
-    discriminator = Sequential(discriminator_layers)
+discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
+                        affine_layer(2 * h_dim, Tanh(), name='d1')]
+if minibatch_discrimination:
+    raise NotImplementedError
+else:
+    discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2'))
+discriminator_layers.append(affine_layer(1, Logistic(), name='d3'))
+discriminator = Sequential(discriminator_layers)
 
 # TODO discriminator pre-training
 
@@ -154,8 +149,8 @@ mean_cost_g = ng.mean(loss_g, out_axes=[])
 
 optimizer_d = make_optimizer(name='discriminator_optimizer')
 optimizer_g = make_optimizer(name='generator_optimizer')
-updates_d = optimizer_d(loss_d, variable_scope=d_scope)
-updates_g = optimizer_g(loss_g, variable_scope=g_scope)
+updates_d = optimizer_d(loss_d, subgraph=discriminator)
+updates_g = optimizer_g(loss_g, subgraph=generator)
 
 discriminator_train_outputs = {'batch_cost': mean_cost_d, 'updates': updates_d}
 generator_train_outputs = {'batch_cost': mean_cost_g, 'updates': updates_g}
