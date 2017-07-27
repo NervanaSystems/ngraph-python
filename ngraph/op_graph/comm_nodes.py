@@ -136,6 +136,7 @@ class RecvOp(CommunicationOp):
             axes=self.calculate_recv_axes(send_node.axes, fragment_axis, fragments),
             dtype=send_node.dtype)
         self._send_node = send_node
+        self.source_id = send_node.metadata['device_id']
 
     @classmethod
     def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
@@ -436,6 +437,10 @@ class GPUCudaAllReduceOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
         self.device_ids = input_node.metadata['device_id']
         self._shared_queues = \
             {i: multiprocessing.Queue() for i in input_node.metadata['device_id']}
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class BroadcastSendOp(SendOp):

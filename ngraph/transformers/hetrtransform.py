@@ -15,7 +15,6 @@
 import collections
 import os
 import signal
-import subprocess
 import sys
 import time
 from multiprocessing import Process, Manager, Event
@@ -30,13 +29,15 @@ from ngraph.transformers.base import Computation
 from ngraph.transformers.base import ComputationGraphTransformer
 from ngraph.transformers.base import PYCUDA_LOGIC_ERROR_CODE
 from ngraph.transformers.base import make_transformer_factory
+from ngraph.transformers.hetr.mpilauncher import Launcher
+from ngraph.transformers.hetr.hetr_utils import get_available_ports
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import DistributedPass
 
 
-def build_transformer(name):
+def build_transformer(name, comm=None):
     """
 
     :param results: the graph nodes that we care about, for the computation
@@ -47,7 +48,7 @@ def build_transformer(name):
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa
-            transformer = make_transformer_factory('gpu', device_id=int(name[-1]))()
+            transformer = make_transformer_factory('gpu', device_id=comm.Get_rank(), comm=comm)()
         except ImportError:
             assert False, "Fatal: Unable to initialize GPU, " \
                           "but GPU transformer was requested."
@@ -309,20 +310,13 @@ class HetrTransformer(ComputationGraphTransformer):
                              CommunicationPass(self.send_nodes),
                              DistributedPass(self.send_nodes)]
 
-        hetr_server_path = os.path.dirname(os.path.realpath(__file__)) + "/cpu/hetr_server.py"
-        hetr_server_num = os.getenv('HETR_SERVER_NUM')
-        hetr_server_hostfile = os.getenv('HETR_SERVER_HOSTFILE')
-        # Assumption is that hydra_persist processes are started on remote nodes
-        # Otherwise, remove "-bootstrap persist" from the command line (it then uses ssh)
-        if (hetr_server_num is not None) & (hetr_server_hostfile is not None):
-            mpirun_str = "mpirun -n %s -ppn 1 -bootstrap persist -hostfile %s %s"\
-                % (hetr_server_num, hetr_server_hostfile, hetr_server_path)
-            subprocess.call(mpirun_str, shell=True)
-            self.use_mlsl = True
-        else:
-            self.use_mlsl = False
+        self.rpc_ports = get_available_ports()
+        self.rpc_port_idx = 0
+        self.mpilauncher = Launcher(self.rpc_ports)
+        self.mpilauncher.launch()
 
     def close(self):
+        self.mpilauncher.close()
         if self.is_closed:
             return
         if self.my_pid != os.getpid():
@@ -340,7 +334,10 @@ class HetrTransformer(ComputationGraphTransformer):
                 # trans_client = RPCTransformerClient(tname)
                 trans_client = AsyncTransformer(tname)  # TODO replace with RPC when ready
             else:
-                trans_client = AsyncTransformer(tname)
+                from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
+                trans_client = RPCTransformerClient(tname,
+                                                    self.rpc_ports[self.rpc_port_idx])
+                self.rpc_port_idx += 1
             self.child_transformers[tname] = trans_client
 
     def transformer(self, tname):

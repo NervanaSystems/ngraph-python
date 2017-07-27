@@ -96,6 +96,7 @@ class CommNodePair(object):
                 from_node=from_node,
                 to_node=to_node,
                 send_node=self.send_node)
+            self.send_node.source_id = self.recv_node.metadata['device_id']
         elif node_type == 'broadcast':
             self.send_node = send_node_factory.build(
                 node_type='broadcast_send',
