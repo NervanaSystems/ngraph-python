@@ -451,7 +451,7 @@ class CPUCodeGenerator(PyGen):
         #     output_decl_name = 'a_'+output_decl.tensor.tensor_name
         #     self.append("#    output_decl {}", val_name)
         if is_tracing_enabled():
-            self.append("self.__profiler_start__.append(time.clock_gettime(__profiler_clk__))")
+            self.append("self.__profiler_start__.append(monotonic())")
 
     def generate_op_post(self, op):
         # exop = self.exop
@@ -465,7 +465,7 @@ class CPUCodeGenerator(PyGen):
         #     self.append("print('   output_decl {} = {{}}'.format({}))", \
         #            output_decl_name, output_decl_name)
         if is_tracing_enabled():
-            self.append("self.__profiler_stop__.append(time.clock_gettime(__profiler_clk__))")
+            self.append("self.__profiler_stop__.append(monotonic())")
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -983,7 +983,7 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
-import time
+from monotonic import monotonic as monotonic
 try:
     import mlsl
     import ctypes
@@ -1005,13 +1005,6 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
         if self.use_mlsl:
             module.execute("mlsl_obj = mlsl.MLSL()")
             module.execute("mlsl_obj.init()")
-        if is_tracing_enabled():
-            module.execute("""
-if hasattr(time, "CLOCK_MONOTONIC_RAW") and (time.clock_getres(time.CLOCK_MONOTONIC_RAW) > 0):
-     __profiler_clk__ = time.CLOCK_MONOTONIC_RAW
-else:
-     __profiler_clk__ = time.CLOCK_MONOTONIC
-""")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
