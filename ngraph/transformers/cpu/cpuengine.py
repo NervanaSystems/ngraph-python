@@ -66,6 +66,16 @@ class Mkldnn(object):
             self.create_layout_md.argtypes = \
                 [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_void_p, ct.c_int]
             self.create_layout_md.restype = ct.c_void_p
+            self.layout_reorder = \
+                self.mkllib.mkldnn_reorder_axes
+            self.layout_reorder.argtypes = \
+                [ct.c_void_p, ct.c_void_p]
+            self.layout_reorder.restype = ct.c_void_p
+            self.flatten_axes = \
+                self.mkllib.mkldnn_flatten_axes
+            self.flatten_axes.argtypes = \
+                [ct.c_void_p, ct.c_void_p]
+            self.flatten_axes.restype = ct.c_void_p
             self.output_layout = self.mkllib.query_opkernel_layout
             self.output_layout.argtypes = [ct.c_void_p, ct.c_int]
             self.output_layout.restype = ct.c_void_p

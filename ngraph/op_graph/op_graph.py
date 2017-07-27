@@ -3663,6 +3663,9 @@ class DotLowDimension(TensorOp):
         else:
             super(DotLowDimension, self).__init__(args=(x, y, bias), axes=axes, **kwargs)
 
+    def copy_with_new_args(self, args):
+        return type(self)(*args, axes=self.axes)
+
 
 class SoftmaxOp(ValueOp):
     def __init__(self, x, normalization_axes=None, **kwargs):

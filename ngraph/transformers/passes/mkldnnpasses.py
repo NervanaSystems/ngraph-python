@@ -16,10 +16,10 @@ from __future__ import division
 
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, ComputationOp, \
-    Flatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp, ReturnOp
+    Flatten, Unflatten, unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp, ReturnOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
-from ngraph.op_graph.axes import FlattenedAxis
+from ngraph.op_graph.axes import Axes, FlattenedAxis
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import PeepholeGraphPass
 from ngraph.util.generics import generic_method
@@ -152,6 +152,16 @@ def dbg_print_kernel(mkldnn, op, op_id):
 def get_ctypes_arg(x):
     return ((ct.c_int) * len(x))(*x) if x else None
 
+
+def get_flattened_axes(x):
+    """
+    Ordered list of axis visible to MKLDNN
+    """
+    return [axis for axis in Axes.as_flattened_list(x) if axis.name != '__NG_DEPTH']
+
+def get_rotated_layout(mkldnn, in_layout, from_axes, to_axes):
+    permute_order = [from_axes.index(axis) for axis in to_axes]
+    return mkldnn.layout_reorder(in_layout, get_ctypes_arg(permute_order))
 
 class MklCreateOpDescriptors(PeepholeGraphPass):
     """
@@ -616,10 +626,31 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         o_shape = get_size_mkl_order(op.axes, [1, 0])
         bias_shape = [o_shape[1]] if bias else None
 
-        (x_layout, mkl_axes) = get_mkl_layout(self.mkldnn, x, [0, 1], True)
-        (y_layout, mkl_axes_1) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
-        if len(mkl_axes_1) != 2:
-            return
+        op_x_axes = get_axes_mkl_order(x.axes, [0, 1])
+        op_y_axes = get_axes_mkl_order(y.axes, [1, 0])
+        (x_layout, in_x_axes) = get_mkl_layout(self.mkldnn, x, [0, 1], True)
+        (y_layout, in_y_axes) = get_mkl_layout(self.mkldnn, y, [1, 0], False)
+
+
+        if get_flattened_axes(op_x_axes) != get_flattened_axes(in_x_axes):
+            print "Need to rotate x axes", get_flattened_axes(op_x_axes), get_flattened_axes(in_x_axes)
+            x_layout = get_rotated_layout(self.mkldnn, x_layout, get_flattened_axes(in_x_axes), get_flattened_axes(op_x_axes))
+        if get_flattened_axes(op_y_axes) != get_flattened_axes(in_y_axes):
+            print "Need to rotate y axes", get_flattened_axes(op_y_axes), get_flattened_axes(in_y_axes)
+            y_layout = get_rotated_layout(self.mkldnn, y_layout, get_flattened_axes(in_y_axes), get_flattened_axes(op_y_axes))
+        """
+        if len(in_y_axes) != 2 and len(in_x_axes) == 2:
+            # Flatten x axes to match y
+            # Assume flattened dimension is dimension 1
+            temp = get_flattened_axes(y.axes)
+            y_shape = get_size_mkl_order(get_flattened_axes(y.axes), [3, 0, 1, 2])
+            try:
+                x_shape = get_size_mkl_order(get_flattened_axes(x.axes), [0, 1, 2, 3])
+            except:
+                x_shape = [x_shape[0], y_shape[1], y_shape[2], y_shape[3]]
+            x_layout = None
+        """
+
         bias_layout = None
         data_type = self.mkldnn.datatype[op.dtype.type]
 
@@ -688,6 +719,46 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
+
+    @visit.on_type(Unflatten)
+    def visit(self, op, arg):
+        if arg.name in self.mkldnn.op_layouts:
+            if (len(arg.axes) == len(op.axes)):
+                (mkl_layout, mkl_axes) = self.mkldnn.op_layouts[arg.name]
+                order = get_order_from_axes(arg.axes, mkl_axes)
+                new_axes = get_axes_mkl_order(op.axes, order)
+                self.mkldnn.op_layouts[op.name] = (mkl_layout, new_axes)
+
+
+    @visit.on_type(Flatten)
+    def visit(self, op, arg):
+        if arg.name in self.mkldnn.op_layouts:
+            if (len(arg.axes) == len(op.axes)):
+                (mkl_layout, mkl_axes) = self.mkldnn.op_layouts[arg.name]
+                order = get_order_from_axes(arg.axes, mkl_axes)
+                new_axes = get_axes_mkl_order(op.axes, order)
+                self.mkldnn.op_layouts[op.name] = (mkl_layout, new_axes)
+            return
+            (mkl_layout, mkl_axes) = self.mkldnn.op_layouts[arg.name]
+            count = 1
+            flatten_map = {}
+            for axis in op.axes:
+                if axis.is_flattened:
+                    assert all([not a.is_flattened for a in axis.axes])
+                    for a in axis.axes:
+                        if a in mkl_axes:
+                            flatten_map[a] = count
+                    count+=1
+                else:
+                    flatten_map[axis] = 0
+            flatten_arg = [flatten_map[axis] for axis in mkl_axes]
+            # Ensure that we are flattening only along contiguous mkl axes
+            if (count == 1):
+                # No flattening required
+                self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
+            else:
+                self.mkldnn.flatten_axes(mkl_layout, get_ctypes_arg(flatten_arg))
+
 
 
 class MklAddLayoutConversions(PeepholeGraphPass):
@@ -776,6 +847,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             self.replace_op(op, arg)
         elif isinstance(arg, MklReorderOp):
             # TODO(jbobba) - Can we eliminate ContiguousOp here?
+            self.replace_op(op, arg)
             pass
 
     @visit.on_type(MapRolesOp)

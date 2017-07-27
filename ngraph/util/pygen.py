@@ -80,7 +80,7 @@ class PyModule(dict):
         Returns: The updated environment.
 
         """
-        if False:
+        if True:
             # Set to True to get a file with all the generated code
             f = open('codegen.py', 'w' if PyModule.codegen_count == 0 else 'a')
             f.write('\n\n')

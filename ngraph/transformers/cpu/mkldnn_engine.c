@@ -65,6 +65,67 @@ create_mkldnn_layout_descriptor(mkldnn_engine_t engine, int ndims,
   return md;
 }
 
+// Return flattened memory descriptor if flattening is feasible
+// else return NULL
+// Can only flatten contiguous axes
+mkldnn_memory_desc_t*
+mkldnn_flatten_axes(mkldnn_memory_desc_t* in_md, int* flatten_map) {
+  return NULL;
+  // Check if layout is blocked in any dimension.
+  // Cannot flatten blocked layouts currently
+  for (size_t i = 0; i < in_md->ndims; i++) {
+    if ((in_md->layout_desc.blocking.block_dims[i] != 1)
+        || (in_md->layout_desc.blocking.padding_dims[i] != in_md->dims[i])
+        || (in_md->layout_desc.blocking.offset_padding_to_data[i] != 0)
+        )
+        return NULL;
+  }
+
+  mkldnn_memory_desc_t* md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
+  md->primitive_kind = mkldnn_memory;
+  md->format = mkldnn_blocked;
+  md->data_type = in_md->data_type;
+  md->ndims = 0;
+  for (size_t i = 0; i < in_md->ndims; i++) {
+    md->layout_desc.blocking.block_dims[md->ndims] = 1;
+    md->layout_desc.blocking.strides[1][md->ndims] = 1;
+    md->layout_desc.blocking.offset_padding_to_data[md->ndims] = 0;
+    if (flatten_map[i] == 1) {
+        // Not done yet
+        md->layout_desc.blocking.strides[0][md->ndims] = 1;
+        md->layout_desc.blocking.padding_dims[md->ndims] = 1;
+        md->dims[md->ndims] = 1;
+    } else {
+        md->layout_desc.blocking.strides[0][md->ndims] = in_md->layout_desc.blocking.strides[0][i];
+        md->layout_desc.blocking.padding_dims[md->ndims] = in_md->dims[i];
+        md->dims[md->ndims] = in_md->dims[i];
+        md->ndims++;
+    }
+  }
+  md->layout_desc.blocking.offset_padding = 0;
+  return md;
+}
+
+mkldnn_memory_desc_t*
+mkldnn_reorder_axes(mkldnn_memory_desc_t *in_md, int* axis_order) {
+  mkldnn_memory_desc_t* md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
+  md->primitive_kind = mkldnn_memory;
+  md->ndims = in_md->ndims;
+  md->format = mkldnn_blocked;
+  md->data_type = in_md->data_type;
+  for (size_t i = 0; i < md->ndims; i++) {
+      assert(axis_order[i] < md->ndims);
+      md->layout_desc.blocking.block_dims[i] = in_md->layout_desc.blocking.block_dims[axis_order[i]];
+      md->layout_desc.blocking.strides[1][i] = in_md->layout_desc.blocking.strides[1][axis_order[i]];
+      md->layout_desc.blocking.strides[0][i] = in_md->layout_desc.blocking.strides[0][axis_order[i]];
+      md->layout_desc.blocking.padding_dims[i] = in_md->layout_desc.blocking.padding_dims[axis_order[i]];
+      md->layout_desc.blocking.offset_padding_to_data[i] = in_md->layout_desc.blocking.offset_padding_to_data[axis_order[i]];
+      md->dims[i] = in_md->dims[axis_order[i]];
+  }
+  md->layout_desc.blocking.offset_padding = 0;
+  return md;
+}
+
 void create_mkldnn_tensor(int ndims, const int *dim_sizes,
                           mkldnn_data_type_t data_type,
                           mkldnn_memory_format_t fmt, mkldnn_engine_t engine,
