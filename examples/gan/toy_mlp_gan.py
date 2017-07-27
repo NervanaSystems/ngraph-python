@@ -24,7 +24,7 @@ from contextlib import closing
 
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import Layer, Affine, Sequential
+from ngraph.frontends.neon import Affine, Sequential
 from ngraph.frontends.neon import Rectlin, Identity, Tanh, Logistic
 from ngraph.frontends.neon import GaussianInit, ConstantInit
 from ngraph.frontends.neon import GradientDescentMomentum

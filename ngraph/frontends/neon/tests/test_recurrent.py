@@ -599,7 +599,7 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [8])
 def test_change_recurrent_axis_length(recurrent_layer_cls, batch_size, sequence_length,
-                                     input_size, hidden_size, transformer_factory):
+                                      input_size, hidden_size, transformer_factory):
     """
     Recurrent layer support for changing REC axis length
     (needed by seq2seq inference)
@@ -624,7 +624,7 @@ def test_change_recurrent_axis_length(recurrent_layer_cls, batch_size, sequence_
     # sequence length greater than 1
     N = ng.make_axis(length=batch_size, name='N')
     REC = ng.make_axis(length=sequence_length, name='REC')
-    M = ng.make_axis(length=input_size, name = 'M')
+    M = ng.make_axis(length=input_size, name='M')
     xn_axes = ng.make_axes([M, REC, N])
     xn = ng.placeholder(axes=xn_axes)
     xn_val = np.random.normal(size=(input_size, sequence_length, batch_size))

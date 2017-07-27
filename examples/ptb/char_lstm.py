@@ -68,17 +68,19 @@ valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_siz
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
 
+
 def expand_onehot(x):
     return ng.one_hot(x, axis=ax.Y)
+
 
 # weight initialization
 init = UniformInit(low=-0.08, high=0.08)
 
 if args.layer_type == "lstm":
     rlayer1 = LSTM(hidden_size, init, activation=Tanh(),
-                  gate_activation=Logistic(), return_sequence=True)
+                   gate_activation=Logistic(), return_sequence=True)
     rlayer2 = LSTM(hidden_size, init, activation=Tanh(),
-                  gate_activation=Logistic(), return_sequence=True)
+                   gate_activation=Logistic(), return_sequence=True)
 
 # model initialization
 seq1 = Sequential([Preprocess(functor=expand_onehot),
