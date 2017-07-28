@@ -39,6 +39,11 @@ except ImportError:
 class AeonDataLoader(object):
 
     def __init__(self, config, *args, **kwargs):
+
+        # TODO: Remove this workaround once tuples are accepted
+        if "etl" in config and isinstance(config["etl"], tuple):
+            config["etl"] = list(config["etl"])
+
         self.config = config
         self._dataloader = DataLoader(config)
 
