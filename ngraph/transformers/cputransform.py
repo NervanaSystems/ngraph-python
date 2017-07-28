@@ -422,7 +422,7 @@ class CPUCodeGenerator(PyGen):
         pass
 
     @allocate_op.on_type(ConvolutionOp)
-    def allocate_op(self, op, outputs, inputs, filters):
+    def allocate_op(self, op, outputs, inputs, filters, bias=None):
         self.conv_params[op.safe_name] = op.conv_params
         self.conv_slices[op.safe_name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
@@ -506,9 +506,9 @@ class CPUCodeGenerator(PyGen):
         self.append("np.ndarray.argmin({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(ConvolutionOp)
-    def generate_op(self, op, outputs, inputs, filters):
-        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                    op.safe_name, op.safe_name, inputs, filters, outputs)
+    def generate_op(self, op, outputs, inputs, filters, bias=None):
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, B={}, O={})",
+                    op.safe_name, op.safe_name, inputs, filters, bias, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
@@ -527,8 +527,8 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(DeconvDerivOp)
     def generate_op(self, op, outputs, delta, filters):
-        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                    op.safe_name, op.fprop.forwarded.safe_name, delta, filters, outputs)
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, B={},  O={})",
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, filters, None, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):

@@ -2452,7 +2452,7 @@ def placeholder(axes, dtype=None, initial_value=None, **kwargs):
                               **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None, **kwargs):
+def temporary(axes, dtype=None, **kwargs):
     """
     Temporary storage.
 
@@ -2461,18 +2461,14 @@ def temporary(axes, dtype=None, initial_value=None, **kwargs):
     Args:
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
-        initial_value (optional): A host constant or callable. If callable, will
-            be called to generate an initial value.
         constant (optional): Once initialization is complete, this tensor should not change.
 
     Returns:
         AssignableTensorOp: The placeholder.
     """
-    if initial_value is not None:
-        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value,
+                              initial_value=None,
                               **kwargs)
 
 

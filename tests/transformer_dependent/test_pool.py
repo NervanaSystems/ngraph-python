@@ -169,12 +169,12 @@ n2_c1_hw4_2x2_str2_avg = dict(
 
 
 @pytest.mark.transformer_dependent
-@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("pool_args",
                          [pytest.config.flex_disabled(n4_c1_hw4_2x2_max,
                                                       reason='#1823 flex pool fail when stride=1'),
                           n2_c1_hw5_3x3_str2_max,
-                          n2_c1_hw4_2x2_str2_avg],
+                          pytest.config.argon_disabled(n2_c1_hw4_2x2_str2_avg,
+                                                       reason='TODO Triage')],
                          ids=['n4_c1_hw4_2x2_max',
                               'n2_c1_hw5_3x3_str2_max',
                               'n2_c1_hw4_2x2_str2_avg'])
