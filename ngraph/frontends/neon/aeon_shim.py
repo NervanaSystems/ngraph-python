@@ -35,7 +35,6 @@ except ImportError:
     raise ImportError(msg)
 
 
-
 class AeonDataLoader(object):
 
     def __init__(self, config, *args, **kwargs):
