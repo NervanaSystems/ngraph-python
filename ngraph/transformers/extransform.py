@@ -37,13 +37,19 @@ class DeviceComputation(BaseDeviceComputation):
         super(DeviceComputation, self).__init__(transformer, computation_op, **kwargs)
 
     def generate_profile(self, profiler_start, profiler_stop):
-        tracker = TraceEventTracker(self.computation_decl.computation_op.name)
+        tracker = TraceEventTracker(self.computation_op.name)
         start = iter(profiler_start)
         stop = iter(profiler_stop)
         for exop in self.computation_decl.exop_block:
             start_time = next(start) * 1e6
             duration = (next(stop) * 1e6) - start_time
-            tracker.add_operation("", exop.name, 0, 0, start_time, duration, {})
+            args = {}
+            count = 0
+            for input_decl in exop.input_decls:
+                args["input{}".format(count)] = input_decl.source_output_decl.exop.name
+                count += 1
+            args['name'] = exop.name
+            tracker.add_operation("ExOp", exop.op.short_name, 0, 0, start_time, duration, args)
         tracker.serialize_to_file()
 
 
