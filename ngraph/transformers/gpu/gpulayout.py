@@ -29,7 +29,7 @@ from ngraph.op_graph.ctc import CTCOp
 
 from ngraph.transformers.passes.layout import UnaryLayoutConstraint
 from ngraph.transformers.util.layout_common import StridedLayoutAssignment, \
-    StridedBinaryLayoutConstraint, flatten
+    StridedBinaryLayoutConstraint, flatten, split_points_to_groups
 
 
 class GPULayoutView(object):
@@ -208,6 +208,76 @@ class GPULayoutAssignment(StridedLayoutAssignment):
             else:
                 layout.append([axes_list.index(group)])
         return [GPULayoutAssignment(axes_list, layout)]
+
+    @staticmethod
+    def generate_default_comms_layout(op, max_out_axes):
+        """
+        Generates a default layout assignment for communication operations
+
+        Arguments:
+            op (CommunicationOp): op to generate layout for
+            max_out_axes: The maximum number of strided axes supported by
+                the kernel for this operation
+
+        Return:
+            GPULayoutAssignment for this op
+        """
+        if isinstance(op, GPUCudaGatherSendOp):
+            return GPULayoutAssignment.generate_default_layout(op.axes, max_out_axes)
+
+        axis_least_contig = None
+        parallel_axis = None
+        if isinstance(op, GPUCudaScatterRecvOp):
+            parallel_axis = op.metadata['parallel_from']
+        else:
+            parallel_axis = op.metadata['parallel']
+
+        if isinstance(op, GPUCudaScatterSendOp):
+            if parallel_axis is not None:
+               axis_least_contig = op.axes.find_by_name(parallel_axis.name)
+               new_axes = axis_least_contig + (op.axes - axis_least_contig)
+            else:
+               new_axes = op.axes
+            return GPULayoutAssignment.generate_default_layout(new_axes, max_out_axes)
+        else:
+            axes = op.axes
+            if parallel_axis is None:
+                return GPULayoutAssignment.generate_default_layout(axes, max_out_axes)
+            axes_list = Axes.as_flattened_list(axes)
+            parallel_axis_index = axes_list.index(parallel_axis)
+
+            if len(axes_list) > max_out_axes:
+                num_splits = max_out_axes - 1
+                num_axes = len(axes_list)
+                split_points = list(reversed([(num_axes - (i + 1)) for i in range(num_splits)]))
+                layout = split_points_to_groups(split_points, len(axes_list))
+
+                # Ensure parallel axis has its index as the first in the memory layout
+                last_val = -1
+                for i in range(len(layout)):
+                    if i == 0:
+                        if parallel_axis_index in layout[i]:
+                            layout[i].remove(parallel_axis_index)
+                            layout[i].insert(0, parallel_axis_index)
+                            break
+                        else:
+                            last_val = layout[i][-1]
+                            layout[i].insert(0, parallel_axis_index)
+                            layout[i].remove(last_val)
+                    else:
+                        if parallel_axis_index in layout[i]:
+                            layout[i].remove(parallel_axis_index)
+                            layout[i].insert(0, last_val)
+                            break
+                        else:
+                            layout[i].insert(0, last_val)
+                            last_val = layout[i][-1]
+                            layout[i].remove(last_val)
+            else:
+                layout = [[i] for i in range(len(axes_list)) if i != parallel_axis_index]
+                layout.insert(0, [parallel_axis_index])
+
+            return [GPULayoutAssignment(axes_list, layout)]
 
 
 class GPUDotLayoutAssignment(GPULayoutAssignment):
@@ -852,10 +922,8 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaScatterRecvOp)):
-        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-    elif isinstance(op, (GPUCudaGatherSendOp, GPUCudaGatherRecvOp)):
-        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
+    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherSendOp, GPUCudaGatherRecvOp)):
+        return GPULayoutAssignment.generate_default_comms_layout(op, 3)
     elif isinstance(op, (GPUCudaAllReduceOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, CTCOp):
@@ -912,8 +980,14 @@ def gpu_constraint_factory(op, arg):
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
-        axis_least_contig = make_axes(op.metadata['parallel'])
-        new_axes = axis_least_contig + (op.axes - axis_least_contig)
+        # axis_least_contig = make_axes(op.metadata['parallel'])
+        # new_axes = axis_least_contig + (op.axes - axis_least_contig)
+        # return GPUFixedLayoutConstraint(op, arg, new_axes)
+        if op.metadata['parallel'] is not None:
+           axis_least_contig = op.axes.find_by_name(op.metadata['parallel'].name)
+           new_axes = axis_least_contig + (op.axes - axis_least_contig)
+        else:
+           new_axes = op.axes
         return GPUFixedLayoutConstraint(op, arg, new_axes)
     elif isinstance(op, (GPUCudaAllReduceOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)

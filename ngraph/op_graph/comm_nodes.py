@@ -137,6 +137,7 @@ class RecvOp(CommunicationOp):
             dtype=send_node.dtype)
         self._send_node = send_node
         self.source_id = send_node.metadata['device_id']
+        self.metadata['parallel_from'] = send_node.metadata['parallel']
 
     @classmethod
     def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
