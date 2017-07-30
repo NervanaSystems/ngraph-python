@@ -19,7 +19,7 @@ from ngraph.frontends.neon import NgraphArgparser, ax
 from ngraph.frontends.neon import Layer, Sequential, Affine, Softmax
 from ngraph.frontends.neon import KaimingInit, Rectlin, Pool2D, GradientDescentMomentum
 from ngraph.frontends.neon import Convolution, BatchNorm, Activation, Preprocess
-#from ngraph.frontends.neon import make_bound_computation, make_default_callbacks, loop_train
+import ngraph.transformers as ngt
 import ngraph.op_graph.tensorboard.tensorboard as tb
 from data import make_aeon_loaders
 import os
@@ -176,7 +176,6 @@ if __name__ == "__main__":
         exit()
 
 label_indices=input_ph['label']
-import ipdb;ipdb.set_trace()
 train_loss=ng.cross_entropy_multi(resnet(input_ph['image']),
                                   ng.one_hot(label_indices,axis=ax.Y))
 batch_cost=ng.sequential([optimizer(train_loss),ng.mean(train_loss,out_axes=())])
