@@ -58,18 +58,18 @@ ax.Y.length = 1000  # number of outputs of last layer.
 init = UniformInit(low=-0.08, high=0.08)
 
 # Setup model
-seq1 = Sequential([Convolution((11, 11, 64), filter_init=GaussianInit(var=0.01),
+seq1 = Sequential([Convolution((11, 11, 96), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=3, strides=4),
                    Pool2D(3, strides=2),
-                   Convolution((5, 5, 192), filter_init=GaussianInit(var=0.01),
+                   Convolution((5, 5, 256), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=2),
                    Pool2D(3, strides=2),
                    Convolution((3, 3, 384), filter_init=GaussianInit(var=0.03),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
+                   Convolution((3, 3, 384), filter_init=GaussianInit(var=0.03),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
                    Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
