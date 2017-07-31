@@ -66,6 +66,10 @@ default: install
 
 install:
 	pip install -U pip
+	# setuptools is autoflex's requirement, but it is here for now
+	# added setuptools separately since it is needed for building packages from source
+	pip install setuptools==18.5
+
 	# cython added separately due to h5py dependency ordering bug.  See:
 	# https://github.com/h5py/h5py/issues/535
 	pip install cython==0.23.1
@@ -103,7 +107,7 @@ uninstall:
 	pip uninstall -r requirements.txt
 
 uninstall_all: uninstall
-	pip uninstall -r gpu_requirements.txt -r test_requirements.txt \
+	pip uninstall -y -r gpu_requirements.txt -r test_requirements.txt \
 	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt \
 	-r multinode_requirements.txt
 
