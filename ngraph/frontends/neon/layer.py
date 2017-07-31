@@ -13,10 +13,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function, absolute_import
+
 import collections
 import itertools
 from contextlib import contextmanager
+
 import ngraph as ng
+from ngraph.frontends.common.utils import output_dim, output_dim_deconv
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
@@ -25,39 +28,6 @@ from ngraph.frontends.neon.initializer import ConstantInit
 # Hopefully these can be used to efficiently display and filter the computational graph
 LABELS = {"weight": "weight",
           "bias": "bias"}
-
-
-def output_dim(X, S, padding, strides, pooling=False, dilation=1):
-    """
-    Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-    Arguments:
-        X (int): input data dimension
-        S (int): filter dimension
-        padding (int): padding on each side
-        strides (int): striding
-        pooling (bool): flag for setting pooling layer size
-        dilation (int): dilation of filter
-    """
-
-    S = dilation * (S - 1) + 1
-    size = ((X - S + 2 * padding) // strides) + 1
-
-    if pooling and padding >= S:
-        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-    if size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(size))
-    return size
-
-
-def output_dim_deconv(X, S, padding, strides, dilation=1):
-    S = dilation * (S - 1) + 1
-    max_size = S + (X + padding - 1) * strides
-
-    if max_size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(max_size))
-    return max_size
 
 
 class Layer(SubGraph):

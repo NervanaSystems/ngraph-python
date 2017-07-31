@@ -16,7 +16,7 @@ import numpy as np
 import itertools as itt
 
 import ngraph as ng
-from ngraph.frontends.neon.layer import output_dim, output_dim_deconv
+from ngraph.frontends.common.utils import output_dim, output_dim_deconv
 
 
 def slicable(dim, pad=0):
