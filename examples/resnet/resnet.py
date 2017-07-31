@@ -103,7 +103,8 @@ class BuildResnet(Sequential):
 
 #Result collector
 def loop_eval(dataset, computation, metric_names):
-    dataset.reset()
+    
+    dataset._dataloader.reset()
     all_results = None
     for data in dataset:
 
@@ -115,7 +116,7 @@ def loop_eval(dataset, computation, metric_names):
             for name, res in zip(metric_names, results):
                 all_results[name].extend(list(res))
 
-    reduced_results = {k: np.mean(v[:dataset.ndata]) for k, v in all_results.items()}
+    reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()}
     return reduced_results
 
 
@@ -127,7 +128,7 @@ if __name__ == "__main__":
     args=parser.parse_args()
 
     #Command line args
-    cifar_sizes = [20, 32, 44, 56, 200]
+    cifar_sizes = [8,20, 32, 44, 56, 200]
     i1k_sizes   = [18, 34, 50, 101, 152] 
     resnet_size=args.size
     resnet_dataset=args.dataset
