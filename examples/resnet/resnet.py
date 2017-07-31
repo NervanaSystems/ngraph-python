@@ -22,6 +22,7 @@ from ngraph.frontends.neon import Convolution, BatchNorm, Activation, Preprocess
 import ngraph.transformers as ngt
 import ngraph.op_graph.tensorboard.tensorboard as tb
 from data import make_aeon_loaders
+from tqdm import tqdm
 import os
 
 #Helpers
@@ -106,7 +107,7 @@ def loop_eval(dataset, computation, metric_names):
     all_results = None
     for data in dataset:
 
-        feed_dict = {inputs[k]: data[k] for k in data.keys()}
+        feed_dict = {input_ph[k]: data[k] for k in data.keys()}
         results = computation(feed_dict=feed_dict)
         if all_results is None:
             all_results = {name: list(res) for name, res in zip(metric_names, results)}
@@ -176,6 +177,7 @@ if __name__ == "__main__":
         exit()
 
 label_indices=input_ph['label']
+label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
 train_loss=ng.cross_entropy_multi(resnet(input_ph['image']),
                                   ng.one_hot(label_indices,axis=ax.Y))
 batch_cost=ng.sequential([optimizer(train_loss),ng.mean(train_loss,out_axes=())])
@@ -199,7 +201,7 @@ interval_cost = 0.0
 
 for step, data in enumerate(train_set):
     data['iteration'] = step
-    feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
+    feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
     output = train_function(feed_dict=feed_dict)
 
     tpbar.update(1)
