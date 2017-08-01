@@ -669,16 +669,10 @@ class ExOpBlock(ExecutionGraphElt):
         """
         if after_exop is None:
             after_exop = self.prev_exop
-        # Get computation graph ops that have already been computed
-        computed_ops = set()
-        exop = after_exop
-        while not exop.is_exop_end_of_list:
-            computed_ops.add(exop.op)
-            computed_ops.update(exop.ref_ops)
-            computed_ops.update(input_decl.exop.op for input_decl in exop.input_decls)
-            for input_decl in exop.input_decls:
-                computed_ops.update(input_decl.source_output_decl.exop.ref_ops)
-            exop = exop.prev_exop
+
+        # Get computation graph ops that are already inserted.
+        # This assumes that we aren't adding an op before its dependents
+        computed_ops = self.computation_decl.ops
 
         available = OrderedSet()
         counts = dict()
