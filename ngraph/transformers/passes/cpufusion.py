@@ -21,7 +21,7 @@ class CPUFusion(GraphRewritePass):
         """
 
         self.conv_bias_label = "B"
-        self.conv_op_label = "C"
+        self.map_roles_label = "M"
 
         bias_label_op = PatternLabelOp(self.conv_bias_label,
                                        (lambda op: op.is_scalar) and
@@ -29,14 +29,9 @@ class CPUFusion(GraphRewritePass):
         bias = PatternSkipOp(bias_label_op,
                              (lambda op: isinstance(op, BroadcastOp)) or
                              (lambda op: isinstance(op, ContiguousOp)))
-
-        conv_label_op = PatternLabelOp(self.conv_op_label,
-                                       (lambda op: isinstance(op, ConvolutionOp)))
-
-        conv_op = PatternSkipOp(conv_label_op,
-                                (lambda op: isinstance(op, MapRolesOp)))
-
-        add_op = Add(conv_op, bias)
+        map_roles = PatternLabelOp(self.map_roles_label,
+                                   (lambda op: isinstance(op, MapRolesOp)))
+        add_op = Add(map_roles, bias)
         return add_op
 
     def fuse_conv_and_bias_callback(self, op, label_map_op_list):
@@ -44,12 +39,15 @@ class CPUFusion(GraphRewritePass):
         Callback function that handles fusion for Conv + bias  pattern
         """
         for (label_map, op) in label_map_op_list:
-            conv_op = label_map[self.conv_op_label]
+            map_roles = label_map[self.map_roles_label]
+            conv_op = map_roles.args[0]
             bias = label_map[self.conv_bias_label]
-            conv_new_op = ConvolutionOp(conv_op.conv_params, conv_op.args[0],
-                                        conv_op.args[1], bias, axes=conv_op.axes)
-            self.op_replacement_dict[conv_op] = conv_new_op
-            self.replace_op(op, conv_new_op)
+            if isinstance(map_roles.args[0], ConvolutionOp):
+                conv_new_op = ConvolutionOp(conv_op.conv_params, conv_op.args[0],
+                                            conv_op.args[1], bias, axes=conv_op.axes)
+                self.op_replacement_dict[conv_op] = conv_new_op
+                map_roles_op = MapRolesOp(conv_new_op, map_roles.axes_map)
+                self.replace_op(op, map_roles_op)
 
     def construct_conv_and_bias_pattern_bprop(self):
         """
@@ -117,11 +115,8 @@ class CPUFusion(GraphRewritePass):
             Single pattern that matches Add(DotLowDimension, Bias) pattern.
         """
 
-        self.dot_x_label = "X"
-        self.dot_y_label = "Y"
         self.bias_label = "B"
-        x = PatternLabelOp(self.dot_x_label)
-        y = PatternLabelOp(self.dot_y_label)
+        self.map_roles_label = "M"
 
         bias_label_op = PatternLabelOp(self.bias_label,
                                        (lambda op: op.is_scalar) and
@@ -129,10 +124,9 @@ class CPUFusion(GraphRewritePass):
         bias = PatternSkipOp(bias_label_op,
                              (lambda op: isinstance(op, BroadcastOp)) or
                              (lambda op: isinstance(op, ContiguousOp)))
-
-        dot_op = PatternSkipOp(DotOp(x, y, None),
-                               (lambda op: isinstance(op, MapRolesOp)))
-        add_op = Add(dot_op, bias)
+        map_roles = PatternLabelOp(self.map_roles_label,
+                                   (lambda op: isinstance(op, MapRolesOp)))
+        add_op = Add(map_roles, bias)
         return add_op
 
     def fuse_innerproduct_and_bias_callback(self, op, label_map_op_list):
@@ -140,11 +134,13 @@ class CPUFusion(GraphRewritePass):
         Callback function that handles fusion for Innerproduct + bias  pattern
         """
         for (label_map, op) in label_map_op_list:
-            x = label_map[self.dot_x_label]
-            y = label_map[self.dot_y_label]
             bias = label_map[self.bias_label]
-            dot_new_op = DotOp(x, y, bias)
-            self.replace_op(op, dot_new_op)
+            map_roles = label_map[self.map_roles_label]
+            if isinstance(map_roles.args[0], DotOp):
+                x = map_roles.args[0].args[0]
+                y = map_roles.args[0].args[1]
+                map_roles_op = MapRolesOp(DotOp(x, y, bias), map_roles.axes_map)
+                self.replace_op(op, map_roles_op)
 
     def construct_relu_fprop_pattern(self):
         """
