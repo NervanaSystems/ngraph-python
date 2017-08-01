@@ -680,6 +680,10 @@ class ExOpBlock(ExecutionGraphElt):
             after_exop = self.prev_exop
 
         # Get computation graph ops that are already inserted.
+        # This assumes that we aren't adding an op before its dependents
+        computed_ops = self.computation_decl.ops
+
+        # Get computation graph ops that are already inserted.
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(OrderedSet)
