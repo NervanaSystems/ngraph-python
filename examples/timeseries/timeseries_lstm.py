@@ -60,7 +60,6 @@ from ngraph.frontends.neon import make_bound_computation, make_default_callbacks
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import ArrayIterator
 import timeseries
-import pdb 
 
 
 def loop_eval(dataset, computation):
@@ -114,18 +113,18 @@ def plot_inference(predictions, predict_seq, gt_data, time_points):
 
     # Plot predictions across time
     fig, ax = plt.subplots(figsize=(20, 10))
-    line1 = ax.plot(range(preds.shape[0]), preds[:, 0],
-                    linestyle=':',
-                    marker='s', label='predicted_x')
-    line2 = ax.plot(range(preds.shape[0]), preds[:, 1],
-                    linestyle=':',
-                    marker='o', label='predicted_y')
-    line3 = ax.plot(range(preds.shape[0]), gt_vals[:, 0],
-                    linestyle=':',
-                    marker='d', label='gt_x')
-    line4 = ax.plot(range(preds.shape[0]), gt_vals[:, 1],
-                    linestyle=':',
-                    marker='D', label='gt_y')
+    ax.plot(range(preds.shape[0]), preds[:, 0],
+            linestyle=':',
+            marker='s', label='predicted_x')
+    ax.plot(range(preds.shape[0]), preds[:, 1],
+            linestyle=':',
+            marker='o', label='predicted_y')
+    ax.plot(range(preds.shape[0]), gt_vals[:, 0],
+            linestyle=':',
+            marker='d', label='gt_x')
+    ax.plot(range(preds.shape[0]), gt_vals[:, 1],
+            linestyle=':',
+            marker='D', label='gt_y')
     ax.legend()
     ax.grid()
     title = 'Lissajous Curve Predictions and Ground Truth, Predict Sequence:%s' % predict_seq
@@ -135,12 +134,12 @@ def plot_inference(predictions, predict_seq, gt_data, time_points):
 
     # Plot one feature in x, the other in y axis
     fig, ax = plt.subplots(figsize=(20, 10))
-    line1 = ax.plot(preds[:, 0], preds[:, 1],
-                    linestyle=':',
-                    marker='s', label='predicted')
-    line2 = ax.plot(gt_vals[:, 0], gt_vals[:, 1],
-                    linestyle=':',
-                    marker='o', label='ground truth')
+    ax.plot(preds[:, 0], preds[:, 1],
+            linestyle=':',
+            marker='s', label='predicted')
+    ax.plot(gt_vals[:, 0], gt_vals[:, 1],
+            linestyle=':',
+            marker='o', label='ground truth')
     title = 'Lissajous Curve Predictions and Ground Truth, \
             2D Time Series, Predict Sequence:%s' % predict_seq
     ax.set_title(title)
@@ -155,18 +154,18 @@ def plot_generated(gen_series, gt_series):
     """
     plt.clf()
     fig, ax = plt.subplots(figsize=(20, 10))
-    line1 = ax.plot(range(gen_series.shape[0]), gen_series[:, 0],
-                    linestyle=':',
-                    marker='s', label='generated_x')
-    line2 = ax.plot(range(gen_series.shape[0]), gen_series[:, 1],
-                    linestyle=':',
-                    marker='o', label='generated_y')
-    line3 = ax.plot(range(gt_series.shape[0]), gt_series[:, 0],
-                    linestyle=':',
-                    marker='d', label='gt_x')
-    line4 = ax.plot(range(gt_series.shape[0]), gt_series[:, 1],
-                    linestyle=':',
-                    marker='D', label='gt_y')
+    ax.plot(range(gen_series.shape[0]), gen_series[:, 0],
+            linestyle=':',
+            marker='s', label='generated_x')
+    ax.plot(range(gen_series.shape[0]), gen_series[:, 1],
+            linestyle=':',
+            marker='o', label='generated_y')
+    ax.plot(range(gt_series.shape[0]), gt_series[:, 0],
+            linestyle=':',
+            marker='d', label='gt_x')
+    ax.plot(range(gt_series.shape[0]), gt_series[:, 1],
+            linestyle=':',
+            marker='D', label='gt_y')
     ax.legend()
     ax.grid()
     title = 'Lissajous Curve Generated Series and Ground Truth, \
@@ -307,7 +306,7 @@ data.train['y']['data']: will be the outputs (labels) for training data.
 data.test follows a similar model
 '''
 # Total epochs of training
-no_epochs = 500 
+no_epochs = 500
 # How many cycles of Lissajous curve to take
 no_cycles = 2000
 # How many points per cycle to take
@@ -323,7 +322,7 @@ data = timeseries.TimeSeries(train_ratio=0.8,  # ratio of samples to set aside f
                              predict_seq=predict_seq,  # set True if you want sequences as output
                              look_ahead=look_ahead)  # number of time steps to look ahead
 
-# Build input data iterables 
+# Build input data iterables
 # Yields an input array of Shape (batch_size, seq_len, input_feature_dim)
 num_iterations = no_epochs * no_batches
 train_set = ArrayIterator(data.train, batch_size, total_iterations=num_iterations)
@@ -351,7 +350,7 @@ seq1 = Sequential([LSTM(nout=recurrent_units, init=init_uni, backward=False,
                    Affine(weight_init=init_uni, bias_init=init_uni,
                    activation=Identity(), axes=out_axis)])
 
-# Optimizer 
+# Optimizer
 # Following policy will set the initial learning rate to 0.05 (base_lr)
 # At iteration (num_iterations // 5), learning rate is multiplied by gamma (new lr = .005)
 # At iteration (num_iterations // 2), it will be reduced by gamma again (new lr = .0005)
@@ -399,7 +398,7 @@ with closing(ngt.make_transformer()) as transformer:
                                  loss_computation=loss_computation,
                                  use_progress_bar=args.progress_bar)
 
-    # Train the network 
+    # Train the network
     loop_train(train_set, train_computation, cbs)
 
     # Get predictions for the test set
@@ -411,7 +410,7 @@ with closing(ngt.make_transformer()) as transformer:
         plot_inference(predictions, predict_seq, data, time_points)
 
     # Generate a sequence
-    # uses the first seq_len samples of the input sequence as seed 
+    # uses the first seq_len samples of the input sequence as seed
     time_points = 8 * no_points
     gen_series, gt_series = generate_sequence(data, time_points, eval_function,
                                               predict_seq, batch_size, seq_len,
