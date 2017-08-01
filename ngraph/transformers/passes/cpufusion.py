@@ -5,12 +5,110 @@ from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
 from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorValueOp, ContiguousOp
+from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import GraphRewritePass
 
 
 class CPUFusion(GraphRewritePass):
+
+    def construct_conv_and_bias_pattern(self):
+        """
+        Pattern - Add(Convolution, Bias).
+        Returns:
+            Single pattern that matches Add(Convolution, Bias) pattern.
+        """
+
+        self.conv_bias_label = "B"
+        self.conv_op_label = "C"
+
+        bias_label_op = PatternLabelOp(self.conv_bias_label,
+                                       (lambda op: op.is_scalar) and
+                                       (lambda op: isinstance(op, TensorValueOp)))
+        bias = PatternSkipOp(bias_label_op,
+                             (lambda op: isinstance(op, BroadcastOp)) or
+                             (lambda op: isinstance(op, ContiguousOp)))
+
+        conv_label_op = PatternLabelOp(self.conv_op_label,
+                                       (lambda op: isinstance(op, ConvolutionOp)))
+
+        conv_op = PatternSkipOp(conv_label_op,
+                                (lambda op: isinstance(op, MapRolesOp)))
+
+        add_op = Add(conv_op, bias)
+        return add_op
+
+    def fuse_conv_and_bias_callback(self, op, label_map_op_list):
+        """
+        Callback function that handles fusion for Conv + bias  pattern
+        """
+        for (label_map, op) in label_map_op_list:
+            conv_op = label_map[self.conv_op_label]
+            bias = label_map[self.conv_bias_label]
+            conv_new_op = ConvolutionOp(conv_op.conv_params, conv_op.args[0],
+                                        conv_op.args[1], bias, axes=conv_op.axes)
+            self.op_replacement_dict[conv_op] = conv_new_op
+            self.replace_op(op, conv_new_op)
+
+    def construct_conv_and_bias_pattern_bprop(self):
+        """
+        Add(Conv, bias) is replaced by mkldnn Conv(which incorporates
+        the bias) in 'fuse_conv_and_bias_callback'. During the
+        fusion the new Conv op is stored in a dict so that
+        the bprop.fprop pointer can be changed to refer to the new
+        Conv op, thus removing the dependency on the old conv and
+        avoiding having duplicate conv kernels.
+        """
+        self.conv_bprop_label = "B"
+
+        bprop_conv_op = PatternLabelOp(self.conv_bprop_label,
+                                       (lambda op: isinstance(op, bprop_conv)))
+        return bprop_conv_op
+
+    def fuse_conv_and_bias_callback_bprop(self, op, label_map_op_list):
+        """
+        """
+        for (label_map, op) in label_map_op_list:
+            bprop_conv_new_op = bprop_conv(op.args[0],
+                                           op.fprop.args[0],
+                                           op.args[1],
+                                           op.fprop)
+            try:
+                new_conv_fprop_op = self.op_replacement_dict[op.fprop]
+                bprop_conv_new_op.fprop = new_conv_fprop_op
+                self.replace_op(op, bprop_conv_new_op)
+            except KeyError:
+                return
+
+    def construct_conv_and_bias_pattern_update_conv(self):
+        """
+        Add(Conv, bias) is replaced by mkldnn Conv(which incorporates
+        the bias) in 'fuse_conv_and_bias_callback'. During the
+        fusion the new Conv op is stored in a dict so that
+        the update_conv.fprop pointer can be changed to refer to the new
+        Conv op, thus removing the dependency on the old conv and
+        avoiding having duplicate conv kernels.
+        """
+        self.conv_update_label = "B"
+        update_conv_op = PatternLabelOp(self.conv_update_label,
+                                        (lambda op: isinstance(op, update_conv)))
+        return update_conv_op
+
+    def fuse_conv_and_bias_callback_update_conv(self, op, label_map_op_list):
+        """
+        """
+        for (label_map, op) in label_map_op_list:
+            update_conv_new_op = update_conv(op.args[0],
+                                             op.args[1],
+                                             op.fprop.args[1],
+                                             op.fprop)
+            try:
+                new_conv_fprop_op = self.op_replacement_dict[op.fprop]
+                update_conv_new_op.fprop = new_conv_fprop_op
+                self.replace_op(op, update_conv_new_op)
+            except KeyError:
+                return
 
     def construct_innerproduct_and_bias_pattern(self):
         """
@@ -95,7 +193,7 @@ class CPUFusion(GraphRewritePass):
             relu_fwd_op = ReluOp(x, slope.tensor.const)
             # We need to store relu_fwd_op in a dictionary so that backward Relu
             # can access it.
-            self.tensor_to_op_dict[x] = relu_fwd_op
+            self.op_replacement_dict[x] = relu_fwd_op
             self.replace_op(op, relu_fwd_op)
 
     def construct_relu_bprop_pattern(self):
@@ -143,7 +241,7 @@ class CPUFusion(GraphRewritePass):
             # Matched Relu pattern, do the replacement here.
             x = label_map[self.relu_bwd_x_label]
             delta = label_map[self.relu_bwd_delta_label]
-            relu_fprop = self.tensor_to_op_dict[x]
+            relu_fprop = self.op_replacement_dict[x]
             self.replace_op(op, BpropReluOp(delta, x, relu_fprop))
 
     def fuse_batchnorm_bprop_callback(self, op, label_map_op_list):
@@ -154,8 +252,8 @@ class CPUFusion(GraphRewritePass):
             # Matched bprop batchnorm pattern, do the replacement here.
             input_tensor = label_map[self.batchnorm_bprop_input_tensor]
             delta = label_map[self.batchnorm_bprop_delta]
-            if input_tensor in self.tensor_to_op_dict:
-                batchnorm_fprop = self.tensor_to_op_dict[input_tensor]
+            if input_tensor in self.op_replacement_dict:
+                batchnorm_fprop = self.op_replacement_dict[input_tensor]
                 self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
             else:
                 assert("No matching fprop BatchnormOp for the input_tensor \
@@ -315,12 +413,12 @@ class CPUFusion(GraphRewritePass):
             batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
 
             # book keep the fprop batchnorm op to use during back propogation
-            self.tensor_to_op_dict[inputs] = batchnorm_fwd_op
+            self.op_replacement_dict[inputs] = batchnorm_fwd_op
             self.replace_op(op, batchnorm_fwd_op)
 
     def __init__(self, **kwargs):
         super(CPUFusion, self).__init__(**kwargs)
-        self.tensor_to_op_dict = dict()
+        self.op_replacement_dict = dict()
 
         # Register Relu fprop pattern
         pattern_relu_fprop = self.construct_relu_fprop_pattern()
@@ -337,6 +435,19 @@ class CPUFusion(GraphRewritePass):
         # Register Batchnorm bprop pattern
         pattern_batchnorm_bprop = self.construct_batchnorm_bprop_pattern()
         self.register_pattern(pattern_batchnorm_bprop, self.fuse_batchnorm_bprop_callback)
+
+        # Register Conv + Bias pattern
+        pattern_conv_bias = self.construct_conv_and_bias_pattern()
+        self.register_pattern(pattern_conv_bias, self.fuse_conv_and_bias_callback)
+
+        # Register update_conv pattern
+        pattern_conv_bias_update = self.construct_conv_and_bias_pattern_update_conv()
+        self.register_pattern(pattern_conv_bias_update,
+                              self.fuse_conv_and_bias_callback_update_conv)
+
+        # Register bprop_op pattern
+        pattern_conv_bias_bprop = self.construct_conv_and_bias_pattern_bprop()
+        self.register_pattern(pattern_conv_bias_bprop, self.fuse_conv_and_bias_callback_bprop)
 
         # Register Inner + Bias  pattern
         pattern_inner_bias = self.construct_innerproduct_and_bias_pattern()
