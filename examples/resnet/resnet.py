@@ -33,43 +33,45 @@ def mean_subtract(x):
     return (x - bgr_mean) / 255.
 
 #Returns dict of convolution layer parameters
-def conv_params(fil_size, num_fils, en_relu=True, en_batchnorm=True,first=False):
+def conv_params(fil_size, num_fils, en_relu=True, en_batchnorm=True,first=False,strides=1):
     return dict(fshape=(fil_size,fil_size,num_fils),
-                stride=2 if first else 1,
+                stride=strides,
                 activation=(Rectlin() if en_relu else None),
                 padding=(1 if fil_size > 1 else 0),
                 filter_init=KaimingInit(),
                 batch_norm=en_batchnorm
                 )
 #Class for Residual Module
-class ResidualModule():
+class ResidualModule(object):
     def __init__(self,num_fils,first):
-       
+        self.side_path=None
         if en_bottleneck:
             print("Oops you should not be here until i1k is done");
             exit()
         else:
-        #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
-            self.main_path=[Convolution(**conv_params(fil_size=3,num_fils=num_fils,first=first)),
-                            Convolution(**conv_params(fil_size=3,num_fils=num_fils,en_relu=False))]
-            self.relu_after=[Activation(Rectlin())]
+            #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
+            self.main_path=Sequential([Convolution(**conv_params(fil_size=3,num_fils=num_fils,first=first,strides=2)),
+                                   Convolution(**conv_params(fil_size=3,num_fils=num_fils,en_relu=False,strides=1))])
+            if first:
+                self.side_path=Convolution(**conv_params(1,num_fils*1,strides=2,en_relu=False,en_batchnorm=False,first=first))
+            self.relu_after=Sequential([Activation(Rectlin())])
 
     def __call__(self,in_obj):
         if en_bottleneck:
             print("Comeback when i1k is implemented")
             exit()
         else:
-            #Calculate first Conv layer output
-            res_conv1_opt=self.main_path[0](in_obj)
-            #Pass it to second Conv layer and calculate output
-            res_conv2_opt=self.main_path[1](res_conv1_opt)
-            #Add input with conv output
-            sum_opt=res_conv2_opt+in_obj
+            #Calculate outputs of convolution
+            convs=self.main_path(in_obj)
+            #Divide input half for size matching
+            identity_conn=self.side_path(in_obj)
+            #Add convs output with identity_conn
+            sum_opt=convs+identity_conn
             #Perform relu on sum output
-            resmod_output=self.relu_after[0](sum_opt)
+            resmod_output=self.relu_after(sum_opt)
         return resmod_output
-            
-            
+
+
 #Class for constructing the network
 class BuildResnet(Sequential):
     def __init__(self,net_type):
@@ -78,21 +80,21 @@ class BuildResnet(Sequential):
             layers=[#Subtracting mean as suggested in paper
                     Preprocess(functor=mean_subtract),
                     #First Conv with 3x3 and stride=1
-                    Convolution(**conv_params(3,16))]
-
-            #Lay out residual layers. Hardcoding 3 as there are only 3 sets of filters
+                    Convolution(**conv_params(fil_size=3,num_fils=16))]
+           #Lay out residual layers. Hardcoding 3 as there are only 3 sets of filters
             for fil in range(3):
                 for resmods in range(num_resnet_mods):
                     if(resmods==0):
                         layers.append(ResidualModule(num_fils[fil],first=True))
                     else:
-                        layers.append(ResidualModule(num_fils[fil],first=False))         
+                        layers.append(ResidualModule(num_fils[fil],first=False))
+
+            layers.append(BatchNorm())
+            layers.append(Activation(Rectlin()))
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
             #Axes are 10 as number of classes are 10
             layers.append(Affine(axes=ax.Y,weight_init=KaimingInit(),activation=Softmax()))
-
-
         elif net_type=='i1k':
             print("Seriously how did we come this far.")
             exit()
@@ -103,7 +105,6 @@ class BuildResnet(Sequential):
 
 #Result collector
 def loop_eval(dataset, computation, metric_names):
-    
     dataset._dataloader.reset()
     all_results = None
     for data in dataset:
@@ -120,21 +121,21 @@ def loop_eval(dataset, computation, metric_names):
     return reduced_results
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     #Command Line Parser
     parser = NgraphArgparser(description="Resnet for Imagenet and Cifar10")
-    parser.add_argument('--dataset', type=str, default='cifar10', help="Enter cifar10 or i1k")
+    parser.add_argument('--dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
     parser.add_argument('--size', type=int, default=56, help="Enter size of resnet")
     args=parser.parse_args()
 
     #Command line args
-    cifar_sizes = [8,20, 32, 44, 56, 200]
-    i1k_sizes   = [18, 34, 50, 101, 152] 
+    cifar_sizes = [8, 14, 20, 32, 44, 56, 200]
+    i1k_sizes   = [18, 34, 50, 101, 152]
     resnet_size=args.size
     resnet_dataset=args.dataset
 
     #Checking Command line args are proper
-    if resnet_dataset=='cifar10' or 'cifar100':
+    if resnet_dataset=='cifar10':
         if resnet_size in cifar_sizes:
             #Create training and validation set objects
             train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations)
@@ -143,7 +144,7 @@ if __name__ == "__main__":
             #Only 2 layers for one resnet module
             en_bottleneck=False
             ax.Y.length=10
-            print("Completed loading CIFAR10 dataset")               
+            print("Completed loading CIFAR10 dataset")
             #Randomize Seed
             np.random.seed(args.rng_seed)
             #Make placeholders
@@ -160,7 +161,7 @@ if __name__ == "__main__":
                                               wdecay=0.0001,
                                               iteration=input_ph['iteration'])
         else:
-            print("Invalid cifar10 size.Select from 20,32,44,56,200")
+            print("Invalid cifar10 size.Select from "+str(cifar_sizes))
             exit()
     elif resnet_dataset=='i1k':
         if resnet_size in i1k_sizes:
@@ -171,7 +172,7 @@ if __name__ == "__main__":
             print("i1k is still under construction")
             exit()
         else:
-            print("Invalid i1k size.Select from 18,34,50,101,152")
+            print("Invalid i1k size. Select from "+str(i1k_sizes))
             exit()
     else:
         print("Invalid Dataset. Dataset should be either cifar10 or i1k")
@@ -179,8 +180,14 @@ if __name__ == "__main__":
 
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
-train_loss=ng.cross_entropy_multi(resnet(input_ph['image']),
-                                  ng.one_hot(label_indices,axis=ax.Y))
+#Put 1 for tensorboard tracking
+if(0):
+    seq1=BuildResnet(resnet_dataset)
+    train=seq1(input_ph['image'])
+    print(type(train))
+    test=tb.ngraph_to_tensorboard(train,True)
+    exit()
+train_loss=ng.cross_entropy_multi(resnet(input_ph['image']),ng.one_hot(label_indices,axis=ax.Y))
 batch_cost=ng.sequential([optimizer(train_loss),ng.mean(train_loss,out_axes=())])
 train_computation=ng.computation(batch_cost,"all")
 
@@ -196,7 +203,6 @@ with Layer.inference_mode_on():
 transformer=ngt.make_transformer()
 train_function=transformer.add_computation(train_computation)
 eval_function=transformer.add_computation(eval_computation)
-
 tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
 interval_cost = 0.0
 
