@@ -355,66 +355,66 @@ ax_D = ng.make_axis(24)
 
 @pytest.mark.hetr_gpu_only
 @pytest.mark.parametrize('config', [
-    # {
-        # 'axes': ng.make_axes([ax_A]),
-        # 'device_id': ('0'),
-        # 'parallel_axis': ax_A,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_A,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_A,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_A,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_A,
-    # },
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
     {
         'axes': ng.make_axes([ax_A, ax_B]),
         'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_A,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_B,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_C,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        # 'device_id': ('0', '1'),
-        # 'parallel_axis': ax_B,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        # 'device_id': ('0', '1', '2'),
-        # 'parallel_axis': ax_C,
-    # },
-    # {
-        # 'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        # 'device_id': ('0', '1', '2'),
-        # 'parallel_axis': ax_D,
-    # },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_B,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_C,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_B,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
+        'device_id': ('0', '1', '2'),
+        'parallel_axis': ax_C,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
+        'device_id': ('0', '1', '2'),
+        'parallel_axis': ax_D,
+    },
 ])
 def test_gpu_graph(config):
     pytest.xfail("Multi-GPU testing not enabled yet")
