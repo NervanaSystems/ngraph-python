@@ -386,6 +386,7 @@ seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2,
                                    (448, 384, 384, 384), (192,)]),  # mixed_7b
                    Inceptionv3_b5([(320,), (384, 384, 384),
                                    (448, 384, 384, 384), (192,)]),  # mixed_7c
+                   Pool2D(fshape=8, padding=0, strides=2, op='avg'),  # Last Avg Pool 
                    Affine(axes=ax.Y, weight_init=XavierInit(),
                           bias_init=bias_init, activation=Softmax())])
 
