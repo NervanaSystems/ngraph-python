@@ -18,7 +18,7 @@ import ngraph as ng
 from ngraph.testing import ExecutorFactory
 
 
-def test_read_state():
+def test_read_state(transformer_factory):
     """
     This just reads back a tensor. No code is generated.
     """
@@ -31,7 +31,7 @@ def test_read_state():
         assert np.allclose(x_np, x_val)
 
 
-def test_write_state():
+def test_write_state(transformer_factory):
     """
     This reads back a tensor set from an argument. No code is generated.
     """
@@ -44,7 +44,7 @@ def test_write_state():
         assert np.allclose(x_np, x_val)
 
 
-def test_use_state():
+def test_use_state(transformer_factory):
     """
     Uses the value of a tensor in a computation.
     """
@@ -58,7 +58,7 @@ def test_use_state():
         assert np.allclose(x_np + x_np, xx_val)
 
 
-def test_modify_state():
+def test_modify_state(transformer_factory):
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
         x_np = np.ones((N.length)) * 4
@@ -72,7 +72,7 @@ def test_modify_state():
         assert np.allclose(x_np + x_np, x_val)
 
 
-def test_fill_state():
+def test_fill_state(transformer_factory):
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
         x_np = np.ones((N.length)) * 4
@@ -86,7 +86,7 @@ def test_fill_state():
         assert np.allclose(-1, x_val)
 
 
-def test_concatenate():
+def test_concatenate(transformer_factory):
     with ExecutorFactory() as ex:
         A = ng.make_axis(name='A', length=3)
         B = ng.make_axis(name='B', length=4)
@@ -102,7 +102,7 @@ def test_concatenate():
         assert ng.testing.allclose(j_val, j_np)
 
 
-def test_specific_slice_deriv():
+def test_specific_slice_deriv(transformer_factory):
     #
     with ExecutorFactory() as ex:
         A = ng.make_axis(name='A', length=3)

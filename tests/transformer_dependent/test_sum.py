@@ -3,7 +3,6 @@ import numpy as np
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
 
-
 np.random.seed(0)
 
 
@@ -27,13 +26,15 @@ def extra_axes(request):
     return request.param
 
 
+@pytest.config.flex_disabled
 def test_sum(transformer_factory, num_units, sequence_length, batch_size):
     """
     This tests for a non-deterministic error that arose in ng.sum following
     a dot product using the gpu transformer.
     """
-
     shape = (num_units, sequence_length, batch_size)
+    if transformer_factory.name == "flexgpu" and shape == (2, 50, 16):
+        pytest.skip()
     np_inp = np.random.uniform(-1, 1, shape)
 
     # Use an identity weight matrix on top of it
