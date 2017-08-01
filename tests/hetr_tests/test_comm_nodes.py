@@ -24,6 +24,7 @@ import ngraph as ng
 import ngraph.transformers as ngt
 import pytest
 import time
+import os
 
 
 ax_A = ng.make_axis(length=10, name='A')
@@ -216,32 +217,32 @@ def test_broadcast_ops(config):
     {
         'input': 36,
         'func': 'mean',
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
         'input': 36,
         'func': 'sum',
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'expected_result': [[[-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0]]],
     },
     {
         'input': 36,
         'func': 'mean',
-        'device_id': (1, 4, 3, 2),
+        'device_id': (0, 1, 2, 3),
         'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
     },
     {
         'input': 25,
         'func': 'sum',
-        'device_id': (5, 7, 3, 4),
+        'device_id': (0, 1, 2, 3),
         'expected_result': [[[-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0]]],
     },
 ])
-def test_allreduce_hint(config):
+def test_allreduce_hint_cpu(config):
     c = config
 
-    with ng.metadata(device_id=c['device_id']):
+    with ng.metadata(device_id=c['device_id'], parallel=None):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
@@ -249,12 +250,66 @@ def test_allreduce_hint(config):
                             axes=[axis_B]).named('var_B')
         var_B.metadata['reduce_func'] = c['func']
         var_minus = (var_A - var_B).named('var_minus')
-        var_minus.metadata['parallel'] = axis_A
     with closing(ngt.make_transformer_factory('hetr')()) as hetr:
         out_comp = hetr.computation([var_minus]).named('out_comp')
         result = out_comp()
 
         np.testing.assert_array_equal(result, c['expected_result'])
+
+
+@pytest.mark.hetr_gpu_only
+@pytest.mark.parametrize('config', [
+    {
+        'input': 36,
+        'func': 'mean',
+        'device_id': (0, 1),
+        'expected_result': -35,
+    },
+    {
+        'input': 36,
+        'func': 'sum',
+        'device_id': (0, 1),
+        'expected_result': -71,
+    },
+    {
+        'input': 36,
+        'func': 'mean',
+        'device_id': (0, 1, 2, 3),
+        'expected_result': -35,
+    },
+    {
+        'input': 25,
+        'func': 'sum',
+        'device_id': (0, 1, 2, 3),
+        'expected_result': -99,
+    },
+])
+def test_allreduce_hint_gpu(config):
+    pytest.xfail("Multi-GPU testing not enabled yet")
+
+    if 'gpu' not in ngt.transformer_choices():
+        pytest.skip("GPUTransformer not available")
+
+    c = config
+    os.environ["HETR_SERVER_GPU_NUM"] = str(len(c['device_id']))
+
+    ax_A_length = 32
+    ax_B_length = 16
+
+    np_result = [np.full((ax_A_length, ax_B_length), c['expected_result'], np.float32)]
+
+    with ng.metadata(device_id=c['device_id'], parallel=None):
+        axis_A = ng.make_axis(length=ax_A_length, name='axis_A')
+        axis_B = ng.make_axis(length=ax_B_length, name='axis_B')
+        var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
+        var_B = ng.variable(initial_value=UniformInit(c['input'], c['input']),
+                            axes=[axis_B]).named('var_B')
+        var_B.metadata['reduce_func'] = c['func']
+        var_minus = (var_A - var_B).named('var_minus')
+    with closing(ngt.make_transformer_factory('hetr', device='gpu')()) as hetr:
+        out_comp = hetr.computation([var_minus]).named('out_comp')
+        result = out_comp()
+        np.testing.assert_array_equal(result, np_result)
 
 
 @pytest.mark.parametrize('config', [

@@ -17,123 +17,20 @@ import pytest
 from contextlib import closing
 from ngraph.testing import ExecutorFactory
 from orderedset import OrderedSet
+from test_hetr_passes import check_device_assign_pass, check_communication_pass
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.transformers.passes.hetrpasses import DeviceAssignPass, \
-    CommunicationPass
-from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp, \
-    GPUCudaAllReduceOp
-from multiprocessing import active_children, Process, Event, Queue
+from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
+from ngraph.transformers.hetr.mpilauncher import Launcher
+from multiprocessing import active_children
 import threading
 import time
+import os
+import subprocess
 
 
 pytestmark = pytest.mark.hetr_only
-
-
-def check_device_assign_pass(default_device, default_device_id,
-                             graph_op_metadata, graph_op=OrderedSet(), *args):
-    """
-    The Device assign pass should inject the metadata{device_id, device} as
-    specified by the user for each op,
-    if not specified then the default {device_id:0, device:cpu} should be
-    inserted for each op.
-
-    :param: default_device: string, the default device for each op,
-            if not specified by user ex: "cpu"
-    :param: default_device_id: string, the default device number for each op,
-            if not specified by user ex: "0"
-    :param: graph_op_metadata: dict, dictionary of list specifying  the expected
-            metadata {device_id, device} for each op
-    :param: graph_op: list of ops to do the graph traversal
-    """
-    with ExecutorFactory():
-        expected_transformers = set()
-
-        class MockHetr(object):
-
-            def __init__(self):
-                self.transformers = set()
-
-            def register_transformer(self, transformer):
-                self.transformers.add(transformer)
-
-        hetr = MockHetr()
-        obj = DeviceAssignPass(hetr, default_device, default_device_id)
-
-        obj.do_pass(ops=graph_op)
-
-        for op in graph_op_metadata.keys():
-            assert op.metadata['device'] == graph_op_metadata[op][0]
-            assert op.metadata['device_id'] == graph_op_metadata[op][1]
-            if isinstance(graph_op_metadata[op][1], (list, tuple)):
-                transformer = [graph_op_metadata[op][0] + str(i) for i in graph_op_metadata[op][1]]
-            else:
-                transformer = graph_op_metadata[op][0] + str(graph_op_metadata[op][1][0])
-            assert op.metadata['transformer'] == transformer
-
-            for device_id in graph_op_metadata[op][1]:
-                expected_transformers.add(graph_op_metadata[op][0] + device_id)
-        assert hetr.transformers == expected_transformers
-
-
-def check_communication_pass(ops_to_transform, expected_recv_nodes):
-    """
-    The communication pass should insert send/recv nodes wherever
-    the metadata[transformer] differs between nodes.
-    This checks that the recv nodes are inserted in the right place, and counts
-    that the expected number of send
-    nodes are found.
-
-    :param ops_to_transform: list of ops to do the garph traversal
-    :param expected_recv_nodes: lits of ops where receive nodes are expected to
-           be inserted after the communication pass
-    """
-    with ExecutorFactory():
-        send_nodes = OrderedSet()
-        obj = CommunicationPass(send_nodes)
-        obj.do_pass(ops_to_transform)
-
-        op_list_instance_type = list()
-        num_expected_sendnodes = len(expected_recv_nodes)
-
-        # Count if the communication pass inserted the expected number of send nodes
-        assert num_expected_sendnodes == len(send_nodes)
-
-        # verify if Recv nodes are inserted in the right place
-        for op in expected_recv_nodes:
-            for each_arg in op.args:
-                op_list_instance_type.append(type(each_arg))
-
-            if (ng.op_graph.comm_nodes.CPUQueueRecvOp in op_list_instance_type or
-                ng.op_graph.comm_nodes.CPUQueueGatherRecvOp in op_list_instance_type or
-                    ng.op_graph.comm_nodes.CPUQueueScatterRecvOp in
-                    op_list_instance_type) is False:
-                assert False
-            del op_list_instance_type[:]
-
-
-def test_hetr_graph_passes(transformer_factory):
-
-    # Build the graph
-    with ng.metadata(device_id='1'):
-        x = ng.placeholder(())
-
-    y = ng.placeholder(())
-    x_plus_y = x + y
-
-    # Build the graph metadata
-    graph_ops = OrderedSet([x_plus_y, x, y])
-
-    graph_op_metadata = {op: list() for op in graph_ops}
-    graph_op_metadata[x] = ["cpu", '1']
-    graph_op_metadata[y] = ["cpu", '0']
-    graph_op_metadata[x_plus_y] = ["cpu", '0']
-
-    # Run the hetr passes one by one, and verify they did the expected things to the graph
-    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
-    check_communication_pass(ops_to_transform=graph_ops,
-                             expected_recv_nodes=[x_plus_y])
+STARTUP_TIME = 3
 
 
 def test_distributed_graph_plus_one(transformer_factory):
@@ -474,48 +371,38 @@ ax_D = ng.make_axis(24)
         'parallel_axis': ax_A,
     },
     {
-        'axes': ng.make_axes([ax_A]),
-        'device_id': ('1', '2'),
-        'parallel_axis': ax_A,
-    },
-    {
         'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('1', '2'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_A,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_C,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('1', '2'),
+        'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('1', '2', '3'),
+        'device_id': ('0', '1', '2'),
         'parallel_axis': ax_C,
     },
     {
         'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('1', '2', '3'),
+        'device_id': ('0', '1', '2'),
         'parallel_axis': ax_D,
     },
 ])
@@ -534,6 +421,8 @@ def test_gpu_graph(config):
 
     with ng.metadata(device='gpu'):
         x_plus_two = x_plus_one + 1
+
+    os.environ["HETR_SERVER_GPU_NUM"] = str(len(t['device_id']))
 
     np_x = np.random.randint(100, size=t['axes'].full_lengths)
     with closing(ngt.make_transformer_factory('hetr')()) as transformer:
@@ -601,86 +490,54 @@ def test_allreduce_cpu_op(config):
     np.testing.assert_array_equal(results, c['results'])
 
 
-@pytest.mark.hetr_gpu_only
-@pytest.mark.parametrize('config', [
-    {
-        'device_id': (0, 1),
-        'x_input': np.arange(24),
-        'func': 'mean',
-    },
-    {
-        'device_id': (0, 1),
-        'x_input': np.arange(32),
-        'func': 'sum',
-    },
-    {
-        'device_id': (0, 1, 2, 3),
-        'x_input': np.arange(48),
-        'func': 'mean',
-    },
-    {
-        'device_id': (0, 1, 2, 3),
-        'x_input': np.arange(64),
-        'func': 'sum',
-    }
-])
-def test_allreduce_gpu_op(config):
-    class myProcess(Process):
-        def __init__(self, y, device_id, queue):
-            Process.__init__(self)
-            self.y = y
-            self.device_id = device_id
-            self.exit = Event()
-            self.queue = queue
+class ClosingHetrServers():
+    def __init__(self, ports):
+        self.processes = []
+        for p in ports:
+            hetr_server = os.path.dirname(os.path.realpath(__file__)) +\
+                "/../../ngraph/transformers/hetr/hetr_server.py"
+            command = ["python", hetr_server, "-p", p]
+            try:
+                proc = subprocess.Popen(command)
+                self.processes.append(proc)
+            except Exception as e:
+                print(e)
+            time.sleep(STARTUP_TIME)
 
-        def run(self):
-            with closing(ngt.make_transformer_factory('gpu', device_id=self.device_id)()) as t:
-                comp = t.computation(self.y)
-                self.queue.put(comp())
+    def close(self):
+        for p in self.processes:
+            p.terminate()
+        time.sleep(STARTUP_TIME)
+        for p in self.processes:
+            p.kill()
+        for p in self.processes:
+            p.wait()
 
-            while not self.exit.is_set():
-                time.sleep(0.1)
 
-    pytest.xfail("Multi-GPU testing not enabled yet")
+def test_rpc_transformer():
+    from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
+    rpc_client_list = list()
+    port_list = ['50111', '50112']
+    num_procs = len(port_list)
 
-    if 'gpu' not in ngt.transformer_choices():
-        pytest.skip('GPUTransformer not available!')
+    with closing(ClosingHetrServers(port_list)):
+        for p in range(num_procs):
+            rpc_client_list.append(RPCTransformerClient('cpu' + str(p), port_list[p]))
+            np.testing.assert_equal(rpc_client_list[p].initialized, True)
 
-    c = config
-    x = list()
-    y = list()
-    input_list = list()
-    process_list = list()
-    result_list = list()
-    np_result_list = list()
-    queue = Queue()
 
-    with ng.metadata(device='gpu', device_id=c['device_id'],
-                     transformer='None', host_transformer='None'):
-        for i in range(len(c['device_id'])):
-            x_input = c['x_input'] * (i + 1)
-            x.append(ng.constant(x_input))
-            input_list.append(x_input)
+def test_mpilauncher():
+    port_list = ['51111', '51112']
+    num_procs = len(port_list)
+    os.environ["HETR_SERVER_GPU_NUM"] = str(num_procs)
 
-    for i in range(len(c['device_id'])):
-        ar_op = GPUCudaAllReduceOp(x[i], c['func'])
-        if (i != 0):
-            ar_op._shared_queues = y[0].shared_queues
-        y.append(ar_op)
+    mpilauncher = Launcher(port_list)
+    mpilauncher.launch()
 
-    if c['func'] == 'mean':
-        np_result = np.mean(input_list, axis=0)
-    elif c['func'] == 'sum':
-        np_result = np.sum(input_list, axis=0)
+    # Check if process has launched
+    assert mpilauncher.mpirun_proc.poll() is None
 
-    for i, d in enumerate(c['device_id']):
-        process_list.append(myProcess(y[i], d, queue))
-        process_list[i].start()
+    mpilauncher.close()
 
-    for p in reversed(process_list):
-        np_result_list.append(np_result)
-        result_list.append(queue.get())
-        p.exit.set()
-        p.join()
-
-    np.testing.assert_array_equal(result_list, np_result_list)
+    # Check if process has completed
+    assert mpilauncher.mpirun_proc.poll() is not None

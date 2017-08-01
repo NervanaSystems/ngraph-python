@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='ngraph/op_graph/serde/ops.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n\x1fngraph/op_graph/serde/ops.proto\"\x14\n\x04UUID\x12\x0c\n\x04uuid\x18\x01 \x01(\x0c\"2\n\x08GraphDef\x12\x14\n\x05\x65\x64ges\x18\x01 \x03(\x0b\x32\x05.Edge\x12\x10\n\x03ops\x18\x02 \x03(\x0b\x32\x03.Op\"\xa5\x01\n\x02Op\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0f\n\x07op_type\x18\x04 \x01(\t\x12\x15\n\x05\x64type\x18\x05 \x01(\x0e\x32\x06.DTYPE\x12\x1d\n\x05\x61ttrs\x18\x06 \x03(\x0b\x32\x0e.Op.AttrsEntry\x1a\x35\n\nAttrsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x16\n\x05value\x18\x02 \x01(\x0b\x32\x07.OpAttr:\x02\x38\x01\"\xed\x01\n\x06OpAttr\x12\x19\n\x06scalar\x18\x03 \x01(\x0b\x32\x07.ScalarH\x00\x12*\n\x0frepeated_scalar\x18\x04 \x01(\x0b\x32\x0f.RepeatedScalarH\x00\x12$\n\x0b\x63onv_params\x18\x05 \x01(\x0b\x32\r.FilterParamsH\x00\x12$\n\x0bpool_params\x18\x06 \x01(\x0b\x32\r.FilterParamsH\x00\x12\x15\n\x04\x61xes\x18\x07 \x01(\x0b\x32\x05.AxesH\x00\x12\x19\n\x06tensor\x18\x08 \x01(\x0b\x32\x07.TensorH\x00\x12\x15\n\x04\x61xis\x18\t \x01(\x0b\x32\x05.AxisH\x00\x42\x07\n\x05value\"?\n\x0c\x46ilterParams\x12\x0e\n\x06\x66shape\x18\x01 \x03(\r\x12\x0e\n\x06stride\x18\x02 \x03(\r\x12\x0f\n\x07padding\x18\x03 \x03(\r\"\x83\x02\n\x06Scalar\x12\x12\n\x08\x62ool_val\x18\x01 \x01(\x08H\x00\x12\x14\n\nstring_val\x18\x02 \x01(\tH\x00\x12\x14\n\ndouble_val\x18\x03 \x01(\x01H\x00\x12\x11\n\x07int_val\x18\x04 \x01(\x03H\x00\x12\x12\n\x08\x62yte_val\x18\x05 \x01(\x0cH\x00\x12\x19\n\x08uuid_val\x18\x06 \x01(\x0b\x32\x05.UUIDH\x00\x12 \n\x07map_val\x18\x07 \x01(\x0b\x32\r.AttributeMapH\x00\x12\x12\n\x08null_val\x18\x08 \x01(\x08H\x00\x12\x1b\n\tslice_val\x18\t \x01(\x0b\x32\x06.SliceH\x00\x12\x1b\n\tdtype_val\x18\n \x01(\x0e\x32\x06.DTYPEH\x00\x42\x07\n\x05value\"h\n\x0c\x41ttributeMap\x12#\n\x03map\x18\x01 \x03(\x0b\x32\x16.AttributeMap.MapEntry\x1a\x33\n\x08MapEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x16\n\x05value\x18\x02 \x01(\x0b\x32\x07.Scalar:\x02\x38\x01\"&\n\x0eRepeatedScalar\x12\x14\n\x03val\x18\x01 \x03(\x0b\x32\x07.Scalar\"\x87\x02\n\x04\x45\x64ge\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x18\n\tfrom_uuid\x18\x02 \x01(\x0b\x32\x05.UUID\x12\x16\n\x07to_uuid\x18\x03 \x01(\x0b\x32\x05.UUID\x12\x1f\n\x05\x61ttrs\x18\x04 \x03(\x0b\x32\x10.Edge.AttrsEntry\x12!\n\tedge_type\x18\x05 \x01(\x0e\x32\x0e.Edge.EdgeType\x1a\x37\n\nAttrsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x18\n\x05value\x18\x02 \x01(\x0b\x32\t.EdgeAttr:\x02\x38\x01\";\n\x08\x45\x64geType\x12\x08\n\x04\x44\x41TA\x10\x00\x12\x0b\n\x07\x43ONTROL\x10\x01\x12\r\n\tCONTAINER\x10\x02\x12\t\n\x05OTHER\x10\x03\"Z\n\x08\x45\x64geAttr\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12*\n\x0frepeated_scalar\x18\x02 \x01(\x0b\x32\x0f.RepeatedScalarH\x00\x42\x07\n\x05value\"U\n\x06Tensor\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x15\n\x05\x64type\x18\x02 \x01(\x0e\x32\x06.DTYPE\x12\r\n\x05shape\x18\x03 \x03(\r\x12\x10\n\x08raw_data\x18\x08 \x01(\x0c\"\xa3\x01\n\x11TensorDescription\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x13\n\x04\x61xes\x18\x02 \x01(\x0b\x32\x05.Axes\x12\x13\n\x04\x62\x61se\x18\x03 \x01(\x0b\x32\x05.UUID\x12\x15\n\x05\x64type\x18\x04 \x01(\x0e\x32\x06.DTYPE\x12\x0e\n\x06offset\x18\x05 \x01(\x05\x12\x14\n\x0c\x66ull_strides\x18\x06 \x03(\x05\x12\x12\n\nfull_sizes\x18\x07 \x03(\x05\">\n\x04\x41xes\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x04\x61xes\x18\x03 \x03(\x0b\x32\x05.Axis\"\xa6\x01\n\x04\x41xis\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0e\n\x06length\x18\x03 \x01(\x05\x12\x11\n\trecurrent\x18\x04 \x01(\x08\x12\r\n\x05\x62\x61tch\x18\x05 \x01(\x08\x12\x17\n\x0fmatch_on_length\x18\x06 \x01(\x08\x12\x11\n\tdocstring\x18\x08 \x01(\t\x12\x1d\n\x0e\x66lattened_axes\x18\t \x01(\x0b\x32\x05.Axes\"\x1b\n\nInt64Value\x12\r\n\x05value\x18\x01 \x01(\x03\"Y\n\x05Slice\x12\x1a\n\x05start\x18\x01 \x01(\x0b\x32\x0b.Int64Value\x12\x19\n\x04step\x18\x02 \x01(\x0b\x32\x0b.Int64Value\x12\x19\n\x04stop\x18\x03 \x01(\x0b\x32\x0b.Int64Value*\x88\x01\n\x05\x44TYPE\x12\x0b\n\x07\x46LOAT32\x10\x00\x12\x0b\n\x07\x46LOAT16\x10\x01\x12\x0b\n\x07\x46LOAT64\x10\x02\x12\t\n\x05UINT8\x10\x03\x12\n\n\x06UINT16\x10\x04\x12\n\n\x06UINT32\x10\x05\x12\x08\n\x04INT8\x10\x06\x12\t\n\x05INT16\x10\x07\x12\t\n\x05INT32\x10\x08\x12\t\n\x05INT64\x10\t\x12\n\n\x06\x46LEX16\x10\nb\x06proto3')
+  serialized_pb=_b('\n\x1fngraph/op_graph/serde/ops.proto\"\x14\n\x04UUID\x12\x0c\n\x04uuid\x18\x01 \x01(\x0c\"2\n\x08GraphDef\x12\x14\n\x05\x65\x64ges\x18\x01 \x03(\x0b\x32\x05.Edge\x12\x10\n\x03ops\x18\x02 \x03(\x0b\x32\x03.Op\"\xa5\x01\n\x02Op\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0f\n\x07op_type\x18\x04 \x01(\t\x12\x15\n\x05\x64type\x18\x05 \x01(\x0e\x32\x06.DTYPE\x12\x1d\n\x05\x61ttrs\x18\x06 \x03(\x0b\x32\x0e.Op.AttrsEntry\x1a\x35\n\nAttrsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x16\n\x05value\x18\x02 \x01(\x0b\x32\x07.OpAttr:\x02\x38\x01\"\xd6\x01\n\x06OpAttr\x12\x19\n\x06scalar\x18\x03 \x01(\x0b\x32\x07.ScalarH\x00\x12*\n\x0frepeated_scalar\x18\x04 \x01(\x0b\x32\x0f.RepeatedScalarH\x00\x12$\n\x0b\x63onv_params\x18\x05 \x01(\x0b\x32\r.FilterParamsH\x00\x12$\n\x0bpool_params\x18\x06 \x01(\x0b\x32\r.FilterParamsH\x00\x12\x15\n\x04\x61xes\x18\x07 \x01(\x0b\x32\x05.AxesH\x00\x12\x19\n\x06tensor\x18\x08 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"?\n\x0c\x46ilterParams\x12\x0e\n\x06\x66shape\x18\x01 \x03(\r\x12\x0e\n\x06stride\x18\x02 \x03(\r\x12\x0f\n\x07padding\x18\x03 \x03(\r\"\x9a\x02\n\x06Scalar\x12\x12\n\x08\x62ool_val\x18\x01 \x01(\x08H\x00\x12\x14\n\nstring_val\x18\x02 \x01(\tH\x00\x12\x14\n\ndouble_val\x18\x03 \x01(\x01H\x00\x12\x11\n\x07int_val\x18\x04 \x01(\x03H\x00\x12\x12\n\x08\x62yte_val\x18\x05 \x01(\x0cH\x00\x12\x19\n\x08uuid_val\x18\x06 \x01(\x0b\x32\x05.UUIDH\x00\x12 \n\x07map_val\x18\x07 \x01(\x0b\x32\r.AttributeMapH\x00\x12\x12\n\x08null_val\x18\x08 \x01(\x08H\x00\x12\x1b\n\tslice_val\x18\t \x01(\x0b\x32\x06.SliceH\x00\x12\x1b\n\tdtype_val\x18\n \x01(\x0e\x32\x06.DTYPEH\x00\x12\x15\n\x04\x61xis\x18\x0b \x01(\x0b\x32\x05.AxisH\x00\x42\x07\n\x05value\"h\n\x0c\x41ttributeMap\x12#\n\x03map\x18\x01 \x03(\x0b\x32\x16.AttributeMap.MapEntry\x1a\x33\n\x08MapEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x16\n\x05value\x18\x02 \x01(\x0b\x32\x07.Scalar:\x02\x38\x01\"&\n\x0eRepeatedScalar\x12\x14\n\x03val\x18\x01 \x03(\x0b\x32\x07.Scalar\"\x87\x02\n\x04\x45\x64ge\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x18\n\tfrom_uuid\x18\x02 \x01(\x0b\x32\x05.UUID\x12\x16\n\x07to_uuid\x18\x03 \x01(\x0b\x32\x05.UUID\x12\x1f\n\x05\x61ttrs\x18\x04 \x03(\x0b\x32\x10.Edge.AttrsEntry\x12!\n\tedge_type\x18\x05 \x01(\x0e\x32\x0e.Edge.EdgeType\x1a\x37\n\nAttrsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x18\n\x05value\x18\x02 \x01(\x0b\x32\t.EdgeAttr:\x02\x38\x01\";\n\x08\x45\x64geType\x12\x08\n\x04\x44\x41TA\x10\x00\x12\x0b\n\x07\x43ONTROL\x10\x01\x12\r\n\tCONTAINER\x10\x02\x12\t\n\x05OTHER\x10\x03\"Z\n\x08\x45\x64geAttr\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12*\n\x0frepeated_scalar\x18\x02 \x01(\x0b\x32\x0f.RepeatedScalarH\x00\x42\x07\n\x05value\"2\n\nTensorInfo\x12\x15\n\x05\x64type\x18\x02 \x01(\x0e\x32\x06.DTYPE\x12\r\n\x05shape\x18\x03 \x03(\r\"1\n\x06Tensor\x12\x19\n\x04info\x18\x01 \x01(\x0b\x32\x0b.TensorInfo\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"4\n\x0eTensorManifest\x12\"\n\x05pairs\x18\x01 \x03(\x0b\x32\x13.TensorInfoUUIDPair\"D\n\x12TensorInfoUUIDPair\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x19\n\x04info\x18\x02 \x01(\x0b\x32\x0b.TensorInfo\">\n\x04\x41xes\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x04\x61xes\x18\x03 \x03(\x0b\x32\x05.Axis\"\xa6\x01\n\x04\x41xis\x12\x13\n\x04uuid\x18\x01 \x01(\x0b\x32\x05.UUID\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0e\n\x06length\x18\x03 \x01(\x05\x12\x11\n\trecurrent\x18\x04 \x01(\x08\x12\r\n\x05\x62\x61tch\x18\x05 \x01(\x08\x12\x17\n\x0fmatch_on_length\x18\x06 \x01(\x08\x12\x11\n\tdocstring\x18\x08 \x01(\t\x12\x1d\n\x0e\x66lattened_axes\x18\t \x01(\x0b\x32\x05.Axes\"\x1b\n\nInt64Value\x12\r\n\x05value\x18\x01 \x01(\x03\"Y\n\x05Slice\x12\x1a\n\x05start\x18\x01 \x01(\x0b\x32\x0b.Int64Value\x12\x19\n\x04step\x18\x02 \x01(\x0b\x32\x0b.Int64Value\x12\x19\n\x04stop\x18\x03 \x01(\x0b\x32\x0b.Int64Value*\x88\x01\n\x05\x44TYPE\x12\x0b\n\x07\x46LOAT32\x10\x00\x12\x0b\n\x07\x46LOAT16\x10\x01\x12\x0b\n\x07\x46LOAT64\x10\x02\x12\t\n\x05UINT8\x10\x03\x12\n\n\x06UINT16\x10\x04\x12\n\n\x06UINT32\x10\x05\x12\x08\n\x04INT8\x10\x06\x12\t\n\x05INT16\x10\x07\x12\t\n\x05INT32\x10\x08\x12\t\n\x05INT64\x10\t\x12\n\n\x06\x46LEX16\x10\nb\x06proto3')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -77,8 +77,8 @@ _DTYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=1955,
-  serialized_end=2091,
+  serialized_start=1929,
+  serialized_end=2065,
 )
 _sym_db.RegisterEnumDescriptor(_DTYPE)
 
@@ -341,13 +341,6 @@ _OPATTR = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
-    _descriptor.FieldDescriptor(
-      name='axis', full_name='OpAttr.axis', index=6,
-      number=9, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
   ],
   extensions=[
   ],
@@ -364,7 +357,7 @@ _OPATTR = _descriptor.Descriptor(
       index=0, containing_type=None, fields=[]),
   ],
   serialized_start=278,
-  serialized_end=515,
+  serialized_end=492,
 )
 
 
@@ -408,8 +401,8 @@ _FILTERPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=517,
-  serialized_end=580,
+  serialized_start=494,
+  serialized_end=557,
 )
 
 
@@ -490,6 +483,13 @@ _SCALAR = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    _descriptor.FieldDescriptor(
+      name='axis', full_name='Scalar.axis', index=10,
+      number=11, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -505,7 +505,7 @@ _SCALAR = _descriptor.Descriptor(
       name='value', full_name='Scalar.value',
       index=0, containing_type=None, fields=[]),
   ],
-  serialized_start=583,
+  serialized_start=560,
   serialized_end=842,
 )
 
@@ -747,38 +747,24 @@ _EDGEATTR = _descriptor.Descriptor(
 )
 
 
-_TENSOR = _descriptor.Descriptor(
-  name='Tensor',
-  full_name='Tensor',
+_TENSORINFO = _descriptor.Descriptor(
+  name='TensorInfo',
+  full_name='TensorInfo',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='uuid', full_name='Tensor.uuid', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='dtype', full_name='Tensor.dtype', index=1,
+      name='dtype', full_name='TensorInfo.dtype', index=0,
       number=2, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='shape', full_name='Tensor.shape', index=2,
+      name='shape', full_name='TensorInfo.shape', index=1,
       number=3, type=13, cpp_type=3, label=3,
       has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='raw_data', full_name='Tensor.raw_data', index=3,
-      number=8, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -795,62 +781,58 @@ _TENSOR = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=1348,
-  serialized_end=1433,
+  serialized_end=1398,
 )
 
 
-_TENSORDESCRIPTION = _descriptor.Descriptor(
-  name='TensorDescription',
-  full_name='TensorDescription',
+_TENSOR = _descriptor.Descriptor(
+  name='Tensor',
+  full_name='Tensor',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='uuid', full_name='TensorDescription.uuid', index=0,
+      name='info', full_name='Tensor.info', index=0,
       number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='axes', full_name='TensorDescription.axes', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
+      name='data', full_name='Tensor.data', index=1,
+      number=2, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1400,
+  serialized_end=1449,
+)
+
+
+_TENSORMANIFEST = _descriptor.Descriptor(
+  name='TensorManifest',
+  full_name='TensorManifest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
     _descriptor.FieldDescriptor(
-      name='base', full_name='TensorDescription.base', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='dtype', full_name='TensorDescription.dtype', index=3,
-      number=4, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='offset', full_name='TensorDescription.offset', index=4,
-      number=5, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='full_strides', full_name='TensorDescription.full_strides', index=5,
-      number=6, type=5, cpp_type=1, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='full_sizes', full_name='TensorDescription.full_sizes', index=6,
-      number=7, type=5, cpp_type=1, label=3,
+      name='pairs', full_name='TensorManifest.pairs', index=0,
+      number=1, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -867,8 +849,46 @@ _TENSORDESCRIPTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1436,
-  serialized_end=1599,
+  serialized_start=1451,
+  serialized_end=1503,
+)
+
+
+_TENSORINFOUUIDPAIR = _descriptor.Descriptor(
+  name='TensorInfoUUIDPair',
+  full_name='TensorInfoUUIDPair',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='uuid', full_name='TensorInfoUUIDPair.uuid', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='info', full_name='TensorInfoUUIDPair.info', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1505,
+  serialized_end=1573,
 )
 
 
@@ -912,8 +932,8 @@ _AXES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1601,
-  serialized_end=1663,
+  serialized_start=1575,
+  serialized_end=1637,
 )
 
 
@@ -992,8 +1012,8 @@ _AXIS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1666,
-  serialized_end=1832,
+  serialized_start=1640,
+  serialized_end=1806,
 )
 
 
@@ -1023,8 +1043,8 @@ _INT64VALUE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1834,
-  serialized_end=1861,
+  serialized_start=1808,
+  serialized_end=1835,
 )
 
 
@@ -1068,8 +1088,8 @@ _SLICE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1863,
-  serialized_end=1952,
+  serialized_start=1837,
+  serialized_end=1926,
 )
 
 _GRAPHDEF.fields_by_name['edges'].message_type = _EDGE
@@ -1085,7 +1105,6 @@ _OPATTR.fields_by_name['conv_params'].message_type = _FILTERPARAMS
 _OPATTR.fields_by_name['pool_params'].message_type = _FILTERPARAMS
 _OPATTR.fields_by_name['axes'].message_type = _AXES
 _OPATTR.fields_by_name['tensor'].message_type = _TENSOR
-_OPATTR.fields_by_name['axis'].message_type = _AXIS
 _OPATTR.oneofs_by_name['value'].fields.append(
   _OPATTR.fields_by_name['scalar'])
 _OPATTR.fields_by_name['scalar'].containing_oneof = _OPATTR.oneofs_by_name['value']
@@ -1104,13 +1123,11 @@ _OPATTR.fields_by_name['axes'].containing_oneof = _OPATTR.oneofs_by_name['value'
 _OPATTR.oneofs_by_name['value'].fields.append(
   _OPATTR.fields_by_name['tensor'])
 _OPATTR.fields_by_name['tensor'].containing_oneof = _OPATTR.oneofs_by_name['value']
-_OPATTR.oneofs_by_name['value'].fields.append(
-  _OPATTR.fields_by_name['axis'])
-_OPATTR.fields_by_name['axis'].containing_oneof = _OPATTR.oneofs_by_name['value']
 _SCALAR.fields_by_name['uuid_val'].message_type = _UUID
 _SCALAR.fields_by_name['map_val'].message_type = _ATTRIBUTEMAP
 _SCALAR.fields_by_name['slice_val'].message_type = _SLICE
 _SCALAR.fields_by_name['dtype_val'].enum_type = _DTYPE
+_SCALAR.fields_by_name['axis'].message_type = _AXIS
 _SCALAR.oneofs_by_name['value'].fields.append(
   _SCALAR.fields_by_name['bool_val'])
 _SCALAR.fields_by_name['bool_val'].containing_oneof = _SCALAR.oneofs_by_name['value']
@@ -1141,6 +1158,9 @@ _SCALAR.fields_by_name['slice_val'].containing_oneof = _SCALAR.oneofs_by_name['v
 _SCALAR.oneofs_by_name['value'].fields.append(
   _SCALAR.fields_by_name['dtype_val'])
 _SCALAR.fields_by_name['dtype_val'].containing_oneof = _SCALAR.oneofs_by_name['value']
+_SCALAR.oneofs_by_name['value'].fields.append(
+  _SCALAR.fields_by_name['axis'])
+_SCALAR.fields_by_name['axis'].containing_oneof = _SCALAR.oneofs_by_name['value']
 _ATTRIBUTEMAP_MAPENTRY.fields_by_name['value'].message_type = _SCALAR
 _ATTRIBUTEMAP_MAPENTRY.containing_type = _ATTRIBUTEMAP
 _ATTRIBUTEMAP.fields_by_name['map'].message_type = _ATTRIBUTEMAP_MAPENTRY
@@ -1161,12 +1181,11 @@ _EDGEATTR.fields_by_name['scalar'].containing_oneof = _EDGEATTR.oneofs_by_name['
 _EDGEATTR.oneofs_by_name['value'].fields.append(
   _EDGEATTR.fields_by_name['repeated_scalar'])
 _EDGEATTR.fields_by_name['repeated_scalar'].containing_oneof = _EDGEATTR.oneofs_by_name['value']
-_TENSOR.fields_by_name['uuid'].message_type = _UUID
-_TENSOR.fields_by_name['dtype'].enum_type = _DTYPE
-_TENSORDESCRIPTION.fields_by_name['uuid'].message_type = _UUID
-_TENSORDESCRIPTION.fields_by_name['axes'].message_type = _AXES
-_TENSORDESCRIPTION.fields_by_name['base'].message_type = _UUID
-_TENSORDESCRIPTION.fields_by_name['dtype'].enum_type = _DTYPE
+_TENSORINFO.fields_by_name['dtype'].enum_type = _DTYPE
+_TENSOR.fields_by_name['info'].message_type = _TENSORINFO
+_TENSORMANIFEST.fields_by_name['pairs'].message_type = _TENSORINFOUUIDPAIR
+_TENSORINFOUUIDPAIR.fields_by_name['uuid'].message_type = _UUID
+_TENSORINFOUUIDPAIR.fields_by_name['info'].message_type = _TENSORINFO
 _AXES.fields_by_name['uuid'].message_type = _UUID
 _AXES.fields_by_name['axes'].message_type = _AXIS
 _AXIS.fields_by_name['uuid'].message_type = _UUID
@@ -1184,8 +1203,10 @@ DESCRIPTOR.message_types_by_name['AttributeMap'] = _ATTRIBUTEMAP
 DESCRIPTOR.message_types_by_name['RepeatedScalar'] = _REPEATEDSCALAR
 DESCRIPTOR.message_types_by_name['Edge'] = _EDGE
 DESCRIPTOR.message_types_by_name['EdgeAttr'] = _EDGEATTR
+DESCRIPTOR.message_types_by_name['TensorInfo'] = _TENSORINFO
 DESCRIPTOR.message_types_by_name['Tensor'] = _TENSOR
-DESCRIPTOR.message_types_by_name['TensorDescription'] = _TENSORDESCRIPTION
+DESCRIPTOR.message_types_by_name['TensorManifest'] = _TENSORMANIFEST
+DESCRIPTOR.message_types_by_name['TensorInfoUUIDPair'] = _TENSORINFOUUIDPAIR
 DESCRIPTOR.message_types_by_name['Axes'] = _AXES
 DESCRIPTOR.message_types_by_name['Axis'] = _AXIS
 DESCRIPTOR.message_types_by_name['Int64Value'] = _INT64VALUE
@@ -1286,6 +1307,13 @@ EdgeAttr = _reflection.GeneratedProtocolMessageType('EdgeAttr', (_message.Messag
   ))
 _sym_db.RegisterMessage(EdgeAttr)
 
+TensorInfo = _reflection.GeneratedProtocolMessageType('TensorInfo', (_message.Message,), dict(
+  DESCRIPTOR = _TENSORINFO,
+  __module__ = 'ngraph.op_graph.serde.ops_pb2'
+  # @@protoc_insertion_point(class_scope:TensorInfo)
+  ))
+_sym_db.RegisterMessage(TensorInfo)
+
 Tensor = _reflection.GeneratedProtocolMessageType('Tensor', (_message.Message,), dict(
   DESCRIPTOR = _TENSOR,
   __module__ = 'ngraph.op_graph.serde.ops_pb2'
@@ -1293,12 +1321,19 @@ Tensor = _reflection.GeneratedProtocolMessageType('Tensor', (_message.Message,),
   ))
 _sym_db.RegisterMessage(Tensor)
 
-TensorDescription = _reflection.GeneratedProtocolMessageType('TensorDescription', (_message.Message,), dict(
-  DESCRIPTOR = _TENSORDESCRIPTION,
+TensorManifest = _reflection.GeneratedProtocolMessageType('TensorManifest', (_message.Message,), dict(
+  DESCRIPTOR = _TENSORMANIFEST,
   __module__ = 'ngraph.op_graph.serde.ops_pb2'
-  # @@protoc_insertion_point(class_scope:TensorDescription)
+  # @@protoc_insertion_point(class_scope:TensorManifest)
   ))
-_sym_db.RegisterMessage(TensorDescription)
+_sym_db.RegisterMessage(TensorManifest)
+
+TensorInfoUUIDPair = _reflection.GeneratedProtocolMessageType('TensorInfoUUIDPair', (_message.Message,), dict(
+  DESCRIPTOR = _TENSORINFOUUIDPAIR,
+  __module__ = 'ngraph.op_graph.serde.ops_pb2'
+  # @@protoc_insertion_point(class_scope:TensorInfoUUIDPair)
+  ))
+_sym_db.RegisterMessage(TensorInfoUUIDPair)
 
 Axes = _reflection.GeneratedProtocolMessageType('Axes', (_message.Message,), dict(
   DESCRIPTOR = _AXES,

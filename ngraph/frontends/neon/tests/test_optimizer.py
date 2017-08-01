@@ -153,6 +153,38 @@ def compare_optimizer(opt_ng, opt_ref):
             ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
 
 
+def compare_optimizer_variable_select(opt_ng, opt_ref):
+
+    # Set up data placeholders
+    C = ng.make_axis(20)
+    N = ng.make_axis(32, name='N')
+
+    data = ng.placeholder([C, N])
+    target = ng.placeholder([N])
+
+    # params to be updated using optimizer to be tested
+    np_W1 = np.random.rand(C.length)
+    np_W2 = np.random.rand(C.length)
+    W1 = ng.variable([C], initial_value=np_W1)
+    W2 = ng.variable([C], initial_value=np_W2)
+
+    # Set up op graph
+    cost = ng.sum(target - ng.dot(W1, data) - ng.dot(W2, data), out_axis=())
+    updated_weights = ng.sequential([opt_ng(cost, variables=[W1]), W1])
+
+    # Set up the computation and run the "train" loop
+    with ExecutorFactory() as ex:
+        opt_ng_comp = ex.transformer.computation([updated_weights, W2], data, target)
+        mock_dataset = data_generator(20, C.length, N.length)
+
+        for x, y in mock_dataset:
+            [ng_W1, ng_W2] = opt_ng_comp(x, y)  # updated weights for ngraph optimizer
+            np_W1 = opt_ref(x, np_W1)   # updated weights for reference optimizer
+
+            ng.testing.assert_allclose(np_W1, ng_W1, rtol=1e-3)
+            ng.testing.assert_allclose(np_W2, ng_W2, rtol=1e-3)
+
+
 def data_generator(iteration_count, C, N):
     for i in range(iteration_count):
         yield (np.random.rand(C, N).astype('float32'),
@@ -172,10 +204,11 @@ def random_momentum_coef():
     return np.random.random()
 
 
-@pytest.mark.flex_disabled
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
-def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov):
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov,
+             select_variables):
 
     # Setup the baseline and reference optimizers to be tested
     gdm_args = {'learning_rate': random_learning_rate,
@@ -187,12 +220,16 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov):
     gdm = GradientDescentMomentum(**gdm_args)
 
     # test baseline against reference
-    compare_optimizer(gdm, gdm_ref)
+    if select_variables:
+        compare_optimizer_variable_select(gdm, gdm_ref)
+    else:
+        compare_optimizer(gdm, gdm_ref)
 
 
 @pytest.mark.parametrize("decay_rate", [0.95, 1])
 @pytest.mark.parametrize("epsilon", [1e-6])
-def test_rmsprop(random_learning_rate, decay_rate, epsilon):
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_rmsprop(random_learning_rate, decay_rate, epsilon, select_variables):
     rmsprop_args = {'learning_rate': random_learning_rate,
                     'epsilon': epsilon,
                     'decay_rate': decay_rate}
@@ -201,7 +238,10 @@ def test_rmsprop(random_learning_rate, decay_rate, epsilon):
     rms = RMSProp(**rmsprop_args)
 
     # test baseline against reference
-    compare_optimizer(rms, rmsprop_ref)
+    if select_variables:
+        compare_optimizer_variable_select(rms, rmsprop_ref)
+    else:
+        compare_optimizer(rms, rmsprop_ref)
 
 
 @pytest.fixture(params=[0, 1])
@@ -215,9 +255,11 @@ def random_beta_2():
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason='Results mismatch')
 @pytest.mark.parametrize("epsilon", [1e-8])
-def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory,
+              select_variables):
 
     # Setup the baseline and reference optimizers to be tested
     adam_args = {'learning_rate': random_learning_rate,
@@ -229,11 +271,14 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, trans
     adam = Adam(**adam_args)
 
     # test baseline against reference
-    compare_optimizer(adam, adam_reference)
+    if select_variables:
+        compare_optimizer_variable_select(adam, adam_reference)
+    else:
+        compare_optimizer(adam, adam_reference)
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Unknown problem yet")
 def test_learning_policy_step(transformer_factory):
     base_learning_rate = 1.0
     drop_factor = 0.1

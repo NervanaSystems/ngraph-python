@@ -34,7 +34,7 @@ import numpy as np
 from recurrent_ref import RefRecurrent, RefBidirectional, RefSeq2Seq
 
 import ngraph as ng
-from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
+from ngraph.frontends.neon import Recurrent, LSTM, BiRNN, Tanh, ConstantInit
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
@@ -112,13 +112,12 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [True, False])
+@pytest.mark.parametrize("return_sequence", [pytest.config.flex_and_argon_disabled(True), False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("extra_axes", [0, 2])
 @pytest.mark.parametrize("backward", [True, False])
@@ -171,9 +170,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-# Flex doesn't support RNN yet, but sometimes test passes (random input) because of the small
-# values during calculations and wide absolute tolerance
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="RNN is not yet supported with Flex")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
@@ -247,7 +244,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                                        rtol=bprop_rtol, atol=bprop_atol)
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Several: Tensor description, placeholder (deriv), tolerance")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
@@ -305,14 +302,13 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
                                            rtol=num_rtol, atol=num_atol)
 
 
-@pytest.mark.flex_disabled
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [True, False])
+@pytest.mark.parametrize("return_sequence", [pytest.config.flex_disabled(True), False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
                                                 (True, False),
@@ -322,6 +318,9 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                      init_state, sum_out, concat_out, transformer_factory):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
+
+    if (sum_out, concat_out) == (False, True):
+        pytest.config.flex_skip_now("because of the strict tolerance (rtol, atol)")
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
@@ -368,7 +367,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="BiRNN is not yet supported with Flex")
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
@@ -496,7 +495,7 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Seq2Seq is not yet supported with Flex")
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length_enc", [5])
@@ -592,3 +591,64 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
                                        deriv_ref_val.squeeze(),
                                        rtol=bprop_rtol,
                                        atol=1e-4)
+
+
+@pytest.mark.parametrize("recurrent_layer_cls", [Recurrent, LSTM])
+@pytest.mark.parametrize("batch_size", [4])
+@pytest.mark.parametrize("sequence_length", [6])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [8])
+def test_change_recurrent_axis_length(recurrent_layer_cls, batch_size, sequence_length,
+                                      input_size, hidden_size, transformer_factory):
+    """
+    Recurrent layer support for changing REC axis length
+    (needed by seq2seq inference)
+    """
+    # create three identical recurrent layers with same weights
+    W_input_val = np.random.normal(size=(hidden_size, input_size))
+    W_recur_val = np.random.normal(size=(hidden_size, hidden_size))
+    rec1 = recurrent_layer_cls(nout=hidden_size,
+                               init=ConstantInit(W_input_val),
+                               init_inner=ConstantInit(W_recur_val),
+                               activation=Tanh())
+    rec2 = recurrent_layer_cls(nout=hidden_size,
+                               init=ConstantInit(W_input_val),
+                               init_inner=ConstantInit(W_recur_val),
+                               activation=Tanh())
+    rec3 = recurrent_layer_cls(nout=hidden_size,
+                               init=ConstantInit(W_input_val),
+                               init_inner=ConstantInit(W_recur_val),
+                               activation=Tanh())
+
+    # create input placeholders and values
+    # sequence length greater than 1
+    N = ng.make_axis(length=batch_size, name='N')
+    REC = ng.make_axis(length=sequence_length, name='REC')
+    M = ng.make_axis(length=input_size, name='M')
+    xn_axes = ng.make_axes([M, REC, N])
+    xn = ng.placeholder(axes=xn_axes)
+    xn_val = np.random.normal(size=(input_size, sequence_length, batch_size))
+    # sequence length 1
+    REC1 = ng.make_axis(length=1, name='REC')
+    x1_axes = ng.make_axes([M, REC1, N])
+    x1 = ng.placeholder(axes=x1_axes)
+    x1_val = np.random.normal(size=(input_size, 1, batch_size))
+
+    # check results of switching REC axis of a layer's input
+    # computations switching REC axis
+    y1_n = rec1(xn)
+    y1_1 = rec1(x1)
+
+    # check against not switching
+    y2_n = rec2(xn)
+    y3_1 = rec3(x1)
+
+    with ExecutorFactory() as ex:
+
+        y1_n_comp = ex.executor(y1_n, xn)
+        y1_1_comp = ex.executor(y1_1, x1)
+        y2_n_comp = ex.executor(y2_n, xn)
+        y3_1_comp = ex.executor(y3_1, x1)
+
+        ng.testing.assert_allclose(y1_n_comp(xn_val), y2_n_comp(xn_val))
+        ng.testing.assert_allclose(y1_1_comp(x1_val), y3_1_comp(x1_val))

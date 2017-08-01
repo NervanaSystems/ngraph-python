@@ -16,10 +16,28 @@ RUN if [ $python_version -eq 3 ]; then \
     virtualenv -p python3 /tmp/env3; fi
 ENV PATH="/tmp/env3/bin:$PATH"
 
+RUN apt-get install -y bzip2 wget coreutils libjasper1 libjpeg8 libpng12-0
+
+# Get and build Open MPI
+RUN wget -q https://www.open-mpi.org/software/ompi/v1.10/downloads/openmpi-1.10.3.tar.gz && \
+    tar -xzvf ./openmpi-1.10.3.tar.gz && \
+    cd openmpi-1.10.3 && \
+    ./configure --prefix=/usr/local/mpi && \
+    make -j all && \
+    sudo make install && cd .. && \
+    rm -rf openmpi-1.10.3 openmpi-1.10.3.tar.gz
+
+# Add Open MPI to path
+ENV PATH="/usr/local/mpi/bin:$PATH"
+ENV LD_LIBRARY_PATH="/usr/local/mpi/lib:$LD_LIBRARY_PATH"
+ENV MPI_ROOT="/usr/local/mpi"
+
 # build ngraph requirements
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 ADD gpu_requirements.txt /tmp/gpu_requirements.txt
 RUN pip install -r /tmp/gpu_requirements.txt
+ADD multinode_requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
 
 WORKDIR /root/ngraph-test

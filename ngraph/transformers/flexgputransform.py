@@ -76,7 +76,7 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     default_rtol = 1e-02
-    default_atol = 1e-05
+    default_atol = 2e-05
 
     def __init__(self, fixed_point=False, flex_verbose=False, collect_flex_data=False, **kwargs):
 
@@ -96,6 +96,10 @@ class FlexGPUTransformer(GPUTransformer):
     def set_output_statistics_file(self, statistics_file):
         if self.collect_flex_data:
             self.set_flex_data_file(statistics_file)
+
+    def save_output_statistics_file(self):
+        if self.collect_flex_data:
+            self.flex_manager.save_diagnostic_data()
 
     def set_flex_data_file(self, data_file):
         self.flex_manager.set_h5py_file(data_file)
@@ -334,10 +338,5 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def __call__(self):
         self.transformer.flex_manager.autoflex_count += 1
-
-        # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)
-        # has been called before loop_train in example file
-        # where cbs is CallbackContainer instance returned by make_default_callbacks
-        self.transformer.flex_manager.save_diagnostic_data()
 
         super(FlexGPUKernelGroup, self).__call__()

@@ -29,6 +29,7 @@ import numpy as np
 import collections
 from operator import itemgetter
 from orderedset import OrderedSet
+import re
 
 
 class MklReorderOp(TensorOp):
@@ -57,7 +58,20 @@ def get_order_from_axes(axes, sub_axes):
 
 
 def get_axes_mkl_order(axes, order):
-    return [axes[index] for index in order]
+    axes_list = []
+    flattend_axis_flag = False
+    for axis in axes:
+        if(axis.is_flattened and len(order) > 2):
+            unflattend_axis = unflatten(axis).axes
+            for indx in range(len(unflattend_axis)):
+                axes_list.append(unflattend_axis[indx])
+                flattend_axis_flag = True
+        else:
+            axes_list.append(axis)
+    if flattend_axis_flag:
+        return [axes_list[index] for index in order]
+    else:
+        return [axes[index] for index in order]
 
 
 def get_size_mkl_order(axes, order):
@@ -65,7 +79,21 @@ def get_size_mkl_order(axes, order):
 
 
 def get_strides_mkl_order(td, order):
-    return [td.strides[index] for index in order]
+    strides_list = []
+    flattend_axis_flag = False
+    for axis in td.axes:
+        if (axis.is_flattened and len(order) > 2):
+                flattend_axis_flag = True
+    if flattend_axis_flag:
+        for each_stride in td.full_strides:
+            if isinstance(each_stride, tuple):
+                for stride_val in each_stride:
+                    strides_list.append(stride_val)
+            else:
+                strides_list.append(each_stride)
+        return [strides_list[index] for index in order]
+    else:
+        return [td.strides[index] for index in order]
 
 
 def get_native_layout(mkldnn, td, order, use_formats=False):
@@ -162,20 +190,22 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             # Sanity check tensor shapes
             if (len(unflatten_inputs.axes.lengths) != 5):
                 return
-
+        else:
+            if (len(inputs.axes.lengths) != 5):
+                return
         # Only single precision float supported for now
         if op.dtype != np.float32:
             return
-
+        mkl_order = [4, 0, 2, 3]
         data_type = self.mkldnn.datatype[op.dtype.type]
-        inputs_shape = get_size_mkl_order(unflatten(inputs).axes, [4, 0, 2, 3])
+        inputs_shape = get_size_mkl_order(inputs.axes, mkl_order)
         mean_size = mean.axes.lengths[0]
         mean_dims = 1
         gamma_shape = gamma.axes.lengths[0]
         bias_shape = bias.axes.lengths[0]
         variance_size = variance.axes.lengths[0]
         variance_dims = 1
-        outputs_shape = op.axes.lengths
+        outputs_shape = get_size_mkl_order(op.axes, mkl_order)
 
         # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd
         # dimension contains beta parameter.
@@ -185,7 +215,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
 
         (inputs_layout, mkl_axes) = get_mkl_layout(
-            self.mkldnn, unflatten_inputs, [4, 0, 2, 3], True)
+            self.mkldnn, inputs, mkl_order, True)
         mean_layout = None
         variance_layout = None
 
@@ -213,7 +243,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.kernels[
                 op.name])
 
-        self.set_mkl_layout_data(op, mkl_axes)
+        out_axes = get_axes_mkl_order(op.axes, mkl_order)
+        self.set_mkl_layout_data(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropBatchnormOp)
@@ -229,7 +260,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 if (len(unflatten(Flatten_axis).axes.lengths) != 4):
                     return
                 else:
-                    outputs_shape = get_size_mkl_order(unflatten(op).axes, [4, 0, 2, 3])
+                    outputs_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
                     outputs_shape_arg = ((ct.c_int) * len(outputs_shape))(*outputs_shape)
                     axis_len_5d = True
             else:
@@ -240,7 +271,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         mean_size = mean.axes.lengths[0]
         variance_size = variance.axes.lengths[0]
 
-        delta_shape = get_size_mkl_order(unflatten(delta).axes, [4, 0, 2, 3])
+        delta_shape = get_size_mkl_order(delta.axes, [4, 0, 2, 3])
         delta_shape_arg = ((ct.c_int) * len(delta_shape))(*delta_shape)
 
         # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd
@@ -298,7 +329,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ConvolutionOp)
-    def visit(self, op, input, filter):
+    def visit(self, op, input, filter, bias=None):
+
         # Only 2D convolution supported in MKLDNN for now
         if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -310,6 +342,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # Assumes (C, D, H, W, N) for convolution axes
         input_shape = get_size_mkl_order(input.axes, [4, 0, 2, 3])
         filter_shape = get_size_mkl_order(filter.axes, [4, 0, 2, 3])
+        bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         pad_d, pad_h, pad_w = itemgetter(
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
@@ -319,6 +352,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         stride = [str_h, str_w]
         input_shape_arg = ((ct.c_int) * len(input_shape))(*input_shape)
         filter_shape_arg = ((ct.c_int) * len(filter_shape))(*filter_shape)
+        bias_shape_arg = ((ct.c_int) * len(bias_shape))(*bias_shape) if bias else None
         output_shape_arg = ((ct.c_int) * len(output_shape))(*output_shape)
         stride_arg = ((ct.c_int) * len(stride))(*stride)
         pad_arg = ((ct.c_int) * len(pad))(*pad)
@@ -328,8 +362,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.conv_fprop_kernel(
             self.mkldnn.mkldnn_engine,
-            len(input_shape), len(filter_shape), len(output_shape),
-            input_shape_arg, filter_shape_arg, output_shape_arg,
+            len(input_shape), len(filter_shape), 1, len(output_shape),
+            input_shape_arg, filter_shape_arg, bias_shape_arg, output_shape_arg,
             stride_arg, pad_arg,
             input_layout, filter_layout,
             data_type,
@@ -684,10 +718,20 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     def init_mkldnn_reorder(self, op):
         (mkl_layout, mkl_axes) = op.in_layout
-        mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
+        check_flatten = False
+        for axis_indx, each_axis in enumerate(op.axes):
+            if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened):
+                check_flatten = True
+        if check_flatten:
+            mkl_axes_order = get_order_from_axes(unflatten(op).axes, mkl_axes)
+        else:
+            mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
         (out_layout, _) = get_mkl_layout(self.mkldnn, op, mkl_axes_order, True)
         ndims = len(mkl_axes)
-        dims = get_size_mkl_order(op.axes, mkl_axes_order)
+        if check_flatten:
+            dims = get_size_mkl_order(unflatten(op).axes, mkl_axes_order)
+        else:
+            dims = get_size_mkl_order(op.axes, mkl_axes_order)
         dims_arg = ((ct.c_int) * ndims)(*dims)
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
@@ -717,6 +761,16 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         if op.name in self.mkldnn.kernels or op.name in self.mkldnn.op_layouts:
             # MKL Op or an MKL layout pass-through op
             return
+        # This checks if the Op is Flatten Op and belongs to neon_layer, if so
+        # then we don't need to insert MKL reorder Op, since flatten Op inserts
+        # Contigous Op in its contructor and coverts the op.args to framework
+        # layout.
+        # ex: ConvolutionOp -> MKL_reorder_Op ->Flatten -> bn_op can be reduced to
+        # ConvolutionOp -> Flatten -> bn_op
+        if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
+                metadata = op.metadata["neon_layer"].split("/")
+                if re.search("BatchNorm(_\d+)", metadata[-1]):
+                    return
         replace = False
         new_args = []
         for arg in args:

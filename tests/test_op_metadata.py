@@ -13,9 +13,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import ngraph as ng
+from ngraph.util.names import NameableValue
 
 
-class Dummy(ng.NameableValue):
+class Dummy(NameableValue):
     metadata = {"layer_type": "convolution"}
 
     @ng.with_op_metadata

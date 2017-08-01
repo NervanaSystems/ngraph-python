@@ -15,6 +15,8 @@
 # set empty to prevent any implicit rules from firing.
 .SUFFIXES:
 
+SHELL := /bin/bash
+
 # Extract Python version
 PY := $(shell python --version 2>&1  | cut -c8)
 ifeq ($(PY), 2)
@@ -25,11 +27,12 @@ endif
 
 # style checking related
 STYLE_CHECK_OPTS :=
-STYLE_CHECK_DIRS := ngraph tests examples benchmarks
+STYLE_CHECK_DIRS := ngraph tests examples
 
 # pytest options
 TEST_OPTS := --timeout=600 --cov=ngraph --timeout_method=thread
 TEST_DIRS := tests/
+TEST_DIRS_COMMON := ngraph/frontends/common/tests
 TEST_DIRS_NEON := ngraph/frontends/neon/tests
 TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
@@ -75,6 +78,9 @@ install_all: gpu_prepare test_prepare examples_prepare doc_prepare install
 gpu_prepare:
 	pip install -r gpu_requirements.txt > /dev/null 2>&1
 
+multinode_prepare:
+	pip install -r multinode_requirements.txt > /dev/null 2>&1
+
 test_prepare:
 	pip install -r test_requirements.txt > /dev/null 2>&1
 
@@ -98,7 +104,8 @@ uninstall:
 
 uninstall_all: uninstall
 	pip uninstall -r gpu_requirements.txt -r test_requirements.txt \
-	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt
+	-r examples_requirements.txt -r doc_requirements.txt -r viz_requirements.txt \
+	-r multinode_requirements.txt
 
 clean:
 	find . -name "*.py[co]" -type f -delete
@@ -122,27 +129,30 @@ test_flex: gpu_prepare test_prepare clean
 	make autoflex_prepare"
 	@echo
 	@echo Running flex unit tests...
-	py.test --boxed --transformer flexgpu -m "transformer_dependent and not flex_disabled \
-	and not hetr_only or flex_only" \
+	py.test --boxed --transformer flexgpu -m "transformer_dependent and not hetr_only or flex_only" \
 	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
-	$(TEST_DIRS) $(TEST_DIRS_NEON) ${TEST_DIRS_TENSORFLOW}
+	$(TEST_DIRS) $(TEST_DIRS_NEON) ${TEST_DIRS_TENSORFLOW} ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export PYTHONHASHSEED=0
 test_mkldnn: export MKL_TEST_ENABLE=1
 test_mkldnn: export LD_PRELOAD+=:./mkldnn_engine.so
 test_mkldnn: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
-test_mkldnn: test_prepare clean
+test_mkldnn: multinode_prepare test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
+	unset http_proxy && \
+	unset https_proxy && \
+	unset HTTP_PROXY && \
+	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -151,7 +161,7 @@ test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -165,7 +175,7 @@ test_gpu: gpu_prepare test_prepare clean
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	not separate_execution" \
 	--boxed $(PARALLEL_OPTS) --junit-xml=testout_test_gpu_tx_dependent_$(PY).xml --cov-append \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	py.test --transformer gpu -m "transformer_dependent and not flex_only and not hetr_only and \
 	separate_execution" \
 	--boxed --junit-xml=testout_test_gpu_tx_dependent_separate_execution_$(PY).xml --cov-append \
@@ -174,11 +184,15 @@ test_gpu: gpu_prepare test_prepare clean
 
 test_hetr: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_hetr: export PYTHONHASHSEED=0
-test_hetr: test_prepare clean
+test_hetr: multinode_prepare test_prepare clean
 	echo Running unit tests for hetr dependent transformer tests...
+	unset http_proxy && \
+	unset https_proxy && \
+	unset HTTP_PROXY && \
+	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW)
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mxnet: test_prepare clean

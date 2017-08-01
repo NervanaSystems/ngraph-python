@@ -29,7 +29,7 @@ from future.utils import with_metaclass
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
     default_int_dtype, AxesMap, UnmatchedAxesError
-from ngraph.util.names import NameableValue
+from ngraph.util.names import ScopedNameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
 from cached_property import cached_property
@@ -140,7 +140,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue):
+class Op(ScopedNameableValue):
     """
     Any operation that can be in an AST.
 
@@ -341,8 +341,6 @@ class Op(NameableValue):
 
         self.style = {}
         self._forward = None
-
-        self.scope = None
 
     def copy_with_new_args(self, args):
         """
@@ -754,6 +752,20 @@ class Op(NameableValue):
         """
         return False
 
+    def _xml_description(self):
+        element = type(self).__name__
+        op_xml = ["<{} id={}".format(element, self.name)]
+        if self.scope is not None:
+            op_xml.append(" scope={}".format(self.scope.name))
+        for attr, val in self.metadata.items():
+            if attr == "label":
+                attr = "class"
+            op_xml.append(" {}={}".format(str(attr), str(val)))
+
+        op_xml.append("></{}>".format(element))
+
+        return "".join(op_xml)
+
 
 class MutateInsteadOfCopyWithNewArgsMixin(object):
     """
@@ -826,7 +838,7 @@ class AssignOp(Op):
         # TODO: requires explicit broadcast in future
         if len(val.axes - tensor.axes) > 0:
             raise ValueError(
-                "tensor(LHS) has axes %s, val(RHS) has axes %s,"
+                "tensor(LHS) has axes %s. val(RHS) has axes %s. "
                 "val's axes should be subset of tensor's axes" %
                 (val.axes, tensor.axes))
         val = broadcast(val, tensor.axes)
@@ -1131,7 +1143,6 @@ class TensorOp(Op):
                 deriv_handler = o.deriv_handler
 
                 # find hetr distribution metadata, pass other data if exists
-                # todo add reduce func metadata key when fixed #1436
                 hetr_meta_key = ['device', 'device_id', 'parallel']
                 hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
                                  if o.metadata.get(k) is not None}
@@ -1272,20 +1283,17 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        if "layout" in self.metadata:
-            return TensorDescription(self.axes,
-                                     op=self,
-                                     layout=self.metadata["layout"],
-                                     dtype=self.dtype,
-                                     is_persistent=self.is_persistent,
-                                     is_input=self.is_input,
-                                     is_placeholder=self.is_placeholder)
-        else:
-            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
-                                     op=self,
-                                     is_persistent=self.is_persistent,
-                                     is_input=self.is_input,
-                                     is_placeholder=self.is_placeholder)
+
+        _layout = self.metadata.get("layout", None)
+
+        return TensorDescription(self.axes,
+                                 op=self,
+                                 layout=_layout,
+                                 dtype=self.dtype,
+                                 name=self.safe_name,
+                                 is_persistent=self.is_persistent,
+                                 is_input=self.is_input,
+                                 is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -2266,7 +2274,6 @@ class AssignableTensorOp(TensorOp):
             is_trainable=False,
             is_placeholder=False,
             const=None,
-            scope=None,
             **kwargs):
         super(AssignableTensorOp, self).__init__(**kwargs)
         self._is_input = is_input
@@ -2276,7 +2283,6 @@ class AssignableTensorOp(TensorOp):
         self._is_placeholder = is_placeholder
         self._const = const
         self.initial_value = None
-        self.scope = scope
 
         if initial_value is not None:
             # convert callable initial value
@@ -2446,7 +2452,7 @@ def placeholder(axes, dtype=None, initial_value=None, **kwargs):
                               **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None, **kwargs):
+def temporary(axes, dtype=None, **kwargs):
     """
     Temporary storage.
 
@@ -2455,18 +2461,14 @@ def temporary(axes, dtype=None, initial_value=None, **kwargs):
     Args:
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
-        initial_value (optional): A host constant or callable. If callable, will
-            be called to generate an initial value.
         constant (optional): Once initialization is complete, this tensor should not change.
 
     Returns:
         AssignableTensorOp: The placeholder.
     """
-    if initial_value is not None:
-        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value,
+                              initial_value=None,
                               **kwargs)
 
 
@@ -2493,7 +2495,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
                               **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
+def variable(axes, dtype=None, initial_value=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2502,8 +2504,6 @@ def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
-        scope (optional): scope of variable, can be used to filter on when
-                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
@@ -2514,7 +2514,6 @@ def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
                               is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
-                              scope=scope,
                               **kwargs)
 
 
