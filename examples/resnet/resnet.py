@@ -64,7 +64,7 @@ class ResidualModule(object):
             #Calculate outputs of convolution
             convs=self.main_path(in_obj)
             #Divide input half for size matching
-            identity_conn=self.side_path(in_obj)
+            identity_conn=self.side_path(in_obj) if self.side_path else in_obj
             #Add convs output with identity_conn
             sum_opt=convs+identity_conn
             #Perform relu on sum output
