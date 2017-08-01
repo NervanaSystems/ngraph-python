@@ -368,11 +368,12 @@ class GPUKernelGroup(object):
             GPU elementwise kernels for this computation
     """
 
-    def __init__(self, transformer, name):
+    def __init__(self, transformer, name, comm=None):
         self.transformer = transformer
         self.kernels = []
         self.name = name
         self.sourcefile = self.make_cuda_source_file()
+        self.comm = comm
 
     def make_cuda_source_file(self):
         return CudaSourceFile(self.name)
@@ -463,23 +464,23 @@ class GPUKernelGroup(object):
 
     @add_kernel.on_type(GPUCudaScatterSendOp)
     def add_kernel(self, op):
-        self.kernels.append(CudaScatterSendKernel(self.transformer, op))
+        self.kernels.append(CudaScatterSendKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaScatterRecvOp)
     def add_kernel(self, op):
-        self.kernels.append(CudaScatterRecvKernel(self.transformer, op))
+        self.kernels.append(CudaScatterRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaGatherSendOp)
     def add_kernel(self, op):
-        self.kernels.append(CudaGatherSendKernel(self.transformer, op))
+        self.kernels.append(CudaGatherSendKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaGatherRecvOp)
     def add_kernel(self, op):
-        self.kernels.append(CudaGatherRecvKernel(self.transformer, op))
+        self.kernels.append(CudaGatherRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaAllReduceOp)
     def add_kernel(self, op):
-        self.kernels.append(CudaAllReduceKernel(self.transformer, op))
+        self.kernels.append(CudaAllReduceKernel(self.transformer, self.comm, op))
 
     def compile_all(self):
         """
@@ -924,7 +925,6 @@ class GPURuntime(object):
 
         # context
         self.ctx = drv.Device(self.device_id).make_context()
-
         # attributes
         self.stream = None
         self.warmup = False
@@ -1049,7 +1049,7 @@ class GPUTransformer(ComputationGraphTransformer):
         for transformer in GPUTransformer.gpu_transformers:
             transformer.close()
 
-    def __init__(self, device_id=None, **kwargs):
+    def __init__(self, device_id=None, comm=None, **kwargs):
         super(GPUTransformer, self).__init__(**kwargs)
         GPUTransformer.gpu_transformers.add(self)
         layout_domain_pass = GenerateLayoutDomains(self)
@@ -1068,6 +1068,7 @@ class GPUTransformer(ComputationGraphTransformer):
         self.current_buffer = None
         self.device_id = device_id
         self.runtime = None
+        self.comm = comm
 
     def initialize_runtime(self):
         if self.runtime is None:
@@ -1113,7 +1114,7 @@ class GPUTransformer(ComputationGraphTransformer):
         pass
 
     def gpu_kernel_group(self, name):
-        return GPUKernelGroup(self, name)
+        return GPUKernelGroup(self, name, self.comm)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         self.initialize_runtime()

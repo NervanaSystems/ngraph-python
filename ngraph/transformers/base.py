@@ -26,6 +26,7 @@ from ngraph.op_graph.op_graph import Op, computation
 from ngraph.util.names import NameableValue
 from orderedset import OrderedSet
 
+from ngraph.util.trace_events import is_tracing_enabled
 
 PYCUDA_LOGIC_ERROR_CODE = 4
 
@@ -102,6 +103,11 @@ class Computation(NameableValue):
 
         self.executor()
 
+        # Generate a timeline for the computation
+        if is_tracing_enabled():
+            self.generate_profile(self.executor.__profiler_start__,
+                                  self.executor.__profiler_stop__)
+
         # TODO Should copy this out of the device to a destination when it is not scalar
         def value(op):
             """
@@ -126,6 +132,9 @@ class Computation(NameableValue):
             return result
         else:
             return None
+
+    def generate_profile(self, profiler_start, profiler_stop):
+        pass
 
 
 class DeviceBufferStorage(with_metaclass(abc.ABCMeta, NameableValue)):
@@ -395,6 +404,12 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     def set_output_statistics_file(self, statistics_file):
         """
         Collects data for transformer
+        """
+        pass
+
+    def save_output_statistics_file(self):
+        """
+        Save collected statistics data to file
         """
         pass
 

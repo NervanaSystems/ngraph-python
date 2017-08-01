@@ -128,7 +128,7 @@ class lr_policy_poly(lr_policy):
 
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
-        self.max_iter = ng.constant(axes=(), const=params['max_iter'], dtype=uint_dtype)
+        self.max_iter = ng.constant(axes=(), const=params['max_iter'])
         self.power = ng.constant(axes=(), const=params['power'])
 
     def __call__(self, iteration):
@@ -141,7 +141,7 @@ class lr_policy_sigmoid(lr_policy):
     def __init__(self, params):
         lr_policy.__init__(self, params['name'], params['base_lr'])
         self.gamma = ng.constant(axes=(), const=params['gamma'])
-        self.step_size = ng.constant(axes=(), const=params['step_size'], dtype=uint_dtype)
+        self.step_size = ng.constant(axes=(), const=params['step_size'])
 
     def __call__(self, iteration):
         return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iteration - self.step_size))))
