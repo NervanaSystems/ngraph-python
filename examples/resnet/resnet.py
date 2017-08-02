@@ -156,7 +156,7 @@ if __name__ == "__main__":
     if resnet_dataset=='cifar10':
         if resnet_size in cifar_sizes:
             #Create training and validation set objects
-            train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations)
+            train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
             #Num of resnet modules required for cifar10
             num_resnet_mods=(args.size-2)//6
             #Only 2 layers for one resnet module
@@ -187,7 +187,7 @@ if __name__ == "__main__":
                 en_bottleneck=False
             else:
                 en_bottleneck=True
-            print("i1k is still under construction")
+            train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
             exit()
         else:
             print("Invalid i1k size. Select from "+str(i1k_sizes))
