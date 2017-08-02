@@ -176,9 +176,10 @@ class CommonSGDOptimizer(object):
                          for variable in variables])
 
 
-def output_dim(X, S, padding, strides, pooling=False, dilation=1):
+def conv_output_dim(X, S, padding, strides, pooling=False, dilation=1):
     """
-    Compute along 1 dimension, with these sizes, what will be the output dimension.
+    Compute convolution output dimension along one dimension with these sizes, what will be
+    the output dimension.
 
     Arguments:
         X (int): input data dimension
@@ -200,7 +201,18 @@ def output_dim(X, S, padding, strides, pooling=False, dilation=1):
     return size
 
 
-def output_dim_deconv(X, S, padding, strides, dilation=1):
+def deconv_output_dim(X, S, padding, strides, dilation=1):
+    """
+    Compute deconvolution output dimension along one dimension with these sizes, what will be
+    the output dimension.
+
+    Arguments:
+        X (int): input data dimension
+        S (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+        dilation (int): dilation of filter
+    """
     S = dilation * (S - 1) + 1
     max_size = S + (X + padding - 1) * strides
 

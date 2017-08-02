@@ -16,7 +16,7 @@ import numpy as np
 import itertools as itt
 
 import ngraph as ng
-from ngraph.frontends.common.utils import output_dim, output_dim_deconv
+from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
 
 
 def slicable(dim, pad=0):
@@ -178,13 +178,13 @@ class ConvParams(object):
                  dil_d=1, dil_h=1, dil_w=1, deconv=False):
 
         if deconv:
-            M = output_dim_deconv(D, T, pad_d, str_d)
-            P = output_dim_deconv(H, R, pad_h, str_h)
-            Q = output_dim_deconv(W, S, pad_w, str_w)
+            M = deconv_output_dim(D, T, pad_d, str_d)
+            P = deconv_output_dim(H, R, pad_h, str_h)
+            Q = deconv_output_dim(W, S, pad_w, str_w)
         else:
-            M = output_dim(D, T, pad_d, str_d)
-            P = output_dim(H, R, pad_h, str_h)
-            Q = output_dim(W, S, pad_w, str_w)
+            M = conv_output_dim(D, T, pad_d, str_d)
+            P = conv_output_dim(H, R, pad_h, str_h)
+            Q = conv_output_dim(W, S, pad_w, str_w)
 
         self.dimO = (K, M, P, Q, N)
         self.dimI = (C, D, H, W, N)
