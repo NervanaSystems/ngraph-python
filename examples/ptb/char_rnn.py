@@ -13,6 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+Train a network with one recurrent layer of tanh units on the Penn
+treebank data parsing on character-level.
+
+Reference:
+
+  Advances in optimizing recurrent networks `[Pascanu2012]`_
+.. _[Pascanu2012]: http://arxiv.org/pdf/1212.0901.pdf
+
+Usage:
+
+    python examples/ptb/char_rnn.py -b gpu -r 0 -t 6800 --iter_interval 680
+
+"""
+
 from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import (Layer, Sequential, Preprocess, BiRNN, Recurrent, Affine,
