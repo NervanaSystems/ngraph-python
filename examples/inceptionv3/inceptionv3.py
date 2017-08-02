@@ -14,9 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-Convnet-GoogLeNet v1 Benchmark with spelled out neon model framework in one file
-https://github.com/soumith/convnet-benchmarks
-./googlenet_v1.py
+python inceptionv3.py -z 16 -t 100 -b gpu
 """
 
 import numpy as np
@@ -28,9 +26,8 @@ from contextlib import closing
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import XavierInit, UniformInit
 from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
-from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
+from ngraph.frontends.neon import Rectlin, Softmax, Identity, GradientDescentMomentum
 from ngraph.frontends.neon import ax
-
 np.seterr(all='raise')
 
 parser = NgraphArgparser(description=__doc__)
@@ -380,8 +377,9 @@ seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2,
                    Inceptionv3_b3([(192,), (160, 160, 192),
                                    (160, 160, 160, 160, 192), (192,)]),  # mixed_6d
                    Inceptionv3_b3([(192,), (192, 192, 192),
-                                   (192, 192, 192, 192, 192), (192,)]),  # mixed_6e
-                   Inceptionv3_b4([(192, 320), (192, 192, 192, 192)]),  # mixed_7a
+                                   (192, 192, 192, 192, 192), (192,)])])  # mixed_6e
+
+seq2 = Sequential([Inceptionv3_b4([(192, 320), (192, 192, 192, 192)]),  # mixed_7a
                    Inceptionv3_b5([(320,), (384, 384, 384),
                                    (448, 384, 384, 384), (192,)]),  # mixed_7b
                    Inceptionv3_b5([(320,), (384, 384, 384),
@@ -390,15 +388,30 @@ seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2,
                    Affine(axes=ax.Y, weight_init=XavierInit(),
                           bias_init=bias_init, activation=Softmax())])
 
+# Auxiliary classifier
+seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'), 
+                      Convolution((1, 1, 128), activation=Rectlin(),
+                               bias_init=bias_init, filter_init=XavierInit()),
+                      Convolution((5, 5, 768), padding=0, activation=Rectlin(),
+                               bias_init=bias_init, filter_init=XavierInit()),
+                      Convolution((1, 1, 1000), activation=Softmax(),
+                               bias_init=bias_init, filter_init=XavierInit(), axes=ax.Y)])
+                      #Affine(activation=Softmax(), bias_init=bias_init, weight_init=XavierInit(), axes=ax.Y)])
+                      
+
 lr_schedule = {'name': 'schedule', 'base_lr': 0.01,
                'gamma': (1 / 250.)**(1 / 3.),
                'schedule': [22, 44, 65]}
 
 optimizer = GradientDescentMomentum(lr_schedule, 0.0, wdecay=0.0005,
                                     iteration=inputs['iteration'])
-train_prob = seq1(inputs['image'])
-train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
-batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+train_prob_main = seq2(seq1(inputs['image']))
+train_loss_main = ng.cross_entropy_multi(train_prob_main, ng.one_hot(inputs['label'], axis=ax.Y))
+y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)
+train_prob_aux = ng.cast_role(seq_aux(seq1(inputs['image']))[:,0,0,0,:], axes=y_onehot.axes)
+
+train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot) 
+batch_cost = ng.sequential([optimizer(train_loss_main + train_loss_aux), ng.mean(train_loss_main, out_axes=())])
 train_computation = ng.computation(batch_cost, 'all')
 
 with closing(ngt.make_transformer()) as transformer:
