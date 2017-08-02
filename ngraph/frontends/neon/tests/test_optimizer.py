@@ -409,47 +409,6 @@ def test_learning_policy_schedule(drop_factor):
             ng.testing.assert_allclose(baseline_value, reference_value, rtol=1e-5)
 
 
-@pytest.mark.parametrize("w_clip", [0.001, 0.01, 0.1, 1])
-@pytest.mark.parametrize("optimizer", optimizer_list)
-def test_weight_clipping(w_clip, optimizer):
-    opt_ng = optimizer(0.1, weight_clip_value=w_clip)
-    if isinstance(opt_ng, Adam):
-        pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
-
-    # Set up data placeholders
-    C = ng.make_axis(20)
-    N = ng.make_axis(32, name='N')
-
-    data = ng.placeholder([C, N])
-    target = ng.placeholder([N])
-
-    # params to be updated using optimizer to be tested
-    # make sure initial values are higher than clip values
-    np_W = 10 * w_clip * (2 * np.random.rand(C.length) - 1)
-    W = ng.variable([C], initial_value=np_W)
-
-    # double check generated initial W value
-    assert np.max(np_W) > w_clip
-    assert np.min(np_W) < -w_clip
-
-    # Set up op graph
-    cost = ng.sum(target - ng.dot(W, data), out_axis=())
-
-    updated_weights = ng.sequential([opt_ng(cost), W])
-
-    epsilon = w_clip * 1e-3
-    # Set up the computation and run the "train" loop
-    with ExecutorFactory() as ex:
-        opt_ng_comp = ex.transformer.computation(updated_weights, data, target)
-        mock_dataset = data_generator(20, C.length, N.length)
-
-        for x, y in mock_dataset:
-            ng_W = opt_ng_comp(x, y)  # updated weights for ngraph optimizer
-
-            assert np.max(ng_W) < w_clip + epsilon
-            assert np.min(ng_W) > -w_clip - epsilon
-
-
 if __name__ == '__main__':
     test_rmsprop(0.1, 0.95, 1e-6)
     test_gdm(0.1, 0.1, 0.1, False)

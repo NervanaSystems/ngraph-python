@@ -42,7 +42,9 @@ from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
 pytestmark = [pytest.mark.transformer_dependent,
-              pytest.config.flex_disabled(reason="#1955 - LSTM is not yet supported with Flex")]
+              pytest.config.flex_disabled(reason="#1955 - LSTM is not yet supported with Flex"),
+              pytest.config.argon_disabled]
+
 rng = RandomTensorGenerator()
 
 delta = 1e-3

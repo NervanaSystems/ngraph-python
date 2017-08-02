@@ -24,7 +24,7 @@ import pytest
 
 pytestmark = [pytest.mark.transformer_dependent("module"),
               pytest.config.flex_disabled(reason="#1898 no CTCKernel for Flex"),
-              pytest.config.argon_disabled(reason="Argon Transformer error - TODO triage)")]
+              pytest.config.argon_disabled(scope="module")]
 
 rng = RandomTensorGenerator(0, np.float32)
 

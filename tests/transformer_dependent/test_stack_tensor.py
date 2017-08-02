@@ -24,7 +24,7 @@ rtol = atol = 1e-2
 
 
 # Flex - Allowed to fail until PR2 - ref: 6714cc5
-@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 def test_stack():
     W = ng.make_axis(length=4)

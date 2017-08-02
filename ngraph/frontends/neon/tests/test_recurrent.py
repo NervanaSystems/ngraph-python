@@ -171,7 +171,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 
 
 @pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
-@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
@@ -244,7 +244,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size, ret
 
 
 @pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
-@pytest.config.argon_disabled(reason="#2219 -  ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
