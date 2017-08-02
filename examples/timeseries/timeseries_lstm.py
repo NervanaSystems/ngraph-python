@@ -80,8 +80,8 @@ def plot_inference(predictions, predict_seq, gt_data, time_points):
     """
     if(predict_seq is False):
         # Flatten the predictions
-        # predictions[0][0] is (output_feature_dim, batch_size)
-        preds = predictions[0][0]
+        # predictions[0] is (output_feature_dim, batch_size)
+        preds = predictions[0]
         for i in range(1, len(predictions)):
             preds = np.concatenate((preds, predictions[i][0]), axis=1)
 
@@ -90,10 +90,10 @@ def plot_inference(predictions, predict_seq, gt_data, time_points):
 
     else:
         # Flatten the predictions
-        # predictions[0][0] is (output_feature_dim, seq_len, batch_size)
-        preds = predictions[0][0]
+        # predictions[0] is (output_feature_dim, seq_len, batch_size)
+        preds = predictions[0]
         for i in range(1, len(predictions)):
-            preds = np.concatenate((preds, predictions[i][0]), axis=2)
+            preds = np.concatenate((preds, predictions[i]), axis=2)
 
         # Reshape the prediction axes to batch_axis (samples), time_axis, feature_axis
         preds = np.swapaxes(preds, 0, 2)
@@ -204,7 +204,7 @@ def generate_sequence(gt_data, time_points, eval_function, predict_seq,
     for tp in range(no_gen_time_points):
         axx = {inputs['X']: input_batch}
         # Get the prediction using seq_len past samples
-        result = eval_function(feed_dict=axx)[0]
+        result = eval_function(feed_dict=axx)
 
         if(predict_seq is False):
             # result is of size (output_dim, batch_size)
@@ -382,8 +382,7 @@ eval_outputs = dict(l2_loss=eval_loss)
 
 # Define computations
 print('Start training')
-pdb.set_trace()
-eval_computation = ng.computation([inference_prob], "all")
+eval_computation = ng.computation(inference_prob, "all")
 with closing(ngt.make_transformer()) as transformer:
     # transformer = ngt.make_transformer()
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
@@ -405,7 +404,6 @@ with closing(ngt.make_transformer()) as transformer:
     # Train the network
     loop_train(train_set, train_computation, cbs)
 
-    pdb.set_trace()
     # Get predictions for the test set
     predictions = loop_eval(test_set, eval_function)
 
