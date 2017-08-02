@@ -144,7 +144,7 @@ def bn_params(request):
                 init_beta=request.param[1])
 
 
-@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
+@pytest.config.flex_disabled(reason="#1975 BatchNorm not yet supported - Results mismatch")
 def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
     """This checks that that we are doing batch norm across a feature make_axis
     and properly tracking the side effect variables
@@ -176,15 +176,12 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
             out = fprop_function(x)
             gm, gv = stats_function()
 
-            assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
+            ng.testing.assert_allclose(out, out_ref, rtol=rtol, atol=atol)
+            ng.testing.assert_allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
+            ng.testing.assert_allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
-    if input_placeholder._axes.lengths == (32, 32):
-        pytest.config.flex_skip_now("Results mismatch - too strict tolerance (rtol, atol)")
-
     layer = BatchNorm(**bn_params)
     fprop = layer(input_placeholder)
 
@@ -208,12 +205,12 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
         # Compute ngraph bprop
         dx, dgamma, dbeta = bprop_function(x, delta)
 
-        assert ng.testing.allclose(dx, dx_ref, rtol=rtol, atol=atol)
-        assert ng.testing.allclose(dgamma, dgamma_ref, rtol=rtol, atol=atol)
-        assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(dx, dx_ref, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(dgamma, dgamma_ref, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(dbeta, dbeta_ref, rtol=rtol, atol=atol)
 
 
-@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
+@pytest.config.flex_disabled(reason="#1975 BatchNorm not yet supported - Results mismatch")
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
@@ -265,12 +262,12 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
             out = fprop_function(input_value)
             gmean, gvar = stats_function()
 
-            assert ng.testing.allclose(out, ref, rtol=rtol, atol=recurrent_atol)
-            assert ng.testing.allclose(gmean, bn_params['gmean'], rtol=rtol, atol=recurrent_atol)
-            assert ng.testing.allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
+            ng.testing.assert_allclose(out, ref, rtol=rtol, atol=recurrent_atol)
+            ng.testing.assert_allclose(gmean, bn_params['gmean'], rtol=rtol, atol=recurrent_atol)
+            ng.testing.assert_allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
 
 
-@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
+@pytest.config.flex_disabled(reason="#1975 BatchNorm not yet supported - Results mismatch")
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
@@ -342,6 +339,6 @@ def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size,
         # Compute ngraph bprop
         dx, dgamma, dbeta = bprop_function(input_value, delta)
 
-        assert ng.testing.allclose(dx, dx_ref, rtol=rtol, atol=recurrent_atol)
-        assert ng.testing.allclose(dgamma, dgamma_ref, rtol=rtol, atol=recurrent_atol)
-        assert ng.testing.allclose(dbeta, dbeta_ref, rtol=rtol, atol=recurrent_atol)
+        ng.testing.assert_allclose(dx, dx_ref, rtol=rtol, atol=recurrent_atol)
+        ng.testing.assert_allclose(dgamma, dgamma_ref, rtol=rtol, atol=recurrent_atol)
+        ng.testing.assert_allclose(dbeta, dbeta_ref, rtol=rtol, atol=recurrent_atol)

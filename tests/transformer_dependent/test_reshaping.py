@@ -90,7 +90,7 @@ def test_expand_dims(transformer_factory):
                     # Test backpropagation
                     numeric_deriv = num_deriv_fun(tensor_np)
                     sym_deriv = sym_deriv_fun(tensor_np)
-                    assert ng.testing.allclose(
+                    ng.testing.assert_allclose(
                         numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                     )
 
@@ -165,7 +165,7 @@ def test_slice(transformer_factory):
             numeric_deriv = num_deriv_fun(tensor_np)
             sym_deriv = sym_deriv_fun(tensor_np)
 
-            assert ng.testing.allclose(
+            ng.testing.assert_allclose(
                 numeric_deriv, sym_deriv, rtol=rtol, atol=atol
             )
 
@@ -185,7 +185,7 @@ def test_reverse_slice(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.config.flex_disabled(reason="There is no TensorDescription for this flex entry")
+@pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
 def test_multiple_slices(transformer_factory):
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
@@ -213,22 +213,21 @@ def test_multiple_slices(transformer_factory):
         x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
         y1_val = y1_fun(x_np)
         y1_np = np.array([23, 46, 69])
-        assert ng.testing.allclose(y1_val, y1_np)
+        ng.testing.assert_allclose(y1_val, y1_np)
         y2_val = y2_fun(x_np)
         y2_np = np.array([27, 54, 81])
-        assert ng.testing.allclose(y2_val, y2_np)
+        ng.testing.assert_allclose(y2_val, y2_np)
 
         f1_num = num_deriv_fun1(x_np)
         f1_sym = sym_deriv_fun1(x_np)
-        assert ng.testing.allclose(f1_num, f1_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(f1_num, f1_sym, rtol=rtol, atol=atol)
 
         f2_num = num_deriv_fun2(x_np)
         f2_sym = sym_deriv_fun2(x_np)
-        assert ng.testing.allclose(f2_num, f2_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(f2_num, f2_sym, rtol=rtol, atol=atol)
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.config.flex_disabled(reason="Placeholders must be supplied - deriv problem?")
 def test_padding(transformer_factory):
     """TODO."""
     C = ng.make_axis()
@@ -320,11 +319,11 @@ def test_cast_axes(transformer_factory):
         x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
         y_fun_np = np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
         y_fun_ng = y_fun(x_np)
-        assert ng.testing.allclose(y_fun_ng, y_fun_np)
+        ng.testing.assert_allclose(y_fun_ng, y_fun_np)
 
         deriv_num = num_deriv_fun(x_np)
         deriv_sym = sym_deriv_fun(x_np)
-        assert ng.testing.allclose(deriv_num, deriv_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(deriv_num, deriv_sym, rtol=rtol, atol=atol)
 
 
 def test_shuffled_deriv(transformer_factory):
