@@ -19,6 +19,7 @@ from ngraph.testing import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
 
+
 def test_read_state(transformer_factory):
     """
     This just reads back a tensor. No code is generated.
