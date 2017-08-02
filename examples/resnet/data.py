@@ -71,9 +71,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0):
                         "width": 32}
         label_config = {"type": "label",
                         "binary": False}
-        augmentation = {"type": "image",
-                        "scale": [0.8, 0.8],
-                        "center": False,
+        augmentation = {"type": "image",                       
+			"padding":4,
                         "flip_enable": True}
 
         return {'manifest_filename': manifest_file,

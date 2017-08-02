@@ -36,7 +36,7 @@ def mean_subtract(x):
 
 #Returns dict of convolution layer parameters
 def conv_params(fil_size, num_fils, strides=1,en_relu=True, en_batchnorm=True):
-   return dict(fshape=(fil_size,fil_size,num_fils),
+    return dict(fshape=(fil_size,fil_size,num_fils),
                 strides=strides,
                 padding=(1 if fil_size > 1 else 0),
                 activation=(Rectlin() if en_relu else None),
@@ -127,7 +127,7 @@ def loop_eval(dataset, computation, metric_names):
     dataset._dataloader.reset()
     all_results = None
     for data in dataset:
-
+        #dataset._dataloader.reset()
         feed_dict = {input_ph[k]: data[k] for k in data.keys()}
         results = computation(feed_dict=feed_dict)
         if all_results is None:
@@ -138,7 +138,6 @@ def loop_eval(dataset, computation, metric_names):
 
     reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()}
     return reduced_results
-
 
 if __name__ == "__main__":
     #Command Line Parser
