@@ -606,9 +606,7 @@ class ExOpBlock(ExecutionGraphElt):
         # Doubly linked loop, with self as termination
         self.prev_exop = self
         self.next_exop = self
-        # All exops in the block
-        self.all_exops = set()
-        # All ops in the block
+        # All ops handled by the block.
         self.all_ops = set()
 
         self.root_set = OrderedSet()
@@ -675,27 +673,36 @@ class ExOpBlock(ExecutionGraphElt):
             after_exop = self.prev_exop
 
         # Get computation graph ops that are already inserted.
-        # This assumes that we aren't adding an op before its dependents
-        computed_ops = self.all_ops
-
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(OrderedSet)
         ready = OrderedSet()
 
-        available.update(roots)
+        # Some ops in roots may have been replaced by other ops; if so, they
+        # are in the graph already, although maybe not in this block. Get the
+        # op from the exop so we have the current version.
+        for op in roots:
+            exop = self.computation_decl.get_exop(op, None)
+            if exop is not None:
+                op = exop.op
+            available.add(op)
+
         while available:
             op = available.pop()
-
-            if op in counts or op in computed_ops:
+            if op in counts or op in self.all_ops:
                 continue
 
-            children = OrderedSet((child for child in op.all_deps if child not in computed_ops))
-            if children:
-                counts[op] = len(children)
-                for child in children:
+            nchildren = 0
+            for child in op.all_deps:
+                exop = self.computation_decl.get_exop(child, None)
+                if exop is not None:
+                    child = exop.op
+                if child not in self.all_ops:
                     parents[child].add(op)
-                available.update(children)
+                    available.add(child)
+                    nchildren += 1
+            if nchildren > 0:
+                counts[op] = nchildren
             else:
                 ready.add(op)
 
@@ -763,7 +770,6 @@ class ExOpBlock(ExecutionGraphElt):
         before_exop.prev_exop = exop
         exop.next_exop = before_exop
 
-        self.all_exops.add(exop)
         self.all_ops.add(exop.op)
 
         return exop
@@ -781,7 +787,6 @@ class ExOpBlock(ExecutionGraphElt):
         exop.next_exop.prev_exop = exop.prev_exop
         for input_decl in exop.input_decls:
             input_decl.source_output_decl.user_input_decls.remove(input_decl)
-        self.all_exops.remove(exop)
         self.all_ops.remove(exop.op)
 
     def replace_op(self, old_op, new_op):
