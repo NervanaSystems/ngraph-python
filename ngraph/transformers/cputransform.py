@@ -872,10 +872,11 @@ class CPUTransformer(ExecutionGraphTransformer):
             LivenessPass(),
             MemLayoutPass()
         ]
-        # DumpGraphPass(filename=graph_name+'.txt').do_pass(computation_decl)
+        # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
+        # self.graph_passes += [DumpGraphPass()]
 
-        # VisualizeMemPass(filename=mem_name+'.html').do_pass(computation_decl)
-        # ExVizPass(view=False, filename=graph_name).do_pass(computation_decl)
+        # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
+        # self.graph_passes += [VisualizeMemPass()]
 
     def finish_allocate_computation(self, computation):
         self.exop_codegen.endl(2)
