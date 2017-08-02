@@ -60,7 +60,7 @@ from ngraph.frontends.neon import make_bound_computation, make_default_callbacks
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import ArrayIterator
 import timeseries
-
+import pdb
 
 def loop_eval(dataset, computation):
     """
@@ -265,12 +265,15 @@ except ImportError:
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--predict_seq', default=False, dest='predict_seq', action='store_true',
                     help='If given, seq_len future timepoints are predicted')
-parser.add_argument('--look_ahead', type=float,
+parser.add_argument('--look_ahead', type=int,
                     help="Number of time steps to start predicting from",
                     default=1)
-parser.add_argument('--seq_len', type=float,
+parser.add_argument('--seq_len', type=int,
                     help="Number of time points in each input sequence",
                     default=32)
+parser.add_argument('--epochs', type=int,
+                    help="Number of epochs",
+                    default=500)
 parser.set_defaults(num_iterations=12000)
 args = parser.parse_args()
 
@@ -306,7 +309,7 @@ data.train['y']['data']: will be the outputs (labels) for training data.
 data.test follows a similar model
 '''
 # Total epochs of training
-no_epochs = 500
+no_epochs = args.epochs 
 # How many cycles of Lissajous curve to take
 no_cycles = 2000
 # How many points per cycle to take
@@ -379,6 +382,7 @@ eval_outputs = dict(l2_loss=eval_loss)
 
 # Define computations
 print('Start training')
+pdb.set_trace()
 eval_computation = ng.computation([inference_prob], "all")
 with closing(ngt.make_transformer()) as transformer:
     # transformer = ngt.make_transformer()
@@ -401,6 +405,7 @@ with closing(ngt.make_transformer()) as transformer:
     # Train the network
     loop_train(train_set, train_computation, cbs)
 
+    pdb.set_trace()
     # Get predictions for the test set
     predictions = loop_eval(test_set, eval_function)
 
