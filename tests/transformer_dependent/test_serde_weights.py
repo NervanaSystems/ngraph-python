@@ -1,15 +1,16 @@
+from __future__ import print_function
+
+import pytest
 import six
 from six import BytesIO
-from contextlib import closing
-
 from google.protobuf.json_format import Parse
 
 import numpy as np
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.op_graph.serde import ops_pb2
 from ngraph.op_graph.serde import serde_weights
 from ngraph.op_graph.serde import serde
+from ngraph.testing import executor, ExecutorFactory
 
 
 def assign_ops(ops, values):
@@ -50,6 +51,8 @@ def test_serialize_and_deserialize_multi_np():
         assert (de_values[k] == v).all()
 
 
+@pytest.config.cpu_enabled_only
+@pytest.mark.transformer_dependent
 def test_extract_op(transformer_factory):
     # set up an op and Assign a value to it so we can read it out
     axes = ng.make_axes([
@@ -60,13 +63,17 @@ def test_extract_op(transformer_factory):
     assign_op = ng.AssignOp(x_op, 1)
 
     # extract values out of it and make sure they match expected results
-    with closing(ngt.make_transformer()) as t:
-        comp_assignment = t.computation(assign_op)
-        comp_assignment()
+    with executor(assign_op) as ex:
+        t = ex.transformer
+        ex()
         x_out = serde_weights.extract_op(t, x_op)
+        print("x_out:\n", x_out)
+        print("np.ones(axes.lengths):\n", np.ones(axes.lengths))
     assert (x_out == np.ones(axes.lengths)).all()
 
 
+@pytest.config.cpu_enabled_only
+@pytest.mark.transformer_dependent
 def test_extract_many_ops(transformer_factory):
     """
     Create NUM_OPS, fill them with 0, 1, 2, ... then check that
@@ -82,9 +89,10 @@ def test_extract_many_ops(transformer_factory):
     variable_ops = [ng.variable(axes) for _ in range(NUM_OPS)]
     assign_sequential = assign_ops(variable_ops, range(NUM_OPS))
 
-    with closing(ngt.make_transformer()) as t:
+    with executor(assign_sequential) as ex:
+        t = ex.transformer
         # Set values manually
-        t.computation(assign_sequential)()
+        ex()
 
         # extract values out of it and make sure they match expected results
         weights = serde_weights.extract_ops(t, variable_ops)
@@ -93,6 +101,8 @@ def test_extract_many_ops(transformer_factory):
         np.testing.assert_allclose(weights[variable_op.uuid.bytes], i)
 
 
+@pytest.config.cpu_enabled_only
+@pytest.mark.transformer_dependent
 def test_set_op_value(transformer_factory):
     """
     set up a variable, then use serde_weights.set_op_value to inject a value
@@ -104,7 +114,8 @@ def test_set_op_value(transformer_factory):
     ])
     x_op = ng.variable(axes)
 
-    with closing(ngt.make_transformer()) as t:
+    with ExecutorFactory() as ex:
+        t = ex.transformer
         value = np.ones(axes.lengths)
         serde_weights.set_op_value(t, x_op, value)
 
@@ -113,6 +124,8 @@ def test_set_op_value(transformer_factory):
     assert (x_out == value).all()
 
 
+@pytest.config.cpu_enabled_only
+@pytest.mark.transformer_dependent
 def test_set_op_values(transformer_factory):
     NUM_OPS = 3
 
@@ -122,9 +135,9 @@ def test_set_op_values(transformer_factory):
         ng.make_axis(name='B', length=3),
     ])
     variable_ops = [ng.variable(axes) for i in range(NUM_OPS)]
-
     values = [np.ones(axes.lengths) * i for i in range(NUM_OPS)]
-    with closing(ngt.make_transformer()) as t:
+    with ExecutorFactory() as ex:
+        t = ex.transformer
         serde_weights.set_op_values(
             t,
             variable_ops, {
@@ -132,7 +145,6 @@ def test_set_op_values(transformer_factory):
                 for op, value in zip(variable_ops, values)
             }
         )
-
         # extract values out of it and make sure they match expected results
         funcs = [t.computation(op) for op in variable_ops]
         op_values = [func() for func in funcs]
@@ -150,8 +162,7 @@ def test_json_dumps_manifest():
 
     js = serde_weights.json_dumps_manifest({'x': x})
 
-    # now deserialize js formatted manifest and make sure it has the right data
-    # in it
+    # now deserialize js formatted manifest and make sure it has the right data in it
     manifest = ops_pb2.TensorManifest()
     Parse(js, manifest)
 
@@ -162,6 +173,8 @@ def test_json_dumps_manifest():
     assert t.info.shape == [2, 3]
 
 
+@pytest.config.cpu_enabled_only
+@pytest.mark.transformer_dependent
 def test_round_trip(transformer_factory):
     # set up an op and Assign a value to it so we can read it out
     axes = ng.make_axes([
@@ -172,9 +185,11 @@ def test_round_trip(transformer_factory):
 
     assign_op = ng.AssignOp(x_op, 1)
 
-    with closing(ngt.make_transformer()) as t:
+    with executor(assign_op) as ex:
+        t = ex.transformer
+
         # Set initial value
-        t.computation(assign_op)()
+        ex()
 
         # Test value
         np.testing.assert_allclose(serde_weights.extract_op(t, x_op), 1)

@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
-from contextlib import closing
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon import Deconvolution, ConstantInit
+from ngraph.testing import executor
+
+pytestmark = [pytest.mark.transformer_dependent, pytest.config.flex_disabled]
 
 
 # TODO: add other configurations?
@@ -35,14 +37,12 @@ def test_deconv(transformer_factory):
 
     output = deconv(image)
 
-    with closing(ngt.make_transformer()) as transformer:
-        comp = transformer.computation(output, image)
-
+    with executor(output, image) as ex:
         input_val = np.zeros(image_shape + (N.length, ), dtype=float)
         input_val[0, 0, 0, 0, 0] = 1
         input_val[0, 0, 5, 5, 0] = 1
         input_val[0, 0, 7, 7, 0] = 1
-        result = comp(input_val)
+        result = ex(input_val)
         feature_map = np.squeeze(result)
 
         assert (feature_map[:5, :5] == filter_val_nz).all()
