@@ -606,6 +606,10 @@ class ExOpBlock(ExecutionGraphElt):
         # Doubly linked loop, with self as termination
         self.prev_exop = self
         self.next_exop = self
+        # All exops in the block
+        self.all_exops = set()
+        # All ops in the block
+        self.all_ops = set()
 
         self.root_set = OrderedSet()
 
@@ -672,7 +676,7 @@ class ExOpBlock(ExecutionGraphElt):
 
         # Get computation graph ops that are already inserted.
         # This assumes that we aren't adding an op before its dependents
-        computed_ops = self.computation_decl.ops
+        computed_ops = self.all_ops
 
         available = OrderedSet()
         counts = dict()
@@ -759,6 +763,9 @@ class ExOpBlock(ExecutionGraphElt):
         before_exop.prev_exop = exop
         exop.next_exop = before_exop
 
+        self.all_exops.add(exop)
+        self.all_ops.add(exop.op)
+
         return exop
 
     def move_exop_to_after_exop(self, exop, after_exop):
@@ -774,6 +781,8 @@ class ExOpBlock(ExecutionGraphElt):
         exop.next_exop.prev_exop = exop.prev_exop
         for input_decl in exop.input_decls:
             input_decl.source_output_decl.user_input_decls.remove(input_decl)
+        self.all_exops.remove(exop)
+        self.all_ops.remove(exop.op)
 
     def replace_op(self, old_op, new_op):
         # TODO Replacing an op can remove ops. For example, (x + 2) * 1 -> x + 2
@@ -789,12 +798,12 @@ class ExOpBlock(ExecutionGraphElt):
             self.remove_exop(old_exop)
             self.add_ops([new_op], after_exop=after_exop)
             return
+        self.remove_exop(old_exop)
         new_exop = self.computation_decl.get_exop(new_op, None)
         if new_exop is None:
             self.add_ops([new_op], after_exop=old_exop.prev_exop)
             new_exop = self.computation_decl.get_exop(new_op, None)
         self.replace_users(old_exop, new_exop)
-        self.remove_exop(old_exop)
         if old_exop in self.root_set:
             self.root_set.remove(old_exop)
             self.root_set.add(new_exop)
