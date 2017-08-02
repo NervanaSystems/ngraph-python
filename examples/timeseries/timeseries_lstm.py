@@ -51,6 +51,7 @@ In addition, generates future values of the sequence based on an initial seed
 from __future__ import division, print_function
 from builtins import range
 from contextlib import closing
+import copy
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Sequential, LSTM, Affine
@@ -60,7 +61,7 @@ from ngraph.frontends.neon import make_bound_computation, make_default_callbacks
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import ArrayIterator
 import timeseries
-import pdb
+
 
 def loop_eval(dataset, computation):
     """
@@ -70,7 +71,7 @@ def loop_eval(dataset, computation):
     results = []
     for data in dataset:
         feed_dict = {inputs[k]: data[k] for k in data.keys() if k != 'iteration'}
-        results.append(computation(feed_dict=feed_dict))
+        results.append(copy.copy(computation(feed_dict=feed_dict)))
     return results
 
 
@@ -273,8 +274,8 @@ parser.add_argument('--seq_len', type=int,
                     default=32)
 parser.add_argument('--epochs', type=int,
                     help="Number of epochs",
-                    default=500)
-parser.set_defaults(num_iterations=12000)
+                    default=1000)
+parser.set_defaults()
 args = parser.parse_args()
 
 # Feature dimension of the input (for Lissajous curve, this is 2)
@@ -309,7 +310,7 @@ data.train['y']['data']: will be the outputs (labels) for training data.
 data.test follows a similar model
 '''
 # Total epochs of training
-no_epochs = args.epochs 
+no_epochs = args.epochs
 # How many cycles of Lissajous curve to take
 no_cycles = 2000
 # How many points per cycle to take
