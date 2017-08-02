@@ -613,9 +613,7 @@ class ExOpBlock(ExecutionGraphElt):
         # Doubly linked loop, with self as termination
         self.prev_exop = self
         self.next_exop = self
-        # All exops in the block
-        self.all_exops = set()
-        # All ops in the block
+        # All ops handled by the block.
         self.all_ops = set()
 
         self.root_set = OrderedSet()
@@ -680,10 +678,6 @@ class ExOpBlock(ExecutionGraphElt):
         """
         if after_exop is None:
             after_exop = self.prev_exop
-
-        # Get computation graph ops that are already inserted.
-        # This assumes that we aren't adding an op before its dependents
-        computed_ops = self.all_ops
 
         # Get computation graph ops that are already inserted.
         available = OrderedSet()
@@ -783,7 +777,6 @@ class ExOpBlock(ExecutionGraphElt):
         before_exop.prev_exop = exop
         exop.next_exop = before_exop
 
-        self.all_exops.add(exop)
         self.all_ops.add(exop.op)
 
         return exop
@@ -801,7 +794,6 @@ class ExOpBlock(ExecutionGraphElt):
         exop.next_exop.prev_exop = exop.prev_exop
         for input_decl in exop.input_decls:
             input_decl.source_output_decl.user_input_decls.remove(input_decl)
-        self.all_exops.remove(exop)
         self.all_ops.remove(exop.op)
 
     def replace_op(self, old_op, new_op):
