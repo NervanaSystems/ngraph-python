@@ -792,16 +792,15 @@ class ExOpBlock(ExecutionGraphElt):
         # * dropping out means a change to sequencing.
         new_op = as_op(new_op)
         old_exop = self.computation_decl.get_exop(old_op)
+        after_exop = old_exop.prev_exop
+        self.remove_exop(old_exop)
         if old_op is new_op:
             # Hetr bashes some ops. See MutateInsteadOfCopyWithNewArgsMixin, issue #1410
-            after_exop = old_exop.prev_exop
-            self.remove_exop(old_exop)
             self.add_ops([new_op], after_exop=after_exop)
             return
-        self.remove_exop(old_exop)
         new_exop = self.computation_decl.get_exop(new_op, None)
         if new_exop is None:
-            self.add_ops([new_op], after_exop=old_exop.prev_exop)
+            self.add_ops([new_op], after_exop=after_exop)
             new_exop = self.computation_decl.get_exop(new_op, None)
         self.replace_users(old_exop, new_exop)
         if old_exop in self.root_set:
@@ -830,9 +829,10 @@ class ExOpBlock(ExecutionGraphElt):
         old_output_decl.exop.output_decls[old_output_decl.pos] = new_output_decl
 
     def replace_exop(self, old_exop, new_exop):
-        self.add_exop(new_exop, old_exop.prev_exop)
-        self.replace_users(old_exop, new_exop)
+        prev_exop = old_exop.prev_exop
         self.remove_exop(old_exop)
+        self.add_exop(new_exop, prev_exop)
+        self.replace_users(old_exop, new_exop)
 
     def merge_exop(self, old_exop, new_exop):
         """
