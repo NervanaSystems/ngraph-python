@@ -1,4 +1,3 @@
-pillow==4.0.0
 cmake 
 
 # aeon (for examples using aeon only without neon)

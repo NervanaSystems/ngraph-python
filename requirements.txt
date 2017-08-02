@@ -37,3 +37,4 @@ cffi>=1.0
 
 # neon frontend
 parsel==1.2.0
+pillow==4.0.0
