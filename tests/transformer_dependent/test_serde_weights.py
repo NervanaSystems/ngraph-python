@@ -75,9 +75,9 @@ def test_extract_op(transformer_factory):
     assign_op = ng.AssignOp(x_op, 1)
 
     # extract values out of it and make sure they match expected results
-    with executor(assign_op) as ex:
-        t = ex.transformer
-        ex()
+    with executor(assign_op) as comp_assignment:
+        t = comp_assignment.transformer
+        comp_assignment()
         x_out = serde_weights.extract_op(t, x_op)
     assert (x_out == np.ones(axes.lengths)).all()
 
@@ -99,10 +99,10 @@ def test_extract_many_ops(transformer_factory):
     variable_ops = [ng.variable(axes) for _ in range(NUM_OPS)]
     assign_sequential = assign_ops(variable_ops, range(NUM_OPS))
 
-    with executor(assign_sequential) as ex:
-        t = ex.transformer
+    with executor(assign_sequential) as assign_computation:
+        t = assign_computation.transformer
         # Set values manually
-        ex()
+        assign_computation()
 
         # extract values out of it and make sure they match expected results
         weights = serde_weights.extract_ops(t, variable_ops)
@@ -195,11 +195,11 @@ def test_round_trip(transformer_factory):
 
     assign_op = ng.AssignOp(x_op, 1)
 
-    with executor(assign_op) as ex:
-        t = ex.transformer
+    with executor(assign_op) as assign_computation:
+        t = assign_computation.transformer
 
         # Set initial value
-        ex()
+        assign_computation()
 
         # Test value
         np.testing.assert_allclose(serde_weights.extract_op(t, x_op), 1)

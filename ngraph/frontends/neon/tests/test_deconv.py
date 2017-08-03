@@ -51,12 +51,12 @@ def test_deconv(transformer_factory):
 
     output = deconv(image)
 
-    with executor(output, image) as ex:
+    with executor(output, image) as comp:
         input_val = np.zeros(image_shape + (N.length, ), dtype=float)
         input_val[0, 0, 0, 0, 0] = 1
         input_val[0, 0, 5, 5, 0] = 1
         input_val[0, 0, 7, 7, 0] = 1
-        result = ex(input_val)
+        result = comp(input_val)
         feature_map = np.squeeze(result)
 
         assert (feature_map[:5, :5] == filter_val_nz).all()
