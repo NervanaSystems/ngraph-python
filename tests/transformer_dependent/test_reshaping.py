@@ -290,9 +290,7 @@ def test_padding(transformer_factory):
             numeric_deriv = numeric_deriv_fun(tensor_np)
             sym_deriv = sym_deriv_fun(tensor_np)
 
-            assert ng.testing.allclose(
-                numeric_deriv, sym_deriv, rtol=rtol, atol=atol
-            )
+            ng.testing.assert_allclose(numeric_deriv, sym_deriv, rtol=rtol, atol=atol)
 
 
 @pytest.config.argon_disabled  # TODO triage

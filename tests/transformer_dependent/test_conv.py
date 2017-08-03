@@ -263,6 +263,7 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
 
         ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=0.01)
 
+
 @pytest.config.flex_disabled(reason="Unknown problem yet")
 @pytest.config.argon_disabled  # WIP debugging
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
