@@ -63,7 +63,7 @@ def test_serialize_and_deserialize_multi_np():
         assert (de_values[k] == v).all()
 
 
-@pytest.config.cpu_enabled_only
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
 def test_extract_op(transformer_factory):
     # set up an op and Assign a value to it so we can read it out
@@ -82,7 +82,7 @@ def test_extract_op(transformer_factory):
     assert (x_out == np.ones(axes.lengths)).all()
 
 
-@pytest.config.cpu_enabled_only
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
 def test_extract_many_ops(transformer_factory):
     """
@@ -111,7 +111,7 @@ def test_extract_many_ops(transformer_factory):
         np.testing.assert_allclose(weights[variable_op.uuid.bytes], i)
 
 
-@pytest.config.cpu_enabled_only
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
 def test_set_op_value(transformer_factory):
     """
@@ -134,7 +134,7 @@ def test_set_op_value(transformer_factory):
     assert (x_out == value).all()
 
 
-@pytest.config.cpu_enabled_only
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
 def test_set_op_values(transformer_factory):
     NUM_OPS = 3
@@ -183,7 +183,7 @@ def test_json_dumps_manifest():
     assert t.info.shape == [2, 3]
 
 
-@pytest.config.cpu_enabled_only
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
 def test_round_trip(transformer_factory):
     # set up an op and Assign a value to it so we can read it out

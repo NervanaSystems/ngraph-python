@@ -105,7 +105,7 @@ def test_concatenate(transformer_factory):
         assert ng.testing.allclose(j_val, j_np)
 
 
-@pytest.config.cpu_enabled_only
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 def test_specific_slice_deriv(transformer_factory):
     #
     with ExecutorFactory() as ex:

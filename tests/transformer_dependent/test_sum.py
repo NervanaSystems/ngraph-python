@@ -41,7 +41,7 @@ def extra_axes(request):
     return request.param
 
 
-@pytest.config.flex_disabled
+@pytest.config.flex_skip
 @pytest.mark.transformer_dependent
 def test_sum(transformer_factory, num_units, sequence_length, batch_size):
     """
@@ -50,7 +50,6 @@ def test_sum(transformer_factory, num_units, sequence_length, batch_size):
     """
     shape = (num_units, sequence_length, batch_size)
     np_inp = np.random.uniform(-1, 1, shape)
-
     # Use an identity weight matrix on top of it
     np_w = np.eye(shape[0])
 
@@ -75,8 +74,7 @@ def test_sum(transformer_factory, num_units, sequence_length, batch_size):
     output_axes = ng.make_axes(x.axes[0])
     y = ng.sum(x, out_axes=output_axes)
     np_y = np.sum(np_x, axis=1)
-    if "flexgpu" == transformer_factory.name and shape in [(2, 50, 16), (2, 75, 16)]:
-        pytest.xfail('First case passes for flexgpu')
+
     with executor([y, x]) as f:
         y_val, x_val = f()
 
