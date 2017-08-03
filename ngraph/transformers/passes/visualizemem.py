@@ -49,7 +49,7 @@ class VisualizeMemPass(GraphPass):
             file.write('<body>\n')
             tensors = set()
             temp_max_size = 0
-            for node in computation_decl.exop:
+            for node in computation_decl.exop_block:
                 tensors |= set(node.liveness_live_list)
             for tensor in tensors:
                 if tensor.is_persistent is False:
@@ -58,10 +58,10 @@ class VisualizeMemPass(GraphPass):
             file.write('<table>\n')
             file.write(
                 '<tr><td>Persistent Memory Footprint</td><td align="right">{:,}</td></tr>\n'
-                .format(computation_decl.exop.persistent_size()))
+                .format(computation_decl.exop_block.persistent_size()))
             file.write(
                 '<tr><td>Temporary Memory Footprint</td><td align="right">{:,}</td></tr>\n'
-                .format(computation_decl.exop.memory_footprint()))
+                .format(computation_decl.exop_block.memory_footprint()))
             file.write(
                 '<tr><td>Max temporary Memory Footprint</td><td align="right">{:,}</td></tr>\n'
                 .format(temp_max_size))
@@ -79,7 +79,7 @@ class VisualizeMemPass(GraphPass):
     def find_largest_op(self):
         largest_op = None
         largest_size = 0
-        for i, exop in enumerate(self.computation_decl.exop):
+        for i, exop in enumerate(self.computation_decl.exop_block):
             size = 0
             for tensor in exop.liveness_live_list:
                 size += tensor.size
@@ -106,7 +106,7 @@ class VisualizeMemPass(GraphPass):
             file.write('<th align="right">age</th>')
             file.write('<th align="right">generator weight</th>')
             file.write('</tr>\n')
-            for i, exop in enumerate(self.computation_decl.exop):
+            for i, exop in enumerate(self.computation_decl.exop_block):
                 for tensor in exop.liveness_new_list:
                     age_list[tensor] = i
                     generator_op[tensor] = exop
@@ -136,14 +136,14 @@ class VisualizeMemPass(GraphPass):
         scale = width - offset
         line_spacing = stroke_width * 1.5
         line_count = 0
-        for _ in self.computation_decl.exop:
+        for _ in self.computation_decl.exop_block:
             line_count += 1
         height = line_count * line_spacing + stroke_width
-        memory_footprint = max(1, float(self.computation_decl.exop.memory_footprint()))
+        memory_footprint = max(1, float(self.computation_decl.exop_block.memory_footprint()))
 
         file.write('<svg viewBox="0 0 {} {}">\n'.format(width, height))
         y = 0
-        for i, node in enumerate(self.computation_decl.exop):
+        for i, node in enumerate(self.computation_decl.exop_block):
             usage = float(node.memory_usage())
             footprint = float(node.memory_footprint())
             y += line_spacing

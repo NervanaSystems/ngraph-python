@@ -181,6 +181,42 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
             assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
+@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
+def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params, transformer_factory):
+    """This checks that that we are doing batch norm across multiple axes
+    and properly tracking the side effect variables
+    """
+
+    layer = BatchNorm(**bn_params)
+    fprop = layer(conv_input_placeholder)
+
+    with ExecutorFactory() as ex:
+        # Compute executors
+        fprop_function = ex.executor(fprop, conv_input_placeholder)
+        stats_function = ex.executor([ng.value_of(layer.gmean),
+                                      ng.value_of(layer.gvar)])
+
+        # Initial conditions for tracked variables
+        bn_params['gmean'] = 0.0
+        bn_params['gvar'] = 1.0
+        bn_params['axis'] = (1, 2, 3, )
+        # Test over 2 iterations to make sure values update properly
+        for i in range(2):
+            # Generate data
+            x = rng.uniform(0, 1, conv_input_placeholder.axes)
+
+            # Compute reference fprop and stats
+            batch_norm_reference = BatchNormReference(x, **bn_params)
+            out_ref, bn_params['gmean'], bn_params['gvar'] = batch_norm_reference.fprop
+
+            # Compute ngraph fprop and stats
+            out = fprop_function(x)
+            gm, gv = stats_function()
+            assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
+            assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
+            assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
+
+
 def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
     if input_placeholder._axes.lengths == (32, 32):
         pytest.config.flex_skip_now("Results mismatch - too strict tolerance (rtol, atol)")
