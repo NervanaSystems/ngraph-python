@@ -130,6 +130,8 @@ class TrainCostCallback(Callback):
         elif phase == CallbackPhase.minibatch_post:
             # This is where the training function is actually called
             callback_data['cost/train'][idx] = self.computation(data)['batch_cost']
+        elif phase == CallbackPhase.train_post:
+            transformer.save_output_statistics_file()
 
 
 class RunTimerCallback(Callback):

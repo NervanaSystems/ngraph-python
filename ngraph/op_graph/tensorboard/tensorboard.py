@@ -46,11 +46,7 @@ def ngraph_to_tf_graph_def(graph):
     tf_graph_def = graph_pb2.GraphDef()
     for op in ng_graph_def.ops:
         node_def = tf_graph_def.node.add()
-        if '_ngraph_metadata_neon_layer' in op.attrs:
-            node_def.name = op.attrs['_ngraph_metadata_neon_layer'].scalar.string_val + \
-                '/' + op.name
-        else:
-            node_def.name = op.name
+        node_def.name = op.name
         node_def.op = op.op_type
         if op.name in op_names:
             raise ValueError("Op with name {} exists in duplicate".format(op.name))

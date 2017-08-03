@@ -124,8 +124,8 @@ class Mkldnn(object):
             self.conv_fprop_kernel = \
                 self.mkllib.create_mkldnn_conv_fprop_kernel
             self.conv_fprop_kernel.argtypes = \
-                [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
-                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
+                [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
+                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
                  ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
             self.conv_bprop_kernel = \
                 self.mkllib.create_mkldnn_conv_bprop_data_kernel
@@ -227,16 +227,17 @@ class Mkldnn(object):
             gamma_scale = gamma / np.sqrt(variance + epsilon)[:, None]
             xhat = (inputs - mean) / np.sqrt(variance + epsilon)[:, None]
             m = np.prod([inputs.shape[ii] for ii in axis])
-
             dgamma = np.sum(delta * xhat, **red_args)
             dbeta = np.sum(delta, **red_args)
             dx = gamma_scale * (delta - (xhat * dgamma + dbeta) / m)
             np.copyto(outputs, dx)
 
-    def fprop_conv(self, name, conv_slices, I, F, O):
+    def fprop_conv(self, name, conv_slices, I, F, B, O):
         if (self.enabled and name in self.kernels):
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], F.ctypes.data, 1)
+            if B is not None:
+                self.set_input_tensor(self.kernels[name], B.ctypes.data, 2)
             self.set_output_tensor(self.kernels[name], O.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:

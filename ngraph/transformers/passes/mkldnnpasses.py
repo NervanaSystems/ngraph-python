@@ -335,7 +335,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ConvolutionOp)
-    def visit(self, op, input, filter):
+    def visit(self, op, input, filter, bias=None):
+
         # Only 2D convolution supported in MKLDNN for now
         if (input.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -347,6 +348,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # Assumes (C, D, H, W, N) for convolution axes
         input_shape = get_size_mkl_order(input.axes, [4, 0, 2, 3])
         filter_shape = get_size_mkl_order(filter.axes, [4, 0, 2, 3])
+        bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         pad_d, pad_h, pad_w = itemgetter(
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
@@ -365,6 +367,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             len(output_shape),
             get_ctypes_arg(input_shape),
             get_ctypes_arg(filter_shape),
+            get_ctypes_arg(bias_shape),
             get_ctypes_arg(output_shape),
             get_ctypes_arg(stride),
             get_ctypes_arg(pad),
