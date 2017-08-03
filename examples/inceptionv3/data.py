@@ -64,7 +64,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,
     if(dataset=="cifar10"):
         train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
     elif(dataset=="i1k"):
-        train_manifest,valid_manifest=workdir+"train-index-tabbed.csv",workdir+"val-index-tabbed.csv"
+        train_manifest,valid_manifest=work_dir+"train-index-tabbed.csv",work_dir+"val-index-tabbed.csv"
     else:
         print("Choose dataset cifar10 or i1k")
         exit()
@@ -93,8 +93,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,
             cache_root=get_data_cache_or_nothing("i1k-cache/")
 
             image_config ={"type": "image",
-                            "height": 224,
-                            "width": 224}
+                            "height": 299,
+                            "width": 299}
 
             label_config={"type": "label",
                           "binary": False}
