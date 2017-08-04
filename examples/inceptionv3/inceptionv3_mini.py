@@ -61,71 +61,60 @@ train_set,valid_set=make_aeon_loaders(manifest_dir, args.batch_size,
 inputs=train_set.make_placeholders(include_iteration=True)
 # Input size is 299 x 299 x 3
 # Root branch of the tree
-seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2, batch_norm=True,
+seq1 = Sequential([Convolution((3, 3, 16), padding=0, strides=2, batch_norm=True,
                                activation=Rectlin(), bias_init=bias_init,
                                filter_init=XavierInit()),  # conv2d_1a_3x3
-                   Convolution((3, 3, 32), activation=Rectlin(), padding=0, batch_norm=True,
+                   Convolution((3, 3, 16), activation=Rectlin(), padding=0, batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),  # conv2d_2a_3x3
-                   Convolution((3, 3, 64), activation=Rectlin(), padding=1, batch_norm=True,
+                   Convolution((3, 3, 16), activation=Rectlin(), padding=1, batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),  # conv2d_2b_3x3
                    Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3 
-                   Convolution((1, 1, 80), activation=Rectlin(), batch_norm=True,
+                   Convolution((1, 1, 16), activation=Rectlin(), batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),  # conv2d_3b_1x1
-                   Convolution((3, 3, 192), activation=Rectlin(), padding=1, batch_norm=True,
+                   Convolution((3, 3, 16), activation=Rectlin(), padding=1, batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),  # conv2d_4a_3x3
                    Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
-                   Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (32, )]),  # mixed_5b 
-                   Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5c 
-                   Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5d 
-                   Inceptionv3_b2([(384,), (64, 96, 96)]),  # mixed_6a 
-                   Inceptionv3_b3([(192,), (128, 128, 192),
-                                   (128, 128, 128, 128, 192), (192,)]),  # mixed_6b 
-                   Inceptionv3_b3([(192,), (160, 160, 192),
-                                   (160, 160, 160, 160, 192), (192,)]),  # mixed_6c
-                   Inceptionv3_b3([(192,), (160, 160, 192),
-                                   (160, 160, 160, 160, 192), (192,)]),  # mixed_6d
-                   Inceptionv3_b3([(192,), (192, 192, 192),
-                                   (192, 192, 192, 192, 192), (192,)])])  # mixed_6e
+                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (16, )]),  # mixed_5b 
+                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (16, )]),  # mixed_5c 
+                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (16, )]),  # mixed_5d 
+                   Inceptionv3_b2([(32,), (32, 32, 32)]),  # mixed_6a 
+                   Inceptionv3_b3([(32,), (32, 32, 32),
+                                   (32, 32, 32, 32, 32), (32,)]),  # mixed_6b 
+                   Inceptionv3_b3([(32,), (32, 32, 32),
+                                   (32, 32, 32, 32, 32), (32,)]),  # mixed_6c 
+                   Inceptionv3_b3([(32,), (32, 32, 32),
+                                   (32, 32, 32, 32, 32), (32,)]),  # mixed_6d 
+                   Inceptionv3_b3([(32,), (32, 32, 32),
+                                   (32, 32, 32, 32, 32), (32,)])])  # mixed_6e 
 
 # Branch of main classifier
-seq2 = Sequential([Inceptionv3_b4([(192, 320), (192, 192, 192, 192)]),  # mixed_7a
-                   Inceptionv3_b5([(320,), (384, 384, 384),
-                                   (448, 384, 384, 384), (192,)]),  # mixed_7b
-                   Inceptionv3_b5([(320,), (384, 384, 384),
-                                   (448, 384, 384, 384), (192,)]),  # mixed_7c
+seq2 = Sequential([Inceptionv3_b4([(32, 32), (32, 32, 32, 32)]),  # mixed_7a
+                   Inceptionv3_b5([(32,), (32, 32, 32),
+                                   (32, 32, 32, 32), (32,)]),  # mixed_7b
+                   Inceptionv3_b5([(32,), (32, 32, 32),
+                                   (32, 32, 32, 32), (32,)]),  # mixed_7c
                    Pool2D(fshape=8, padding=0, strides=2, op='avg'),  # Last Avg Pool 
-                   Dropout(keep=0.8),
                    Convolution((1, 1, 1000), activation=Softmax(),
                                bias_init=bias_init, filter_init=XavierInit())])
-                   #Affine(axes=ax.Y, weight_init=XavierInit(),
-                   #       bias_init=bias_init, activation=Softmax())])
 
 # Auxiliary classifier
 seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'), 
-                      Convolution((1, 1, 128), activation=Rectlin(), batch_norm=True,
+                      Convolution((1, 1, 32), activation=Rectlin(), batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),
-                      Convolution((5, 5, 768), padding=0, activation=Rectlin(), batch_norm=True,
+                      Convolution((5, 5, 32), padding=0, activation=Rectlin(), batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),
                       Convolution((1, 1, 1000), activation=Softmax(),
                                bias_init=bias_init, filter_init=XavierInit())])
-                      #Affine(activation=Softmax(), bias_init=bias_init, weight_init=XavierInit(), axes=ax.Y)])
-                      
-
-lr_schedule = {'name': 'schedule', 'base_lr': 0.01,
-               'gamma': (1 / 250.)**(1 / 3.),
-               'schedule': [22, 44, 65]}
-
-optimizer = GradientDescentMomentum(lr_schedule, 0.0, wdecay=0.0005,
-                                    iteration=inputs['iteration'])
 
 optimizer = Adam()
-train_prob_main = seq2(seq1(inputs['image']))
-train_loss_main = ng.cross_entropy_multi(train_prob_main, ng.one_hot(inputs['label'][:,0], axis=ax.Y))
 y_onehot = ng.one_hot(inputs['label'][:,0], axis=ax.Y)
-train_prob_aux = ng.cast_role(seq_aux(seq1(inputs['image']))[:,0,0,0,:], axes=y_onehot.axes)
+train_prob_main = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
+train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
 
+train_prob_aux = ng.cast_role(seq_aux(seq1(inputs['image']))[:,0,0,0,:], axes=y_onehot.axes)
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot) 
-batch_cost = ng.sequential([optimizer(train_loss_main + train_loss_aux), ng.mean(train_loss_main, out_axes=())])
+
+batch_cost = ng.sequential([optimizer(train_loss_main + 0.1*train_loss_aux), ng.mean(train_loss_main, out_axes=())])
 train_computation = ng.computation(batch_cost, 'all')
 
 with closing(ngt.make_transformer()) as transformer:
@@ -146,10 +135,11 @@ with closing(ngt.make_transformer()) as transformer:
 
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output[()]))
-        interval_cost += output[()]
+        interval_cost = output[()]
         if (step + 1) % args.iter_interval == 0 and step > 0:
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
                        "Avg Train Cost {cost:0.4f}".format(
                            interval=step // args.iter_interval,
                            iteration=step,
-                           cost=interval_cost / args.iter_interval))
+                           cost=interval_cost))
+print('\n')

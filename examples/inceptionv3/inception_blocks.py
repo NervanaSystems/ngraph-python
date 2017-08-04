@@ -41,26 +41,26 @@ class Inceptionv3_b1(Sequential):
         (p1, p2, p3, p4) = branch_units
 
         self.branch_1 = Convolution((1, 1, p1[0]), activation=activation,
-                                    bias_init=bias_init,
+                                    bias_init=bias_init, batch_norm=True,
                                     filter_init=filter_init)
         self.branch_2 = [Convolution((1, 1, p2[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((5, 5, p2[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding=2)]
         self.branch_3 = [Convolution((1, 1, p3[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((3, 3, p3[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding=1),
                          Convolution((3, 3, p3[2]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding=1)]
         self.branch_4 = [Pool2D(fshape=3, padding=1, strides=1, op="avg"),
                          Convolution((1, 1, p4[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init)]
 
     def __call__(self, in_obj):
@@ -98,16 +98,16 @@ class Inceptionv3_b2(Sequential):
         (p1, p2) = branch_units
 
         self.branch_1 = Convolution((3, 3, p1[0]), activation=activation,
-                                    bias_init=bias_init, strides=2,
+                                    bias_init=bias_init, strides=2, batch_norm=True,
                                     filter_init=filter_init, padding=0)
         self.branch_2 = [Convolution((1, 1, p2[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((3, 3, p2[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding=1),
                          Convolution((3, 3, p2[2]), activation=activation,
-                                     bias_init=bias_init, strides=2,
+                                     bias_init=bias_init, strides=2, batch_norm=True,
                                      filter_init=filter_init, padding=0)]
         self.branch_3 = [Pool2D(fshape=3, padding=0, strides=2, op="max")]
 
@@ -143,35 +143,35 @@ class Inceptionv3_b3(Sequential):
         (p1, p2, p3, p4) = branch_units
 
         self.branch_1 = Convolution((1, 1, p1[0]), activation=activation,
-                                    bias_init=bias_init,
+                                    bias_init=bias_init, batch_norm=True,
                                     filter_init=filter_init)
         self.branch_2 = [Convolution((1, 1, p2[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((1, 7, p2[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 0, 'pad_w': 3, 'pad_d': 0}),
                          Convolution((7, 1, p2[2]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 3, 'pad_w': 0, 'pad_d': 0})]
         self.branch_3 = [Convolution((1, 1, p3[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((7, 1, p3[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 3, 'pad_w': 0, 'pad_d': 0}),
                          Convolution((1, 7, p3[2]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 0, 'pad_w': 3, 'pad_d': 0}),
                          Convolution((7, 1, p3[3]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 3, 'pad_w': 0, 'pad_d': 0}),
                          Convolution((1, 7, p3[4]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 0, 'pad_w': 3, 'pad_d': 0})]
         self.branch_4 = [Pool2D(fshape=3, padding=1, strides=1, op="avg"),
                          Convolution((1, 1, p4[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init)]
 
     def __call__(self, in_obj):
@@ -213,22 +213,22 @@ class Inceptionv3_b4(Sequential):
         (p1, p2) = branch_units
 
         self.branch_1 = [Convolution((1, 1, p1[0]), activation=activation,
-                                    bias_init=bias_init,
+                                    bias_init=bias_init, batch_norm=True,
                                     filter_init=filter_init),
                          Convolution((3, 3, p1[1]), activation=activation,
                                      bias_init=bias_init, strides=2,
                                      filter_init=filter_init, padding=0)]
         self.branch_2 = [Convolution((1, 1, p2[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((1, 7, p2[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 0, 'pad_w': 3, 'pad_d': 0}),
                          Convolution((7, 1, p2[2]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 3, 'pad_w': 0, 'pad_d': 0}),
                          Convolution((3, 3, p2[3]), activation=activation,
-                                     bias_init=bias_init, strides=2,
+                                     bias_init=bias_init, strides=2, batch_norm=True,
                                      filter_init=filter_init, padding=0)]
         self.branch_3 = [Pool2D(fshape=3, padding=0, strides=2, op="max")]
 
@@ -267,35 +267,35 @@ class Inceptionv3_b5(Sequential):
         (p1, p2, p3, p4) = branch_units
 
         self.branch_1 = Convolution((1, 1, p1[0]), activation=activation,
-                                    bias_init=bias_init,
+                                    bias_init=bias_init, batch_norm=True,
                                     filter_init=filter_init)
 
         self.branch_2 = Convolution((1, 1, p2[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init)
         self.branch_2a = Convolution((1, 3, p2[1]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 0, 'pad_w': 1, 'pad_d': 0})
         self.branch_2b = Convolution((3, 1, p2[2]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 1, 'pad_w': 0, 'pad_d': 0})
 
         self.branch_3 = [Convolution((1, 1, p3[0]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init),
                          Convolution((3, 3, p3[1]), activation=activation,
-                                     bias_init=bias_init, padding=1,
+                                     bias_init=bias_init, padding=1, batch_norm=True,
                                      filter_init=filter_init)]
         self.branch_3a = Convolution((1, 3, p3[2]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 0, 'pad_w': 1, 'pad_d': 0})
         self.branch_3b = Convolution((3, 1, p3[3]), activation=activation,
-                                     bias_init=bias_init,
+                                     bias_init=bias_init, batch_norm=True,
                                      filter_init=filter_init, padding={'pad_h': 1, 'pad_w': 0, 'pad_d': 0})
 
         self.branch_4 = [Pool2D(fshape=3, padding=1, strides=1, op="avg"),
                          Convolution((1, 1, p4[0]), activation=activation,
-                                    bias_init=bias_init,
+                                    bias_init=bias_init, batch_norm=True,
                                     filter_init=filter_init)]
 
     def __call__(self, in_obj):
@@ -321,5 +321,3 @@ class Inceptionv3_b5(Sequential):
         outputs = [branch_1_output, branch_2_output, branch_3_output, branch_4_output]
         # This does the equivalent of neon's merge-broadcast
         return ng.concat_along_axis(outputs, branch_1_output.axes.channel_axis())
-
-
