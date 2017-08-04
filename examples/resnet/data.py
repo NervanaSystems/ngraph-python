@@ -75,8 +75,9 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
                             "width": 32}
             label_config = {"type": "label",
                             "binary": False}
-            augmentation = {"type": "image",                       
+            augmentation = {"type": "image",
                             "padding":4,
+                            "crop_enable": False,
                             "flip_enable": True}
 
             return {'manifest_filename': manifest_file,
@@ -96,8 +97,9 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
             label_config={"type": "label",
                           "binary": False}
 
-            augmentation = {"type": "image",                       
+            augmentation = {"type": "image",
                             "padding":4,
+                            "crop_enable": False,
                             "flip_enable": True}
 
             return {'manifest_filename': manifest_file,
