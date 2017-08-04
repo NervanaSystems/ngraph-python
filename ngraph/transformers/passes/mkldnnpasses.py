@@ -364,6 +364,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.mkldnn_engine,
             len(input_shape),
             len(filter_shape),
+            len(bias_shape),
             len(output_shape),
             get_ctypes_arg(input_shape),
             get_ctypes_arg(filter_shape),
