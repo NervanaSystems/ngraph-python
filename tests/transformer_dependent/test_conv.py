@@ -264,7 +264,7 @@ def test_convolution_backprop(transformer_factory, n128_hw32_c3_2x2):
         ng.testing.assert_allclose(dcdf_sym_val, dcdf_num_val, rtol=0.01)
 
 
-@pytest.config.flex_disabled(reason="There is no TensorDescription for this flex entry")
+@pytest.config.flex_disabled(reason="Unknown problem yet")
 @pytest.config.argon_disabled  # WIP debugging
 def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
     """
@@ -314,12 +314,12 @@ def test_conv_flatten_deriv(transformer_factory, n4_hw12_c3_5x5):
         conv_val = conv_comp(filter_val, input_val)
         conv_val_num = np.empty_like(conv_val)
         conv_val_num.fill(np.prod(cf.ax_f.lengths[:-1]))
-        assert ng.testing.allclose(conv_val, conv_val_num)
+        ng.testing.assert_allclose(conv_val, conv_val_num)
 
         grad_filter_num_val = grad_filter_num_comp(filter_val, input_val)
         grad_filter_sym_val = grad_filter_sym_comp(filter_val, input_val)
-        assert ng.testing.allclose(grad_filter_num_val, grad_filter_sym_val)
+        ng.testing.assert_allclose(grad_filter_num_val, grad_filter_sym_val)
 
         grad_input_num_val = grad_input_num_comp(input_val, filter_val)
         grad_input_sym_val = grad_input_sym_comp(input_val, filter_val)
-        assert ng.testing.allclose(grad_input_num_val, grad_input_sym_val)
+        ng.testing.assert_allclose(grad_input_num_val, grad_input_sym_val)
