@@ -371,16 +371,6 @@ ax_D = ng.make_axis(24)
         'parallel_axis': ax_A,
     },
     {
-        'axes': ng.make_axes([ax_A]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_A,
-    },
-    {
         'axes': ng.make_axes([ax_A, ax_B]),
         'device_id': ('0', '1'),
         'parallel_axis': ax_B,
