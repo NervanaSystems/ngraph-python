@@ -51,7 +51,7 @@ def make_aeon_dataloader(manifest_filename, audio_length, transcript_length,
 
     config = {'manifest_filename': manifest_filename,
               'batch_size': batch_size,
-              'etl': (feats_config, transcripts_config),
+              'etl': [feats_config, transcripts_config],
               'cache_directory': cache_root}
 
     if seed is not None:

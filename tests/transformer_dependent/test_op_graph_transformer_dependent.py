@@ -159,8 +159,8 @@ def test_concatenate(transformer_factory, concatenate_variables):
         f = ex.executor([v, d])
         e_v, e_d = f()
         np_v = np.concatenate(np_list, axis=pos)
-        assert ng.testing.allclose(e_v.copy(), np_v)
-        assert ng.testing.allclose(e_d.copy(), np.ones(x_list[0].axes.lengths))
+        ng.testing.assert_allclose(e_v.copy(), np_v)
+        ng.testing.assert_allclose(e_d.copy(), np.ones(x_list[0].axes.lengths))
 
 
 @pytest.config.argon_disabled  # TODO triage
@@ -181,7 +181,7 @@ def test_concat_different_axis_lengths(transformer_factory):
         f = ex.executor(v, x, y)
         e_v = f(np_x, np_y)
         np_v = np.concatenate([np_x, np_y], axis=0)
-        assert ng.testing.allclose(e_v.copy(), np_v)
+        ng.testing.assert_allclose(e_v.copy(), np_v)
 
 
 def test_variable_init(transformer_factory, C):
@@ -233,4 +233,4 @@ def test_multiple_computations(transformer_factory):
         vals = [f(x_np) for f in fs]
         # print(vals_np)
         # print(vals)
-        assert ng.testing.allclose(vals, vals_np)
+        ng.testing.assert_allclose(vals, vals_np)

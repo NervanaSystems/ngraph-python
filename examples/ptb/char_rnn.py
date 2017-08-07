@@ -13,6 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+Train a network with one recurrent layer of tanh units on the Penn
+treebank data parsing on character-level.
+
+Reference:
+
+  Advances in optimizing recurrent networks `[Pascanu2012]`_
+.. _[Pascanu2012]: http://arxiv.org/pdf/1212.0901.pdf
+
+Usage:
+
+    python examples/ptb/char_rnn.py -b gpu -r 0 -t 6800 --iter_interval 680
+
+"""
+
 from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import (Layer, Sequential, Preprocess, BiRNN, Recurrent, Affine,
@@ -70,11 +85,6 @@ if args.layer_type == "rnn":
 elif args.layer_type == "birnn":
     rlayer = BiRNN(hidden_size, init, activation=Tanh(), return_sequence=True, sum_out=True)
 
-if args.use_lut:
-    layer_0 = LookupTable(50, 100, init, update=False)
-else:
-    layer_0 = Preprocess(functor=expand_onehot)
-
 # model initialization
 seq1 = Sequential([layer_0,
                    rlayer,
@@ -91,10 +101,16 @@ train_outputs = dict(batch_cost=batch_cost)
 
 with Layer.inference_mode_on():
     inference_prob = seq1(inputs['inp_txt'])
+
+errors = ng.not_equal(ng.argmax(inference_prob, reduction_axes=[ax.Y]), inputs['tgt_txt'])
+errors_last_char = ng.slice_along_axis(errors, ax.REC, time_steps - 1)
+
 eval_loss = ng.cross_entropy_multi(inference_prob,
                                    ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
                                    usebits=True)
-eval_outputs = dict(cross_ent_loss=eval_loss)
+eval_outputs = dict(cross_ent_loss=eval_loss,
+                    misclass_pct=errors,
+                    misclass_last_pct=errors_last_char)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:
