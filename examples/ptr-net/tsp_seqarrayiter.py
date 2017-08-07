@@ -16,12 +16,12 @@ import numpy as np
 import ngraph as ng
 from future.utils import viewitems
 import six
-from ngraph.frontends.neon import ax
-import collections
+
 
 class TSPSequentialArrayIterator(object):
     """
-    Modification of SequentialArrayIterator class. Add number of features argument to handle variable feature sizes.
+    Modification of SequentialArrayIterator class. Add number of features argument
+    to handle variable feature sizes.
 
     Args:
         data_arrays (ndarray): Input features of the dataset.
@@ -44,10 +44,10 @@ class TSPSequentialArrayIterator(object):
         else:
             raise ValueError("Must provide dict as input")
 
-        # Number of examples
+        # number of examples
         self.ndata = len(six.next(six.itervalues(self.data_arrays)))
 
-        # Number of examples (with integer multiplication of batch sizes)
+        # number of examples (with integer multiplication of batch sizes)
         self.ndata = self.ndata // (self.batch_size) * self.batch_size
 
         self.nbatches = self.ndata // self.batch_size
@@ -58,11 +58,25 @@ class TSPSequentialArrayIterator(object):
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
 
         # reshape array for batch and batch size dimensions
-        self.data_arrays['inp_txt'] = self.data_arrays['inp_txt'][:self.ndata][:][:].reshape(self.batch_size, self.nbatches, self.time_steps, self.nfeatures)
+        self.data_arrays['inp_txt'] = \
+            self.data_arrays['inp_txt'][:self.ndata][:][:].reshape(
+            self.batch_size,
+            self.nbatches,
+            self.time_steps,
+            self.nfeatures)
 
-        self.data_arrays['tgt_txt'] = self.data_arrays['tgt_txt'][:self.ndata][:].reshape(self.batch_size, self.nbatches, self.time_steps)
+        self.data_arrays['tgt_txt'] = \
+            self.data_arrays['tgt_txt'][:self.ndata][:].reshape(
+            self.batch_size,
+            self.nbatches,
+            self.time_steps)
 
-        self.data_arrays['teacher_tgt'] = self.data_arrays['teacher_tgt'][:self.ndata][:][:].reshape(self.batch_size, self.nbatches, self.time_steps, self.nfeatures)
+        self.data_arrays['teacher_tgt'] = \
+            self.data_arrays['teacher_tgt'][:self.ndata][:][:].reshape(
+            self.batch_size,
+            self.nbatches,
+            self.time_steps,
+            self.nfeatures)
 
         # Teacher Forcing
         self.data_arrays['teacher_tgt'] = np.roll(self.data_arrays['teacher_tgt'], shift=1, axis=2)

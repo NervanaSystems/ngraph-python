@@ -13,8 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.util.persist import valid_path_append
-from tqdm import trange, tqdm
+from tqdm import tqdm
 import numpy as np
+
 
 class TSP(object):
     """
@@ -39,7 +40,7 @@ class TSP(object):
                 for i, line in tqdm(enumerate(f)):
                     inputs, outputs = line.split('output')
                     X.append(np.array([float(j) for j in inputs.split()]).reshape([-1, 2]))
-                    y.append(np.array([int(j) - 1 for j in outputs.split()])[:-1]) # delete last
+                    y.append(np.array([int(j) - 1 for j in outputs.split()])[:-1])  # delete last
                     # teacher forcing array as decoder's input while training
                     y_teacher.append([X[i][j - 1] for j in y[i]])
             X = np.array(X)

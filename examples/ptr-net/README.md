@@ -16,65 +16,53 @@ $ python ptr-net.py --train_file tsp10.txt --test_file tsp10_test.txt -b gpu
 ```
 ## Results
 - Results training on tsp5.txt
+>iteration = 1000, train loss = 2.32192277908
+iteration = 2000, train loss = 0.46896520257
+iteration = 3000, train loss = 0.217246204615
+iteration = 4000, train loss = 0.246910408139
+iteration = 5000, train loss = 0.104850962758
+iteration = 6000, train loss = 0.0337684042752
+iteration = 7000, train loss = 0.0199971366674
+iteration = 8000, train loss = 0.0131694134325
+iteration = 9000, train loss = 0.0102642579004
+iteration = 10000, train loss = 0.0103495847434
+iteration = 11000, train loss = 0.0107053946704
+iteration = 12000, train loss = 0.00945739354938
+iteration = 13000, train loss = 0.00575671391562
+iteration = 14000, train loss = 0.0155959874392
+iteration = 15000, train loss = 0.0326099693775
+iteration = 16000, train loss = 0.0160880722106
+iteration = 17000, train loss = 0.0100189754739
+iteration = 18000, train loss = 0.00303012714721
+iteration = 19000, train loss = 0.0117024183273
+iteration = 20000, train loss = 0.00976016186178
 
->iteration = 2000, train loss = 1.57829642296
-iteration = 4000, train loss = 1.43903386593
-iteration = 6000, train loss = 1.02534890175
-iteration = 8000, train loss = 0.931654274464
-iteration = 10000, train loss = 0.785848796368
-iteration = 12000, train loss = 0.824071228504
-iteration = 14000, train loss = 0.760764241219
-iteration = 16000, train loss = 0.723568558693
-iteration = 18000, train loss = 0.612337231636
-iteration = 20000, train loss = 0.533858776093
-iteration = 22000, train loss = 0.520471572876
-iteration = 24000, train loss = 0.419541060925
-iteration = 26000, train loss = 0.433132320642
-iteration = 28000, train loss = 0.470048248768
-iteration = 30000, train loss = 0.489885240793
-iteration = 32000, train loss = 0.509543120861
-iteration = 34000, train loss = 0.397153705359
-iteration = 36000, train loss = 0.41118773818
-iteration = 38000, train loss = 0.330927848816
-iteration = 40000, train loss = 0.34331125021
-iteration = 42000, train loss = 0.376413494349
-iteration = 44000, train loss = 0.388570189476
-iteration = 46000, train loss = 0.327951878309
-iteration = 48000, train loss = 0.379947990179
-iteration = 50000, train loss = 0.317634046078
-
-- prelim results training on tsp10.txt
->iteration = 2000, train loss = 2.85296750069
-iteration = 4000, train loss = 2.84532856941
-iteration = 6000, train loss = 2.66449666023
-iteration = 8000, train loss = 2.56625890732
-iteration = 10000, train loss = 2.19565153122
-iteration = 12000, train loss = 1.94617462158
-iteration = 14000, train loss = 2.06753349304
-iteration = 16000, train loss = 1.78943669796
-iteration = 18000, train loss = 1.67663383484
-iteration = 20000, train loss = 1.63309168816
-iteration = 22000, train loss = 1.68619692326
-iteration = 24000, train loss = 1.50074219704
-iteration = 26000, train loss = 1.50416409969
-iteration = 28000, train loss = 1.4880001545
-iteration = 30000, train loss = 1.43878722191
-iteration = 32000, train loss = 1.34956288338
-iteration = 34000, train loss = 1.36554932594
-iteration = 36000, train loss = 1.36947906017
-iteration = 38000, train loss = 1.34887468815
-iteration = 40000, train loss = 1.38094007969
-iteration = 42000, train loss = 1.22148537636
-iteration = 44000, train loss = 1.33542692661
-iteration = 46000, train loss = 1.23805546761
-iteration = 48000, train loss = 1.19426417351
-iteration = 50000, train loss = 1.30143654346
+- Results training on tsp10.txt
+>iteration = 1000, train loss = 1.20918560028
+iteration = 2000, train loss = 0.168795406818
+iteration = 3000, train loss = 0.0863107442856
+iteration = 4000, train loss = 0.0689085796475
+iteration = 5000, train loss = 0.0350853949785
+iteration = 6000, train loss = 0.0326116643846
+iteration = 7000, train loss = 0.0325198583305
+iteration = 8000, train loss = 0.0345276221633
+iteration = 9000, train loss = 0.0271318014711
+iteration = 10000, train loss = 0.0296661164612
+iteration = 11000, train loss = 0.0212019626051
+iteration = 12000, train loss = 0.0255753938109
+iteration = 13000, train loss = 0.0725105628371
+iteration = 14000, train loss = 0.0258009489626
+iteration = 15000, train loss = 0.573940873146
+iteration = 16000, train loss = 0.0236293375492
+iteration = 17000, train loss = 0.0536655895412
+iteration = 18000, train loss = 0.0177622660995
+iteration = 19000, train loss = 0.00931741949171
+iteration = 20000, train loss = 0.0163616128266
 
 ## To-dos
 - [X] change decoder input to coordinates for teacher forcing  
 - [X] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
 - [X] use LSTM as enc/dec rnn cell
 - [X] function to calculate travel distance
-- [ ] clean the training code/write README
 - [ ] variable size sequence training
-- [ ] ptr-net inference code
+- [ ] inference code
