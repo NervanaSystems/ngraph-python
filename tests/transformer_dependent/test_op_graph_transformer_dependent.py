@@ -93,6 +93,7 @@ def test_sequential_reduce(M):
         assert np.allclose(p_val, x2_np)
 
 
+@pytest.config.flex_disabled
 def test_sequential_side(M):
     x1_np = 2
     x2_np = 3
@@ -149,7 +150,7 @@ def test_sequential_side(M):
 
 @pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
 @pytest.config.argon_disabled  # TODO triage
-def test_concatenate(transformer_factory, concatenate_variables):
+def test_concatenate(concatenate_variables):
     x_list, np_list, pos = concatenate_variables
 
     with ExecutorFactory() as ex:
@@ -164,7 +165,7 @@ def test_concatenate(transformer_factory, concatenate_variables):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_concat_different_axis_lengths(transformer_factory):
+def test_concat_different_axis_lengths():
     ax1 = ng.make_axis(length=3, name="concat")
     ax2 = ng.make_axis(length=2, name="concat")
     ax3 = ng.make_axis(length=10, name="other")
@@ -184,7 +185,7 @@ def test_concat_different_axis_lengths(transformer_factory):
         ng.testing.assert_allclose(e_v.copy(), np_v)
 
 
-def test_variable_init(transformer_factory, C):
+def test_variable_init(C):
     w_init = np.random.rand(C.length)
     W = ng.variable(ng.make_axes([C]), initial_value=w_init)
 
@@ -193,7 +194,7 @@ def test_variable_init(transformer_factory, C):
     ng.testing.assert_allclose(result, w_init)
 
 
-def test_initial_value(transformer_factory):
+def test_initial_value():
     # Test work-around for issue #1138
     w = [3, 4, 5]
     x = ng.constant(w)
@@ -204,15 +205,9 @@ def test_initial_value(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_multiple_computations(transformer_factory):
+def test_multiple_computations():
     """
     Create multiple computations for the same value.
-
-    Args:
-        transformer_factory:
-
-    Returns:
-
     """
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)

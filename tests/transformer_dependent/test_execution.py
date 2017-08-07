@@ -31,7 +31,7 @@ pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transf
 rng = RandomTensorGenerator(0, np.float32)
 
 
-def test_constant_multiply(transformer_factory):
+def test_constant_multiply():
     # TODO: better error message when missing axes length in cases where it
     # is needed
     Y = ng.make_axis(length=1)
@@ -47,7 +47,7 @@ def test_constant_multiply(transformer_factory):
     ng.testing.assert_allclose(result, [8])
 
 
-def test_constant_tensor_multiply(transformer_factory):
+def test_constant_tensor_multiply():
     Y = ng.make_axis(length=2)
     N = ng.make_axis(length=2)
 
@@ -61,7 +61,7 @@ def test_constant_tensor_multiply(transformer_factory):
         ng.testing.assert_allclose(result, [[1.0, 1.0], [1.0, 1.0]])
 
 
-def test_tensor_sum_single_reduction_axes(transformer_factory):
+def test_tensor_sum_single_reduction_axes():
     """TODO."""
     Y = ng.make_axis(length=2)
     N = ng.make_axis(length=2)
@@ -75,7 +75,7 @@ def test_tensor_sum_single_reduction_axes(transformer_factory):
         ng.testing.assert_allclose(result, [2.0, 2.0])
 
 
-def test_scalar(transformer_factory):
+def test_scalar():
     """TODO."""
     # Simple evaluation of a scalar
     val = 5
@@ -87,7 +87,7 @@ def test_scalar(transformer_factory):
     ng.testing.assert_allclose(cval, val)
 
 
-def test_tensor_constant(transformer_factory):
+def test_tensor_constant():
     W = ng.make_axis().named('W')
     H = ng.make_axis().named('H')
 
@@ -106,7 +106,7 @@ def test_tensor_constant(transformer_factory):
 
 
 @pytest.config.flex_disabled(reason='Results mismatch')
-def test_placeholder(transformer_factory):
+def test_placeholder():
     W = ng.make_axis(length=10)
     H = ng.make_axis(length=20)
 
@@ -161,7 +161,7 @@ def sub_axes(request):
 
 # TODO this is a non-strict disable since not all parametrizations fail argon
 @pytest.mark.argon_disab_loose  # TODO Triage
-def test_reduction(transformer_factory, reduction, sub_axes):
+def test_reduction(reduction, sub_axes):
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=4),
                          ng.make_axis(length=4)])
@@ -184,7 +184,7 @@ def test_reduction(transformer_factory, reduction, sub_axes):
 
 
 @pytest.config.argon_disabled  # TODO Triage
-def test_reduction_deriv(transformer_factory, reduction, sub_axes):
+def test_reduction_deriv(reduction, sub_axes):
     if reduction in ('max', 'min'):
         pytest.skip("max/min needed to be tested differently")
     if sub_axes in (slice(0, 2, None), slice(1, None, None)) and reduction == "prod":
@@ -210,7 +210,7 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
 
 @pytest.config.flex_disabled(reason="Too big values for Flex ( > 32767 ) only in last assert")
 @pytest.config.argon_disabled  # TODO Triage
-def test_prod_constant(transformer_factory):
+def test_prod_constant():
     """
     Test reduce product of constants
     """
@@ -256,7 +256,7 @@ def test_prod_constant(transformer_factory):
 
 @pytest.config.flex_disabled
 @pytest.config.argon_disabled  # TODO Triage
-def test_prod_deriv(transformer_factory):
+def test_prod_deriv():
     """
     Test reduce product's gradient
     """
@@ -320,7 +320,7 @@ def test_prod_deriv(transformer_factory):
             check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
 
 
-def test_reciprocal(transformer_factory, input_tensor):
+def test_reciprocal(input_tensor):
     """TODO."""
     p_u = input_tensor
     u = rng.uniform(.1, 5.0, p_u.axes)
@@ -333,7 +333,7 @@ def test_reciprocal(transformer_factory, input_tensor):
     ng.testing.assert_allclose(rec_u_np, rec_u_graph)
 
 
-def test_reciprocal_derivative(transformer_factory, input_tensor):
+def test_reciprocal_derivative(input_tensor):
     """TODO."""
     p_u = input_tensor
 
@@ -394,11 +394,7 @@ def elementwise_unary_op(request):
     return request.param
 
 
-def test_elementwise_binary_ops_matched_args(
-    transformer_factory,
-    elementwise_binary_op,
-    symmetric_tensor
-):
+def test_elementwise_binary_ops_matched_args(elementwise_binary_op, symmetric_tensor):
     """TODO."""
     np_op = getattr(np, elementwise_binary_op)
     be_op = getattr(ng, elementwise_binary_op)
@@ -415,11 +411,7 @@ def test_elementwise_binary_ops_matched_args(
     )
 
 
-def test_elementwise_binary_ops_matched_args_deriv_lhs(
-    transformer_factory,
-    elementwise_binary_op,
-    symmetric_tensor
-):
+def test_elementwise_binary_ops_matched_args_deriv_lhs(elementwise_binary_op, symmetric_tensor):
     """TODO."""
     be_op = getattr(ng, elementwise_binary_op)
     p_u = symmetric_tensor
@@ -436,11 +428,7 @@ def test_elementwise_binary_ops_matched_args_deriv_lhs(
     )
 
 
-def test_elementwise_binary_ops_matched_args_deriv_rhs(
-    transformer_factory,
-    elementwise_binary_op,
-    symmetric_tensor
-):
+def test_elementwise_binary_ops_matched_args_deriv_rhs(elementwise_binary_op, symmetric_tensor):
     """TODO."""
     be_op = getattr(ng, elementwise_binary_op)
     p_u = symmetric_tensor
@@ -457,11 +445,7 @@ def test_elementwise_binary_ops_matched_args_deriv_rhs(
     )
 
 
-def test_elementwise_unary_ops_matched_args(
-    transformer_factory,
-    elementwise_unary_op,
-    symmetric_tensor
-):
+def test_elementwise_unary_ops_matched_args(elementwise_unary_op, symmetric_tensor):
     """TODO."""
     delta = .001
     np_op = getattr(np, elementwise_unary_op)
@@ -484,11 +468,7 @@ def test_elementwise_unary_ops_matched_args(
         ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
-def test_elementwise_ops_unmatched_args(
-    transformer_factory,
-    elementwise_binary_op,
-    batch_axis
-):
+def test_elementwise_ops_unmatched_args(elementwise_binary_op, batch_axis):
     """TODO."""
     W = ng.make_axis(length=5)
     H = ng.make_axis(length=5)
@@ -601,10 +581,7 @@ def cross_entropy_binary_logistic_shortcut(x, t):
     return (1.0 - t) * x - np.log(y)
 
 
-def test_cross_entropy_binary_logistic_shortcut(
-    transformer_factory,
-    input_tensor,
-):
+def test_cross_entropy_binary_logistic_shortcut(input_tensor):
     """TODO."""
     p_u = input_tensor
     p_v = ng.placeholder(p_u.axes)
@@ -620,10 +597,7 @@ def test_cross_entropy_binary_logistic_shortcut(
     ng.testing.assert_allclose(cel, cel_graph, rtol=1e-5)
 
 
-def test_cross_entropy_binary(
-    transformer_factory,
-    input_tensor
-):
+def test_cross_entropy_binary(input_tensor):
     """TODO."""
     p_u = input_tensor
     p_v = ng.placeholder(p_u.axes)
@@ -748,7 +722,7 @@ def np_cross_entropy_multi(y, t, axis=None):
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
 @pytest.config.argon_disabled  # TODO triage
-def test_softmax(transformer_factory, input_tensor):
+def test_softmax(input_tensor):
     """TODO."""
     p_x = input_tensor
     N = p_x.axes.batch_axes()[0]
@@ -778,35 +752,35 @@ def test_softmax(transformer_factory, input_tensor):
         ng.testing.assert_allclose(s, u, atol=1e-6, rtol=1e-3)
 
 
-def test_softmax2(transformer_factory, input_tensor):
+def test_softmax2(input_tensor):
     p_x = input_tensor
     x = rng.uniform(0, 1, p_x.axes)
 
     compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x, rtol=1e-5)
 
 
-def test_softmax_deriv(transformer_factory, input_tensor):
+def test_softmax_deriv(input_tensor):
     p_x = input_tensor
     x = rng.uniform(0, 1, p_x.axes)
 
     check_derivative(ng.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
-def test_softmax_rec(transformer_factory, recurrent_input_tensor):
+def test_softmax_rec(recurrent_input_tensor):
     p_x = recurrent_input_tensor
     x = rng.uniform(0, 1, p_x.axes)
 
     compare_f_at_x(ng.softmax(p_x), p_x, lambda x: np_softmax(x, 0), x, rtol=1e-5)
 
 
-def test_softmax_rec_deriv(transformer_factory, recurrent_input_tensor):
+def test_softmax_rec_deriv(recurrent_input_tensor):
     p_x = recurrent_input_tensor
     x = rng.uniform(0, 1, p_x.axes)
 
     check_derivative(ng.softmax(p_x), p_x, 0.001, x, atol=1e-2, rtol=1e-2)
 
 
-def test_cross_entropy_softmax(transformer_factory, input_tensor):
+def test_cross_entropy_softmax(input_tensor):
     p_x = input_tensor
     p_t = ng.placeholder(p_x.axes)
 
@@ -821,7 +795,7 @@ def test_cross_entropy_softmax(transformer_factory, input_tensor):
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_cross_entropy_softmax_deriv(transformer_factory, input_tensor):
+def test_cross_entropy_softmax_deriv(input_tensor):
     p_x = input_tensor
     p_t = ng.placeholder(p_x.axes)
 
@@ -837,7 +811,7 @@ def test_cross_entropy_softmax_deriv(transformer_factory, input_tensor):
     )
 
 
-def test_cross_entropy_rec(transformer_factory, recurrent_input_tensor):
+def test_cross_entropy_rec(recurrent_input_tensor):
     p_x = recurrent_input_tensor
     p_t = ng.placeholder(p_x.axes)
 
@@ -852,7 +826,7 @@ def test_cross_entropy_rec(transformer_factory, recurrent_input_tensor):
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
 
 
-def test_cross_entropy_softmax_rec_deriv(transformer_factory, recurrent_input_tensor):
+def test_cross_entropy_softmax_rec_deriv(recurrent_input_tensor):
     p_x = recurrent_input_tensor
     p_t = ng.placeholder(p_x.axes)
 
@@ -878,7 +852,7 @@ def test_cross_entropy_multi_unmatched_axes(input_tensor):
         ng.cross_entropy_multi(y, t)
 
 
-def test_cross_entropy_multi_axis_order(transformer_factory, input_tensor):
+def test_cross_entropy_multi_axis_order(input_tensor):
     """If y and t have different axis orders, it should give the same result"""
     y = input_tensor
     t1 = ng.placeholder(y.axes)
@@ -904,7 +878,7 @@ def test_cross_entropy_multi_axis_order(transformer_factory, input_tensor):
         ng.testing.assert_allclose(out1.ravel(), out2.ravel(), rtol=1e-5)
 
 
-def test_sigmoid_deriv(transformer_factory, input_tensor):
+def test_sigmoid_deriv(input_tensor):
     """TODO."""
     p_u = input_tensor
     u = rng.uniform(-3.0, 3.0, p_u.axes)
@@ -914,7 +888,7 @@ def test_sigmoid_deriv(transformer_factory, input_tensor):
     check_derivative(val_u, p_u, 0.001, u, atol=1e-2, rtol=1e-2)
 
 
-def test_log_sigmoid_deriv(transformer_factory, input_tensor):
+def test_log_sigmoid_deriv(input_tensor):
     """TODO."""
     p_u = input_tensor
     u = rng.uniform(-3.0, 3.0, p_u.axes)
@@ -954,7 +928,7 @@ def compare_f_at_x(f_be, x_be, f_np, x, **kwargs):
         ng.testing.assert_allclose(val_np, val_be, **kwargs)
 
 
-def test_sigmoid_value(transformer_factory, input_tensor):
+def test_sigmoid_value(input_tensor):
     """ check the output of sigmoid is the same as np """
     p_x = input_tensor
     x = rng.uniform(-3.0, 3.0, p_x.axes)
@@ -984,7 +958,7 @@ def one_hot_comparison(hot_axes, axes, C):
         ng.testing.assert_allclose(v_t, v)
 
 
-def test_onehot(transformer_factory):
+def test_onehot():
     """TODO."""
     C = ng.make_axis(length=4)
     H = ng.make_axis(length=32)
@@ -995,7 +969,7 @@ def test_onehot(transformer_factory):
     one_hot_comparison(ng.make_axes([C, W, H, N]), ng.make_axes([W, H, N]), C)
 
 
-def test_clip(transformer_factory):
+def test_clip():
     H = ng.make_axis(length=5)
     W = ng.make_axis(length=4)
     axes = ng.make_axes([W, H])
@@ -1015,7 +989,7 @@ def test_clip(transformer_factory):
         ng.testing.assert_allclose(result, expected_result)
 
 
-def test_elementwise_fp16_in(transformer_factory):
+def test_elementwise_fp16_in():
     axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=2)])
 
     a = ng.constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float16'), axes,
@@ -1030,7 +1004,7 @@ def test_elementwise_fp16_in(transformer_factory):
         ng.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
 
 
-def test_elementwise_fp16_out(transformer_factory):
+def test_elementwise_fp16_out():
     axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=2)])
 
     a = ng.constant(np.array([[1.0, 2.0], [4.0, 12.0]], dtype='float32'), axes)
@@ -1043,7 +1017,7 @@ def test_elementwise_fp16_out(transformer_factory):
         ng.testing.assert_allclose(result, [[1.0, 4.0], [24.0, 144.0]])
 
 
-def test_argmax(transformer_factory):
+def test_argmax():
     axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=8)])
     a = ng.placeholder(axes=axes)
     b = ng.argmax(a, out_axes=axes[0])
@@ -1058,7 +1032,7 @@ def test_argmax(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_fill_slice(transformer_factory):
+def test_fill_slice():
     axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=8)])
     a = ng.placeholder(axes=axes)
     b = ng.sequential([ng.fill(a[:, 1], 0), ng.value_of(a)])
@@ -1089,7 +1063,7 @@ def test_tensor_derivative():
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_mean(transformer_factory, input_tensor):
+def test_mean(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
 
@@ -1107,7 +1081,7 @@ def test_mean(transformer_factory, input_tensor):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_variance_wgrad(transformer_factory, input_tensor):
+def test_variance_wgrad(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
 
@@ -1130,7 +1104,7 @@ def test_variance_wgrad(transformer_factory, input_tensor):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_variance_sqrt_inverse(transformer_factory, input_tensor):
+def test_variance_sqrt_inverse(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
 
@@ -1162,7 +1136,7 @@ def test_variance_sqrt_inverse(transformer_factory, input_tensor):
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
-def test_return_type(transformer_factory):
+def test_return_type():
     x = ng.placeholder(())
     with ExecutorFactory() as ex:
         c0 = ex.executor(x, x)
@@ -1176,14 +1150,14 @@ def test_return_type(transformer_factory):
         assert r1[0] == 1
 
 
-def test_empty_computation(transformer_factory):
+def test_empty_computation():
     with ExecutorFactory() as ex:
         computation = ex.executor(None)
         res = computation()
         assert not res
 
 
-def test_wrong_placeholders(transformer_factory):
+def test_wrong_placeholders():
     x = ng.placeholder(())
     with ExecutorFactory() as ex:
         c = ex.executor(x, x)
@@ -1198,7 +1172,7 @@ def test_wrong_placeholders(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_broadcast_deriv_reorder(transformer_factory):
+def test_broadcast_deriv_reorder():
     H = ng.make_axis(2)
     W = ng.make_axis(3)
 

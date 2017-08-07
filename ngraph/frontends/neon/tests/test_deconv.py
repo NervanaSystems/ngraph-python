@@ -6,7 +6,7 @@ from ngraph.frontends.neon import Deconvolution, ConstantInit
 
 
 # TODO: add other configurations?
-def test_deconv(transformer_factory):
+def test_deconv():
     """
     basic test of deconv fprop.
     ngraph/tests/test_conv.py tests ng.deconvolution bprop

@@ -124,7 +124,7 @@ def test_specific_slice_deriv():
                 assert ng.testing.allclose(dslice_dx_val, dslice_dx_np)
 
 
-def test_slice_deriv(transformer_factory):
+def test_slice_deriv():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
 

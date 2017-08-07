@@ -33,7 +33,7 @@ pytestmark = pytest.mark.hetr_only
 STARTUP_TIME = 3
 
 
-def test_distributed_graph_plus_one(transformer_factory):
+def test_distributed_graph_plus_one():
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')
     x = ng.placeholder(axes=[H, W])
@@ -47,7 +47,7 @@ def test_distributed_graph_plus_one(transformer_factory):
         np.testing.assert_array_equal(res, np_x + 1)
 
 
-def test_distributed_dot(transformer_factory):
+def test_distributed_dot():
     H = ng.make_axis(length=4, name='height')
     N = ng.make_axis(length=8, name='batch')
     weight = ng.make_axis(length=2, name='weight')
@@ -64,7 +64,7 @@ def test_distributed_dot(transformer_factory):
         np.testing.assert_array_equal(res, np.dot(np_weight, np_x))
 
 
-def test_distributed_graph_plus_two(transformer_factory):
+def test_distributed_graph_plus_two():
     H = ng.make_axis(length=4, name='height')
     W = ng.make_axis(length=6, name='width')
     x = ng.placeholder(axes=[H, W])
@@ -79,7 +79,7 @@ def test_distributed_graph_plus_two(transformer_factory):
         np.testing.assert_array_equal(res, np_x + 2)
 
 
-def test_singleton_device_id(transformer_factory):
+def test_singleton_device_id():
     with ng.metadata(device_id=(['1'])):
         x = ng.placeholder(())
     graph_ops = OrderedSet([x])
@@ -90,7 +90,7 @@ def test_singleton_device_id(transformer_factory):
     check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
 
 
-def test_from_device(transformer_factory):
+def test_from_device():
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
     x_plus_one = x + 1
@@ -101,7 +101,7 @@ def test_from_device(transformer_factory):
             assert computation(i) == i + 1
 
 
-def test_to_device(transformer_factory):
+def test_to_device():
     x = ng.placeholder(())
     with ng.metadata(device_id='1'):
         x_plus_one = x + 1
@@ -112,7 +112,7 @@ def test_to_device(transformer_factory):
             assert computation(i) == i + 1
 
 
-def test_to_and_from_device(transformer_factory):
+def test_to_and_from_device():
     x = ng.placeholder(())
     with ng.metadata(device_id='1'):
         x_plus_one = x + 1
@@ -124,7 +124,7 @@ def test_to_and_from_device(transformer_factory):
             assert computation(i) == i + 2
 
 
-def test_computation_return_list(transformer_factory):
+def test_computation_return_list():
     with ng.metadata(device_id='1'):
         x = ng.placeholder(())
     x_plus_one = x + 1
@@ -137,7 +137,7 @@ def test_computation_return_list(transformer_factory):
             assert computation(i) == (i + 1, i + 2, i * 3)
 
 
-def test_scatter_gather_graph(transformer_factory):
+def test_scatter_gather_graph():
     # Build the graph
     W = ng.make_axis(length=6, name='width')
 
@@ -197,7 +197,7 @@ def test_gpu_send_and_recv():
             assert computation(i) == i + 2
 
 
-def test_recvop_axes_using_dot(transformer_factory):
+def test_recvop_axes_using_dot():
     x_value = np.array([[1],
                         [2]])
     w_value = np.array([[-1, 1]])
@@ -219,7 +219,7 @@ def test_recvop_axes_using_dot(transformer_factory):
         assert ng.testing.allclose(val_ng, val_np)
 
 
-def test_recvop_tensorupdate(transformer_factory):
+def test_recvop_tensorupdate():
     """
     The tensor (RecvOp_#_#) associated with the following conv op has two views:
     1) Non-flat view (e.g. RecvOp_#_#_1_1_1_1_4.shape=(1,1,1,1,4))
@@ -311,7 +311,7 @@ def test_recvop_tensorupdate(transformer_factory):
                                             [8., 8., 8., 8.]])
 
 
-def test_terminate_op(transformer_factory):
+def test_terminate_op():
 
     class TerminateOp(ng.Op):
 
@@ -334,7 +334,7 @@ def test_terminate_op(transformer_factory):
     assert len(active_children()) == len(baseline)
 
 
-def test_process_leak(transformer_factory):
+def test_process_leak():
     baseline = active_children()
     with ng.metadata(device_id=('2')):
         x = ng.constant(2)

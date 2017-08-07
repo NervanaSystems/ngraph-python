@@ -27,7 +27,7 @@ def extra_axes(request):
     return request.param
 
 
-def test_sum(transformer_factory, num_units, sequence_length, batch_size):
+def test_sum(num_units, sequence_length, batch_size):
     """
     This tests for a non-deterministic error that arose in ng.sum following
     a dot product using the gpu transformer.
