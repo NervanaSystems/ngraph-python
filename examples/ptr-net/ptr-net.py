@@ -23,12 +23,13 @@ from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import UniformInit, RMSProp, ax, Tanh, Logistic
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation
+from ngraph.frontends.neon import Layer, LSTM
 import ngraph.transformers as ngt
 import numpy as np
-from tsp import TSP
-from custom_recurrent import Recurrent, LSTM
+from ngraph.frontends.neon import TSP
+# from custom_recurrent import Recurrent, LSTM
 from tsp_seqarrayiter import TSPSequentialArrayIterator
-from utils import first_example, save_plot, batch_corrects
+from utils import first_example, save_plot
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
@@ -56,8 +57,8 @@ tsp_data = tsp.load_data()
 
 # take a look at the first TSP input-target example pair
 input_example, target_example = first_example(tsp_data)
-print('First input example = {}'.format(input_example))
-print('First target example = {}'.format(target_example))
+print('First input example in training data = {}'.format(input_example))
+print('First target example in training data= {}'.format(target_example))
 
 # number of time steps equal to number of points (cities) in each example
 time_steps = input_example.shape[0]
@@ -90,22 +91,25 @@ W_emb = ng.variable(axes=[hidden_feature_axis, feature_axis], initial_value=init
 emb_enc_inputs = ng.dot(W_emb, inputs['inp_txt'])
 
 # docoder input embedding
-tmp_list = []
+emb_dec_input = []
 ax.N.length = args.batch_size
 for i in range(ax.N.length):
     """
     for each iteration, permute (by true label)
     encoder input embedding for teacher forcing input to decoder
     """
-    emb_enc_input = emb_enc_inputs[:, i, :]
+    emb_enc_input = ng.slice_along_axis(emb_enc_inputs, axis=ax.N, idx=i)
+    # emb_enc_input = emb_enc_inputs[:, i, :]
 
     tmp_axis_1 = ng.make_axis(length=time_steps, name='tmp_axis_1')
     emb_enc_input_tmp = ng.cast_axes(emb_enc_input, ng.make_axes([hidden_feature_axis, tmp_axis_1]))
-    one_hot_target_tmp = ng.one_hot(inputs['tgt_txt'][i, :], axis=tmp_axis_1)
+    # one_hot_target_tmp = ng.one_hot(inputs['tgt_txt'][i, :], axis=tmp_axis_1)
+    perm = ng.slice_along_axis(inputs['tgt_txt'], axis=ax.N, idx=i)
+    one_hot_target_tmp = ng.one_hot(perm, axis=tmp_axis_1)
 
-    tmp_list.append(ng.dot(emb_enc_input_tmp, one_hot_target_tmp))
+    emb_dec_input.append(ng.dot(emb_enc_input_tmp, one_hot_target_tmp))
 
-emb_dec_inputs = ng.stack(tmp_list, axis=ax.N, pos=1)
+emb_dec_inputs = ng.stack(emb_dec_input, axis=ax.N, pos=1)
 
 if args.emb == True:
     enc_input = emb_enc_inputs
@@ -114,12 +118,15 @@ else:
     enc_input = inputs['inp_txt']
     dec_input = inputs['teacher_txt']
 
-(enc_h_out, enc_c_out), (enc_h_out_seq, enc_c_out_seq) = enc(enc_input, return_cell_state=True)
-_, dec_h_out_seq = dec(dec_input, init_state=(enc_h_out, enc_c_out), return_cell_state=False)
+(enc_h_out, enc_c_out) = enc(enc_input, return_cell_state=True)
+rec_axis = enc_h_out.axes.recurrent_axis()
+enc_last_h_out = ng.slice_along_axis(enc_h_out, axis=rec_axis, idx=-1)
+enc_last_c_out = ng.slice_along_axis(enc_c_out, axis=rec_axis, idx=-1)
+dec_h_out = dec(dec_input, init_state=(enc_last_h_out, enc_last_c_out), return_cell_state=False)
 
 # ptr-net model
 ######################
-rec_axis = dec_h_out_seq.axes.recurrent_axis()
+rec_axis = dec_h_out.axes.recurrent_axis()
 tmp_axis_2 = ng.make_axis(length=args.hs, name='tmp_axis_2')
 
 # ptr-net variables
@@ -130,10 +137,10 @@ v = ng.variable(axes=[tmp_axis_2], initial_value=init)
 u_list = []
 for i in range(time_steps):
     u_i_list = []
-    W2_di = ng.dot(W2, ng.slice_along_axis(dec_h_out_seq, axis=rec_axis, idx=i))
+    W2_di = ng.dot(W2, ng.slice_along_axis(dec_h_out, axis=rec_axis, idx=i))
 
     for j in range(time_steps):
-        W1_ej = ng.dot(W1, ng.slice_along_axis(enc_h_out_seq, axis=rec_axis, idx=j))
+        W1_ej = ng.dot(W1, ng.slice_along_axis(enc_h_out, axis=rec_axis, idx=j))
         score = ng.dot(v, ng.tanh(W1_ej + W2_di)) # u_i = v*tanh(W1*e_j + W2*d_i)
         u_i_list.append(score)
 
