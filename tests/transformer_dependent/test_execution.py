@@ -30,6 +30,10 @@ pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transf
 
 rng = RandomTensorGenerator(0, np.float32)
 
+A0 = ng.make_axis(length=2)
+A1 = ng.make_axis(length=3)
+A2 = ng.make_axis(length=4)
+
 
 def test_constant_multiply(transformer_factory):
     # TODO: better error message when missing axes length in cases where it
@@ -208,55 +212,66 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
     check_derivative(graph_reduce, p_u, delta, u, atol=1e-1, rtol=1e-1)
 
 
-@pytest.config.flex_disabled(reason="Too big values for Flex ( > 32767 ) only in last assert")
+@pytest.fixture(params=[
+    (0, A0),
+    (1, A1),
+    (2, A2),
+    ((0, 1), (A0, A1)),
+    ((0, 2), (A0, A2)),
+    ((1, 2), (A1, A2)),
+    pytest.config.flex_disabled(
+        ((0, 1, 2), (A0, A1, A2)),
+        reason="Too big values for Flex ( > 32767 )"
+    )
+])
+def prod_constant(request):
+    return request.param
+
+
 @pytest.config.argon_disabled  # TODO Triage
-def test_prod_constant(transformer_factory):
+def test_prod_constant(transformer_factory, prod_constant):
     """
     Test reduce product of constants
     """
-    A0 = ng.make_axis(length=2)
-    A1 = ng.make_axis(length=3)
-    A2 = ng.make_axis(length=4)
-
-    # ngrpah ops
+    np_axis, ng_axis = prod_constant
+    # ngrpah op
     const_3d = ng.broadcast(ng.constant(2., axes=[]), axes=[A0, A1, A2])
-    prod_0 = ng.prod(const_3d, reduction_axes=[A0])
-    prod_1 = ng.prod(const_3d, reduction_axes=[A1])
-    prod_2 = ng.prod(const_3d, reduction_axes=[A2])
-    prod_0_1 = ng.prod(const_3d, reduction_axes=[A0, A1])
-    prod_0_2 = ng.prod(const_3d, reduction_axes=[A0, A2])
-    prod_1_2 = ng.prod(const_3d, reduction_axes=[A1, A2])
-    prod_0_1_2 = ng.prod(const_3d, reduction_axes=[A0, A1, A2])
+    prod = ng.prod(const_3d, reduction_axes=ng_axis)
 
     # numpy results
     np_const_3d = np.ones((2, 3, 4)) * 2.
-    res_0_np = np.prod(np_const_3d, axis=(0))
-    res_1_np = np.prod(np_const_3d, axis=(1))
-    res_2_np = np.prod(np_const_3d, axis=(2))
-    res_0_1_np = np.prod(np_const_3d, axis=(0, 1))
-    res_0_2_np = np.prod(np_const_3d, axis=(0, 2))
-    res_1_2_np = np.prod(np_const_3d, axis=(1, 2))
-    res_0_1_2_np = np.prod(np_const_3d, axis=(0, 1, 2))
+
+    res_np = np.prod(np_const_3d, axis=np_axis)
 
     # define comp
     with ExecutorFactory() as ex:
-        comps = ex.executor([prod_0, prod_1, prod_2, prod_0_1, prod_0_2, prod_1_2,
-                             prod_0_1_2])
+        comps = ex.executor(prod)
+        res_ng = comps()
 
-        res_0_ng, res_1_ng, res_2_ng, res_0_1_ng, res_0_2_ng, res_1_2_ng, res_0_1_2_ng = comps()
-
-    np.testing.assert_allclose(res_0_np, res_0_ng)
-    np.testing.assert_allclose(res_1_np, res_1_ng)
-    np.testing.assert_allclose(res_2_np, res_2_ng)
-    np.testing.assert_allclose(res_0_1_np, res_0_1_ng)
-    np.testing.assert_allclose(res_0_2_np, res_0_2_ng)
-    np.testing.assert_allclose(res_1_2_np, res_1_2_ng)
-    np.testing.assert_allclose(res_0_1_2_np, res_0_1_2_ng)
+    np.testing.assert_allclose(res_np, res_ng)
 
 
-@pytest.config.flex_disabled
+@pytest.fixture(params=[
+    pytest.config.flex_disabled(
+        np.array([[[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]],
+                  [[1., 2., 3.], [4., 5., 6.], [7., 8., 0.]]]),
+        reason="Too big values for Flex ( > 32767 )"),
+    np.array([[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]]),
+    np.array([1., 2., 3.]),
+    np.array([0., 2., 3.]),
+    np.array([0., 0., 3.]),
+    np.array([0., 0., 0.]),
+    np.array([0.]),
+    np.array([2.]),
+    np.array(0.),
+    np.array(2.),
+])
+def prod_deriv_arrays(request):
+    return request.param
+
+
 @pytest.config.argon_disabled  # TODO Triage
-def test_prod_deriv(transformer_factory):
+def test_prod_deriv(transformer_factory, prod_deriv_arrays):
     """
     Test reduce product's gradient
     """
@@ -296,28 +311,13 @@ def test_prod_deriv(transformer_factory):
         axes = ng.make_axes([ng.make_axis(length=s) for s in shape])
         return axes
 
-    # test cases
-    test_cases = [
-        np.array([[[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]],
-                  [[1., 2., 3.], [4., 5., 6.], [7., 8., 0.]]]),
-        np.array([[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]]),
-        np.array([1., 2., 3.]),
-        np.array([0., 2., 3.]),
-        np.array([0., 0., 3.]),
-        np.array([0., 0., 0.]),
-        np.array([0.]),
-        np.array([2.]),
-        np.array(0.),
-        np.array(2.),
-    ]
-
-    for x_val in test_cases:
-        axes = shape_to_axes(x_val.shape)
-        all_reduction_axes = get_all_reduction_axes(axes)
-        for reduction_axes in all_reduction_axes:
-            x = ng.placeholder(axes=axes)
-            x_prod = ng.prod(x, reduction_axes)
-            check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
+    x_val = prod_deriv_arrays
+    axes = shape_to_axes(x_val.shape)
+    all_reduction_axes = get_all_reduction_axes(axes)
+    for reduction_axes in all_reduction_axes:
+        x = ng.placeholder(axes=axes)
+        x_prod = ng.prod(x, reduction_axes)
+        check_derivative(x_prod, x, 0.001, x_val, atol=1e-3, rtol=1e-3)
 
 
 def test_reciprocal(transformer_factory, input_tensor):
