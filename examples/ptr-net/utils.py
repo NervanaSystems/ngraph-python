@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -19,20 +21,6 @@ import matplotlib.pyplot as plt
 
 def first_example(tsp_data):
     return tsp_data['train']['inp_txt'][0], tsp_data['train']['tgt_txt'][0]
-
-def avg_travel_distance(inputs_array, pred_travel_index_array):
-    """WIP"""
-
-    avg_travel_distance = 0
-    num_of_examples = 0
-    for i, (inputs, pred_travel_index) in enumerate(zip(inputs_array, pred_travel_index_array)):
-        avg_travel_distance += travel_distance(inputs, pred_travel_index)
-        num_of_examples = i+1
-
-    print(num_of_examples)
-    return avg_travel_distance
-
-
 
 def travel_distance(inputs, pred_travel_index):
     """
@@ -68,13 +56,12 @@ def distance(coord_a, coord_b):
     for a, b in zip(coord_a,coord_b):
         sum_square_dist += (a-b)**2
 
-    dist = sum_square_dist**(1./dim)
+    dist = sum_square_dist**(1/dim)
 
     return dist
 
 def save_plot(niters, loss, args):
-    name = 'train-{}_test-{}_hs-{}_lr-{}_bs-{}'.format(args.train_file, args.test_file, args.hs, args.lr, args.batch_size)
-    print(name)
+    name = 'train-{}_hs-{}_lr-{}_bs-{}'.format(args.train_file, args.hs, args.lr, args.batch_size)
     plt.title(name)
     plt.plot(niters, loss)
     plt.xlabel('iteration')
@@ -90,12 +77,7 @@ if __name__ == '__main__':
      [0.36377419, 0.59624465],
      [0.95521193, 0.94703186]])
 
+    pred_travel_route = np.array([1, 4, 2, 3, 5])
 
-    pred_travel_index = np.array([1, 4, 2, 3, 5])
-
-    # test case
-    # inputs = np.array([[0, 0], [1, 1], [1, 0], [0, 1]])
-    # pred_travel_index = np.array([1, 3, 2, 4])
-
-    travel_dist = travel_distance(inputs, pred_travel_index)
-    print(travel_dist)
+    travel_dist = travel_distance(inputs, pred_travel_route)
+    print('travel distance = {}'.format(travel_dist))

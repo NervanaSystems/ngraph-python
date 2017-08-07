@@ -28,7 +28,7 @@ class TSP(object):
         self.filemap = dict(train=dict(filename=train_filename),
                             test=dict(filename=test_filename))
 
-    def load_data(self, nrows):
+    def load_data(self):
         self.data_dict = {}
         for phase in ['train', 'test']:
             filename = self.filemap[phase]['filename']
@@ -42,8 +42,6 @@ class TSP(object):
                     y.append(np.array([int(j) - 1 for j in outputs.split()])[:-1]) # delete last
                     # teacher forcing array as decoder's input while training
                     y_teacher.append([X[i][j - 1] for j in y[i]])
-                    if i == nrows:
-                        break
             X = np.array(X)
             y = np.array(y)
             y_teacher = np.array(y_teacher)

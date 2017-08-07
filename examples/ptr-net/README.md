@@ -1,8 +1,8 @@
 ## Pointer Networks
 - Pointer Net deal with problems that each token in the output sequence is corresponding to positions in the input sequence. Sorting, convex hull and Traveling Salesman Problem fall under these kind of problems.
 - Pointer Net uses attention as a pointer to select a member of the input sequence as the output.
-- The repository shows ngraph implementation of Pointer Net to approximate Planer Traveling Salesman Problem.
-- reference paper: https://arxiv.org/pdf/1506.03134.pdf
+- The repository shows ngraph implementation of Pointer Nets to approximate Planer Traveling Salesman Problem.
+- Reference paper: https://arxiv.org/pdf/1506.03134.pdf
 
 ## How to run
 1. Download TSP dataset `tsp_5_train.zip` and `tsp_10_train.zip` from [here](https://drive.google.com/drive/folders/0B2fg8yPGn2TCMzBtS0o4Q2RJaEU)
@@ -12,10 +12,10 @@ $ unzip '*.zip'
 ```
 3. Run training script
 ```
-$ python ptr-net.py --train_file tsp5.txt --test_file tsp5_test.txt -b gpu
+$ python ptr-net.py --train_file tsp10.txt --test_file tsp10_test.txt -b gpu
 ```
 ## Results
-- prelim results training on tsp5.txt
+- Results training on tsp5.txt
 
 >iteration = 2000, train loss = 1.57829642296
 iteration = 4000, train loss = 1.43903386593
@@ -72,8 +72,9 @@ iteration = 50000, train loss = 1.30143654346
 
 ## To-dos
 - [X] change decoder input to coordinates for teacher forcing  
-- [ ] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
+- [X] ptr-net convergence issue (compare to [TF implementation](https://github.com/devsisters/pointer-network-tensorflow))
 - [X] use LSTM as enc/dec rnn cell
-- [ ] function to calculate travel distance
+- [X] function to calculate travel distance
+- [ ] clean the training code/write README
+- [ ] variable size sequence training
 - [ ] ptr-net inference code
-- [ ] visualize TSP  
