@@ -489,8 +489,6 @@ def test_elementwise_ops_unmatched_args(
     elementwise_binary_op,
     batch_axis
 ):
-    if elementwise_binary_op == "add":
-        pytest.config.flex_skip_now("There is no TensorDescription for this flex entry")
     """TODO."""
     W = ng.make_axis(length=5)
     H = ng.make_axis(length=5)

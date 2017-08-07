@@ -299,7 +299,7 @@ def test_learning_policy_step(transformer_factory):
             baseline_value = stepped_learning_rate(iter_input)
             reference_value = base_learning_rate * (drop_factor ** (iter_input // step))
 
-            assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
+            ng.testing.assert_allclose(baseline_value, reference_value, rtol=1e-5)
 
 
 def test_learning_policy_fixed_with_input(transformer_factory):
@@ -314,7 +314,7 @@ def test_learning_policy_fixed_with_input(transformer_factory):
         for iter_input in [10, 50, 90, 6, 15]:
             baseline_value = fixed_learning_rate(iter_input)
 
-            assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
+            ng.testing.assert_allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
 def test_learning_policy_fixed_without_input(transformer_factory):
@@ -325,7 +325,7 @@ def test_learning_policy_fixed_without_input(transformer_factory):
     with ExecutorFactory() as ex:
         fixed_learning_rate = ex.transformer.computation(lro.lrate)
         baseline_value = fixed_learning_rate()
-        assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
+        ng.testing.assert_allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
 @pytest.config.argon_disabled  # TODO triage
@@ -357,7 +357,7 @@ def test_learning_policy_schedule(transformer_factory, drop_factor):
             else:
                 scale_factor = drop_factor ** max_step_ind
             reference_value = base_learning_rate * scale_factor
-            assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
+            ng.testing.assert_allclose(baseline_value, reference_value, rtol=1e-5)
 
 
 if __name__ == '__main__':
