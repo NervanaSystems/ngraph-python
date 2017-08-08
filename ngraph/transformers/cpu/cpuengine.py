@@ -381,10 +381,18 @@ class Mkldnn(object):
     def mkl_reorder(self, name, output, input):
         assert self.enabled
         assert name in self.kernels
+        self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
+        self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
+        self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+
+    def mkl_contiguous(self, name, output, input):
         if name in self.kernels:
             self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
             self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        else:
+            output[()] = input
+
 
     def update_conv(self, name, conv_slices, I, E, U):
         if (self.enabled and name in self.kernels):

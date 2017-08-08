@@ -575,7 +575,9 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(ContiguousOp)
     def generate_op(self, op, out, x):
-        self.append("{}[()] = {}", out, x)
+        # self.append("{}[()] = {}", out, x)
+        self.append("mkldnn.mkl_contiguous('{}', {}, {})",
+                    op.safe_name, out, x)
 
     @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
