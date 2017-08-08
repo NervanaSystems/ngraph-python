@@ -859,11 +859,10 @@ class CPUTransformer(ExecutionGraphTransformer):
 
         add_layout_conversion = AddLayoutConversions(None)
         if self.mkldnn.enabled:
-            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn)),
-            DeadCodeEliminationPass(),
+            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn))
             self.graph_passes.append(MklAddLayoutConversions(mkldnn=self.mkldnn,
-                                                             layoutpass=add_layout_conversion)),
-            DeadCodeEliminationPass()
+                                                             layoutpass=add_layout_conversion))
+
         self.graph_passes += [
             SSAConversion(),
             IndexElision(),

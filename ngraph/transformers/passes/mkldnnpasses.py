@@ -712,6 +712,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
         elif (not arg.tensor_description().c_contiguous and
                 all(stride != 0 for stride in arg.tensor_description().strides)):
+            # TODO(jbobba): Disabled until MKLDNN coversion bug is fixed
+            return
+            arg_td = arg.tensor_description()
+            op_td = op.tensor_description()
             ndims = len(op.axes)
             order = range(ndims)
             (in_shape, in_layout) = get_mkl_op_shape_and_layout(self.mkldnn, arg, order)

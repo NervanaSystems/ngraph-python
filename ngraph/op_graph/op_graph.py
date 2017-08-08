@@ -1743,6 +1743,10 @@ class AxesCastOp(IndexOp):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
+
 
 class RoleCastOp(AxesCastOp):
     """
