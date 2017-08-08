@@ -30,10 +30,6 @@ pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transf
 
 rng = RandomTensorGenerator(0, np.float32)
 
-A0 = ng.make_axis(length=2)
-A1 = ng.make_axis(length=3)
-A2 = ng.make_axis(length=4)
-
 
 def test_constant_multiply(transformer_factory):
     # TODO: better error message when missing axes length in cases where it
@@ -213,19 +209,26 @@ def test_reduction_deriv(transformer_factory, reduction, sub_axes):
 
 
 @pytest.fixture(params=[
-    (0, A0),
-    (1, A1),
-    (2, A2),
-    ((0, 1), (A0, A1)),
-    ((0, 2), (A0, A2)),
-    ((1, 2), (A1, A2)),
+    (0, "A0"),
+    (1, "A1"),
+    (2, "A2"),
+    ((0, 1), "A0, A1"),
+    ((0, 2), "A0, A2"),
+    ((1, 2), "A1, A2"),
     pytest.config.flex_disabled(
-        ((0, 1, 2), (A0, A1, A2)),
+        ((0, 1, 2), "A0, A1, A2"),
         reason="Too big values for Flex ( > 32767 )"
     )
 ])
 def prod_constant(request):
-    return request.param
+    ng_axis = []
+    axis_dict = {
+        "A0": ng.make_axis(length=2),
+        "A1": ng.make_axis(length=3),
+        "A2": ng.make_axis(length=4)}
+    for axis in request.param[1].split(', '):
+        ng_axis.append(axis_dict[axis])
+    return request.param[0], ng_axis, axis_dict
 
 
 @pytest.config.argon_disabled  # TODO Triage
@@ -233,9 +236,12 @@ def test_prod_constant(transformer_factory, prod_constant):
     """
     Test reduce product of constants
     """
-    np_axis, ng_axis = prod_constant
+    np_axis, ng_axis, axis_dict = prod_constant
+    A0, A1, A2 = axis_dict["A0"], axis_dict["A1"], axis_dict["A2"]
+
     # ngrpah op
     const_3d = ng.broadcast(ng.constant(2., axes=[]), axes=[A0, A1, A2])
+    print ng_axis
     prod = ng.prod(const_3d, reduction_axes=ng_axis)
 
     # numpy results
