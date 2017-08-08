@@ -128,6 +128,7 @@ def test_specific_slice_deriv(transformer_factory):
                 assert ng.testing.allclose(dslice_dx_val, dslice_dx_np)
 
 
+@pytest.config.flex_disabled(reason="#1954, UnsliceOp multiple slicing not yet supported by flex")
 @pytest.config.flex_disabled
 def test_slice_deriv(transformer_factory):
     C = ng.make_axis(length=2)

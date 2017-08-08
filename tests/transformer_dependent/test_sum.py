@@ -41,7 +41,8 @@ def extra_axes(request):
     return request.param
 
 
-@pytest.config.flex_skip
+@pytest.config.flex_skip(reason="Strange behaviour of tests for flex, "
+                                "most cases run as first pass others fail")
 @pytest.mark.transformer_dependent
 def test_sum(transformer_factory, num_units, sequence_length, batch_size):
     """
