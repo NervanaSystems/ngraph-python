@@ -42,7 +42,7 @@ from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
 pytestmark = [pytest.mark.transformer_dependent,
-              pytest.config.flex_disabled(reason="LSTM is not yet supported with Flex"),
+              pytest.config.flex_disabled(reason="#1955 - LSTM is not yet supported with Flex"),
               pytest.config.argon_disabled]
 
 rng = RandomTensorGenerator()
@@ -136,7 +136,7 @@ def check_lstm(seq_len, input_size, hidden_size,
 
             if reset_cells is False:
                 # look at the last hidden states
-                assert ng.testing.allclose(fprop_neon[:, -1].reshape(-1, 1),
+                ng.testing.assert_allclose(fprop_neon[:, -1].reshape(-1, 1),
                                            h_init_neon,
                                            rtol=rtol, atol=atol)
 
@@ -174,7 +174,7 @@ def check_lstm(seq_len, input_size, hidden_size,
             fprop_ref_list.append(Hout_ref)
 
         for i in range(num_iter):
-            assert ng.testing.allclose(fprop_neon_list[i],
+            ng.testing.assert_allclose(fprop_neon_list[i],
                                        fprop_ref_list[i], rtol=rtol, atol=atol)
 
 
@@ -233,7 +233,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
                 # look at the last hidden states
                 h_init_neon = fprop_neon_2[:, -1].reshape(-1, 1)
                 h_init_ng = h_init_fun()
-                assert ng.testing.allclose(h_init_neon, h_init_ng, rtol=rtol, atol=atol)
+                ng.testing.assert_allclose(h_init_neon, h_init_ng, rtol=rtol, atol=atol)
 
         # after the rnn graph has been executed, can get the W values. Get copies so
         # shared values don't confuse derivatives
@@ -284,7 +284,7 @@ def check_stacked_lstm(seq_len, input_size, hidden_size,
             fprop_ref_2_list.append(Hout_ref_2)
 
         for i in range(num_iter):
-            assert ng.testing.allclose(fprop_neon_2_list[i],
+            ng.testing.assert_allclose(fprop_neon_2_list[i],
                                        fprop_ref_2_list[i], rtol=rtol, atol=atol)
 
 

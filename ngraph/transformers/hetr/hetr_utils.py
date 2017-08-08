@@ -13,7 +13,9 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.comm_nodes import calculate_scatter_axes
+
+from ngraph.op_graph.axes import Axes
+from ngraph.op_graph.comm_nodes import set_parallel_axes
 from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
     GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp, BroadcastRecvOp
@@ -158,25 +160,27 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                 op._send_node = send_op
                 new_send_nodes.add(send_op)
                 replaced_send_nodes.add(orig_ops[op.uuid].send_node())
-            if hasattr(op, '_axes') and parallel_axis in op._axes:
-                op._axes = calculate_scatter_axes(op.axes, parallel_axis, num_clones)
-                # TODO: Revisit to handle axes updation better. Github Ticket #1355
-                if isinstance(op, DotOp):
-                    if parallel_axis in op.x_out_axes:
-                        op.x_out_axes = calculate_scatter_axes(op.x_out_axes,
-                                                               parallel_axis, num_clones)
-                    elif parallel_axis in op.y_out_axes:
-                        op.y_out_axes = calculate_scatter_axes(op.y_out_axes,
-                                                               parallel_axis, num_clones)
-                    else:
-                        raise ValueError("Missing parallel_axis in Op's x_out_axes or y_out_axes")
 
             if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
-                op.reduction_axes = calculate_scatter_axes(op.reduction_axes, parallel_axis,
-                                                           num_clones)
+                op.reduction_axes = set_parallel_axes(op.reduction_axes, parallel_axis)
+
+            if getattr(op, 'axes', None) is not None \
+                    and parallel_axis in Axes.as_flattened_list(op.axes):
+                # if parallel_axis in Axes.as_flattened_list(op.axes):
+                op._axes = set_parallel_axes(op.axes, parallel_axis)
+                if isinstance(op, DotOp):
+                    if parallel_axis in op.x_out_axes:
+                        op.x_out_axes = set_parallel_axes(op.x_out_axes,
+                                                          parallel_axis)
+                    elif parallel_axis in op.y_out_axes:
+                        op.y_out_axes = set_parallel_axes(op.y_out_axes,
+                                                          parallel_axis)
+                    else:
+                        raise ValueError("Missing parallel_axis in Op's "
+                                         "x_out_axes or y_out_axes")
 
             if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
-                op.tensor._axes = calculate_scatter_axes(op.tensor.axes, parallel_axis, num_clones)
+                op.tensor._axes = set_parallel_axes(op.tensor.axes, parallel_axis)
 
             args_list = list(op.args)
             for arg_idx, arg_op in enumerate(args_list):
