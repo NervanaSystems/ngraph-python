@@ -236,10 +236,10 @@ def test_recvop_tensorupdate(transformer_factory):
                      pad_d=0, pad_h=0, pad_w=0,
                      str_d=1, str_h=1, str_w=1):
 
-            from ngraph.frontends.neon.layer import output_dim
-            M = output_dim(D, T, pad_d, str_d)
-            P = output_dim(H, R, pad_h, str_h)
-            Q = output_dim(W, S, pad_w, str_w)
+            from ngraph.frontends.common.utils import conv_output_dim
+            M = conv_output_dim(D, T, pad_d, str_d)
+            P = conv_output_dim(H, R, pad_h, str_h)
+            Q = conv_output_dim(W, S, pad_w, str_w)
 
             self.dimO = (K, M, P, Q, N)
             self.dimI = (C, D, H, W, N)
