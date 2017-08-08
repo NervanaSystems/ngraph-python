@@ -15,7 +15,6 @@
 import numpy as np
 import ngraph as ng
 from future.utils import viewitems
-import six
 
 
 class TSPSequentialArrayIterator(object):
@@ -40,14 +39,14 @@ class TSPSequentialArrayIterator(object):
 
         # make sure input is in dict format
         if isinstance(data_arrays, dict):
-            self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
+            self.data_arrays = dict(data_arrays)
         else:
             raise ValueError("Must provide dict as input")
 
         # number of examples
-        self.ndata = len(six.next(six.itervalues(self.data_arrays)))
+        self.ndata = len(self.data_arrays['inp_txt'])
 
-        # number of examples (with integer multiplication of batch sizes)
+        # number of examples (as integer multiple of batch size)
         self.ndata = self.ndata // (self.batch_size) * self.batch_size
 
         self.nbatches = self.ndata // self.batch_size

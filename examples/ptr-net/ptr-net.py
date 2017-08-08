@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-Approximate Planer Traveling Salesman Problem using Pointer Networks
+Approximate Planar Traveling Salesman Problem using Pointer Networks
 Reference paper: https://arxiv.org/pdf/1506.03134.pdf
 """
 from __future__ import division
@@ -28,7 +28,7 @@ import ngraph.transformers as ngt
 import numpy as np
 from ngraph.frontends.neon.data import tsp
 from tsp_seqarrayiter import TSPSequentialArrayIterator
-from utils import first_example, save_plot
+from utils import save_plot
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
@@ -51,16 +51,10 @@ num_features = 2  # for planer TSP, each city's location is represented by a 2-d
 
 # preprocess the TSP dataset
 tsp = tsp.TSP(train_filename=args.train_file, test_filename=args.test_file)
-print('Loading and preprocessing TSP data...')
 tsp_data = tsp.load_data()
 
-# take a look at the first TSP input-target example pair
-input_example, target_example = first_example(tsp_data)
-print('First input example in training data = {}'.format(input_example))
-print('First target example in training data= {}'.format(target_example))
-
 # number of time steps equal to number of points (cities) in each example
-time_steps = input_example.shape[0]
+time_steps = tsp_data['train']['inp_txt'].shape[1]
 
 # number of classes
 ax.Y.length = time_steps
@@ -82,34 +76,33 @@ enc = LSTM(args.hs, init, activation=Tanh(), reset_cells=True,
 dec = LSTM(args.hs, init, activation=Tanh(), reset_cells=True,
            gate_activation=Logistic(), return_sequence=True)
 
-# encoder input embedding
-hidden_feature_axis = ng.make_axis(length=args.hs, name='hidden_feature_axis')
-feature_axis = ng.make_axis(length=num_features, name='feature_axis')
-
-W_emb = ng.variable(axes=[hidden_feature_axis, feature_axis], initial_value=init)
-emb_enc_inputs = ng.dot(W_emb, inputs['inp_txt'])
-
-# docoder input embedding
-emb_dec_input = []
-ax.N.length = args.batch_size
-for i in range(ax.N.length):
-    """
-    for each iteration, permute (by true label)
-    encoder input embedding for teacher forcing input to decoder
-    """
-    emb_enc_input = ng.slice_along_axis(emb_enc_inputs, axis=ax.N, idx=i)
-
-    tmp_axis_1 = ng.make_axis(length=time_steps, name='tmp_axis_1')
-    emb_enc_input_tmp = ng.cast_axes(emb_enc_input,
-                                     ng.make_axes([hidden_feature_axis, tmp_axis_1]))
-    perm = ng.slice_along_axis(inputs['tgt_txt'], axis=ax.N, idx=i)
-    one_hot_target_tmp = ng.one_hot(perm, axis=tmp_axis_1)
-
-    emb_dec_input.append(ng.dot(emb_enc_input_tmp, one_hot_target_tmp))
-
-emb_dec_inputs = ng.stack(emb_dec_input, axis=ax.N, pos=1)
-
 if args.emb is True:
+    # encoder input embedding
+    hidden_feature_axis = ng.make_axis(length=args.hs, name='hidden_feature_axis')
+    feature_axis = ng.make_axis(length=num_features, name='feature_axis')
+
+    W_emb = ng.variable(axes=[hidden_feature_axis, feature_axis], initial_value=init)
+    emb_enc_inputs = ng.dot(W_emb, inputs['inp_txt'])
+
+    # decoder input embedding
+    emb_dec_input = []
+    ax.N.length = args.batch_size
+    for i in range(ax.N.length):
+        # for each iteration, permute (by true label)
+        # encoder input embedding for teacher forcing input to decoder
+
+        emb_enc_input = ng.slice_along_axis(emb_enc_inputs, axis=ax.N, idx=i)
+
+        tmp_axis_1 = ng.make_axis(length=time_steps, name='tmp_axis_1')
+        emb_enc_input_tmp = ng.cast_axes(emb_enc_input,
+                                         ng.make_axes([hidden_feature_axis, tmp_axis_1]))
+        perm = ng.slice_along_axis(inputs['tgt_txt'], axis=ax.N, idx=i)
+        one_hot_target_tmp = ng.one_hot(perm, axis=tmp_axis_1)
+
+        emb_dec_input.append(ng.dot(emb_enc_input_tmp, one_hot_target_tmp))
+
+    emb_dec_inputs = ng.stack(emb_dec_input, axis=ax.N, pos=1)
+
     enc_input = emb_enc_inputs
     dec_input = emb_dec_inputs
 else:
@@ -117,13 +110,15 @@ else:
     dec_input = inputs['teacher_txt']
 
 (enc_h_out, enc_c_out) = enc(enc_input, return_cell_state=True)
+
+# compute the last hidden/cell states as decoder's initial states
 rec_axis = enc_h_out.axes.recurrent_axis()
 enc_last_h_out = ng.slice_along_axis(enc_h_out, axis=rec_axis, idx=-1)
 enc_last_c_out = ng.slice_along_axis(enc_c_out, axis=rec_axis, idx=-1)
+
 dec_h_out = dec(dec_input, init_state=(enc_last_h_out, enc_last_c_out), return_cell_state=False)
 
 # ptr-net model
-######################
 rec_axis = dec_h_out.axes.recurrent_axis()
 tmp_axis_2 = ng.make_axis(length=args.hs, name='tmp_axis_2')
 
@@ -132,12 +127,17 @@ W1 = ng.variable(axes=[hidden_feature_axis, tmp_axis_2], initial_value=init)
 W2 = ng.variable(axes=[hidden_feature_axis, tmp_axis_2], initial_value=init)
 v = ng.variable(axes=[tmp_axis_2], initial_value=init)
 
-u_list = []
-for i in range(time_steps):
-    u_i_list = []
+input_time_steps = time_steps
+output_time_steps = time_steps
+
+u_list = []  # a list of target probability distribtuions of every output time step
+for i in range(output_time_steps):
+    # compute attention vector for output time step i
+    u_i_list = []  # a list of attention scores u_i
     W2_di = ng.dot(W2, ng.slice_along_axis(dec_h_out, axis=rec_axis, idx=i))
 
-    for j in range(time_steps):
+    for j in range(input_time_steps):
+        # compute attention score for output time step i with input time step j
         W1_ej = ng.dot(W1, ng.slice_along_axis(enc_h_out, axis=rec_axis, idx=j))
         score = ng.dot(v, ng.tanh(W1_ej + W2_di))  # u_i = v*tanh(W1*e_j + W2*d_i)
         u_i_list.append(score)
@@ -146,7 +146,6 @@ for i in range(time_steps):
     u_list.append(output_prob)
 
 pointer_out = ng.stack(u_list, axis=rec_axis, pos=2)
-######################
 
 # specify loss function, calculate loss and update weights
 one_hot_target = ng.one_hot(inputs['tgt_txt'], axis=ax.Y)

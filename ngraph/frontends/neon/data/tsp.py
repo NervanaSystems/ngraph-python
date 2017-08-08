@@ -50,7 +50,7 @@ class TSP(object):
                         z.extractall('./')
                     print('\nDownloaded and unzipped {} from paper\n'.format(file_name))
 
-            print('Loading and preprocessing TSP data...')
+            print('Loading and preprocessing TSP {} data...'.format(phase))
             with open(filepath, 'r') as f:
                 X, y, y_teacher = [], [], []
                 for i, line in tqdm(enumerate(f)):

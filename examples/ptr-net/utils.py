@@ -82,16 +82,3 @@ def save_plot(niters, loss, args):
     plt.ylabel('loss')
     plt.savefig(name + '.jpg')
     print('{} saved!'.format(name + '.jpg'))
-
-if __name__ == '__main__':
-    # test case
-    inputs = np.array([[0.59764034, 0.81147296],
-                      [0.37839254, 0.1881658],
-                      [0.44284963, 0.29181517],
-                      [0.36377419, 0.59624465],
-                      [0.95521193, 0.94703186]])
-
-    pred_travel_route = np.array([1, 4, 2, 3, 5])
-
-    travel_dist = travel_distance(inputs, pred_travel_route)
-    print('travel distance = {}'.format(travel_dist))
