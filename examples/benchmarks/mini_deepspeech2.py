@@ -30,16 +30,17 @@ def get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands,
     return model_out
 
 
-def run_mini_ds2_benchmark(max_length, nbands, str_w, nout, batch_size, max_iter, skip_iter,
-                           nfilters, filter_width, depth, hidden_size, batch_norm, device_id,
-                           device, transformer, nesterov=False, bprop=False, visualize=False):
-    inputs, train_set, eval_set = generate_ds2_data(max_length, str_w, nout, nbands,
-                                                    batch_size, max_iter)
+def run_mini_ds2_benchmark(args, **kwargs):
+    device_id = kwargs.get('device_id')
 
-    model_out = get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands, depth, hidden_size,
-                             batch_norm, device_id)
+    inputs, train_set, eval_set = generate_ds2_data(args.max_length, args.str_w, args.nout,
+                                                    args.nbands, args.batch_size,
+                                                    args.num_iterations)
 
-    if bprop:
+    model_out = get_mini_ds2(inputs, args.nfilters, args.filter_width, args.str_w, args.nbands,
+                             args.depth, args.hidden_size, args.batch_norm, device_id)
+
+    if args.bprop:
         with ng.metadata(device_id=device_id, parallel=ax.N):
             loss = ng.ctc(model_out,
                           ng.flatten(inputs["char_map"]),
@@ -49,22 +50,26 @@ def run_mini_ds2_benchmark(max_length, nbands, str_w, nout, batch_size, max_iter
             optimizer = GradientDescentMomentum(learning_rate=2e-5,
                                                 momentum_coef=0.99,
                                                 gradient_clip_norm=400,
-                                                nesterov=nesterov)
+                                                nesterov=args.nesterov)
 
             updates = optimizer(loss)
             mean_cost = ng.sequential([updates, ng.mean(loss, out_axes=())])
 
-            bprop_computation_op = ng.computation([mean_cost, model_out], "all")
+            bprop_computation_op = ng.computation(mean_cost, "all")
 
-        benchmark = Benchmark(bprop_computation_op, train_set, inputs, transformer, device)
-        Benchmark.print_benchmark_results(benchmark.time(max_iter, skip_iter, 'ds2_bprop',
-                                                         visualize, preprocess=True))
+        benchmark = Benchmark(bprop_computation_op, train_set, inputs, args.backend,
+                              args.hetr_device)
+        Benchmark.print_benchmark_results(benchmark.time(args.num_iterations, args.skip_iter,
+                                                         'ds2_bprop', args.visualize,
+                                                         preprocess=True))
     else:
         fprop_computation_op = ng.computation(model_out, "all")
 
-        benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, transformer, device)
-        Benchmark.print_benchmark_results(benchmark_fprop.time(max_iter, skip_iter, 'ds2_fprop',
-                                                               visualize, preprocess=True))
+        benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, args.backend,
+                                    args.hetr_device)
+        Benchmark.print_benchmark_results(benchmark_fprop.time(args.num_iterations, args.skip_iter,
+                                                               'ds2_fprop', args.visualize,
+                                                               preprocess=True))
 
 
 if __name__ == "__main__":
@@ -87,24 +92,24 @@ if __name__ == "__main__":
     parser.add_argument('--nbands', type=int, default=13)
     parser.add_argument('--nout', type=int, default=29)
     parser.add_argument('--batch_norm', action='store_true')
-    parser.add_argument('--nesterov', action='store_true')
-    parser.add_argument('--max_iter', type=int,
-                        help='Number of  iterations',
-                        default=2)
+    parser.add_argument('--nesterov', action='store_true',
+                        help='Use Nesterov accelerated gradient')
     parser.add_argument('-s', '--skip_iter', type=int,
                         help='Number of iterations to skip',
                         default=1)
     parser.add_argument('-n', '--num_devices', nargs='+', type=int,
-                        help="number of devices to run the benchmark on",
+                        help="Number of devices to run the benchmark on",
                         default=[1])
     parser.add_argument('-d', '--hetr_device', choices=['cpu', 'gpu'],
-                        help="device to run HeTr",
+                        help="Device to run HeTr",
                         default='cpu')
     parser.add_argument('--max_length', type=float,
-                        help="max duration for each audio sample",
+                        help="Max duration for each audio sample",
                         default=0.3)
-    parser.add_argument('--bprop', action="store_true", help="enable back propagation")
-    parser.add_argument('--visualize', action="store_true", help="enable graph visualization")
+    parser.add_argument('--bprop', action="store_true",
+                        help="Enable back propagation")
+    parser.add_argument('--visualize', action="store_true",
+                        help="Enable graph visualization")
 
     args = parser.parse_args()
 
@@ -117,21 +122,4 @@ if __name__ == "__main__":
     ax.Y.name = "characters"
 
     for device_id in device_ids:
-        run_mini_ds2_benchmark(max_length=args.max_length,
-                               nbands=args.nbands,
-                               str_w=args.str_w,
-                               nout=args.nout,
-                               batch_size=args.batch_size,
-                               max_iter=args.max_iter,
-                               skip_iter=args.skip_iter,
-                               nfilters=args.nfilters,
-                               filter_width=args.filter_width,
-                               depth=args.depth,
-                               hidden_size=args.hidden_size,
-                               batch_norm=args.batch_norm,
-                               device_id=device_id,
-                               device=args.hetr_device,
-                               transformer=args.backend,
-                               nesterov=args.nesterov,
-                               bprop=args.bprop,
-                               visualize=args.visualize)
+        run_mini_ds2_benchmark(args, device_id=device_id)

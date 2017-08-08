@@ -54,7 +54,7 @@ class Benchmark(object):
         self.transformer = transformer
         self.device = device
 
-    def fill_feed_dict(self, dataset, feed_inputs, preprocess):
+    def fill_feed_dict(self, dataset, feed_inputs, preprocess=False):
         data = next(iter(dataset))
         if preprocess:
             data = preprocess_ds2_data(data)
@@ -76,7 +76,7 @@ class Benchmark(object):
         return wrapper
 
     def time(self, n_iterations, n_skip, computation_name, visualize,
-             subgraph_attr=None, preprocess=None):
+             subgraph_attr=None, preprocess=False):
         """
         This runs _any_ computation repeatedly with data from feed_dict, and times it
 

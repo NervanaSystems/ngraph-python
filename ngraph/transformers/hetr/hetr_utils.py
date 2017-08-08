@@ -130,7 +130,7 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
 
     new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
 
-    orig_ops = {op.uuid: op for op in Op.all_op_references([root])}
+    orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
     # Prune ops that are not control_deps of new_gather_send_op
     # deserialize includes extra referenced nodes
     cloned_graph = Op.ordered_ops([new_root])
@@ -195,17 +195,6 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
                     orig_ops[op.uuid].metadata['clones'][str(clone_id)] = op
 
             op.uuid = uuid.uuid4()
-
-    # Generate new UUIDs at the end of cloning, otherwise we will end up with multiple ops having
-    # the same UUIDs.
-    for op in Op.all_op_references([new_root]):
-        if isinstance(op, (ScatterRecvOp, GatherSendOp, AllReduceOp, BroadcastRecvOp)):
-            if not hasattr(op, '_shared_queues'):
-                op._shared_queues = orig_ops[op.uuid]._shared_queues
-                op.idx = shared_queues_idx
-                if isinstance(op, RecvOp):
-                    op._send_node = orig_ops[op.uuid].send_node()
-        op.uuid = uuid.uuid4()
 
     return new_root, new_send_nodes, replaced_send_nodes
 
