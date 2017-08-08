@@ -118,8 +118,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,
     train_config = common_config(train_manifest, batch_size)
     train_config['iteration_mode'] = "COUNT"
     train_config['iteration_mode_count'] = train_iterations
-    train_config['shuffle_manifest'] = True
-    train_config['shuffle_enable'] = True
+    train_config['shuffle_manifest'] = False 
+    train_config['shuffle_enable'] = False
     train_config['random_seed'] = random_seed
 
     valid_config = common_config(valid_manifest, batch_size)

@@ -22,13 +22,30 @@ import ngraph.transformers as ngt
 from tqdm import tqdm
 from contextlib import closing
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
-from ngraph.frontends.neon import XavierInit, UniformInit
+from ngraph.frontends.neon import XavierInit, UniformInit, Layer
 from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential, Dropout
 from ngraph.frontends.neon import Rectlin, Softmax, Identity, GradientDescentMomentum
 from ngraph.frontends.neon import ax, Adam
 from data import make_aeon_loaders
 from inception_blocks import Inceptionv3_b1, Inceptionv3_b2, Inceptionv3_b3
 from inception_blocks import Inceptionv3_b4, Inceptionv3_b5
+
+def loop_eval(dataset, computation, metric_names):
+    dataset._dataloader.reset()
+    all_results = None
+    for data in dataset:
+
+        feed_dict = {inputs[k]: data[k] for k in data.keys()}
+        results = computation(feed_dict=feed_dict)
+        if all_results is None:
+            all_results = {name: list(res) for name, res in zip(metric_names, results)}
+        else:
+            for name, res in zip(metric_names, results):
+                all_results[name].extend(list(res))
+
+    reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()}
+    return reduced_results
+
 np.seterr(all='raise')
 
 parser = NgraphArgparser(description=__doc__)
@@ -61,7 +78,7 @@ train_set,valid_set=make_aeon_loaders(manifest_dir, args.batch_size,
 inputs=train_set.make_placeholders(include_iteration=True)
 # Input size is 299 x 299 x 3
 # Root branch of the tree
-seq1 = Sequential([Convolution((3, 3, 16), padding=0, strides=2, batch_norm=True,
+seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2, batch_norm=True,
                                activation=Rectlin(), bias_init=bias_init,
                                filter_init=XavierInit()),  # conv2d_1a_3x3
                    Convolution((3, 3, 16), activation=Rectlin(), padding=0, batch_norm=True,
@@ -71,12 +88,12 @@ seq1 = Sequential([Convolution((3, 3, 16), padding=0, strides=2, batch_norm=True
                    Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3 
                    Convolution((1, 1, 16), activation=Rectlin(), batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),  # conv2d_3b_1x1
-                   Convolution((3, 3, 16), activation=Rectlin(), padding=1, batch_norm=True,
+                   Convolution((3, 3, 32), activation=Rectlin(), padding=1, batch_norm=True,
                                bias_init=bias_init, filter_init=XavierInit()),  # conv2d_4a_3x3
                    Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
-                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (16, )]),  # mixed_5b 
-                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (16, )]),  # mixed_5c 
-                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (16, )]),  # mixed_5d 
+                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5b 
+                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5c 
+                   Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5d 
                    Inceptionv3_b2([(32,), (32, 32, 32)]),  # mixed_6a 
                    Inceptionv3_b3([(32,), (32, 32, 32),
                                    (32, 32, 32, 32, 32), (32,)]),  # mixed_6b 
@@ -106,7 +123,7 @@ seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'),
                       Convolution((1, 1, 1000), activation=Softmax(),
                                bias_init=bias_init, filter_init=XavierInit())])
 
-optimizer = Adam()
+optimizer = Adam(learning_rate=.001)
 y_onehot = ng.one_hot(inputs['label'][:,0], axis=ax.Y)
 train_prob_main = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
@@ -114,11 +131,20 @@ train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
 train_prob_aux = ng.cast_role(seq_aux(seq1(inputs['image']))[:,0,0,0,:], axes=y_onehot.axes)
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot) 
 
-batch_cost = ng.sequential([optimizer(train_loss_main + 0.1*train_loss_aux), ng.mean(train_loss_main, out_axes=())])
+batch_cost = ng.sequential([optimizer(train_loss_main + 0.4*train_loss_aux), ng.mean(train_loss_main, out_axes=())])
 train_computation = ng.computation(batch_cost, 'all')
+
+label_indices = inputs['label'][:, 0]
+with Layer.inference_mode_on():
+    inference_prob = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
+    errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
+    eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot)
+    eval_loss_names = ['cross_ent_loss', 'misclass']
+    eval_computation = ng.computation([eval_loss, errors], "all")
 
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
+    eval_function = transformer.add_computation(eval_computation)
 
     if args.no_progress_bar:
         ncols = 0
@@ -135,11 +161,14 @@ with closing(ngt.make_transformer()) as transformer:
 
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output[()]))
-        interval_cost = output[()]
+        interval_cost += output[()]
         if (step + 1) % args.iter_interval == 0 and step > 0:
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
                        "Avg Train Cost {cost:0.4f}".format(
                            interval=step // args.iter_interval,
                            iteration=step,
-                           cost=interval_cost))
+                           cost=interval_cost / args.iter_interval))
+            interval_cost = 0.0
+            eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            tqdm.write("Avg losses: {}".format(eval_losses))
 print('\n')

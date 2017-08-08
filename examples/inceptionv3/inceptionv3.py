@@ -22,13 +22,30 @@ import ngraph.transformers as ngt
 from tqdm import tqdm
 from contextlib import closing
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
-from ngraph.frontends.neon import XavierInit, UniformInit
+from ngraph.frontends.neon import XavierInit, UniformInit, Layer
 from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential, Dropout
 from ngraph.frontends.neon import Rectlin, Softmax, Identity, GradientDescentMomentum
 from ngraph.frontends.neon import ax, Adam
 from data import make_aeon_loaders
 from inception_blocks import Inceptionv3_b1, Inceptionv3_b2, Inceptionv3_b3
 from inception_blocks import Inceptionv3_b4, Inceptionv3_b5
+
+def loop_eval(dataset, computation, metric_names):
+    dataset._dataloader.reset()
+    all_results = None
+    for data in dataset:
+
+        feed_dict = {inputs[k]: data[k] for k in data.keys()}
+        results = computation(feed_dict=feed_dict)
+        if all_results is None:
+            all_results = {name: list(res) for name, res in zip(metric_names, results)}
+        else:
+            for name, res in zip(metric_names, results):
+                all_results[name].extend(list(res))
+
+    reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()}
+    return reduced_results
+
 np.seterr(all='raise')
 
 parser = NgraphArgparser(description=__doc__)
@@ -109,27 +126,29 @@ seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'),
                       Convolution((1, 1, 1000), activation=Softmax(),
                                bias_init=bias_init, filter_init=XavierInit())])
                       #Affine(activation=Softmax(), bias_init=bias_init, weight_init=XavierInit(), axes=ax.Y)])
-                      
-
-lr_schedule = {'name': 'schedule', 'base_lr': 0.01,
-               'gamma': (1 / 250.)**(1 / 3.),
-               'schedule': [22, 44, 65]}
-
-optimizer = GradientDescentMomentum(lr_schedule, 0.0, wdecay=0.0005,
-                                    iteration=inputs['iteration'])
 
 optimizer = Adam()
-train_prob_main = seq2(seq1(inputs['image']))
-train_loss_main = ng.cross_entropy_multi(train_prob_main, ng.one_hot(inputs['label'][:,0], axis=ax.Y))
 y_onehot = ng.one_hot(inputs['label'][:,0], axis=ax.Y)
-train_prob_aux = ng.cast_role(seq_aux(seq1(inputs['image']))[:,0,0,0,:], axes=y_onehot.axes)
+train_prob_main = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
+train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
 
+train_prob_aux = ng.cast_role(seq_aux(seq1(inputs['image']))[:,0,0,0,:], axes=y_onehot.axes)
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot) 
-batch_cost = ng.sequential([optimizer(train_loss_main + train_loss_aux), ng.mean(train_loss_main, out_axes=())])
+
+batch_cost = ng.sequential([optimizer(train_loss_main + 0.4*train_loss_aux), ng.mean(train_loss_main, out_axes=())])
 train_computation = ng.computation(batch_cost, 'all')
+
+label_indices = inputs['label'][:, 0]
+with Layer.inference_mode_on():
+    inference_prob = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
+    errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
+    eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot)
+    eval_loss_names = ['cross_ent_loss', 'misclass']
+    eval_computation = ng.computation([eval_loss, errors], "all")
 
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
+    eval_function = transformer.add_computation(eval_computation)
 
     if args.no_progress_bar:
         ncols = 0
@@ -153,3 +172,7 @@ with closing(ngt.make_transformer()) as transformer:
                            interval=step // args.iter_interval,
                            iteration=step,
                            cost=interval_cost / args.iter_interval))
+            interval_cost = 0.0
+            eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            tqdm.write("Avg losses: {}".format(eval_losses))
+print('\n')
