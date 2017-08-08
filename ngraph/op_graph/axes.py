@@ -336,7 +336,7 @@ class Axes(object):
             elems = []
             for x in seq:
                 if isinstance(x, collections.Iterable):
-                    x = Axes(convert(x)).flatten()
+                    x = Axes(convert(x)).flatten(force=True)
                 elems.append(x)
             return elems
 
@@ -951,9 +951,20 @@ class FlattenedAxis(Axis):
     def is_flattened(self):
         """
         Returns:
-            True is this is a FlattendAxis.
+            True if this is a FlattenedAxis.
         """
         return True
+
+    @property
+    def is_batch(self):
+        """
+        Tests if an axis is a batch axis.
+
+        Returns:
+            bool: True if the axis is a batch axis.
+
+        """
+        return False
 
     @property
     def empty(self):
@@ -978,6 +989,14 @@ class FlattenedAxis(Axis):
             The flattened axes contained in this object.
         """
         return self._axes
+
+    @property
+    def length(self):
+        """
+        Returns:
+            The length of the FlattenedAxis.
+        """
+        return reduce(operator.mul, self.axes.lengths, 1)
 
     def __eq__(self, other):
         return other.is_flattened\
