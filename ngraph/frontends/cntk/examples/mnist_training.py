@@ -97,76 +97,68 @@ def savetxt(filename, ndarray):
         print("File already exists", filename)
 
 
-def downloadMNIST(data_dir):
+def download_and_save(data_dir):
     url_train_image = 'http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz'
     url_train_labels = 'http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz'
     num_train_samples = 60000
     train = try_download(url_train_image, url_train_labels, num_train_samples)
+    savetxt(os.path.join(data_dir, "Train-28x28_cntk_text.txt"), train)
+
     url_test_image = 'http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz'
     url_test_labels = 'http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz'
     num_test_samples = 10000
     test = try_download(url_test_image, url_test_labels, num_test_samples)
-
-    savetxt(os.path.join(data_dir, "Train-28x28_cntk_text.txt"), train)
     savetxt(os.path.join(data_dir, "Test-28x28_cntk_text.txt"), test)
 
 
-def create_reader(path, is_training, input_dim, num_label_classes):
-    labelStream = C.io.StreamDef(field='labels', shape=num_label_classes, is_sparse=False)
+def create_reader(path, is_training, input_dim, output_dim):
     featureStream = C.io.StreamDef(field='features', shape=input_dim, is_sparse=False)
-
-    deserailizer = C.io.CTFDeserializer(
-        path,
-        C.io.StreamDefs(labels=labelStream, features=featureStream)
-    )
+    labelStream = C.io.StreamDef(field='labels', shape=output_dim, is_sparse=False)
 
     return C.io.MinibatchSource(
-        deserailizer,
+        C.io.CTFDeserializer(
+            path,
+            C.io.StreamDefs(labels=labelStream, features=featureStream)
+        ),
         randomize=is_training,
         max_sweeps=C.io.INFINITELY_REPEAT if is_training else 1
     )
 
 
-def create_model(features, num_hidden_layers, hidden_layers_dim, num_output_classes):
+def create_model(features, num_hidden_layers, hidden_layers_dim, output_dim):
     with C.layers.default_options(init=C.layers.glorot_uniform(), activation=C.ops.relu):
         h = features
         for _ in range(num_hidden_layers):
             h = C.layers.Dense(hidden_layers_dim)(h)
-        return C.layers.Dense(num_output_classes, activation=None)(h)
+        return C.layers.Dense(output_dim, activation=None)(h)
 
 
 def train_and_test(data_dir):
-    input_dim = 784
-    num_output_classes = 10
-
     train_file = os.path.join(data_dir, "Train-28x28_cntk_text.txt")
     test_file = os.path.join(data_dir, "Test-28x28_cntk_text.txt")
 
-    num_hidden_layers = 2
-    hidden_layers_dim = 400
+    input_dim = 784
+    output_dim = 10
 
-    input = C.input(input_dim)
-    label = C.input(num_output_classes)
+    input_var = C.input(input_dim)
+    label_var = C.input(output_dim)
 
-    z = create_model(input / 256.0, num_hidden_layers, hidden_layers_dim, num_output_classes)
+    cntk_model = create_model(input_var / 256.0, 2, 400, output_dim)
 
-    loss = C.cross_entropy_with_softmax(z, label)
-    label_error = C.classification_error(z, label)
+    cntk_loss = C.cross_entropy_with_softmax(cntk_model, label_var)
+    cntk_error = C.classification_error(cntk_model, label_var)
 
     learning_rate = 0.2
     lr_schedule = C.learning_rate_schedule(learning_rate, C.UnitType.minibatch)
-    learner = C.sgd(z.parameters, lr_schedule)
-    trainer = C.Trainer(z, (loss, label_error), [learner])
+    learner = C.sgd(cntk_model.parameters, lr_schedule)
+    trainer = C.Trainer(cntk_model, (cntk_loss, cntk_error), [learner])
 
     batch_size = 64
-    num_samples_per_sweep = 60000
-    num_sweeps_to_train_with = 10
-    num_minibatches_to_train = (num_samples_per_sweep * num_sweeps_to_train_with) / batch_size
 
     # ngraph import begin ==================================================================
-    ng_model, ng_placeholders = CNTKImporter(batch_size=batch_size).import_model(z)
+    ng_model, ng_placeholders = CNTKImporter(batch_size=batch_size).import_model(cntk_model)
 
-    ng_labels = ng.placeholder([ng.make_axis(batch_size, 'N'), ng.make_axis(num_output_classes)])
+    ng_labels = ng.placeholder([ng.make_axis(output_dim), ng.make_axis(batch_size, 'N')])
     ng_placeholders.append(ng_labels)
 
     transformer = ng.transformers.make_transformer()
@@ -179,90 +171,51 @@ def train_and_test(data_dir):
     test_fun = transformer.computation(ng_error, *ng_placeholders)
     # ngraph import end ====================================================================
 
-    reader_train = create_reader(train_file, True, input_dim, num_output_classes)
-
-    input_map = {
-        label: reader_train.streams.labels,
-        input: reader_train.streams.features
+    reader_train = create_reader(train_file, True, input_dim, output_dim)
+    train_input_map = {
+        input_var: reader_train.streams.features,
+        label_var: reader_train.streams.labels
     }
 
+    num_samples = 60000
+    num_epochs = 10
+    num_minibatches_to_train = (num_samples * num_epochs) / batch_size
     for _ in range(0, int(num_minibatches_to_train)):
-        data = reader_train.next_minibatch(batch_size, input_map=input_map)
+        data = reader_train.next_minibatch(batch_size, input_map=train_input_map)
         trainer.train_minibatch(data)
 
-    reader_test = create_reader(test_file, False, input_dim, num_output_classes)
+        # ngraph train
+        features_batch = np.moveaxis(np.squeeze(data[input_var].asarray()), 0, -1)
+        labels_batch = np.moveaxis(np.squeeze(data[label_var].asarray()), 0, -1)
+        training_fun(features_batch, labels_batch)
 
+    reader_test = create_reader(test_file, False, input_dim, output_dim)
     test_input_map = {
-        label: reader_test.streams.labels,
-        input: reader_test.streams.features,
+        input_var: reader_test.streams.features,
+        label_var: reader_test.streams.labels
     }
 
+    cntk_result = 0.0
+    ng_error = 0.0
     num_samples = 10000
     num_minibatches_to_test = num_samples // batch_size
-    test_result = 0.0
-
     for _ in range(num_minibatches_to_test):
         data = reader_test.next_minibatch(batch_size, input_map=test_input_map)
-        test_result += trainer.test_minibatch(data)
+        cntk_result += trainer.test_minibatch(data)
 
-    print("Average CNTK test error: {0:.2f}%".format(test_result * 100 / num_minibatches_to_test))
-    z.save(data_dir + "/MNIST.dnn")
+        # ngraph test
+        features_batch = np.moveaxis(np.squeeze(data[input_var].asarray()), 0, -1)
+        labels_batch = np.moveaxis(np.squeeze(data[label_var].asarray()), 0, -1)
+        ng_error += test_fun(features_batch, labels_batch)
 
-    # ngraph batch training begin ============================================================
-    features_batch = []
-    labels_batch = []
-    for _ in range(0, num_sweeps_to_train_with):
-        for line in open(train_file):
-            if len(features_batch) == batch_size:
-                training_fun(np.transpose(features_batch), labels_batch)
-                features_batch.clear()
-                labels_batch.clear()
-
-            minibatch_data = line.split()
-
-            labels = minibatch_data[
-                minibatch_data.index("|labels") + 1:minibatch_data.index("|features")
-            ]
-            labels = [float(i) for i in labels]
-            labels_batch.append(labels)
-
-            features = minibatch_data[
-                minibatch_data.index("|features") + 1:
-            ]
-            features = [float(i) for i in features]
-            features_batch.append(features)
-    # ngraph batch training end ==============================================================
-
-    # ngraph batch testing begin =============================================================
-    features_batch.clear()
-    labels_batch.clear()
-    ng_error = 0.0
-    for line in open(test_file):
-        if len(features_batch) == batch_size:
-            ng_error += test_fun(np.transpose(features_batch), labels_batch)
-            features_batch.clear()
-            labels_batch.clear()
-
-        minibatch_data = line.split()
-
-        labels = minibatch_data[
-            minibatch_data.index("|labels") + 1:minibatch_data.index("|features")
-        ]
-        labels = [float(i) for i in labels]
-        labels_batch.append(labels)
-
-        features = minibatch_data[
-            minibatch_data.index("|features") + 1:
-        ]
-        features = [float(i) for i in features]
-        features_batch.append(features)
+    print("Average CNTK test error: {0:.2f}%".format(cntk_result * 100 / num_minibatches_to_test))
     print("Average ngraph test error: {0:.2f}%".format(ng_error * 100 / num_minibatches_to_test))
-    # ngraph batch testing end ===============================================================
+
+    C.softmax(cntk_model).save(os.path.join(MNIST, "MNIST.dnn"))
 
 
 if __name__ == "__main__":
-    data_dir = os.path.join("/tmp/data", "MNIST")
-    downloadMNIST(data_dir)
-
     np.random.seed(0)
-    train_and_test(data_dir)
+    MNIST = os.path.join("/tmp/data", "MNIST")
+    download_and_save(MNIST)
+    train_and_test(MNIST)
