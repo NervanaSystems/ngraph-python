@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
+import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.testing import ExecutorFactory
 
+pytestmark = pytest.mark.transformer_dependent
 
-def test_read_state():
+
+def test_read_state(transformer_factory):
     """
     This just reads back a tensor. No code is generated.
     """
@@ -31,7 +33,7 @@ def test_read_state():
         assert np.allclose(x_np, x_val)
 
 
-def test_write_state():
+def test_write_state(transformer_factory):
     """
     This reads back a tensor set from an argument. No code is generated.
     """
@@ -44,7 +46,7 @@ def test_write_state():
         assert np.allclose(x_np, x_val)
 
 
-def test_use_state():
+def test_use_state(transformer_factory):
     """
     Uses the value of a tensor in a computation.
     """
@@ -58,7 +60,8 @@ def test_use_state():
         assert np.allclose(x_np + x_np, xx_val)
 
 
-def test_modify_state():
+@pytest.config.flex_disabled
+def test_modify_state(transformer_factory):
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
         x_np = np.ones((N.length)) * 4
@@ -72,7 +75,7 @@ def test_modify_state():
         assert np.allclose(x_np + x_np, x_val)
 
 
-def test_fill_state():
+def test_fill_state(transformer_factory):
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
         x_np = np.ones((N.length)) * 4
@@ -86,7 +89,7 @@ def test_fill_state():
         assert np.allclose(-1, x_val)
 
 
-def test_concatenate():
+def test_concatenate(transformer_factory):
     with ExecutorFactory() as ex:
         A = ng.make_axis(name='A', length=3)
         B = ng.make_axis(name='B', length=4)
@@ -102,7 +105,8 @@ def test_concatenate():
         assert ng.testing.allclose(j_val, j_np)
 
 
-def test_specific_slice_deriv():
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+def test_specific_slice_deriv(transformer_factory):
     #
     with ExecutorFactory() as ex:
         A = ng.make_axis(name='A', length=3)
@@ -124,6 +128,8 @@ def test_specific_slice_deriv():
                 assert ng.testing.allclose(dslice_dx_val, dslice_dx_np)
 
 
+@pytest.config.flex_disabled(reason="#1954, UnsliceOp multiple slicing not yet supported by flex")
+@pytest.config.flex_disabled
 def test_slice_deriv():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)

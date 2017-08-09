@@ -40,9 +40,9 @@ class DumpGraphPass(object):
                     tensors.append(output_decl.tensor_decl)
             f.write('{} {} {}\n'.format(
                 i, exop.name, '************' if exop is largest_op else ''))
-            f.write('\targs: {}\n'.format(
+            f.write('\tinputs: {}\n'.format(
                 ", ".join([self.tensor_name(x.tensor_decl) for x in exop.input_decls])))
-            f.write('\tvalues: {}\n'.format(
+            f.write('\toutputs: {}\n'.format(
                 ", ".join([self.tensor_name(x.tensor_decl) for x in exop.output_decls])))
             if self.show_live:
                 f.write('\tlive: {}\n'.format(

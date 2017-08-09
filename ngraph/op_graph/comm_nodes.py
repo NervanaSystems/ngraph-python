@@ -13,13 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-
 import multiprocessing
-
+import collections
 from orderedset import OrderedSet
-
-from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes, \
+from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
     MutateInsteadOfCopyWithNewArgsMixin
+from ngraph.op_graph.axes import Axes, make_axes, make_axis
 
 
 def calculate_gather_axes(axes, gather_axis, num_devices):
@@ -29,20 +28,17 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
     return new_axes
 
 
-def calculate_scatter_axes(axes, scatter_axis, num_devices):
-    new_axes = list()
-    for a in axes:
-        if scatter_axis == a and scatter_axis.length == a.length:
-            assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
-                .format(scatter_axis, num_devices)
+def set_parallel_axes(axes, parallel_axis):
+    new_axes = []
+    for axis in Axes.as_nested_list(axes):
+        if axis == parallel_axis:
+            axis = parallel_axis
+        elif isinstance(axis, collections.Iterable):
+            # flattened axis
+            axis = [parallel_axis if a == parallel_axis else a for a in axis]
+        new_axes.append(axis)
 
-            new_length = a.length // num_devices
-            new_axis = make_axis(new_length, a.name)
-            new_axes.append(new_axis)
-        else:
-            new_axes.append(a)
-    new_axes = make_axes(new_axes)
-    return new_axes
+    return make_axes(new_axes)
 
 
 def get_slices(axes, parallel_axis, num_devices):
