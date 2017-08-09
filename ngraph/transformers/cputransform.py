@@ -706,7 +706,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
-        self.append("np.sign({}, out=out)", x, out)
+        self.append("np.sign({}, out={})", x, out)
 
     @generate_op.on_type(SinOp)
     def generate_op(self, op, out, x):
