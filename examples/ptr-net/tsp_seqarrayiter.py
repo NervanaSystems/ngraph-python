@@ -21,7 +21,6 @@ class TSPSequentialArrayIterator(object):
     """
     Modification of SequentialArrayIterator class. Add number of features argument
     to handle variable feature sizes.
-
     Args:
         data_arrays (ndarray): Input features of the dataset.
         time_steps (int): number of time steps.

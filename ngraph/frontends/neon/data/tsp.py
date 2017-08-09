@@ -18,6 +18,7 @@ import numpy as np
 import requests
 import zipfile
 import os
+import re
 
 GOOGLE_DRIVE_IDS = {
     'tsp5_train.zip': '0B2fg8yPGn2TCSW1pNTJMXzFPYTg',
@@ -45,12 +46,13 @@ class TSP(object):
             if not os.path.exists(filepath):
                 for file_name, file_id in GOOGLE_DRIVE_IDS.items():
                     destination = './' + file_name
-                    download_file_from_google_drive(file_id, destination)
+                    self.download_file_from_google_drive(file_id, destination)
                     with zipfile.ZipFile(destination, 'r') as z:
                         z.extractall('./')
                     print('\nDownloaded and unzipped {} from paper\n'.format(file_name))
 
-            print('Loading and preprocessing TSP {} data...'.format(phase))
+            cities = int(re.search(r'\d+', filename).group())
+            print('Loading and preprocessing tsp{} {} data...'.format(cities, phase))
             with open(filepath, 'r') as f:
                 X, y, y_teacher = [], [], []
                 for i, line in tqdm(enumerate(f)):
@@ -67,37 +69,37 @@ class TSP(object):
         return self.data_dict
 
 
-def download_file_from_google_drive(id, destination):
-    """
-    code based on
-    https://stackoverflow.com/questions/25010369/wget-curl-large-file-from-google-drive/39225039#39225039
-    """
-    URL = "https://docs.google.com/uc?export=download"
+    def download_file_from_google_drive(self, id, destination):
+        """
+        code based on
+        https://stackoverflow.com/questions/25010369/wget-curl-large-file-from-google-drive/39225039#39225039
+        """
+        URL = "https://docs.google.com/uc?export=download"
 
-    session = requests.Session()
+        session = requests.Session()
 
-    response = session.get(URL, params={'id': id}, stream=True, verify=False)
-    token = get_confirm_token(response)
+        response = session.get(URL, params={'id': id}, stream=True, verify=False)
+        token = self.get_confirm_token(response)
 
-    if token:
-        params = {'id': id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True, verify=False)
+        if token:
+            params = {'id': id, 'confirm': token}
+            response = session.get(URL, params=params, stream=True, verify=False)
 
-    save_response_content(response, destination)
-
-
-def get_confirm_token(response):
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            return value
-
-    return None
+        self.save_response_content(response, destination)
 
 
-def save_response_content(response, destination):
-    CHUNK_SIZE = 32768
+    def get_confirm_token(self, response):
+        for key, value in response.cookies.items():
+            if key.startswith('download_warning'):
+                return value
 
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:  # filter out keep-alive new chunks
-                f.write(chunk)
+        return None
+
+
+    def save_response_content(self, response, destination):
+        CHUNK_SIZE = 32768
+
+        with open(destination, "wb") as f:
+            for chunk in response.iter_content(CHUNK_SIZE):
+                if chunk:  # filter out keep-alive new chunks
+                    f.write(chunk)

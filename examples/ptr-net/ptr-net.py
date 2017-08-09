@@ -32,10 +32,10 @@ from utils import save_plot
 
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
-parser.add_argument('--train_file', default='tsp10.txt',
+parser.add_argument('--train_file', default='tsp5.txt',
                     choices=['tsp5.txt', 'tsp10.txt'],
                     help='specify training filename')
-parser.add_argument('--test_file', default='tsp10_test.txt',
+parser.add_argument('--test_file', default='tsp5_test.txt',
                     choices=['tsp5_test.txt', 'tsp10_test.txt'],
                     help='specify testing filename')
 parser.add_argument('--lr', type=float, default=0.0025, help='learning rate')
@@ -60,14 +60,14 @@ time_steps = tsp_data['train']['inp_txt'].shape[1]
 ax.Y.length = time_steps
 
 # create iterator and placeholders for training data
-train_set = TSPSequentialArrayIterator(tsp_data['train'],
+train_set = TSPSequentialArrayIterator(data_arrays=tsp_data['train'],
                                        nfeatures=num_features,
                                        batch_size=args.batch_size,
                                        time_steps=time_steps,
                                        total_iterations=args.num_iterations)
 inputs = train_set.make_placeholders()
 
-# weight initialization
+# weight initializationn
 init = UniformInit(low=-0.08, high=0.08)
 
 # build computational graph
@@ -173,7 +173,7 @@ with closing(ngt.make_transformer()) as transformer:
     for idx, data in enumerate(train_set):
         train_output = train_computation(data)
         niter = idx + 1
-        if niter % 1000 == 0:
+        if niter % 500 == 0:
             predicted_targets = np.argmax(train_output['pointer_out'], axis=1)
             true_targets = tsp_data['train']['tgt_txt'][niter - 1:(niter + args.batch_size) - 1][:]
             correct = 0
