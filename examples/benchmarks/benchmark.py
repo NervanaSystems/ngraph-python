@@ -20,6 +20,7 @@ import ngraph.transformers.passes.nviz
 import numpy as np
 import time
 from contextlib import closing
+from examples.benchmarks.fake_data_generator import preprocess_ds2_data
 
 
 class DefaultOrderedDict(OrderedDict):
@@ -53,8 +54,10 @@ class Benchmark(object):
         self.transformer = transformer
         self.device = device
 
-    def fill_feed_dict(self, dataset, feed_inputs):
+    def fill_feed_dict(self, dataset, feed_inputs, preprocess=False):
         data = next(iter(dataset))
+        if preprocess:
+            data = preprocess_ds2_data(data)
         return {feed_inputs[k]: data[k] for k in feed_inputs.keys()}
 
     @staticmethod
@@ -72,14 +75,15 @@ class Benchmark(object):
 
         return wrapper
 
-    def time(self, n_iterations, n_skip, computation_name, visualize, subgraph_attr=None):
+    def time(self, n_iterations, n_skip, computation_name, visualize,
+             subgraph_attr=None, preprocess=False):
         """
         This runs _any_ computation repeatedly with data from feed_dict, and times it
 
         (Nothing model-specific inside, can be reused)
         """
         times = DefaultOrderedDict()
-        feed_dict = self.fill_feed_dict(self.train_set, self.inputs)
+        feed_dict = self.fill_feed_dict(self.train_set, self.inputs, preprocess)
         start = Benchmark.marker.init_mark()
         end = Benchmark.marker.init_mark()
         with closing(ngt.make_transformer_factory(self.transformer,
