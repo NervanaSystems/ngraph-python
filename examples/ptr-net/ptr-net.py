@@ -47,7 +47,7 @@ args.batch_size = 128
 args.num_iterations = 20000
 
 gradient_clip_value = 2
-num_features = 2  # for planer TSP, each city's location is represented by a 2-d coordinate
+num_features = 2  # for planar TSP, each city's location is represented by a 2-d coordinate
 
 # preprocess the TSP dataset
 tsp = tsp.TSP(train_filename=args.train_file, test_filename=args.test_file)
