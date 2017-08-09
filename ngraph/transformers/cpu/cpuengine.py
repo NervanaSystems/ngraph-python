@@ -40,8 +40,8 @@ class Mkldnn(object):
             'chwn': 7,
         }
         self.kernels = dict()        # MKL Op kernels
-        self.op_layouts = dict()     # Layout objects for MKL tensors
-        self.native_layouts = dict()  # Layout objects for Non-MKL tensors
+        self.op_layouts = dict()     # Layout objects owned by MKLDNN
+        self.native_layouts = []     # Layout objects owned by transformer
         try:
             self.mkllib = ct.CDLL(engine_path)
             self.enabled = True
@@ -186,8 +186,8 @@ class Mkldnn(object):
         if (self.mkldnn_engine_initialized):
             for op in self.kernels:
                 self.delete_opkernel(self.kernels[op])
-            for td in self.native_layouts:
-                self.delete_layout(self.native_layouts[td])
+            for layout in self.native_layouts:
+                self.delete_layout(layout)
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -392,7 +392,6 @@ class Mkldnn(object):
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             output[()] = input
-
 
     def update_conv(self, name, conv_slices, I, E, U):
         if (self.enabled and name in self.kernels):

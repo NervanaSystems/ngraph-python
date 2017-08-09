@@ -74,7 +74,7 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
                          &(opkernel->inputs[0]));
   }
   if (input_weights_md) {
-    create_mkldnn_tensor_from_md(weights_dims, weights_sizes, &input_weights_md, engine,
+    create_mkldnn_tensor_from_md(weights_dims, weights_sizes, input_weights_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
     create_mkldnn_tensor(weights_dims, weights_sizes, data_type, mkldnn_ihwo,
