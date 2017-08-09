@@ -96,9 +96,9 @@ def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
         return (0, 0, 0, 0)
 
 
-def remove_ones_axes(inputs):
+def squeeze_axes(inputs):
     """
-    Removes axes with length of 1 from list of tensors.
+    Removes axes with length of 1 for each tensor.
 
     Arguments:
         inputs: List of inputs to be sliced.
