@@ -19,14 +19,14 @@ Reference paper: https://arxiv.org/pdf/1506.03134.pdf
 """
 from __future__ import division
 from __future__ import print_function
+import numpy as np
 from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import UniformInit, RMSProp, ax, Tanh, Logistic
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation
 from ngraph.frontends.neon import LSTM
 import ngraph.transformers as ngt
-import numpy as np
-from ngraph.frontends.neon.data import tsp
+from ngraph.frontends.neon.data.tsp import TSP
 from tsp_seqarrayiter import TSPSequentialArrayIterator
 from utils import save_plot
 
@@ -50,7 +50,7 @@ gradient_clip_value = 2
 num_features = 2  # for planar TSP, each city's location is represented by a 2-d coordinate
 
 # preprocess the TSP dataset
-tsp = tsp.TSP(train_filename=args.train_file, test_filename=args.test_file)
+tsp = TSP(train_filename=args.train_file, test_filename=args.test_file)
 tsp_data = tsp.load_data()
 
 # number of time steps equal to number of points (cities) in each example
@@ -127,10 +127,9 @@ W1 = ng.variable(axes=[hidden_feature_axis, tmp_axis_2], initial_value=init)
 W2 = ng.variable(axes=[hidden_feature_axis, tmp_axis_2], initial_value=init)
 v = ng.variable(axes=[tmp_axis_2], initial_value=init)
 
-input_time_steps = time_steps
-output_time_steps = time_steps
+input_time_steps = output_time_steps = time_steps
 
-u_list = []  # a list of target probability distribtuions of every output time step
+u_list = []  # a list of target probability distributions of every output time step
 for i in range(output_time_steps):
     # compute attention vector for output time step i
     u_i_list = []  # a list of attention scores u_i
@@ -139,10 +138,10 @@ for i in range(output_time_steps):
     for j in range(input_time_steps):
         # compute attention score for output time step i with input time step j
         W1_ej = ng.dot(W1, ng.slice_along_axis(enc_h_out, axis=rec_axis, idx=j))
-        score = ng.dot(v, ng.tanh(W1_ej + W2_di))  # u_i = v*tanh(W1*e_j + W2*d_i)
+        score = ng.dot(v, ng.tanh(W1_ej + W2_di))  # u_i = v * tanh(W1 * e_j + W2 * d_i)
         u_i_list.append(score)
 
-    output_prob = ng.softmax(ng.stack(u_i_list, axis=ax.Y, pos=1), ax.Y)
+    output_prob = ng.softmax(ng.stack(u_i_list, axis=ax.Y, pos=0), ax.Y)
     u_list.append(output_prob)
 
 pointer_out = ng.stack(u_list, axis=rec_axis, pos=2)
@@ -167,25 +166,26 @@ with closing(ngt.make_transformer()) as transformer:
     # bind the computations
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
 
-    niters = []
+    eval_frequency = 500
     loss = []
     # iterate over training set
     for idx, data in enumerate(train_set):
         train_output = train_computation(data)
         niter = idx + 1
-        if niter % 500 == 0:
-            predicted_targets = np.argmax(train_output['pointer_out'], axis=1)
+        if niter % eval_frequency == 0:
+            predicted_targets = np.argmax(train_output['pointer_out'], axis=0)
             true_targets = tsp_data['train']['tgt_txt'][niter - 1:(niter + args.batch_size) - 1][:]
-            correct = 0
+
+            corrects = 0
             for predicted_target, true_target in zip(predicted_targets, true_targets):
                 if np.array_equal(predicted_target, true_target):
-                    correct += 1
+                    corrects += 1
 
-            print('iteration = {}, train loss = {}'.format(niter, train_output['batch_cost']))
-            niters.append(niter)
+            batch_accuracy = corrects / args.batch_size
+            print('iteration = {}, train loss = {}, batch accuracy = {}'.format(
+                  niter, train_output['batch_cost'], batch_accuracy))
+
             loss.append(train_output['batch_cost'])
-
-            # uncomment lines below to get batch accuracy
-            # batch_accuracy = correct/args.nbatches
+        niters = list(range(eval_frequency, niter + 1, eval_frequency))
 
 save_plot(niters, loss, args)

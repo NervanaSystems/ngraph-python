@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.util.persist import valid_path_append
 from tqdm import tqdm
 import numpy as np
 import requests
 import zipfile
 import os
 import re
+from ngraph.util.persist import valid_path_append
 
 GOOGLE_DRIVE_IDS = {
     'tsp5_train.zip': '0B2fg8yPGn2TCSW1pNTJMXzFPYTg',
