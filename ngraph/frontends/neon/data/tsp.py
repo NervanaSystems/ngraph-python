@@ -68,7 +68,6 @@ class TSP(object):
 
         return self.data_dict
 
-
     def download_file_from_google_drive(self, id, destination):
         """
         code based on
@@ -87,14 +86,12 @@ class TSP(object):
 
         self.save_response_content(response, destination)
 
-
     def get_confirm_token(self, response):
         for key, value in response.cookies.items():
             if key.startswith('download_warning'):
                 return value
 
         return None
-
 
     def save_response_content(self, response, destination):
         CHUNK_SIZE = 32768
