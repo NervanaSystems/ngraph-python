@@ -178,10 +178,10 @@ with closing(ngt.make_transformer()) as transformer:
 
             corrects = 0
             for predicted_target, true_target in zip(predicted_targets, true_targets):
-                if np.array_equal(predicted_target, true_target):
-                    corrects += 1
+                corrects += np.sum(predicted_target == true_target)
 
-            batch_accuracy = corrects / args.batch_size
+            # categorical accuracy
+            batch_accuracy = corrects / (args.batch_size * time_steps)
             print('iteration = {}, train loss = {}, batch accuracy = {}'.format(
                   niter, train_output['batch_cost'], batch_accuracy))
 
