@@ -168,6 +168,7 @@ def test_scatter_gather_graph():
         expected_recv_nodes=[x_plus_y])
 
 
+@pytest.config.
 @pytest.mark.hetr_gpu_only
 def test_gpu_send_and_recv():
     # put x+1 on cpu numpy
