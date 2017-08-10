@@ -1213,3 +1213,16 @@ def test_broadcast_deriv_reorder(transformer_factory):
     with ExecutorFactory() as ex:
         dx_fun = ex.executor(dx)
         ng.testing.assert_allclose(dx_fun(), np.ones((2, 3)))
+
+
+@pytest.mark.xfail(pytest.config.getvalue("transformer") == "gpu",
+                   reason="GPU problem with uint32 converting", strict=True)
+def test_multiply_unit32_convertion(transformer_factory):
+    x = ng.placeholder(axes=(), dtype=np.uint32())
+    multiplier = 1
+    ng_mul = 1.1 * x * 1.1
+
+    with executor(ng_mul, x) as ex:
+        ng_result = ex(multiplier)
+
+    assert ng_result <= 1.21
