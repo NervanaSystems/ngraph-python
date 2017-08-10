@@ -46,16 +46,22 @@ def test_distributed_graph_plus_one(transformer_factory):
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 1)
 
-
-def test_distributed_dot(transformer_factory):
+@pytest.mark.multi_device
+def test_distributed_dot(transformer_factory, hetr_device):
+    print('\n hetr device: {}'.format(hetr_device))
+    if hetr_device == 'gpu':
+        pytest.skip('gpu test is not supported now.')
     H = ng.make_axis(length=4, name='height')
     N = ng.make_axis(length=8, name='batch')
     weight = ng.make_axis(length=2, name='weight')
-    x = ng.placeholder(axes=[H, N])
-    w = ng.placeholder(axes=[weight, H])
-    with ng.metadata(device_id=('1', '2'), parallel=N):
-        dot = ng.dot(w, x)
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=[H, N])
+        w = ng.placeholder(axes=[weight, H])
+        with ng.metadata(device_id=('1', '2'), parallel=N):
+            dot = ng.dot(w, x)
 
+    if hetr_device == 'gpu':
+        os.environ["HETR_SERVER_GPU_NUM"] = str(2)
     np_x = np.random.randint(100, size=[H.length, N.length])
     np_weight = np.random.randint(100, size=[weight.length, H.length])
     with ExecutorFactory() as ex:
