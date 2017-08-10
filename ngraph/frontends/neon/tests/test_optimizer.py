@@ -204,7 +204,7 @@ def random_momentum_coef():
     return np.random.random()
 
 
-@pytest.config.flex_skip(reason="The most cases fail because of the too strict assert tolerance")
+@pytest.config.flex_skip(reason="The most cases fail because of too strict assert tolerance")
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
 @pytest.mark.parametrize("select_variables", [False, True])
@@ -257,7 +257,8 @@ def random_beta_2():
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.config.flex_skip
+@pytest.config.flex_skip(reason='Usually all cases fail but very rarely some pass for flex - '
+                           'because of the random character of the parameters')
 @pytest.mark.parametrize("epsilon", [1e-8])
 @pytest.mark.parametrize("select_variables", [False, True])
 def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, select_variables):

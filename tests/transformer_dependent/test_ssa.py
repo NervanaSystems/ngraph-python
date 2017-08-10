@@ -20,7 +20,7 @@ from ngraph.testing import ExecutorFactory
 pytestmark = pytest.mark.transformer_dependent
 
 
-def test_read_state(transformer_factory):
+def test_read_state():
     """
     This just reads back a tensor. No code is generated.
     """
@@ -33,7 +33,7 @@ def test_read_state(transformer_factory):
         assert np.allclose(x_np, x_val)
 
 
-def test_write_state(transformer_factory):
+def test_write_state():
     """
     This reads back a tensor set from an argument. No code is generated.
     """
@@ -46,7 +46,7 @@ def test_write_state(transformer_factory):
         assert np.allclose(x_np, x_val)
 
 
-def test_use_state(transformer_factory):
+def test_use_state():
     """
     Uses the value of a tensor in a computation.
     """
@@ -61,7 +61,7 @@ def test_use_state(transformer_factory):
 
 
 @pytest.config.flex_disabled
-def test_modify_state(transformer_factory):
+def test_modify_state():
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
         x_np = np.ones((N.length)) * 4
@@ -75,7 +75,7 @@ def test_modify_state(transformer_factory):
         assert np.allclose(x_np + x_np, x_val)
 
 
-def test_fill_state(transformer_factory):
+def test_fill_state():
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
         x_np = np.ones((N.length)) * 4
@@ -89,7 +89,7 @@ def test_fill_state(transformer_factory):
         assert np.allclose(-1, x_val)
 
 
-def test_concatenate(transformer_factory):
+def test_concatenate():
     with ExecutorFactory() as ex:
         A = ng.make_axis(name='A', length=3)
         B = ng.make_axis(name='B', length=4)
@@ -106,7 +106,7 @@ def test_concatenate(transformer_factory):
 
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
-def test_specific_slice_deriv(transformer_factory):
+def test_specific_slice_deriv():
     #
     with ExecutorFactory() as ex:
         A = ng.make_axis(name='A', length=3)
