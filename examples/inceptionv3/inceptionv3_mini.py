@@ -14,9 +14,10 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-python inceptionv3.py -z 16 -t 100 -b gpu
+export CUDA_VISIBLE_DEVICES=3; python ./examples/inceptionv3/inceptionv3_mini.py -z 8 -t 10000 -b gpu --iter_interval 1000
 """
 import numpy as np
+import pickle
 import ngraph as ng
 import ngraph.transformers as ngt
 from tqdm import tqdm
@@ -25,7 +26,7 @@ from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import XavierInit, UniformInit, Layer
 from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential, Dropout
 from ngraph.frontends.neon import Rectlin, Softmax, Identity, GradientDescentMomentum
-from ngraph.frontends.neon import ax, Adam
+from ngraph.frontends.neon import ax, Adam, RMSProp
 from data import make_aeon_loaders
 from inception_blocks import Inceptionv3_b1, Inceptionv3_b2, Inceptionv3_b3
 from inception_blocks import Inceptionv3_b4, Inceptionv3_b5
@@ -123,7 +124,9 @@ seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'),
                       Convolution((1, 1, 1000), activation=Softmax(),
                                bias_init=bias_init, filter_init=XavierInit())])
 
-optimizer = Adam(learning_rate=.001)
+# To match tensorflow learning rate
+optimizer = RMSProp(learning_rate=.01, decay_rate=0.9)
+
 y_onehot = ng.one_hot(inputs['label'][:,0], axis=ax.Y)
 train_prob_main = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
@@ -154,6 +157,7 @@ with closing(ngt.make_transformer()) as transformer:
     tpbar = tqdm(unit="batches", ncols=ncols, total=args.num_iterations)
     interval_cost = 0.0
 
+    saved_losses = {'train_loss': [], 'eval_loss': [], 'eval_misclass': []}
     for step, data in enumerate(train_set):
         data['iteration'] = step
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
@@ -168,7 +172,11 @@ with closing(ngt.make_transformer()) as transformer:
                            interval=step // args.iter_interval,
                            iteration=step,
                            cost=interval_cost / args.iter_interval))
+            saved_losses['train_loss'].append(interval_cost / args.iter_interval)
             interval_cost = 0.0
             eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
+            saved_losses['eval_misclass'].append(eval_losses['misclass'])
+            pickle.dump( saved_losses, open( "losses.pkl", "wb" ) )
             tqdm.write("Avg losses: {}".format(eval_losses))
 print('\n')
