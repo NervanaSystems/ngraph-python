@@ -168,9 +168,9 @@ def test_scatter_gather_graph():
         expected_recv_nodes=[x_plus_y])
 
 
-@pytest.config.cpu_enabled_only(reason="Multi-GPU testing not enabled yet")
 @pytest.mark.hetr_gpu_only
 def test_gpu_send_and_recv():
+    pytest.xfail("GitHub issue: #2007, Unknown error - investigation is needed")
     # put x+1 on cpu numpy
     with ng.metadata(device='cpu'):
         x = ng.placeholder(())
