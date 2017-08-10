@@ -174,7 +174,7 @@ with closing(ngt.make_transformer()) as transformer:
         if niter % eval_frequency == 0:
             print('iteration = {}, train loss = {}'.format(niter, train_output['batch_cost']))
 
-        loss.append(train_output['batch_cost'])
+            loss.append(train_output['batch_cost'])
         niters = list(range(eval_frequency, niter + 1, eval_frequency))
 
 save_plot(niters, loss, args)
