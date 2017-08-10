@@ -54,6 +54,17 @@ def M():
     return ng.make_axis(length=3)
 
 
+def test_sign():
+    x_np = np.array([-1.2, 2.3, 0.0, 1.2])
+    N = ng.make_axis(len(x_np))
+    x = ng.variable([N])
+    y = ng.sign(x)
+    y_np = np.sign(x_np)
+    with ExecutorFactory() as ex:
+        y_val = ex.executor(y, x)(x_np)
+        assert np.allclose(y_val, y_np)
+
+
 def test_sequential(N):
     x = ng.variable([N], initial_value=0)
     x0 = x + x

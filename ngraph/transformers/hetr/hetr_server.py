@@ -55,15 +55,16 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             return_list = []
             placeholder_list = []
             ops = Op.ordered_ops(subgraph)
-            for op in ops:
-                for r in returns:
+            for r in returns:
+                for op in ops:
                     if op.uuid == r.uuid:
                         return_list.append(op)
-            for op in ops:
-                for p in placeholders:
+            for p in placeholders:
+                for op in ops:
                     if op.uuid == p.uuid:
                         placeholder_list.append(op)
             computation = self.transformer.computation(return_list, *placeholder_list)
+
             self.computations[comp_id] = computation
             return hetr_pb2.ComputationReply(comp_id=comp_id)
         except:
@@ -81,8 +82,19 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 else:
                     values.append(pb_to_tensor(v.tensor))
             computation = self.computations[request.comp_id]
-            outputs = computation(*values)
+
+            if self.transformer.transformer_name == "gpu":
+                import pycuda.driver as drv
+                if self.transformer.runtime and \
+                   not self.transformer.runtime.ctx == drv.Context.get_current():
+                    self.transformer.runtime.ctx.push()
+                outputs = computation(*values)
+                self.transformer.runtime.ctx.pop()
+            else:
+                outputs = computation(*values)
+
             self.results[request.comp_id] = outputs
+
             return hetr_pb2.FeedInputReply(status=True)
         except:
             return hetr_pb2.FeedInputReply(status=False)
