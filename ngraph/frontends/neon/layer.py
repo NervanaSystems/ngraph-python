@@ -13,10 +13,13 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function, absolute_import
+
 import collections
 import itertools
 from contextlib import contextmanager
+
 import ngraph as ng
+from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
@@ -25,39 +28,6 @@ from ngraph.frontends.neon.initializer import ConstantInit
 # Hopefully these can be used to efficiently display and filter the computational graph
 LABELS = {"weight": "weight",
           "bias": "bias"}
-
-
-def output_dim(X, S, padding, strides, pooling=False, dilation=1):
-    """
-    Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-    Arguments:
-        X (int): input data dimension
-        S (int): filter dimension
-        padding (int): padding on each side
-        strides (int): striding
-        pooling (bool): flag for setting pooling layer size
-        dilation (int): dilation of filter
-    """
-
-    S = dilation * (S - 1) + 1
-    size = ((X - S + 2 * padding) // strides) + 1
-
-    if pooling and padding >= S:
-        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-    if size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(size))
-    return size
-
-
-def output_dim_deconv(X, S, padding, strides, dilation=1):
-    S = dilation * (S - 1) + 1
-    max_size = S + (X + padding - 1) * strides
-
-    if max_size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(max_size))
-    return max_size
 
 
 class Layer(SubGraph):
@@ -355,12 +325,12 @@ class ConvBase(Layer):
         cpm = self.convparams.copy()
         out_shape = [
             self.W.axes[-1].length,
-            output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
-                       cpm['dil_d']),
-            output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
-                       cpm['dil_h']),
-            output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
-                       cpm['dil_w'])
+            conv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
+                            cpm['dil_d']),
+            conv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
+                            cpm['dil_h']),
+            conv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
+                            cpm['dil_w'])
         ]
         return out_shape
 
@@ -440,11 +410,11 @@ class DeconvBase(ConvBase):
         cpm = self.convparams.copy()
         # axes for deconv output shape without any trimming
         out_max_shape = [
-            output_dim_deconv(in_axes[1].length, cpm['T'], cpm['pad_d'],
+            deconv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'],
                               cpm['str_d'], cpm['dil_d']),
-            output_dim_deconv(in_axes[2].length, cpm['R'], cpm['pad_h'],
+            deconv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'],
                               cpm['str_h'], cpm['dil_h']),
-            output_dim_deconv(in_axes[3].length, cpm['S'], cpm['pad_w'],
+            deconv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'],
                               cpm['str_w'], cpm['dil_w'])
         ]
         # output slice indices when output shape is specified
@@ -552,10 +522,10 @@ class PoolBase(Layer):
             ])
             # set lengths
             out_shape = [
-                output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
-                output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
-                output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
-                output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
+                conv_output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
+                conv_output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
+                conv_output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
+                conv_output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
             self.o_axes |= in_axes.batch_axis()
@@ -604,7 +574,7 @@ class Bias(Layer):
     @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         if not self.initialized:
-            w_axes = in_obj.axes.sample_axes()
+            w_axes = in_obj.axes.feature_axes()
             if self.shared and in_obj.axes.channel_axis() is not None:
                 w_axes = ng.make_axes(in_obj.axes.channel_axis())
             self.W = ng.variable(axes=w_axes, initial_value=self.init,

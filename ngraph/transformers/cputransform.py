@@ -64,6 +64,8 @@ from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
     CPUQueueBroadcastRecvOp
 
+from ngraph.util.trace_events import is_tracing_enabled
+
 
 class CPUConvEngine(object):
 
@@ -440,7 +442,6 @@ class CPUCodeGenerator(PyGen):
         self.pool_slices[op.safe_name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
 
     def generate_op_pre(self, op):
-        pass
         # exop = self.exop
         # self.append("\n# {} pre", exop.name)
         # for input_decl in exop.input_decls:
@@ -449,9 +450,10 @@ class CPUCodeGenerator(PyGen):
         # for output_decl in exop.output_decls:
         #     output_decl_name = 'a_'+output_decl.tensor.tensor_name
         #     self.append("#    output_decl {}", val_name)
+        if is_tracing_enabled():
+            self.append("self.__profiler_start__.append(monotonic())")
 
     def generate_op_post(self, op):
-        pass
         # exop = self.exop
         # self.append("print('{{}}'.format('{}'))", op.name)
         # for input_decl in exop.input.decls:
@@ -462,6 +464,8 @@ class CPUCodeGenerator(PyGen):
         #     self.append("#    output_decl {}", output_decl_name)
         #     self.append("print('   output_decl {} = {{}}'.format({}))", \
         #            output_decl_name, output_decl_name)
+        if is_tracing_enabled():
+            self.append("self.__profiler_stop__.append(monotonic())")
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -702,7 +706,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
-        self.append("np.sign({}, out=out)", x, out)
+        self.append("np.sign({}, out={})", x, out)
 
     @generate_op.on_type(SinOp)
     def generate_op(self, op, out, x):
@@ -868,10 +872,11 @@ class CPUTransformer(ExecutionGraphTransformer):
             LivenessPass(),
             MemLayoutPass()
         ]
-        # DumpGraphPass(filename=graph_name+'.txt').do_pass(computation_decl)
+        # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
+        # self.graph_passes += [DumpGraphPass()]
 
-        # VisualizeMemPass(filename=mem_name+'.html').do_pass(computation_decl)
-        # ExVizPass(view=False, filename=graph_name).do_pass(computation_decl)
+        # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
+        # self.graph_passes += [VisualizeMemPass()]
 
     def finish_allocate_computation(self, computation):
         self.exop_codegen.endl(2)
@@ -882,6 +887,11 @@ class CPUTransformer(ExecutionGraphTransformer):
         with indenting(self.exop_codegen):
             self.exop_codegen.append("def __init__(self, **kwargs):")
             with indenting(self.exop_codegen):
+                if is_tracing_enabled():
+                    self.exop_codegen.append("""
+self.__profiler_start__ = list()
+self.__profiler_stop__  = list()
+""")
                 self.exop_codegen.append('super({}, self).__init__(**kwargs)',
                                          computation_decl.computation_op.name)
                 for exop in computation_decl.exop_block:
@@ -974,6 +984,7 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
+from monotonic import monotonic as monotonic
 try:
     import mlsl
     import ctypes
