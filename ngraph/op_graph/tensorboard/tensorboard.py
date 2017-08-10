@@ -33,19 +33,18 @@ class TensorBoard(object):
     def __init__(self, logdir, run=None):
         """
         Creates an interface for logging ngraph data to tensorboard
-        
+
         Arguments:
             logdir (str): Path to tensorboard logdir
-            run (str, optional): Name of the current run. If one is not provided, the run name 
+            run (str, optional): Name of the current run. If one is not provided, the run name
                                  will be generated from the date and time.
-            
+
         Notes:
-            1. Tensorboard must be started separately from the terminal using `tensorboard --logdir 
+            1. Tensorboard must be started separately from the terminal using `tensorboard --logdir
                <logdir>`
-            2. In tensorboard, "runs" denote individual experiments that can be browsed 
-               simultaneously. In this way, it's useful to use the same logdir for multiple 
-               experiments that are conceptually related. 
-            
+            2. In tensorboard, "runs" denote individual experiments that can be browsed
+               simultaneously. In this way, it's useful to use the same logdir for multiple
+               experiments that are conceptually related.
         """
 
         self.logdir = logdir
@@ -60,13 +59,12 @@ class TensorBoard(object):
     def add_run(self, run=None):
         """
         Create a new run and start using it.
-        
+
         Arguments:
-            run (str, optional): Name of the new run. If one is not provided, it will be 
-                                 generated from the current date and time. If the run already 
+            run (str, optional): Name of the new run. If one is not provided, it will be
+                                 generated from the current date and time. If the run already
                                  exists, it will be reused.
         """
-
 
         def get_events_filename():
             return ".".join(["events.ngraph.out.tfevents",
@@ -93,11 +91,11 @@ class TensorBoard(object):
     def add_scalar(self, name, scalar, step=None):
         """
         Add a scalar to the current tensorboard run
-        
+
         Arguments:
             name (str): Display name within tensorboard
-            scalar (int, float): Scalar value to be logged 
-            step (int, optional): Step in the series. Optional, but should usually be provided. 
+            scalar (int, float): Scalar value to be logged
+            step (int, optional): Step in the series. Optional, but should usually be provided.
         """
 
         summ = summary.scalar(name, scalar)
@@ -109,8 +107,8 @@ class TensorBoard(object):
 
         Arguments:
             name (str): Display name within tensorboard
-            image (ndarray): 3-D array containing the image to be logged. It should be 
-                             formatted as Height by Width by Channels, where 1 channel is 
+            image (ndarray): 3-D array containing the image to be logged. It should be
+                             formatted as Height by Width by Channels, where 1 channel is
                              greyscale, 3 channels is RGB, and 4 channels is RGBA.
             step (int, optional): Step in the series
         """
@@ -125,7 +123,7 @@ class TensorBoard(object):
         Arguments:
             name (str): Display name within tensorboard
             sequence (ndarray, Iterable): A sequence on which to compute a histogram of values
-            step (int, optional): Step in the series. Optional, but should usually be provided. 
+            step (int, optional): Step in the series. Optional, but should usually be provided.
         """
 
         if isinstance(sequence, np.ndarray):
@@ -137,7 +135,7 @@ class TensorBoard(object):
         """
         Add a graph to the current tensorboard run
         Arguments:
-            ops (Op, Iterable): Ops to serialize as a TensorFlow Graph 
+            ops (Op, Iterable): Ops to serialize as a TensorFlow Graph
         """
         graph_def = ngraph_to_tf_graph_def(ops)
         self._write_event(create_event(graph_def=graph_def))
@@ -148,10 +146,10 @@ class TensorBoard(object):
 
         Arguments:
             name (str): Display name within tensorboard
-            audio (ndarray): 2-D array containing the audio clip to be logged. It should be 
+            audio (ndarray): 2-D array containing the audio clip to be logged. It should be
                              formatted as Frames by Channels.
             sample_rate (float): Sample rate of audio in Hertz
-            step (int, optional): Step in the series            
+            step (int, optional): Step in the series
         """
 
         summ = summary.audio(name, audio, sample_rate)

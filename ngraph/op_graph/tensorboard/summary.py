@@ -127,7 +127,7 @@ def make_histogram(values):
         counts[idx] += 1
 
     limit_counts = [(limits[i], counts[i]) for i in range(len(limits))
-                   if counts[i]]
+                    if counts[i]]
     bucket_limit = [lc[0] for lc in limit_counts]
     bucket = [lc[1] for lc in limit_counts]
     sum_sq = sum(v * v for v in values)
