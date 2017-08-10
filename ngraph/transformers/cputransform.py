@@ -66,11 +66,13 @@ from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
 
 from ngraph.util.trace_events import is_tracing_enabled
 
+
 def align_ndarray(element_count, alignment, dtype):
-    x = np.empty(element_count+(alignment-1), dtype)
-    offset =  (x.ctypes.data%alignment) // dtype.itemsize
+    x = np.empty(element_count + (alignment - 1), dtype)
+    offset = (x.ctypes.data % alignment) // dtype.itemsize
     padding = 0 if offset == 0 else (alignment - offset)
-    return x[padding:padding+element_count]
+    return x[padding:padding + element_count]
+
 
 class CPUConvEngine(object):
 
@@ -932,14 +934,16 @@ self.__profiler_stop__  = list()
         persistent_pool_size = computation_decl.exop_block.persistent_size() // 4
         byte_alignment = computation_decl.execution_graph.execution_state \
             .transformer.byte_alignment
-        self.exop_codegen_pools.append("{}_temporary_pool = align_ndarray({}, {}, np.dtype('{}'))",
-                                       computation_decl.computation_op.name, temp_pool_size,
-                                       byte_alignment,
-                                       'float32')
-        self.exop_codegen_pools.append("{}_persistent_pool = align_ndarray({}, {}, np.dtype('{}'))",
-                                       computation_decl.computation_op.name, persistent_pool_size,
-                                       byte_alignment,
-                                       'float32')
+        self.exop_codegen_pools.append(
+            "{}_temporary_pool = align_ndarray({}, {}, np.dtype('{}'))",
+            computation_decl.computation_op.name, temp_pool_size,
+            byte_alignment,
+            'float32')
+        self.exop_codegen_pools.append(
+            "{}_persistent_pool = align_ndarray({}, {}, np.dtype('{}'))",
+            computation_decl.computation_op.name, persistent_pool_size,
+            byte_alignment,
+            'float32')
 
         code = '#---------------------------------------------\n'
         code += '# memory pool\n'
