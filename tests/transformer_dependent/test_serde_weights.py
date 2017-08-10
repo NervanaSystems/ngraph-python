@@ -134,7 +134,6 @@ def test_set_op_value():
     assert (x_out == value).all()
 
 
-
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
 def test_set_op_values():

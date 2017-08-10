@@ -25,7 +25,7 @@ pytestmark = pytest.mark.transformer_dependent("module")
 
 @pytest.fixture
 def iter_buf():
-    return ng.placeholder(axes=(), dtype=np.dtype(np.uint32))
+    return ng.placeholder(axes=())
 
 
 @pytest.fixture

@@ -93,7 +93,7 @@ def test_sequential_reduce(M):
         assert np.allclose(p_val, x2_np)
 
 
-@pytest.config.flex_disabled
+@pytest.config.flex_disabled(reason='Results mismatch')
 def test_sequential_side(M):
     x1_np = 2
     x2_np = 3
