@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import print_function
 from tqdm import tqdm
 import numpy as np
 import requests
@@ -61,6 +62,7 @@ class TSP(object):
                     y.append(np.array([int(j) - 1 for j in outputs.split()])[:-1])  # delete last
                     # teacher forcing array as decoder's input while training
                     y_teacher.append([X[i][j - 1] for j in y[i]])
+
             X = np.array(X)
             y = np.array(y)
             y_teacher = np.array(y_teacher)

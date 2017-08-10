@@ -19,7 +19,6 @@ Reference paper: https://arxiv.org/pdf/1506.03134.pdf
 """
 from __future__ import division
 from __future__ import print_function
-import numpy as np
 from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import UniformInit, RMSProp, ax, Tanh, Logistic
@@ -173,19 +172,9 @@ with closing(ngt.make_transformer()) as transformer:
         train_output = train_computation(data)
         niter = idx + 1
         if niter % eval_frequency == 0:
-            predicted_targets = np.argmax(train_output['pointer_out'], axis=0)
-            true_targets = tsp_data['train']['tgt_txt'][niter - 1:(niter + args.batch_size) - 1][:]
+            print('iteration = {}, train loss = {}'.format(niter, train_output['batch_cost']))
 
-            corrects = 0
-            for predicted_target, true_target in zip(predicted_targets, true_targets):
-                corrects += np.sum(predicted_target == true_target)
-
-            # categorical accuracy
-            batch_accuracy = corrects / (args.batch_size * time_steps)
-            print('iteration = {}, train loss = {}, batch accuracy = {}'.format(
-                  niter, train_output['batch_cost'], batch_accuracy))
-
-            loss.append(train_output['batch_cost'])
+        loss.append(train_output['batch_cost'])
         niters = list(range(eval_frequency, niter + 1, eval_frequency))
 
 save_plot(niters, loss, args)

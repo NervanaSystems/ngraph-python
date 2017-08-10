@@ -14,9 +14,12 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from __future__ import print_function
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+except ImportError:
+    print('matplotlib not installed')
 
 
 def first_example(tsp_data):
