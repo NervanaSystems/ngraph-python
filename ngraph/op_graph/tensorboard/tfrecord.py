@@ -4,20 +4,111 @@ The code was adapted or copied from https://github.com/TeamHG-Memex/tensorboard_
 https://github.com/dmlc/tensorboard
 """
 
-import re
 import struct
 import array
+import time
+
+from tensorflow.core.util import event_pb2
 
 
-_VALID_OP_NAME_START = re.compile('^[A-Za-z0-9.]')
-_VALID_OP_NAME_PART = re.compile('[A-Za-z0-9_.\\-/]+')
+class RecordWriter(object):
+    def __init__(self, f, mode='wb'):
+        """
+        Create a tfrecord writer
+        Arguments:
+            f (str): Path to record file
+            mode (str): Mode to open file (must be one of 'wb' or 'ab')
+        """
+        if mode not in ('wb', 'ab'):
+            raise ValueError("mode must be one of 'wb' or 'ab', not {}".format(mode))
 
-# TODO: enforce valid tf names
-def make_valid_tf_name(name):
-    if not _VALID_OP_NAME_START.match(name):
-        # Must make it valid somehow, but don't want to remove stuff
-        name = '.' + name
-    return '_'.join(_VALID_OP_NAME_PART.findall(name))
+        self._f = f
+        self._mode = mode
+        self._file_obj = None
+        self._written = 0
+
+    def __enter__(self):
+        self._file_obj = open(self._f, self._mode)
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self._file_obj.close()
+
+    def write(self, event):
+        """
+        Write an event to the TFRecord file
+        """
+        if self._written == 0:
+            self._file_obj.write(event_to_record(create_event()))
+        self._file_obj.write(event_to_record(event))
+        self._file_obj.flush()
+        self._written += 1
+
+
+def event_to_record(event):
+    """
+    Convert an event protobuf to a TFRecord
+
+    Arguments:
+        event (Event): Event Protobuf to write in TFRecord format
+
+    Returns:
+        TFRecord formatted bytestring
+    """
+
+    event_str = serialize_protobuf(event)
+    header = struct.pack('Q', len(event_str))
+    record = [header,
+              struct.pack('I', masked_crc32c(header)),
+              event_str,
+              struct.pack('I', masked_crc32c(event_str))]
+
+    return b"".join(record)
+
+
+def create_event(summary=None, graph_def=None, wall_time=None, step=None):
+    """
+    Create a TF Event protobuf
+
+    Arguments:
+        summary (Summary): A Summary protobuf
+        graph_def (GraphDef): A GraphDef protobuf
+        wall_time (float): A timestamp to add to the event. If not set, time.time() will be used.
+        step (int): The global step for the current event
+
+    Returns:
+        Event protobuf instance
+    """
+
+    event = event_pb2.Event()
+    if summary is not None:
+        event.summary.ParseFromString(serialize_protobuf(summary))
+    elif graph_def is not None:
+        event.graph_def = serialize_protobuf(graph_def)
+
+    if wall_time is None:
+        wall_time = time.time()
+    event.wall_time = wall_time
+
+    if step is not None:
+        event.step = int(step)
+
+    return event
+
+
+def serialize_protobuf(pb):
+    """
+    Serialize a protobuf object into a bytestring
+
+    Arguments:
+        pb (Protobuf, bytes): Protobuf object to serialize or bytestring to pass through
+    """
+    if not isinstance(pb, bytes):
+        if not hasattr(pb, "SerializeToString"):
+            raise TypeError("pb must be a bytestring or a protobuf object, not {}".format(type(pb)))
+        pb = pb.SerializeToString()
+
+    return pb
 
 
 def masked_crc32c(data):

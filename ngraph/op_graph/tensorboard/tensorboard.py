@@ -1,37 +1,34 @@
-from __future__ import absolute_import
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 
 import os
-import subprocess
-import tempfile
 import logging
 import time
-import struct
 import socket
 import datetime as dt
 
-from collections import Iterable
-
 import numpy as np
-from ngraph.op_graph.serde.serde import _serialize_graph
-from ngraph.op_graph.tensorboard.tfrecord import masked_crc32c
 from ngraph.op_graph.tensorboard import summary
-
-# Tensorflow is (should be anyways) an optional dependency
-# for ngraph, and we only want to fail if the functions below
-# are invoked without TF installed.
-try:
-    from tensorflow.core.framework import graph_pb2
-    from tensorflow.core.util import event_pb2
-    from tensorflow.core.framework import summary_pb2
-    TF_IMPORT_SUCCESS = True
-except ImportError:
-    TF_IMPORT_SUCCESS = False
+from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
+from ngraph.op_graph.tensorboard.tfrecord import RecordWriter, create_event
 
 
 logger = logging.getLogger(__name__)
 
 
-class Tensorboard(object):
+class TensorBoard(object):
 
     def __init__(self, logdir, run=None):
         """
@@ -166,155 +163,3 @@ class Tensorboard(object):
             self.add_run()
         with RecordWriter(self._record_file, "ab") as fh:
             fh.write(event)
-
-
-def ngraph_to_tf_graph_def(graph):
-    """
-    Given an ngraph graph, convert it to a TensorFlow `GraphDef` protobuf object in memory.
-
-    Arguments:
-        graph (Op, Iterable): Ops to serialize as a TensorFlow Graph
-
-    Returns:
-        A Tensorflow `tensorflow.core.framework.graph_pb2.GraphDef` structure.
-
-    References:
-        Tensorflow graphdef proto:
-        https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/framework/graph.proto
-        Tensorflow nodedef proto:
-        https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/framework/node_def.proto
-    """
-    if not TF_IMPORT_SUCCESS:
-        raise ImportError("Tensorflow is not installed, yet it is required ",
-                          "to export Nervana Graph IR to TF GraphDef")
-
-    if not isinstance(graph, Iterable):
-        graph = [graph]
-    ng_graph_def = _serialize_graph(graph)
-
-    op_names = set()
-    op_uuid_map = dict()
-    tf_graph_def = graph_pb2.GraphDef()
-    for op in ng_graph_def.ops:
-        node_def = tf_graph_def.node.add()
-        node_def.name = op.name
-        node_def.op = op.op_type
-        node_def.attr['axes'].s = str(op.attrs['axes'].scalar.string_val)
-        for key, value in op.attrs.items():
-            if key.startswith("_ngraph_metadata_"):
-                key = key.replace("_ngraph_metadata_", "")
-                value_type = value.scalar.WhichOneof("value")
-                if value_type == "string_val":
-                    node_def.attr[key].s = value.scalar.string_val
-                elif value_type == "bool_val":
-                    node_def.attr[key].b = value.scalar.bool_val
-                elif value_type == "double_val":
-                    node_def.attr[key].f = value.scalar.double_val
-                elif value_type == "int_val":
-                    node_def.attr[key].i = value.scalar.int_val
-                else:
-                    # TODO: Could also capture slice and dtype
-                    pass
-
-        if op.name in op_names:
-            raise ValueError("Op with name {} exists in duplicate".format(op.name))
-        op_names.add(op.name)
-        op_uuid_map[op.uuid.uuid] = node_def
-
-    for edge in ng_graph_def.edges:
-        from_op = op_uuid_map[edge.from_uuid.uuid]
-        to_op = op_uuid_map[edge.to_uuid.uuid]
-        to_op.input.append(from_op.name)
-
-    return tf_graph_def
-
-
-def serialize_protobuf(pb):
-
-    if not isinstance(pb, bytes):
-        if not hasattr(pb, "SerializeToString"):
-            raise TypeError("pb must be a bytestring or a protobuf object, not {}".format(type(pb)))
-        pb = pb.SerializeToString()
-
-    return pb
-
-
-def deserialize_protobuf(pb, pb_type):
-
-    if isinstance(pb, bytes):
-        pb = pb_type.FromString(pb)
-
-    if not isinstance(pb, pb_type):
-        raise TypeError("pb must be a bytestring or a protobuf of type {}, not {}".format(pb_type,
-                                                                                          type(pb)))
-    return pb
-
-
-def event_to_record(event):
-    """
-    Convert an event protobuf to a tfrecord
-    Args:
-        event: 
-
-    Returns:
-
-    """
-
-    event_str = serialize_protobuf(event)
-    header = struct.pack('Q', len(event_str))
-    record = [header,
-              struct.pack('I', masked_crc32c(header)),
-              event_str,
-              struct.pack('I', masked_crc32c(event_str))]
-
-    return b"".join(record)
-
-
-class RecordWriter(object):
-    def __init__(self, f, mode='wb'):
-        """
-        Create a tfrecord writer
-        Arguments:
-            f (str): Path to record file 
-            mode (str): Mode to open file (must be one of 'wb' or 'ab') 
-        """
-        if mode not in ('wb', 'ab'):
-            raise ValueError("mode must be one of 'wb' or 'ab', not {}".format(mode))
-
-        self._f = f
-        self._mode = mode
-        self._file_obj = None
-        self._written = 0
-
-    def __enter__(self):
-        self._file_obj = open(self._f, self._mode)
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        self._file_obj.close()
-
-    def write(self, event):
-        if self._written == 0:
-            self._file_obj.write(event_to_record(create_event()))
-        self._file_obj.write(event_to_record(event))
-        self._file_obj.flush()
-        self._written += 1
-
-
-def create_event(summary=None, graph_def=None, wall_time=None, step=None, **kwargs):
-
-    if summary is not None:
-        event = event_pb2.Event(summary=deserialize_protobuf(summary, summary_pb2.Summary))
-    elif graph_def is not None:
-        event = event_pb2.Event(graph_def=serialize_protobuf(graph_def))
-    else:
-        event = event_pb2.Event()
-
-    if wall_time is None:
-        wall_time = time.time()
-    event.wall_time = wall_time
-
-    if step is not None:
-        event.step = int(step)
-
-    return event

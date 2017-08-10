@@ -1,15 +1,20 @@
 import numpy as np
 import ngraph as ng
-from ngraph.op_graph.tensorboard.tensorboard import Tensorboard, ngraph_to_tf_graph_def
+from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
+from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
 
 
-tb = Tensorboard("/tmp/test_tensorboard_integration")
+tb = TensorBoard("/tmp/test_tensorboard_integration")
 
 
 def get_simple_graph():
     ax = ng.make_axes([ng.make_axis(name='C', length=1)])
-    base_op = ng.constant(5.0, ax)
+    base_op = ng.constant(5.0, ax).named("weird_name#@$")
     simple_graph = ng.log(ng.exp(base_op))
+    simple_graph.metadata.update(string_val="foo",
+                                 bool_val=True,
+                                 float_val=6.5,
+                                 int_val=2)
     return base_op, simple_graph
 
 

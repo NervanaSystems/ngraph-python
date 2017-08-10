@@ -12,22 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-"""## Generation of summaries.
-### Class for writing Summaries
-@@FileWriter
-@@FileWriterCache
-### Summary Ops
-@@tensor_summary
-@@scalar
-@@histogram
-@@audio
-@@image
-@@merge
-@@merge_all
-## Utilities
-@@get_summary_description
-"""
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
 
 from __future__ import absolute_import
 from __future__ import division
@@ -45,36 +42,35 @@ import numpy as np
 from tensorflow.core.framework.summary_pb2 import Summary, HistogramProto
 
 
+logger = logging.getLogger(__name__)
 
 _INVALID_TAG_CHARACTERS = _re.compile(r'[^-/\w\.]')
 
 
 def _clean_tag(name):
-  # In the past, the first argument to summary ops was a tag, which allowed
-  # arbitrary characters. Now we are changing the first argument to be the node
-  # name. This has a number of advantages (users of summary ops now can
-  # take advantage of the tf name scope system) but risks breaking existing
-  # usage, because a much smaller set of characters are allowed in node names.
-  # This function replaces all illegal characters with _s, and logs a warning.
-  # It also strips leading slashes from the name.
-  if name is not None:
-    new_name = _INVALID_TAG_CHARACTERS.sub('_', name)
-    new_name = new_name.lstrip('/')  # Remove leading slashes
-    if new_name != name:
-      logging.info(
-          'Summary name %s is illegal; using %s instead.' %
-          (name, new_name))
-      name = new_name
-  return name
+    # In the past, the first argument to summary ops was a tag, which allowed
+    # arbitrary characters. Now we are changing the first argument to be the node
+    # name. This has a number of advantages (users of summary ops now can
+    # take advantage of the tf name scope system) but risks breaking existing
+    # usage, because a much smaller set of characters are allowed in node names.
+    # This function replaces all illegal characters with _s, and logs a warning.
+    # It also strips leading slashes from the name.
+    if name is not None:
+        new_name = _INVALID_TAG_CHARACTERS.sub('_', name)
+        new_name = new_name.lstrip('/')  # Remove leading slashes
+        if new_name != name:
+            logger.debug('Summary name {} is illegal; using {} instead.'.format(name, new_name))
+        name = new_name
+    return name
 
 
-def scalar(name, scalar, collections=None):
+def scalar(name, scalar):
     """Outputs a `Summary` protocol buffer containing a single scalar value.
     The generated Summary has a Tensor.proto containing the input Tensor.
     Args:
       name: A name for the generated node. Will also serve as the series name in
         TensorBoard.
-      tensor: A real numeric Tensor containing a single value.
+      scalar: A real numeric Tensor containing a single value.
       collections: Optional list of graph collections keys. The new summary op is
         added to these collections. Defaults to `[GraphKeys.SUMMARIES]`.
     Returns:
@@ -89,7 +85,7 @@ def scalar(name, scalar, collections=None):
     return Summary(value=[Summary.Value(tag=name, simple_value=scalar)])
 
 
-def histogram(name, values, collections=None):
+def histogram(name, values):
     # pylint: disable=line-too-long
     """Outputs a `Summary` protocol buffer with a histogram.
     The generated
@@ -101,8 +97,6 @@ def histogram(name, values, collections=None):
         TensorBoard.
       values: A real numeric `Tensor`. Any shape. Values to use to
         build the histogram.
-      collections: Optional list of graph collections keys. The new summary op is
-        added to these collections. Defaults to `[GraphKeys.SUMMARIES]`.
     Returns:
       A scalar `Tensor` of type `string`. The serialized `Summary` protocol
       buffer.
@@ -194,20 +188,33 @@ def make_image(tensor, height, width, channel):
                          encoded_image_string=image_string)
 
 
-def audio(tag, audio, sample_rate):
-    if len(audio.shape) == 1:
-        num_frames, num_channels = len(audio), 1
-    elif len(audio.shape) == 2:
-        num_frames, num_channels = audio.shape
+def audio(tag, tensor, sample_rate):
+    """Outputs a `Summary` protocol buffer with audio.
+    The audio is built from `tensor` which must be 2-D with shape `[num_frames,
+    channels]`.
+    Args:
+      tag: A name for the generated node. Will also serve as a series name in
+        TensorBoard.
+      tensor: A 2-D `int16` `Tensor` of shape `[num_frames, channels]`
+      sample_rate: An `int` declaring the sample rate for the provided audio
+    Returns:
+      A scalar `Tensor` of type `string`. The serialized `Summary` protocol
+      buffer.
+    """
+    tag = _clean_tag(tag)
+    if len(tensor.shape) == 1:
+        num_frames, num_channels = len(tensor), 1
+    elif len(tensor.shape) == 2:
+        num_frames, num_channels = tensor.shape
     else:
-        raise ValueError("audio must have 1 or 2 dimensions, not {}".format(len(audio.shape)))
+        raise ValueError("audio must have 1 or 2 dimensions, not {}".format(len(tensor.shape)))
 
-    audio = make_audio(audio, sample_rate, num_frames, num_channels)
-    return Summary(value=[Summary.Value(tag=tag, audio=audio)])
+    tensor = make_audio(tensor, sample_rate, num_frames, num_channels)
+    return Summary(value=[Summary.Value(tag=tag, audio=tensor)])
 
 
 def make_audio(tensor, sample_rate, length_frames, num_channels):
-
+    """Convert an numpy representation audio to Audio protobuf"""
     output = StringIO()
     wav_out = wave.open(output, "w")
     wav_out.setframerate(float(sample_rate))
@@ -224,114 +231,3 @@ def make_audio(tensor, sample_rate, length_frames, num_channels):
                          length_frames=length_frames,
                          encoded_audio_string=audio_string,
                          content_type="audio/wav")
-
-
-
-'''TODO(zihaolucky). support more summary types later.
-def audio(name, tensor, sample_rate, max_outputs=3, collections=None):
-  # pylint: disable=line-too-long
-  """Outputs a `Summary` protocol buffer with audio.
-  The summary has up to `max_outputs` summary values containing audio. The
-  audio is built from `tensor` which must be 3-D with shape `[batch_size,
-  frames, channels]` or 2-D with shape `[batch_size, frames]`. The values are
-  assumed to be in the range of `[-1.0, 1.0]` with a sample rate of
-  `sample_rate`.
-  The `tag` in the outputted Summary.Value protobufs is generated based on the
-  name, with a suffix depending on the max_outputs setting:
-  *  If `max_outputs` is 1, the summary value tag is '*name*/audio'.
-  *  If `max_outputs` is greater than 1, the summary value tags are
-     generated sequentially as '*name*/audio/0', '*name*/audio/1', etc
-  Args:
-    name: A name for the generated node. Will also serve as a series name in
-      TensorBoard.
-    tensor: A 3-D `float32` `Tensor` of shape `[batch_size, frames, channels]`
-      or a 2-D `float32` `Tensor` of shape `[batch_size, frames]`.
-    sample_rate: A Scalar `float32` `Tensor` indicating the sample rate of the
-      signal in hertz.
-    max_outputs: Max number of batch elements to generate audio for.
-    collections: Optional list of ops.GraphKeys.  The collections to add the
-      summary to.  Defaults to [_ops.GraphKeys.SUMMARIES]
-  Returns:
-    A scalar `Tensor` of type `string`. The serialized `Summary` protocol
-    buffer.
-  """
-  # pylint: enable=line-too-long
-  name = _clean_tag(name)
-  with _ops.name_scope(name, None, [tensor]) as scope:
-    # pylint: disable=protected-access
-    sample_rate = _ops.convert_to_tensor(
-        sample_rate, dtype=_dtypes.float32, name='sample_rate')
-    val = _gen_logging_ops._audio_summary_v2(
-        tag=scope.rstrip('/'),
-        tensor=tensor,
-        max_outputs=max_outputs,
-        sample_rate=sample_rate,
-        name=scope)
-    _collect(val, collections, [_ops.GraphKeys.SUMMARIES])
-  return val
-
-
-def merge(inputs, collections=None, name=None):
-  # pylint: disable=line-too-long
-  """Merges summaries.
-  This op creates a
-  [`Summary`](https://www.tensorflow.org/code/tensorflow/core/framework/summary.proto)
-  protocol buffer that contains the union of all the values in the input
-  summaries.
-  When the Op is run, it reports an `InvalidArgument` error if multiple values
-  in the summaries to merge use the same tag.
-  Args:
-    inputs: A list of `string` `Tensor` objects containing serialized `Summary`
-      protocol buffers.
-    collections: Optional list of graph collections keys. The new summary op is
-      added to these collections. Defaults to `[GraphKeys.SUMMARIES]`.
-    name: A name for the operation (optional).
-  Returns:
-    A scalar `Tensor` of type `string`. The serialized `Summary` protocol
-    buffer resulting from the merging.
-  """
-  # pylint: enable=line-too-long
-  name = _clean_tag(name)
-  with _ops.name_scope(name, 'Merge', inputs):
-    # pylint: disable=protected-access
-    val = _gen_logging_ops._merge_summary(inputs=inputs, name=name)
-    _collect(val, collections, [])
-  return val
-
-
-def merge_all(key=_ops.GraphKeys.SUMMARIES):
-  """Merges all summaries collected in the default graph.
-  Args:
-    key: `GraphKey` used to collect the summaries.  Defaults to
-      `GraphKeys.SUMMARIES`.
-  Returns:
-    If no summaries were collected, returns None.  Otherwise returns a scalar
-    `Tensor` of type `string` containing the serialized `Summary` protocol
-    buffer resulting from the merging.
-  """
-  summary_ops = _ops.get_collection(key)
-  if not summary_ops:
-    return None
-  else:
-    return merge(summary_ops)
-
-
-def get_summary_description(node_def):
-  """Given a TensorSummary node_def, retrieve its SummaryDescription.
-  When a Summary op is instantiated, a SummaryDescription of associated
-  metadata is stored in its NodeDef. This method retrieves the description.
-  Args:
-    node_def: the node_def_pb2.NodeDef of a TensorSummary op
-  Returns:
-    a summary_pb2.SummaryDescription
-  Raises:
-    ValueError: if the node is not a summary op.
-  """
-
-  if node_def.op != 'TensorSummary':
-    raise ValueError("Can't get_summary_description on %s" % node_def.op)
-  description_str = _compat.as_str_any(node_def.attr['description'].s)
-  summary_description = SummaryDescription()
-  _json_format.Parse(description_str, summary_description)
-  return summary_description
-'''
