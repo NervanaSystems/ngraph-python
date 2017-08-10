@@ -257,8 +257,8 @@ def random_beta_2():
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.config.flex_skip(reason='Usually all cases fail but very rarely some pass for flex - ' 
-                                'because of the random character of the parameters')
+@pytest.config.flex_skip(reason="Usually all cases fail but very rarely some pass for flex - "
+                                "because of the random character of the parameters")
 @pytest.mark.parametrize("epsilon", [1e-8])
 @pytest.mark.parametrize("select_variables", [False, True])
 def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, select_variables):
