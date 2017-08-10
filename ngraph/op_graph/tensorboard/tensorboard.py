@@ -22,7 +22,7 @@ import datetime as dt
 import numpy as np
 from ngraph.op_graph.tensorboard import summary
 from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
-from ngraph.op_graph.tensorboard.tfrecord import RecordWriter, create_event
+from ngraph.op_graph.tensorboard.record_writer import RecordWriter, create_event
 
 
 logger = logging.getLogger(__name__)
