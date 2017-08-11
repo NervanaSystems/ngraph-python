@@ -47,7 +47,7 @@ class TSP(object):
             if not os.path.exists(filepath):
                 for file_name, file_id in GOOGLE_DRIVE_IDS.items():
                     destination = './' + file_name
-                    print('\nDownloading and unzipped traveling salesman data {} released '
+                    print('\nDownloading and unzipping traveling salesman data {} released '
                           'with Pointer Networks paper\n'.format(file_name))
                     self.download_file_from_google_drive(file_id, destination)
                     with zipfile.ZipFile(destination, 'r') as z:
