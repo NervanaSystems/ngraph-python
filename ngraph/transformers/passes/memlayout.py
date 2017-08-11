@@ -38,7 +38,7 @@ class MemLayoutPass(GraphPass):
 
         # Layout temporary memory
         # self.layout_memory_middle_out()
-        self.layout_memory_best_fit()
+        computation_decl.temporary_max_allocated = self.layout_memory_best_fit()
 
         # Layout persistent memory
         pmm = MemoryManager(self.byte_alignment)
@@ -53,6 +53,8 @@ class MemLayoutPass(GraphPass):
                         output_decl.tensor_decl.buffer_pool_offset is None:
                     output_decl.tensor_decl.buffer_pool_offset = \
                         pmm.allocate(output_decl.tensor_decl.size)
+
+        computation_decl.persistent_max_allocated = pmm.max_allocated()
 
         # self.test_memory_overlap()
 
@@ -72,6 +74,7 @@ class MemLayoutPass(GraphPass):
                         free.tensor_description_base.name))
                 else:
                     mm.free(free.buffer_pool_offset)
+        return mm.max_allocated()
 
     def layout_memory_first_fit(self):
         mm = MemoryManager(self.byte_alignment)
@@ -89,6 +92,7 @@ class MemLayoutPass(GraphPass):
                         free.tensor_description_base.name))
                 else:
                     mm.free(free.buffer_pool_offset)
+        return mm.max_allocated()
 
     def layout_memory_middle_out(self):
         mm = MemoryManager(self.byte_alignment)
@@ -142,6 +146,7 @@ class MemLayoutPass(GraphPass):
                 mm.free(free.buffer_pool_offset)
             # node.validate()
             node = node.next_exop
+        return mm.max_allocated()
 
     def test_memory_overlap(self):
         for i, node in enumerate(self.exop_block):
