@@ -1,5 +1,7 @@
+.. _building_graphs:
+
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -15,17 +17,18 @@
 
 Building graphs
 ***************
-Frontends (or users who require the flexibility of constructing Nervana Graph ``Ops`` directly) utilize a set of graph construction functions to construct Nervana Graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op`` that is not typically a concern to users or frontends but gives a hierarchical structure that can be helpful.
 
-Nervana Graph Structure
+Frontends (or users who require the flexibility of constructing Intel® Nervana™ graph ``Ops`` directly) utilize a set of graph construction functions to construct Intel Nervana graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op``, which is not typically a concern for users or frontends but that illustrates a hierarchical structure that can be helpful.
+
+Intel Nervana graph structure
 =======================
 
-Data Dependencies
+Data dependencies
 -----------------
 
-An ``Op``'s primary role is to function as a node in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies this ``Op`` operates upon. These operate as the directed edges of the graph.
+An ``Op``'s primary role is to function as a node in a directed acyclic graph dependency computation graph. The ``Op`` class's attribute ``args`` is a list containing all upstream dependencies that this ``Op`` operates upon. These operate as the directed edges of the graph.
 
-For example,
+For example:
 
 .. code-block:: python
 
@@ -42,11 +45,11 @@ For example,
     (<AssignableTensorOp(<Const(0)>):4500972432>,
      <AssignableTensorOp(<Const(1)>):4500974224>)
 
-``mysum`` then refers to an instance of the class ``Add`` which is a subclass of ``Op``. ``mysum.args`` is a list containing the ``Ops`` pointed to by the python variables ``x`` and ``y``.
+``mysum`` then refers to an instance of the class ``Add``, which is a subclass of ``Op``. ``mysum.args`` is a list containing the ``Ops`` pointed to by the Python variables ``x`` and ``y``.
 
 Initializers
 ------------
-In addition to ``args``, there are two other types of edges in Nervana Graphs. Each op has an attribute ``initializers`` which contains a (possibly empty) set of ops needed to execute before any computations occur. To use our running example:
+In addition to ``args``, there are two other types of edges in Intel Nervana graphs. Each op has an attribute, ``initializers``, which contains a (possibly empty) set of ops that need to execute before any computations occur. To use our running example:
 
 .. code-block:: python
 
@@ -56,9 +59,9 @@ In addition to ``args``, there are two other types of edges in Nervana Graphs. E
     >>> x.initializers
     {<InitTensorOp(InitTensorOp_1):4500973392>}
 
-We see here that ``mysum`` doesn't have any initializers because its value is only known at runtime. ``x`` on the other hand is a constant and can and must be initialized before any computations occur. Initializer subgraphs (the ops in ``initializers`` and all upstream ops) themselves contain ``SetItem``, ``Fill``, ``Flatten``, ``ConstantOp`` and other ops to manipulate a tensor to get it ready for computation.
+We see here that ``mysum`` doesn't have any initializers because its value is only known at runtime. On the other hand, ``x`` is a constant, and can and must be initialized before any computations occur. Initializer subgraphs (the ops in ``initializers`` and all upstream ops) themselves contain ``SetItem``, ``Fill``, ``Flatten``, ``ConstantOp`` and other ops to manipulate a tensor to get it ready for computation.
 
-Non-data Control Dependencies
+Non-data control dependencies
 -----------------------------
 Finally, consider the following graph construction:
 
@@ -68,7 +71,11 @@ Finally, consider the following graph construction:
     >>> a = ng.assign(x, 5)
     >>> z = x + 1
 
-Here we create a scalar placeholder ``x``, an assignment of 5 to the placeholder ``x``, and an addition of 1 to ``x``. It may not be clear if ``z`` when evaluated should equal ``1`` or ``6``. The sub-graph for ``z`` does not include the assignment, so the result would be ``1``. To include the assignment, we provide ``ng.sequential`` which causes ops to be executed in the order listed, with the last op serving as the value, subject to the constraint that ops in a computation are only executed once. To force the assignment, we would write:
+Here we create a scalar placeholder ``x``, an assignment of 5 to the placeholder ``x``, and an addition of 1 to ``x``. 
+
+It might not be clear if ``z`` should equal ``1`` or ``6`` when evaluated. The subgraph for ``z`` does not include the assignment, so the result would be ``1``. To include the assignment, we provide ``ng.sequential`` which causes ops to be executed in the order listed, with the last op serving as the value, subject to the constraint that ops in a computation are only executed once. 
+
+To force the assignment, we would write:
 
 .. code-block:: python
 
@@ -83,38 +90,37 @@ Now ``z`` performs the assignment and then returns the value of ``x + 1``.
 General properties of ops
 =========================
 
-All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former provides ``Ops`` with automatically generated unique names and the latter provides debug info as to the line number and filename where this node was constructed.
+All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former class provides ``Ops`` with unique, automatically generated names, and the latter provides debug info as to the line number and filename where this node was constructed.
 
-In addition to the three graph properties explained above (``args`` and
-``initializers``), all ops have the additional attributes:
+In addition to the three graph properties explained above (``args`` and ``initializers``), all ops have the additional attributes:
 
-`axes`
+*axes*
     The axes of the result of the computation. This only needs to be specified
     by the frontend or user during ``Op`` creation if the default result is not
-    correct or not inferrable for a particular ``Op`` type. The `axes` are also
+    correct or is not inferrable for a particular ``Op`` type. The ``axes`` are also
     available as a gettable property.
 
-`name`
-    A string that can help identify the node during debugging, or when search for a node in a set of nodes.
-    Some front ends may also make use of the `name`.  The `name` is a settable property.
+*name*
+    A string that can help identify the node during debugging, or when searching for a node in a set of nodes.
+    Some frontends may also make use of the ``name``.  The ``name`` is a settable property.
 
-`metadata`
-    A dictionary of key,value string pairs that can be used to select/filter
+*metadata*
+    A dictionary of key, value string pairs that can be used to select/filter
     ops when manipulating them. For example, ``stochastic=dropout`` may be used
-    to indicate groups of trainable variables in conjunction with drop-out.
+    to indicate groups of trainable variables in conjunction with dropout.
 
-Some useful properties of ops are:
+Some useful properties of ``Ops`` are:
 
-`filename`
-    The file that created the op.
+*filename*
+    The file that created the ``Op``.
 
-`lineno`
-    The line number in the file where the op was created.
+*lineno*
+    The line number in the file where the ``Op`` was created.
 
-`file_info`
+*file_info*
     The file and line number formatted for debuggers that support clicking on a file location to edit that location.
 
-Op Hierarchy
+Op hierarchy
 ============
 
 Users and frontends do not typically need to worry about the implementation details of the various ``Op`` classes. This is why they are hidden behind graph construction functions.
@@ -127,7 +133,7 @@ Users and frontends do not typically need to worry about the implementation deta
 Ops influencing evaluation
 ==========================
 
-During computation (covered in more detail in :doc:`transformer_usage`), the input and output values must be stored somewhere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``:
+During computation (which we cover in more detail in :doc:`transformer_usage`), the input and output values must be stored somewhere. To create a ``placeholder`` expression in the operational graph, we must import the operational backend symbols and then create the ``placeholder``:
 
 .. code-block:: python
 
@@ -136,9 +142,9 @@ During computation (covered in more detail in :doc:`transformer_usage`), the inp
 
     x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
 
-This ``placeholder`` will create an ``AssignableTensorOp`` to trigger the necessary storage to be allocated on the host device and trigger values to be transferred between the device and host. When the op is used in a graph computation, the op serves as a Python handle for the tensor stored on the device.
+This ``placeholder`` creates an ``AssignableTensorOp`` that triggers the necessary storage to be allocated on the host device and triggers values to be transferred between the device and host. When the ``Op`` is used in a graph computation, the ``Op`` serves as a Python handle for the tensor stored on the device.
 
-It is important to remember that ``x`` is a Python variable that holds an op.  Therefore, the following code:
+It is important to remember that ``x`` is a Python variable that holds an ``Op``.  Therefore, the following code
 
 .. code-block:: python
 
@@ -146,27 +152,29 @@ It is important to remember that ``x`` is a Python variable that holds an op.  T
 
 does not directly double the value of the tensor in the ``placeholder``. Instead, the ``__add__`` method is called with
 both arguments pointing to the same ``placeholder`` object. This returns a new ``Op`` that is now stored as the python variable ``x``.
-On the other hand, to directly modify the value of the ``placeholder``, use:
+
+On the other hand, you can directly modify the value of the ``placeholder`` with the following.
 
 .. code-block:: python
 
     ng.SetItem(x, x + x)
 
-Constructing the graph consists mostly of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider:
+Constructing the graph mostly consists of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider the following example.
 
 .. code-block:: python
 
     x1 = x + x
     y = x1 * x1 - x
 
-The intermediate value ``x + x`` is only computed once, since the same op is used for both arguments of the multiplication in ``y``.
-Furthermore, in this computation, all the computations will automatically be performed in place. If the computation is later modified such that the intermediate value ``x + x`` is needed, the op-graph will automatically adjust the computation's implementation to make the intermediate result ``x + x`` available.  This same flexibility exists with NumPy or PyCUDA, but those implementations always allocate tensors for the intermediate values, relying on Python's garbage collector clean them up; the peak memory usage will be higher and there will be more overhead.
+The intermediate value ``x + x`` is only computed once, since the same ``Op`` is used for both arguments of the multiplication in ``y``.
+
+Furthermore, in this computation, all the computations are automatically performed in place. If the computation is later modified such that the intermediate value ``x + x`` is needed, the op-graph automatically adjusts the computation's implementation to make the intermediate result ``x + x`` available. This same flexibility exists with *NumPy* or *PyCUDA*, but those implementations always allocate tensors for the intermediate values, relying on Python's garbage collector to clean them up. This means the peak memory usage will be higher and there will be more overhead.
 
 Derivatives
 ===========
 
 Because ``Ops`` describe computations, we have enough information to compute derivatives, using the ``deriv``
-function:
+function.
 
 .. code-block:: python
 
@@ -181,14 +189,14 @@ function:
     c = ng.squared_L2(y - y0)
     d = ng.deriv(c, w)
 
-The python variable ``d`` will hold an ``Op`` whose value is the derivative ``dc/dw``. In this example, we knew which ops contain the variables to be trained (e.g. ``w``).  For a more general optimizer, we could search through all the subexpressions looking for the dependant variables.  This is handled by the ``variables`` method, so ``c.variables()`` would return the list of ``Ops`` ``[w, b]``.
+The Python variable ``d`` will hold an ``Op`` whose value is the derivative ``dc/dw``. In this example, we knew which ``Ops`` contain the variables to be trained (for example, ``w``).  For a more general optimizer, we could search through all the subexpressions to look for the dependant variables. This is handled by the ``variables`` method, so ``c.variables()`` would return the list of ``Ops`` ``[w, b]``.
 
-An important distinction to make here is that the ``deriv`` function does not perform symbolic or numeric differentiation. In fact it does not compute anything at all. Its sole job is to construct another computational graph using the existing upstream graph of ``c`` and return a handle to that new computational graph (``d``). No computation is therefore taking place at this point until a user evaluates a computation of ``d`` using a transformer.
+An important distinction to make here is that the ``deriv`` function does not perform symbolic or numeric differentiation. In fact, it does not compute anything at all. Its sole job is to construct another computational graph using the existing upstream graph of ``c`` and then return a handle to that new computational graph (``d``). Therefore, no computation is taking place at this point until a user evaluates a computation of ``d`` using a transformer.
 
 .. Note::
-  The following functionality is likely to be supplanted more composable abstractions involving op graph containers.
+  The following functionality is likely to be supplanted by more composable abstractions involving op graph containers in the future.
 
-In some cases, it is convenient for an op graph construction function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this The ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and indicate the sub-graphs that are useful in cross-entropy and derivatives by adding a ``deriv_handler`` to the ``DivideOp``:
+In some cases, it is convenient for an op graph construction function to associate additional information with an ``Op``. For example, the ``softmax`` function returns a ``DivideOp`` but when that output value is then used in a cross-entropy entropy calculation, the derivative computation would be numerically unstable if performed directly. To avoid this, the ``softmax`` function can indicate that the ``DivideOp`` is part of a ``softmax`` computation and can add a ``deriv_handler`` to the ``DivideOp`` to indicate the subgraphs that are useful in cross-entropy and derivative calculations.
 
 More details about the mechanics of automatic differiantion and how ``deriv`` works are covered in :doc:`autodiff`.
 

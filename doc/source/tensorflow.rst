@@ -1,5 +1,7 @@
+.. _tensorflow:
+
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -13,20 +15,20 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-TensorFlow
-==========
+TensorFlow*
+***********
 
-In ngraph, we aim to provide utilities that enable frontend interoperability
+In Intel® Nervana™ graph (ngraph), we aim to provide utilities that enable frontend interoperability
 with other frameworks such as `TensorFlow <https://www.tensorflow.org/>`__.
-The TensorFlow importer allows users to define a limited set models in
-TensorFlow and then execute computations using ngraph transformers.
+The TensorFlow* importer allows users to define a limited set models in
+TensorFlow and then execute computations using Intel Nervana graph transformers.
 
 
-Minimal Example
----------------
-Here's a minimal example for the TensorFlow importer.
+Minimal example
+===============
 
-::
+Here's a minimal example for the TensorFlow importer::
+
 
     from __future__ import print_function
     from ngraph.frontends.TensorFlow.tf_importer.importer import TFImporter
@@ -52,15 +54,15 @@ Here's a minimal example for the TensorFlow importer.
     print(f_result)
 
 
-Walk-through of MNIST MLP Example
----------------------------------
-Here's a walk-through of the MNIST MLP example. For full source code of the
-example, please see the
+Walkthrough of MNIST MLP example
+================================
+
+Here's a walkthrough of the MNIST MLP example. For the full source code of the
+example, refer to the
 `examples <https://github.com/NervanaSystems/ngraph/tree/master/ngraph/frontends/tensorflow/examples/>`__
 directory.
 
-1. Define MNIST MLP model in TensorFlow
-::
+1. Define the MNIST MLP model in TensorFlow as shown below::
 
     x = tf.placeholder(tf.float32, [args.batch_size, 784])
     t = tf.placeholder(tf.float32, [args.batch_size, 10])
@@ -71,33 +73,30 @@ directory.
         t * tf.log(tf.nn.softmax(y)), reduction_indices=[1]))
     init = tf.initialize_all_variables()
 
-In the example, we need to explicitly set ``init`` to
+In this example, we need to explicitly set ``init`` to
 ``tf.initialize_all_variables()`` since we need to use the handle of the
-``init`` op for ngraph to execute the correct initialization.
+``init`` op for Intel Nervana graph to execute the correct initialization.
 
-2. Import TensorFlow ``GraphDef``
-::
+2. Import TensorFlow ``GraphDef``::
 
     importer = TFImporter()
     importer.import_graph_def(tf.Session().graph_def)
 
 - We use the ``TFImporter.import_graph_def()`` function to import from
   TensorFlow sessions's ``graph_def``.
-- The importer also support importing from a ``graph_def`` protobuf file
+- The importer also supports importing from a ``graph_def`` protobuf file
   using ``TFImporter.import_protobuf()``. For example, a ``graph_def`` file can
   be dumped by ``tf.train.SummaryWriter()``.
 
-3. Get handles of corresponding ngraph ops
-::
+3. Get the handles of the corresponding Intel Nervana graph ops::
 
     x_ng, t_ng, cost_ng, init_op_ng = importer.get_op_handle([x, t, cost, init])
 
-TensorFlow nodes are converted to ngraph ops. In order to evaluate a
-TensorFlow node, we need to get its corresponding ngraph node using
+TensorFlow nodes are converted to Intel Nervana graph ops. To evaluate a
+TensorFlow node, we need to get its corresponding Intel Nervana graph node using
 ``TFImporter.get_op_handle()``.
 
-4. Perform autodiff and define computations
-::
+4. Perform autodiff and define computations::
 
     updates = SGDOptimizer(args.lrate).minimize(cost_ng)
     transformer = ngt.make_transformer()
@@ -105,11 +104,10 @@ TensorFlow node, we need to get its corresponding ngraph node using
     init_comp = transformer.computation(init_op_ng)
     transformer.initialize()
 
-As we only import the forward graph from TensorFlow, we should use ngraph's
+As we only import the forward graph from TensorFlow, we should use Intel Nervana graph's
 autodiff to compute gradients and get optimizers.
 
-5. Training using ngraph
-::
+5. Training using Intel Nervana graph::
 
     mnist = input_data.read_data_sets(args.data_dir, one_hot=True)
     init_comp()
@@ -118,11 +116,10 @@ autodiff to compute gradients and get optimizers.
         cost_val, _ = train_comp(batch_xs, batch_ys)
         print("[Iter %s] Cost = %s" % (idx, cost_val))
 
-Now we can train the model in ngraph as if it were a native ngraph model. All
-ngraph functionalities and syntax can be applied after the graph is imported.
+Now we can train the model in ngraph as if it were a native Intel Nervana graph model. All
+Intel Nervana graph functionalities and syntax can be applied after the graph is imported.
 
-6. Training using TensorFlow as comparison
-::
+6. Training using TensorFlow as comparison::
 
     with tf.Session() as sess:
         # train in tensorflow
@@ -136,12 +133,12 @@ ngraph functionalities and syntax can be applied after the graph is imported.
                                    feed_dict={x: batch_xs, t: batch_ys})
             print("[Iter %s] Cost = %s" % (idx, cost_val))
 
-Finally, we train the model using standard TensorFlow. The ngraph results above
+Finally, we train the model using standard TensorFlow. The Intel Nervana graph results above
 match TensorFlow's results.
 
 
 Current Limitations
--------------------
+===================
 
 1. Only a subset of operations are supported.
 
@@ -154,18 +151,18 @@ Current Limitations
 2. The importer should be used to import the forward graph.
 
   - User should use the importer to import the forward pass of the TensorFlow graph,
-    and then perform autodiff and training updates in ngraph.
+    and then perform autodiff and training updates in Intel Nervana graph.
   - TensorFlow ops related to gradient computation are not supported.
-  - In the future, bidirectional weight exchange between TensorFlow and ngraph will
+  - In the future, bidirectional weight exchange between TensorFlow and Intel Nervana graph will
     also be supported.
 
-3. Static-ness
+3. Staticness
 
-  - In ngraph, the transformer may alter the computation graph during the
+  - In Intel Nervana graph, the transformer can alter the computation graph during the
     transformation phase, thus we need to declare all computations before
     executing any of them. Altering the imported graph after transformer
     initialization is not supported.
   - TensorFlow allows dynamic parameters to its ops. For example, the kernel
     size of a ``Conv2d`` can be the result of another computation. Since
-    ngraph needs to know dimension information prior to execution to allocate
+    Intel Nervana graph needs to know dimension information prior to execution to allocating
     memory, dynamic parameters are not supported in importer.

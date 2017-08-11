@@ -1,5 +1,7 @@
+.. _caffe:
+
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -13,20 +15,21 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-Caffe
-=====
+Caffe*
+******
 
-In ngraph, we aim to provide utilities that enable frontend interoperability
+In Intel® Nervana™ graph (ngraph), we aim to provide utilities that enable frontend interoperability
 with other frameworks such as `caffe <http://caffe.berkeleyvision.org/>`__.
-The caffe importer allows users to build a graph of ngraph ops from the layers in
-model prototxt. This graph can be executed using ngraph transformers.
+The caffe* importer allows users to build a graph of Intel Nervana graph ops from the layers in
+model prototxt. This graph can be executed using Intel Nervana graph transformers.
 
-Sum Example
------------
+Sum example
+===========
+
 Here's a sample sum example for the caffe importer.
-Sample prototxt is given below to compute the operation **D = A+B+C**
 
-::
+The sample prototxt is given below to compute the operation **D = A+B+C**::
+
 
     name: "Sum"
     layer {
@@ -90,9 +93,8 @@ Sample prototxt is given below to compute the operation **D = A+B+C**
     }
 
 
-**Sample code to compute D in the above prototxt using the python script**
+Here is sample code to compute D in the above prototxt using the Python script::
 
-::
 
     from __future__ import print_function
     import ngraph.transformers as ngt
@@ -104,9 +106,8 @@ Sample prototxt is given below to compute the operation **D = A+B+C**
     res = ngt.make_transformer().computation(op)()
     print("Result is:",res)
 
-**Explanation:**
+Explanation::
 
-::
 
     from ngraph.frontends.caffe.cf_importer.importer import parse_prototxt
 
@@ -131,17 +132,16 @@ Sample prototxt is given below to compute the operation **D = A+B+C**
 
         - after getting the ngraph of required layer, it can be executed using ngrpah tranformers
 
-Command Line interface
------------------------
+Command line interface
+======================
 
-caffe like Command line interface is also available to run the prototxt as given below:
+A caffe-like command line interface is also available to run the prototxt, as shown below::
 
-::
 
     python importer.py compute -model  sum.prototxt -name C,D,A 
 
 Limitations
-------------
+===========
 
-Currently only sum operation on dummy data can be executed. Stay tuned for more functionality
+Currently only sum operations on dummy data can be executed. Stay tuned for more functionality in future releases. 
 

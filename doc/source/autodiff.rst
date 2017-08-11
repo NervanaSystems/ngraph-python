@@ -1,3 +1,5 @@
+.. _autodiff:
+
 .. ---------------------------------------------------------------------------
 .. Copyright 2016 Nervana Systems Inc.
 .. Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,21 +15,17 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-.. _autodiff:
-
 Autodiff
 ********
 
 We use the autodiff algorithm to generate the *backprop* computations for derivatives. Autodiff is based on symbolic differentiation via the chain rule.
 
-Computing Derivatives in Op-Graph
+Computing derivatives in op-graph
 =================================
 
 Each ``Op`` node in our graph implements the ``generate_adjoints`` method, which defines the local gradient for that operation and propagates the deltas to its arguments. To compute the derivatives, we first perform a topological sort on the graph, then traverse the graph in order, calling each node's ``generate_adjoints`` method to add the required backprop computations to the graph.
 
-The ``generate_adjoints`` method accepts ``adjoints``, ``delta``, and the arguments of the op.
-The ``adjoints`` contains
-partially computed backprop ``Ops``, while ``delta`` is the complete adjoint of the ``Op``.
+The ``generate_adjoints`` method accepts ``adjoints``, ``delta``, and the arguments of the op. The ``adjoints`` contains partially computed backprop ``Ops``, while ``delta`` is the complete adjoint of the ``Op``.
 
 To implement ``generate_adjoints`` for an ``Op`` for the function
 
@@ -46,7 +44,7 @@ Then::
         xn.generate_add_delta(adjoints, an * delta)
 
 
-For example,
+For example:
 
 .. math:: f(x,y) = xy
 
@@ -59,50 +57,50 @@ So::
         y.generate_add_delta(adjoints, x * delta)
 
 
-Technical Details
+Technical details
 =================
 
-Although we write a computation in a program as a series of expressions, they are converted into a series of steps, each a function producing a value from previously computed values.  We will use the notation :math:`t_{mj}` for a value which is computed from :math:`\{t_{ij} | i<m\}`.  We start with the independent variables,
+Although we write computations in a program as a series of expressions, they are converted into a series of steps that are each a function that produces a value from previously computed values.  We will use the notation :math:`t_{mj}` for a value that is computed from :math:`\{t_{ij} | i<m\}`. We start with the following independent variables:
 
 .. math:: t_{00}, t_{01}, \ldots
 
-Then we apply functions to these variables to obtain
+Then we apply functions to these variables to obtain:
 
 .. math:: t_{1i} = f_{1i}(t_{00}, t_{01}, \ldots).
 
 It is not necessary for each function to use all of the values, but it must only use previous values.
 
-From the original values and the newly computed values we compute new values,
+From the original values and the newly computed values we can compute new values, as seen below:
 
 .. math:: t_{2i} = f_{2i}(t_{00}, t_{01}, \ldots, t_{10}, t_{11}, \ldots).
 
 We proceed until we finally have :math:`y=t_{n0}`.
 
-For each computation, we have
+For each computation, we have:
 
 .. math:: dt_{mi} = \sum_{jk} D_{jk}f_{mi}(\ldots)d_{jk}
 
 where :math:`D_{jk}f_{mi}` is the derivative of :math:`f_{mi}` with respect to argument :math:`jk`.
 
-If we continue expanding the :math:`dt_{mi}` expressions we will eventually have an expression that can be written as
+If we continue expanding the :math:`dt_{mi}` expressions we will eventually have an expression that can be written as seen here:
 
 .. math:: dy = \sum a_{00k}dt_{0k}.
 
-Since the layer 0 values are independent,
+Since the layer 0 values are independent:
 
 .. math:: \frac{dt_{0i}}{dt_{0j}} = \delta_{ij}
 
-so
+Therefore:
 
 .. math:: \frac{dy}{dt_{0j}} = a_{00j}.
 
-If we expand the computation level by level we find that at level :math:`m` we have
+If we expand the computation level by level we find that at level :math:`m` we have:
 
 .. math:: dy = \left(\sum_{mj} a_{mj}dt_{mj}\right) + \left(\sum_{ij, i<m} b_{ij}dt_{ij}\right),
 
 where :math:`a_{mj}` is called the *adjoint* of :math:`dt_{mj}`.
 
-If we expand the :math:`dt_{mj}` terms, we will be left with only :math:`dt_{ij}` terms for :math:`i<m`.  During the expansion, we can push the :math:`a_{mij}` adjoints down to the next level.
+If we expand the :math:`dt_{mj}` terms, we will be left with only :math:`dt_{ij}` terms for :math:`i<m`. During the expansion, we can push the :math:`a_{mij}` adjoints down to the next level.
 
 Example
 -------
@@ -139,7 +137,7 @@ We then expand the :math:`dt_{21}` terms to get:
     dy &= 1(t_{00}dt_{10} + t_{10}dt_{00}) + 1(dt_{11} + dt_{02})\\
     &= t_{00}dt_{10} + t_{10}dt_{00} + 1dt_{11} + 1dt_{02}
 
-Finally, we expand the first level terms to get
+And finally, we expand the first level terms to get this:
 
 .. math::
     dy &= t_{00}(2(t_{03}dt_{03})+t_{10}dt_{00}+1(t_{01}dt_{03}+t_{03}dt_{01})+1dt_{02}\\
@@ -148,15 +146,16 @@ Finally, we expand the first level terms to get
 The Algorithm
 -------------
 
-Every intermediate value in the computation supports three adjoint methods, initialize, increment, and finalize.  The initialize step is performed when the intermediate value is computed, the increment is called when a node which uses the value sends a contribution to the adjoint, and finalize is called when there will be no more contributions to the adjoint; processing at its level is complete.
+Every intermediate value in the computation supports three adjoint methods: initialize, increment, and finalize. The *initialize* step is performed when the intermediate value is computed, the *increment* method is called when a node that uses the value sends a contribution to the adjoint, and *finalize* is called when there will be no more contributions to the adjoint and processing at its level is complete.
 
-There are two ways to implement the three methods.
-    1. The initialize and finalize methods do nothing, while the increment method propagates to increment methods at lower levels.
-    2. We associate an adjoint array of the same kind as the value.  Initialize initializes the adjoint to 0 (possibly also allocating it), increment increments the adjoint, and finalize propagates the appropriate values to increment methods for lower level adjoints, and possibly frees the adjoint storage.
+There are two ways to approach implementing the three methods.
 
-    For values at level 0 that we want derivatives for we use the second approach, and the remaining values at level 0 use the first approach, which ignores the updates.  At higher levels, the approach depends on the computation and how many computations use the value.  If the update is simple, or if the value is only used once, the first approach should be used, while if it is cheaper to accumulate the adjoint and process it all at once, the second approach is used.
+1. The *initialize* and *finalize* methods do nothing, while the *increment* method propagates to increment methods at lower levels.
+2. We associate an adjoint array of the same kind as the value.  *Initialize* initializes the adjoint to 0 (possibly also allocating it), *increment* increments the adjoint, and *finalize* propagates the appropriate values to increment methods for lower level adjoints, and possibly frees the adjoint storage.
 
-For example, if we have a computation :math:`t_m = t_a t_b` then, since :math:`dt_m = t_b dt_a+t_a dt_b`, we perform
+For values at level 0 that we want derivatives for, we use the second approach. The remaining values at level 0 use the first approach, which ignores the updates. At higher levels, the approach depends on the computation and how many computations use the value. If the update is simple, or if the value is only used once, the first approach should be used. If it is cheaper to accumulate the adjoint and process it all at once, the second approach is used.
+
+For example, if we have a computation :math:`t_m = t_a t_b` then, since :math:`dt_m = t_b dt_a+t_a dt_b`, we perform:
 
 .. math::
     \overline{t_a} += \overline{t_m} t_b\\
@@ -164,4 +163,4 @@ For example, if we have a computation :math:`t_m = t_a t_b` then, since :math:`d
 
 where we use :math:`\overline{t}` to denote the adjoint we are accumulating for :math:`t`.
 
-We use method 2 so that we only need to perform the multiplication once.  Compare this with :math:`t_m=t_a+t_b` with derivative :math:`dt_a+dt_b`.  If there are two uses of the value, using approach 2 requires allocating and initializing an array for the adjoint (we could have the first update perform the initialization), followed by one addition to the adjoint, and then two additions as the adjoint is passed to the next level, while approach 1 requires four additions to the adjoints at the next level, but no additional storage.
+We use the second method so that we only need to perform the multiplication once. Compare this with :math:`t_m=t_a+t_b` with derivative :math:`dt_a+dt_b`. If there are two uses of the value, using the second approach requires allocating and initializing an array for the adjoint (we could have the first update perform the initialization), followed by one addition to the adjoint, and then two additions as the adjoint is passed to the next level. The first approach requires four additions to the adjoints at the next level, but no additional storage.

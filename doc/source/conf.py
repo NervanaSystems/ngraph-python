@@ -63,8 +63,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'ngraph'
-copyright = u'2016, Nervana Systems Inc'
+project = u'Intel® Nervana™ graph'
+copyright = u'Intel Nervana and neon are trademarks of Intel Corporation or its subsidiaries in the U.S. and/or other countries. * Other names and brands may be claimed as the property of others.'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -257,8 +257,8 @@ man_pages = [
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
-texinfo_documents = [('index', 'ngraph', u'Nervana Graph Documentation',
-                      u'Nervana Systems Inc', 'cloud',
+texinfo_documents = [('index', 'ngraph', u'Intel Nervana Graph Documentation',
+                      u'Intel Corporation', 'cloud',
                       'One line description of project.', 'Miscellaneous'), ]
 
 # Documents to append as an appendix to all manuals.

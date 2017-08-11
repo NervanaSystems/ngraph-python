@@ -1,5 +1,7 @@
+.. _neon:
+
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -13,10 +15,10 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-neon
-****
+neon™
+*****
 
-The neon frontend to ngraph provides common deep learning primitives, such as activation functions. optimizers, layers, and more. We include in this release several examples to illustrate how to use the neon frontend to construct your models:
+The neon™ frontend to Intel® Nervana™ graph (ngraph) provides common deep learning primitives, such as activation functions, optimizers, layers, and more. We include several examples in this release to illustrate how to use the neon frontend to construct your models:
 
 - ``examples/minst/mnist_mlp.py``: Multi-layer perceptron on the MNIST digits dataset.
 - ``examples/cifar10/cifar10_mlp.py``: Multi-layer perceptron on the CIFAR10 dataset.
@@ -35,7 +37,7 @@ We currently have support for the following sets of deep learning primitives:
 MNIST Example
 -------------
 
-The ``mnist_mlp.py`` example provides an introduction into the neon frontend. Similiar to ``neon``, we being with a arg parser that allows command line flags for specifying options, such as batch size and the data directory:
+The ``mnist_mlp.py`` example provides an introduction into the neon frontend. Similiar to ``neon``, we begin with a arg parser that allows command line flags for specifying options, such as batch size and the data directory:
 
 .. code-block:: python
 
@@ -43,7 +45,7 @@ The ``mnist_mlp.py`` example provides an introduction into the neon frontend. Si
 	parser = NgraphArgparser(description='Train simple mlp on mnist dataset')
 	args = parser.parse_args()
 
-To provision data to the model, we use the ``ArrayIterator`` object, which is a python iterator that returns a minibatch of inputs and targets to the model with each call. We also provide a helper function for handling the MNIST dataset and providing numpy arrays with the image and target data.
+To provision data to the model, we use the ``ArrayIterator`` object, which is a Python iterator that returns a minibatch of inputs and targets to the model with each call. We also provide a helper function for handling the MNIST dataset and providing NumPY arrays with the image and target data.
 
 .. code-block:: python
 
@@ -55,7 +57,7 @@ To provision data to the model, we use the ``ArrayIterator`` object, which is a 
 	train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
 	valid_set = ArrayIterator(valid_data, args.batch_size)
 
-One can compose models as a list of layers that then gets passed to a container, which handles how the layers are linked. Here we just have a sequential list of layers, so we use the ``Sequential`` container.
+You can compose models as a list of layers which then gets passed to a container that handles how the layers are linked. Here we just have a sequential list of layers, so we use the ``Sequential`` container.
 
 .. code-block:: python
 
@@ -68,7 +70,7 @@ One can compose models as a list of layers that then gets passed to a container,
 
 Note that above we also use a ``Preprocess`` layer to scale the input image data to between 0 and 1.
 
-The ``neon`` frontend has a predefined set of axes commonly used with deep learning in the ``ngraph/frontends/neon/axis.py`` file. We import the name_scope from this file as ``ax``, and can define the lengths of the relevant axes give the shape of the input image and the target number of classes:
+The ``neon`` frontend has a predefined set of axes commonly used with deep learning in the ``ngraph/frontends/neon/axis.py`` file. We import the *name_scope* from this file as ``ax``, and can define the lengths of the relevant axes give the shape of the input image and the target number of classes:
 
 .. code-block:: python
 
@@ -91,7 +93,7 @@ We use stochastic gradient descent with momentum.
 
 	optimizer = GradientDescentMomentum(0.1, 0.9)
 
-We then define the model output, and associated cost function and metric (the misclassification rate) using the ngraph API directly:
+We then define the model output, and the associated cost function and metric (the misclassification rate) using the ngraph API directly:
 
 .. code-block:: python
 
@@ -103,9 +105,9 @@ We then define the model output, and associated cost function and metric (the mi
 	mean_cost = ng.mean(loss, out_axes=())
 	updates = optimizer(loss)
 
-To obtain the model output, we use the sequential container's included `train_outputs()` method, which essentially perform the forward pass through the layers of the model.
+To obtain the model output, we use the sequential container's included `train_outputs()` method, which essentially performs the forward pass through the layers of the model.
 
-Now that we have used the neon frontend to compose our graph, we pass it to a transformer for execution by specifying the computations required to both train the network, and also to compute the loss. Instead of directly specifying the computations using ``transformer.computation()`` as with the ngraph walk-through examples, we instead use a helper function ``make_bound_computation()`` to create computations that bind a set of inputs with outputs. We can specify a set of outputs using python dictionaries.
+Now that we have used the neon frontend to compose our graph, we pass it to a transformer for execution by specifying the computations required to both train the network and also to compute the loss. Instead of directly specifying the computations using ``transformer.computation()`` as with the Intel Nervana graph walkthrough examples, we instead use a helper function ``make_bound_computation()`` to create computations that bind a set of inputs with outputs. We can specify a set of outputs using Python dictionaries.
 
 .. code-block:: python
 
@@ -119,7 +121,7 @@ Now that we have used the neon frontend to compose our graph, we pass it to a tr
 	train_computation = make_bound_computation(transformer, train_outputs, inputs)
 	loss_computation = make_bound_computation(transformer, loss_outputs, inputs)
 
-We can think of ``make_bound_computation`` as create a computation by, in the case of ``train_computation``, calling ``transformer.computation([mean_cost updates], inputs)``.
+In the case of ``train_computation``, we can think of ``make_bound_computation`` as creating a computation by calling ``transformer.computation([mean_cost updates], inputs)``.
 
 Callbacks allow the model to report back its progress and any relevant metrics during the course of training.
 
@@ -136,7 +138,7 @@ Callbacks allow the model to report back its progress and any relevant metrics d
                              loss_computation=loss_computation,
                              use_progress_bar=args.progress_bar)
 
-Finally, to train the model, we use another helper function ``loop_train``, which loops through the provided training data, calling the provided computation (in this case ``train_computation``), to update the model weights and report progress via the provided callbacks.
+Finally, we use another helper function, ``loop_train``, to train the model. ``loop_train`` loops through the provided training data, calling the provided computation (in this case ``train_computation``), to update the model weights and report progress via the provided callbacks.
 
 .. code-block:: python
 
@@ -144,7 +146,5 @@ Finally, to train the model, we use another helper function ``loop_train``, whic
 
 	loop_train(train_set, train_computation, cbs)
 
-Note that this model is very similar to the ``MNIST_Direct.ipynb``, which walks through an implementation using the ngraph API directly instead of the neon frontend. The neon frontend essentially contains objects and helper methods that wrap the ngraph calls to make it easier for users to compose the networks in terms of deep learning building blocks.
-
-
-
+.. Note::
+   This model is very similar to the ``MNIST_Direct.ipynb``, which walks through an implementation using the Intel Nervana graph API directly instead of the neon frontend. The neon frontend essentially contains objects and helper methods that wrap the ngraph calls to make it easier for users to compose the networks in terms of deep learning building blocks.

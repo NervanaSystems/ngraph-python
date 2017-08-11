@@ -1,5 +1,7 @@
+.. _axes:
+
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -17,12 +19,12 @@ Axes
 ****
 
 Introduction
-------------
+============
 
 An ``Axis`` labels a dimension of a tensor. The op-graph uses
 the identity of ``Axis`` objects to pair and specify dimensions in
 symbolic expressions. This system has several advantages over
-using the length and position of the axis as in other frameworks:
+using the length and position of the axis as other frameworks do:
 
 1. **Convenience.** The dimensions of tensors, which may be nested
 deep in a computation graph, can be specified without having to
@@ -32,18 +34,19 @@ calculate their lengths.
 programming languages, allowing objects to interact only when
 they are permitted to do so in advance. In symbolic computation,
 this prevents interference between axes that happen to have the
-same lengths but are logically distinct, e.g. if the number of
+same lengths but are logically distinct. For example, if the number of
 training examples and the number of input features are both 50.
 
-3. **Generic.** The order of axes for multi-dimensional tensors do not
+3. **Generic.** The order of axes for multidimensional tensors does not
 imply a specific data layout or striding, making the graph specification
 compatible across different hardware with different constraints.
 
 Core concepts
--------------
+=============
 
 Axis and Axes
-~~~~~~~~~~~~~
+-------------
+
 The ``Axis`` object represents one dimension of a tensor, and can be created with the ``ng.make_axis`` method.
 
   ::
@@ -51,15 +54,16 @@ The ``Axis`` object represents one dimension of a tensor, and can be created wit
     H = ng.make_axis(length=3, name='height')
     W = ng.make_axis(length=4, name='width')
 
-For tensors with multiple dimensions, we create an ``Axes`` passing in a list of individual ``Axis`` objects. Note that
-the ordering does *not* matter in specifying the axes, and has no bearing on the eventual data layout during execution. See Properties
-for a full description of axes properties.
+For tensors with multiple dimensions, we create an ``Axes`` passing in a list of individual ``Axis`` objects. 
 
-  ::
+.. Note::
+   The ordering does *not* matter in specifying the axes, and has no bearing on the eventual data layout during execution. Refer to the Properties section below for a full description of axes properties.
 
-    axes = ng.make_axes([H, W])
+::
 
-We use ``Axes`` to define the shape of tensors in ngraph. For example,
+  axes = ng.make_axes([H, W])
+
+We use ``Axes`` to define the shape of tensors in Intel® Nervana™ graph (ngraph). For example:
 
   ::
 
@@ -76,20 +80,18 @@ We can also delay the specification of the axis length.
     W.length = 4
 
 Semantics
----------
+=========
 
-In the nervana graph, our axis design is very flexible. Axes can be given arbitrary names and the ordering of the axes does not matter. Sometimes, however, axes need to have additional semantic information provided to operations.
+In Intel Nervana graph, our axis design is very flexible. Axes can be given arbitrary names and the ordering of the axes does not matter. Sometimes, however, axes need to have additional semantic information provided to operations.
 
 Properties
-----------
+==========
 
-1. The order of Axes does not matter.
+1. The order of axes does not matter.
 
-  - Two tensors ``x`` and ``y`` are considered having the same type if
-
-    - ``x`` and ``y`` have the same number of axes and same set of axes
-    - After shuffling of ``y``'s axes to be the same order of ``x``'s, the
-      underlying values are the same.
+  - Two tensors ``x`` and ``y`` are considered having the same type if:
+    - ``x`` and ``y`` have the same number of axes and same set of axes.
+    - After shuffling of ``y``'s axes to be the same order of ``x``'s, the underlying values are the same.
 
   - We can check element-wise tensor equality using ``ng.equal()``. ::
 
@@ -120,11 +122,9 @@ Properties
       x = ng.constant(np.ones((2, 2)), [H, H])  # throws exception
       x = ng.constant(np.ones((2, 2)), [H, W])  # good
 
-3. Axes have context
+3. Axes have context. A set of standard neon™ axes are defined for neon frontends.
 
-  A set of standard neon axes are defined for neon frontends.
-
-  - Axes roles
+  - Axes roles:
 
   ::
 
@@ -136,7 +136,7 @@ Properties
     ar.Channelout = ng.make_axis_role()
     ar.Time = ng.make_axis_role()
 
-  - Image / feature map
+  - Image / feature map:
 
   ::
 
@@ -147,7 +147,7 @@ Properties
     ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
     ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
 
-  - Filter (convolution kernel)
+  - Filter (convolution kernel):
 
   ::
 
@@ -157,7 +157,7 @@ Properties
     ax.J = ng.make_axis(roles=[ar.Channel], docstring="filter channel size (for crossmap pooling)")
     ax.K = ng.make_axis(roles=[ar.Channelout], docstring="number of output feature maps")
 
-  - Output
+  - Output:
 
   ::
 
@@ -165,28 +165,29 @@ Properties
     ax.P = ng.make_axis(roles=[ar.Height], docstring="output image height")
     ax.Q = ng.make_axis(roles=[ar.Width], docstring="output image width")
 
-  - Recurrent
+  - Recurrent:
 
   ::
 
     ax.REC = ng.make_axis(name='R', roles=[ar.Time], docstring="recurrent axis")
 
-  - Target
+  - Target:
 
   ::
 
     ax.Y = ng.make_axis(docstring="target")
 
 
-Axes Operations
----------------
-``Axes`` has ``list`` and ``set`` behaviors at the same time. ``Axes`` are
+Axes operations
+===============
+
+``Axes`` have ``list`` and ``set`` behaviors at the same time. ``Axes`` are
 internally stored and can be used as ``list``, while we also have use cases of
 ``Axes`` as ``set``. Here's a list of supported operations by ``Axes`` and their
 expected behavors.
 
 - ``__add__``: list operation, concatenated axes, throws exception when there
-  are Axis duplications
+  are axis duplications
 - ``__sub__``: set operation, returns the ordered set difference of axes
 - ``__or__``: set operation, returns ordered set union of axes
 - ``__and__``: set operation, returns ordered set intersection of axes
@@ -198,16 +199,20 @@ expected behavors.
   set operations
 
 
-Elementwise Binary Ops
-----------------------
+Elementwise binary ops
+======================
 
-- When matches, output the same axis. ::
+- When axes match, output the same axes. 
+
+::
 
   (H,) + (H,) -> (H,)
   (H, W) + (H, W) -> (H, W)
 
-- Automatic broadcasting / dim shuffle, the output axis order determined by input
-  axis order of the left and right operands. ::
+- Automatic broadcasting / dim shuffle, the output axis order is determined by the input
+  axis order of the left and right operands. 
+
+  ::
 
   (H, W) + (H,) -> (H, W)
   (H, W) + (W,) -> (H, W)
@@ -216,9 +221,12 @@ Elementwise Binary Ops
   (C, H) + (W, H, N) -> (C, H, W, N)
 
   Axis order is determined by the following rules:
+
   1. If the set of axes for both operands match exactly, but the order is different, use the order of the left operand.
   2. If one operand's axes are a superset of the other's, use that operand's axis order
-  3. Otherwise order is determined by concatenating the left operand's axes with the axes from the right operand which are not present in the left operand (left_axes + (right_axes - left_axes)).
+  3. Otherwise the order is determined by concatenating the left operand's axes with the axes from the right operand that are not present in the left operand (left_axes + (right_axes - left_axes)). 
+
+  ::
 
   (H, W, N) + (N, H) -> (H, W, N)
   (H, W) + (N, H, W) -> (N, H, W)
@@ -226,16 +234,16 @@ Elementwise Binary Ops
   (C, H, W) + (N, W, H) -> (C, H, W, N)
   (N, C, H, W) + (C, H, W, N) -> (N, C, H, W)
 
-- Commutative property is as usual, though axis order of the equivalent tensors
-  can be different. ::
+- Commutative property is as usual, although the axis order of the equivalent tensors can be different. 
+
+::
 
   (H,) + (W,) -> (H, W)
   (W,) + (H,) -> (W, H)
   (C,) + (H, W) -> (C, H, W)
   (H, W) + (C,) -> (H, W, C)
 
-  In the following example, ``z`` from left and right are equivalent, although
-  the axis orders are different.
+  In the following example, ``z`` from left and right are equivalent, although the axis orders are different.
 
   ::
 
@@ -255,24 +263,28 @@ Elementwise Binary Ops
     (2, 3)                                   |  [ 2.  2.]]
                                              | (3, 2)
 
-- Associative property is as usual. ::
+- Associative property is as usual. 
+
+::
 
   ((H,) + (W,)) + (N,) -> (H, W) + (N,) -> (H, W, N)
   (H,) + ((W,) + (N,)) -> (H,) + (W, N) -> (H, W, N)
 
-- Distributive property is as usual. ::
+- Distributive property is as usual. 
+
+::
 
   (H,) * ((W,) + (N,)) = (H,) * (W, N) = (H, W, N)
   (H,) * (W,) + (H,) * (N,) = (H, W) * (H, N) = (H, W, N)
 
 
-Dot Operation
-~~~~~~~~~~~~~
+Dot operation
+-------------
 
-When two tensors are provided to a multi-axis operation, such as ``ng.dot()``,
+When two tensors are provided to a multiaxis operation, such as ``ng.dot()``,
 we need to indicate the corresponding axes that should be paired together.
 
-For example
+For example:
 
   ::
 
@@ -287,13 +299,13 @@ For example
     (M, W, H, C) • (C, H, W, N) -> (M, N)
 
 
-Axes Reduction
---------------
+Axes reduction
+==============
 
 - We specify the reduction axes in ``reduction_axes``. Reduction operations can
-  have arbitrary number of reduction axes. The order of the reduction axes
+  have an arbitrary number of reduction axes. The order of the reduction axes
   can be arbitrary.
-- When ``reduction_axes`` is empty, reduction is performed on NONE of the axes.
+- When ``reduction_axes`` is empty, reduction is performed on *none* of the axes.
 
 Examples: ::
 
@@ -306,12 +318,12 @@ Examples: ::
     ng.sum(x, reduction_axes=x.axes)        -> []
 
 
-Axes Casting
-------------
+Axes casting
+============
 
 Use ``ng.cast_axes`` to cast at axes to targeting axes with the same dimensions.
-For example, we might want to sum two layer's outputs, where they have the same
-dimensions but different axes. Examples: ::
+For example, we might want to sum two layers' outputs, where they have the same
+dimensions but different axes. Examples are shown below: ::
 
     # assume C1.length == C2.length == 100
     hidden_1 = ng.constant(np.ones((100, 128)), [C1, N])
@@ -325,11 +337,11 @@ dimensions but different axes. Examples: ::
     sum_cast = hidden_1 + hidden_2_cast  # sum_cast has axes: [C1, N]
 
 
-Axes Broadcasting
------------------
+Axes broadcasting
+=================
 
 Use ``ng.broadcast`` to broadcast to new axes. The new axes must be a superset
-of the original axes. The order of the new axes can be arbitrary. Examples: ::
+of the original axes. The order of the new axes can be arbitrary. For example: ::
 
     from ngraph.frontends.neon.axis import ax
     x = ng.placeholder([ax.C, ax.H])
@@ -338,7 +350,7 @@ of the original axes. The order of the new axes can be arbitrary. Examples: ::
 
 
 .. Axes reordering
-.. ----------------
+.. ===============
 ..
 .. Use ``ng.axes_with_order`` to reorder axes. The new axes must be the same set as the
 .. original axes. Examples: ::
