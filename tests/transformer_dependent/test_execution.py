@@ -1220,9 +1220,9 @@ def test_broadcast_deriv_reorder(transformer_factory):
 def test_multiply_unit32_convertion(transformer_factory):
     x = ng.placeholder(axes=(), dtype=np.uint32())
     multiplier = 1
-    ng_mul = 1.1 * x * 1.1
+    ng_mul = 0.5 * x * 0.5
 
     with executor(ng_mul, x) as ex:
         ng_result = ex(multiplier)
 
-    assert ng_result <= 1.21
+    assert ng_result == 0.25
