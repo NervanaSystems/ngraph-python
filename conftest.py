@@ -25,10 +25,18 @@ def pytest_addoption(parser):
     parser.addoption("--serialization_integration_test", action="store_true",
                      help="Force all unit tests to serialize and deserialize the graph before \
                      transformer compilation.")
+    parser.addoption('--hetr_device', action='append', default=[],
+                     help='Set hetr device (cpu, gpu, etc.)')
 
 
 def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
+
+
+def pytest_generate_tests(metafunc):
+    if 'hetr_device' in metafunc.fixturenames:
+        metafunc.parametrize("hetr_device",
+                             metafunc.config.getoption('hetr_device'))
 
 
 @pytest.fixture(scope="module")
