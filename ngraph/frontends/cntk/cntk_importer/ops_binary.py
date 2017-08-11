@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 import ngraph as ng
-from ngraph.frontends.common.utils import remove_ones_axes
+from ngraph.frontends.common.utils import squeeze_axes
 
 
 class OpsBinary:
@@ -56,7 +56,9 @@ class OpsBinary:
         Returns:
             Casted inputs.
         """
-        cast_0, cast_1 = remove_ones_axes(inputs)
+        assert len(inputs) == 2
+
+        cast_0, cast_1 = squeeze_axes(inputs)
 
         if len(cast_0.axes) >= len(cast_1.axes):
             axes = self._match_axes(cast_0.axes, cast_1.axes)
@@ -78,6 +80,8 @@ class OpsBinary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 2
+
         cast_0, cast_1 = self._cast_for_binary_op(inputs)
         return ng.add(cast_0, cast_1).named(cntk_op.uid)
 
@@ -92,6 +96,8 @@ class OpsBinary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 2
+
         cast_0, cast_1 = self._cast_for_binary_op(inputs)
         return ng.subtract(cast_0, cast_1).named(cntk_op.uid)
 
@@ -106,6 +112,8 @@ class OpsBinary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 2
+
         cast_0, cast_1 = self._cast_for_binary_op(inputs)
         return ng.multiply(cast_0, cast_1).named(cntk_op.uid)
 
@@ -120,6 +128,8 @@ class OpsBinary:
         Returns:
             A ngraph Op.
         """
+        assert len(inputs) == 2
+
         cast_0, cast_1 = inputs
 
         cast_0_len = len(cast_0.axes)

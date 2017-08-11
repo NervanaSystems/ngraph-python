@@ -21,7 +21,7 @@ class DumpGraphPass(object):
         self.filename = kwargs.pop('filename', 'graph.txt')
         self.show_live = kwargs.pop('show_live', False)
 
-    def do_pass(self, computation_decl, **kwargs):
+    def wrapped_do_pass(self, computation_decl, **kwargs):
         self.computation_decl = computation_decl
         if self.filename is None:
             f = sys.stdout
@@ -32,18 +32,18 @@ class DumpGraphPass(object):
 
         tensors = list()
         for i, exop in enumerate(computation_decl.exop_block):
-            for arg in exop.args:
-                if arg.tensor_decl not in tensors:
-                    tensors.append(arg.tensor_decl)
-            for value in exop.values:
-                if value.tensor_decl not in tensors:
-                    tensors.append(value.tensor_decl)
+            for input_decl in exop.input_decls:
+                if input_decl.tensor_decl not in tensors:
+                    tensors.append(input_decl.tensor_decl)
+            for output_decl in exop.output_decls:
+                if output_decl.tensor_decl not in tensors:
+                    tensors.append(output_decl.tensor_decl)
             f.write('{} {} {}\n'.format(
                 i, exop.name, '************' if exop is largest_op else ''))
-            f.write('\targs: {}\n'.format(
-                ", ".join([self.tensor_name(x.tensor_decl) for x in exop.args])))
-            f.write('\tvalues: {}\n'.format(
-                ", ".join([self.tensor_name(x.tensor_decl) for x in exop.values])))
+            f.write('\tinputs: {}\n'.format(
+                ", ".join([self.tensor_name(x.tensor_decl) for x in exop.input_decls])))
+            f.write('\toutputs: {}\n'.format(
+                ", ".join([self.tensor_name(x.tensor_decl) for x in exop.output_decls])))
             if self.show_live:
                 f.write('\tlive: {}\n'.format(
                     ", ".join([self.tensor_name(x) for x in exop.liveness_live_list])))
@@ -65,8 +65,8 @@ class DumpGraphPass(object):
         # tensor.tensor_description_base.name, i-start, weight_list[tensor]))
 
         # make a list of tensors
-        for exop in computation_decl.exop:
-            for obj in exop.args + exop.values:
+        for exop in computation_decl.exop_block:
+            for obj in exop.input_decls + exop.output_decls:
                 if obj.tensor_decl not in tensors:
                     tensors.append(obj.tensor_decl)
 
@@ -89,7 +89,7 @@ class DumpGraphPass(object):
     def find_largest_op(self):
         largest_op = None
         largest_size = 0
-        for i, exop in enumerate(self.computation_decl.exop):
+        for i, exop in enumerate(self.computation_decl.exop_block):
             size = 0
             for tensor in exop.liveness_live_list:
                 size += tensor.size
