@@ -44,8 +44,8 @@ def loop_eval(dataset, computation, metric_names):
             for name, res in zip(metric_names, results):
                 all_results[name].extend(list(res))
 
-    reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()}
-    return reduced_results
+    reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()if k != 'predictions'}
+    return all_results, reduced_results
 
 np.seterr(all='raise')
 
@@ -142,8 +142,8 @@ with Layer.inference_mode_on():
     inference_prob = ng.cast_role(seq2(seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
     errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
     eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot)
-    eval_loss_names = ['cross_ent_loss', 'misclass']
-    eval_computation = ng.computation([eval_loss, errors], "all")
+    eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
+    eval_computation = ng.computation([eval_loss, errors, inference_prob], "all")
 
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
@@ -175,7 +175,9 @@ with closing(ngt.make_transformer()) as transformer:
                            cost=interval_cost / args.iter_interval))
             saved_losses['train_loss'].append(interval_cost / args.iter_interval)
             interval_cost = 0.0
-            eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            all_results, eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            predictions = all_results['predictions']
+            import pdb; pdb.set_trace()
             saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
             saved_losses['eval_misclass'].append(eval_losses['misclass'])
             pickle.dump( saved_losses, open( "losses.pkl", "wb" ) )
