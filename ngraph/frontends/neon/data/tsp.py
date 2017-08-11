@@ -47,11 +47,11 @@ class TSP(object):
             if not os.path.exists(filepath):
                 for file_name, file_id in GOOGLE_DRIVE_IDS.items():
                     destination = './' + file_name
+                    print('\nDownloading and unzipped traveling salesman data {} released '
+                          'with Pointer Networks paper\n'.format(file_name))
                     self.download_file_from_google_drive(file_id, destination)
                     with zipfile.ZipFile(destination, 'r') as z:
                         z.extractall('./')
-                    print('\nDownloaded and unzipped traveling salesman data {} released '
-                          'with Pointer Networks paper\n'.format(file_name))
 
             cities = int(re.search(r'\d+', filename).group())
             print('Loading and preprocessing tsp{} {} data...'.format(cities, phase))
