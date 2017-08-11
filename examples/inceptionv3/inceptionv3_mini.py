@@ -160,6 +160,7 @@ with closing(ngt.make_transformer()) as transformer:
     saved_losses = {'train_loss': [], 'eval_loss': [], 'eval_misclass': []}
     for step, data in enumerate(train_set):
         data['iteration'] = step
+        data['image'] = data['image'] / 255. 
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output = train_function(feed_dict=feed_dict)
 
