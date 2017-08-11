@@ -500,8 +500,7 @@ class ExOp(ExecutionGraphElt):
     def has_side_effects(self):
         return self.op.has_side_effects
 
-    @staticmethod
-    def align(size, alignment):
+    def align(self, size, alignment):
         return - (-size // alignment) * alignment
 
     def memory_usage(self):
@@ -517,7 +516,7 @@ class ExOp(ExecutionGraphElt):
         """
         size = 0
         for node in self.liveness_live_list:
-            size += align(node.size)
+            size += self.align(node.size)
         return size
 
     def memory_footprint(self):
@@ -534,7 +533,7 @@ class ExOp(ExecutionGraphElt):
         max_mem = 0
         for node in self.liveness_live_list:
             if node.buffer_pool_offset is not None:
-                offset = align(node.size) + node.buffer_pool_offset
+                offset = self.align(node.size) + node.buffer_pool_offset
                 max_mem = max([offset, max_mem])
         return max_mem
 
