@@ -232,27 +232,21 @@ class GPULayoutAssignment(StridedLayoutAssignment):
             split_points = list(reversed([(num_axes - (i + 1)) for i in range(num_splits)]))
             layout = split_points_to_groups(split_points, len(axes_list))
 
-            # Ensure parallel axis has its index as the first in the memory layout
-            last_val = -1
-            for i in range(len(layout)):
-                if i == 0:
-                    if parallel_axis_index in layout[i]:
-                        layout[i].remove(parallel_axis_index)
-                        layout[i].insert(0, parallel_axis_index)
-                        break
-                    else:
-                        last_val = layout[i][-1]
-                        layout[i].insert(0, parallel_axis_index)
-                        layout[i].remove(last_val)
-                else:
-                    if parallel_axis_index in layout[i]:
-                        layout[i].remove(parallel_axis_index)
-                        layout[i].insert(0, last_val)
-                        break
-                    else:
-                        layout[i].insert(0, last_val)
-                        last_val = layout[i][-1]
-                        layout[i].remove(last_val)
+            slot_index = -1
+            # Find which slot contains the parallel axis
+            for idx, slot in enumerate(layout):
+                if parallel_axis_index in slot:
+                    slot_index = idx
+                    break
+            # Move the parallel_axis slot to the first position
+            parallel_slot = layout[0]
+            if slot_index > 0:
+                parallel_slot = layout.pop(slot_index)
+                layout.insert(0, parallel_slot)
+            # If parallel_axis is not the first in its slot make it the first
+            if parallel_axis_index != parallel_slot[0]:
+                parallel_slot.remove(parallel_axis_index)
+                parallel_slot.insert(0, parallel_axis_index)
         else:
             layout = [[i] for i in range(len(axes_list)) if i != parallel_axis_index]
             layout.insert(0, [parallel_axis_index])
