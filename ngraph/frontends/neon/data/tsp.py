@@ -50,7 +50,8 @@ class TSP(object):
                     self.download_file_from_google_drive(file_id, destination)
                     with zipfile.ZipFile(destination, 'r') as z:
                         z.extractall('./')
-                    print('\nDownloaded and unzipped {} from paper\n'.format(file_name))
+                    print('\nDownloaded and unzipped traveling salesman data {} released '
+                          'with Pointer Networks paper\n'.format(file_name))
 
             cities = int(re.search(r'\d+', filename).group())
             print('Loading and preprocessing tsp{} {} data...'.format(cities, phase))

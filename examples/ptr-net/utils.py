@@ -14,12 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 from __future__ import print_function
-try:
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-except ImportError:
-    print('matplotlib not installed')
 
 
 def first_example(tsp_data):
@@ -77,10 +71,20 @@ def distance(coord_a, coord_b):
 
 
 def save_plot(niters, loss, args):
-    name = 'train-{}_hs-{}_lr-{}_bs-{}'.format(args.train_file, args.hs, args.lr, args.batch_size)
-    plt.title(name)
-    plt.plot(niters, loss)
-    plt.xlabel('iteration')
-    plt.ylabel('loss')
-    plt.savefig(name + '.jpg')
-    print('{} saved!'.format(name + '.jpg'))
+    print('Saving training loss-iteration figure...')
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        name = 'Train-{}_hs-{}_lr-{}_bs-{}'.format(args.train_file, args.hs,
+                                                   args.lr, args.batch_size)
+        plt.title(name)
+        plt.plot(niters, loss)
+        plt.xlabel('iteration')
+        plt.ylabel('loss')
+        plt.savefig(name + '.jpg')
+        print('{} saved!'.format(name + '.jpg'))
+
+    except ImportError:
+        print('matplotlib not installed and no figure is saved.')
