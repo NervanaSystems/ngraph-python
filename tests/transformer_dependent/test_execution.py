@@ -1216,7 +1216,8 @@ def test_broadcast_deriv_reorder(transformer_factory):
 
 
 @pytest.mark.xfail(pytest.config.getvalue("transformer") == "gpu",
-                   reason="GPU problem with uint32 converting", strict=True)
+                   reason="GitHub issue: #2014, GPU problem with multiplying placeholders"
+                          " with dtype converted to int32", strict=True)
 def test_multiply_unit32_convertion(transformer_factory):
     x = ng.placeholder(axes=(), dtype=np.uint32())
     multiplier = 1
