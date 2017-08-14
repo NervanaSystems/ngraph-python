@@ -98,6 +98,105 @@ class Inception(Sequential):
         # This does the equivalent of neon's merge-broadcast
         return ng.concat_along_axis(outputs, branch_1_output.axes.channel_axis())
 
+class Inception(object):
+    def __init__(self, mini=False):
+
+        """ 
+        Builds an Inception model
+        """
+
+        # Input size is 299 x 299 x 3
+        # weight initialization
+        bias_init = UniformInit(low=-0.08, high=0.08)
+        if(mini is True):
+            """
+            This is the mini model with reduced number of filters in each layer
+            """
+            # Root branch of the tree
+            seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2, batch_norm=True,
+                                           activation=Rectlin(), bias_init=bias_init,
+                                           filter_init=XavierInit()),  # conv2d_1a_3x3
+                               Convolution((3, 3, 16), activation=Rectlin(), padding=0, batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_2a_3x3
+                               Convolution((3, 3, 16), activation=Rectlin(), padding=1, batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_2b_3x3
+                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3 
+                               Convolution((1, 1, 16), activation=Rectlin(), batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_3b_1x1
+                               Convolution((3, 3, 32), activation=Rectlin(), padding=1, batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_4a_3x3
+                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5b 
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5c 
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5d 
+                               Inceptionv3_b2([(32,), (32, 32, 32)]),  # mixed_6a 
+                               Inceptionv3_b3([(32,), (32, 32, 32),
+                                               (32, 32, 32, 32, 32), (32,)]),  # mixed_6b 
+                               Inceptionv3_b3([(32,), (32, 32, 32),
+                                               (32, 32, 32, 32, 32), (32,)]),  # mixed_6c 
+                               Inceptionv3_b3([(32,), (32, 32, 32),
+                                               (32, 32, 32, 32, 32), (32,)]),  # mixed_6d 
+                               Inceptionv3_b3([(32,), (32, 32, 32),
+                                               (32, 32, 32, 32, 32), (32,)])])  # mixed_6e 
+
+            # Branch of main classifier
+            seq2 = Sequential([Inceptionv3_b4([(32, 32), (32, 32, 32, 32)]),  # mixed_7a
+                               Inceptionv3_b5([(32,), (32, 32, 32),
+                                               (32, 32, 32, 32), (32,)]),  # mixed_7b
+                               Inceptionv3_b5([(32,), (32, 32, 32),
+                                               (32, 32, 32, 32), (32,)]),  # mixed_7c
+                               Pool2D(fshape=8, padding=0, strides=2, op='avg'),  # Last Avg Pool 
+                               Convolution((1, 1, 1000), activation=Softmax(),
+                                           bias_init=bias_init, filter_init=XavierInit())])
+
+            # Auxiliary classifier
+            seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'), 
+                                  Convolution((1, 1, 32), activation=Rectlin(), batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),
+                                  Convolution((5, 5, 32), padding=0, activation=Rectlin(), batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),
+                                  Convolution((1, 1, 1000), activation=Softmax(),
+                                           bias_init=bias_init, filter_init=XavierInit())])
+
+        else:
+            seq1 = Sequential([Convolution((3, 3, 32), padding=0, strides=2, batch_norm=True,
+                                           activation=Rectlin(), bias_init=bias_init,
+                                           filter_init=XavierInit()),  # conv2d_1a_3x3
+                               Convolution((3, 3, 32), activation=Rectlin(), padding=0, batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_2a_3x3
+                               Convolution((3, 3, 64), activation=Rectlin(), padding=1, batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_2b_3x3
+                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3 
+                               Convolution((1, 1, 80), activation=Rectlin(), batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_3b_1x1
+                               Convolution((3, 3, 192), activation=Rectlin(), padding=1, batch_norm=True,
+                                           bias_init=bias_init, filter_init=XavierInit()),  # conv2d_4a_3x3
+                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (32, )]),  # mixed_5b 
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5c 
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5d 
+                               Inceptionv3_b2([(384,), (64, 96, 96)]),  # mixed_6a 
+                               Inceptionv3_b3([(192,), (128, 128, 192),
+                                               (128, 128, 128, 128, 192), (192,)]),  # mixed_6b 
+                               Inceptionv3_b3([(192,), (160, 160, 192),
+                                               (160, 160, 160, 160, 192), (192,)]),  # mixed_6c
+                               Inceptionv3_b3([(192,), (160, 160, 192),
+                                               (160, 160, 160, 160, 192), (192,)]),  # mixed_6d
+                               Inceptionv3_b3([(192,), (192, 192, 192),
+                                               (192, 192, 192, 192, 192), (192,)])])  # mixed_6e
+
+            # Branch of main classifier
+            seq2 = Sequential([Inceptionv3_b4([(192, 320), (192, 192, 192, 192)]),  # mixed_7a
+                               Inceptionv3_b5([(320,), (384, 384, 384),
+                                               (448, 384, 384, 384), (192,)]),  # mixed_7b
+                               Inceptionv3_b5([(320,), (384, 384, 384),
+                                               (448, 384, 384, 384), (192,)]),  # mixed_7c
+                               Pool2D(fshape=8, padding=0, strides=2, op='avg'),  # Last Avg Pool 
+                               Dropout(keep=0.8),
+                               Convolution((1, 1, 1000), activation=Softmax(),
+                                           bias_init=bias_init, filter_init=XavierInit())])
+                               #Affine(axes=ax.Y, weight_init=XavierInit(),
+                               #       bias_init=bias_init, activation=Softmax())])
 
 seq1 = Sequential([Convolution((7, 7, 64), padding=3, strides=2,
                                activation=Rectlin(), bias_init=bias_init,
