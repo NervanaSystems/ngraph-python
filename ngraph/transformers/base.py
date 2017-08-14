@@ -300,6 +300,7 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     def __init__(self, **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self.graph_passes = []
+        self.byte_alignment = 4
 
     @abc.abstractproperty
     def use_exop(self):
