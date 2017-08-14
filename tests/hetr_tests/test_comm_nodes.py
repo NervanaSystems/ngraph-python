@@ -230,8 +230,8 @@ def test_allreduce_hint(hetr_device, config):
         out_comp = hetr.computation([var_minus])
         result = out_comp()
 
-    np_result = [np.full((axis_A.length), config['expected_result'], np.float32)]
-    np.testing.assert_array_equal(result, np_result)
+        np_result = [np.full((axis_A.length), config['expected_result'], np.float32)]
+        np.testing.assert_array_equal(result, np_result)
 
 
 @pytest.mark.parametrize('config', [
