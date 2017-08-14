@@ -56,10 +56,11 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,
+def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_seed=0,
                       dataset="cifar10"):
     """
     workdir is the path for tab separated files
+    datadir is the path for the images
     """
     if(dataset=="cifar10"):
         train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)

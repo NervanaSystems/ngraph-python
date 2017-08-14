@@ -27,8 +27,8 @@ from contextlib import closing
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import XavierInit, UniformInit
-from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
-from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
+from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential, Dropout
+from ngraph.frontends.neon import Rectlin, Softmax, Identity, GradientDescentMomentum
 from ngraph.frontends.neon import ax
 
 np.seterr(all='raise')

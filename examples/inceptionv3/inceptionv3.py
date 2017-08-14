@@ -31,6 +31,12 @@ from data import make_aeon_loaders
 import inception
 
 def loop_eval(dataset, computation, metric_names):
+    """
+    Function to calculate the loss metrics on the evaluation set
+    dataset: aeon iterator object
+    computation: evaluation set computations
+    metric_names: metrics to compute for evaluation set 
+    """
     dataset._dataloader.reset()
     all_results = None
     for data in dataset:
@@ -42,33 +48,39 @@ def loop_eval(dataset, computation, metric_names):
         else:
             for name, res in zip(metric_names, results):
                 all_results[name].extend(list(res))
-        #import pdb; pdb.set_trace()
 
     reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()if k != 'predictions'}
     return all_results, reduced_results
 
-np.seterr(all='raise')
-
 parser = NgraphArgparser(description=__doc__)
-# Default batch_size for convnet-googlenet is 128.
-parser.set_defaults(batch_size=128, num_iterations=100)
+parser.add_argument('--mini', default=False, dest='mini', action='store_true',
+                    help='If given, builds a mini version of Inceptionv3')
+parser.set_defaults(batch_size=32, num_iterations=1000000, iter_interval=2000)
 args = parser.parse_args()
 
-ax.Y.length = 1000  # number of outputs of last layer.
+# Number of outputs of last layer.
+ax.Y.length = 1000  
+# Directory where AEON manifest files (csv's) exist
+manifest_dir = './'
+# Directory where images exist
+data_dir = '/dataset/aeon/I1K/i1k-extracted/'
 
-manifest_dir = '/nfs/site/home/gkeskin/work/ngraph/dataset/i1k/'
+# Build AEON data loader objects
 train_set,valid_set=make_aeon_loaders(manifest_dir, args.batch_size,
-                                      args.num_iterations, dataset='i1k')
+                                      args.num_iterations, dataset='i1k',
+                                      datadir=data_dir)
 inputs=train_set.make_placeholders(include_iteration=True)
+
 # Input size is 299 x 299 x 3
 image_size = 299
 
 # Build the network
-inception = inception.Inception(mini=True)
+inception = inception.Inception(mini=args.mini)
 
 # Declare the optimizer
 optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=5., epsilon=1.)
 
+# Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:,0], axis=ax.Y)
 train_prob_main = ng.cast_role(inception.seq2(inception.seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
@@ -80,6 +92,7 @@ batch_cost = ng.sequential([optimizer(train_loss_main + 0.4*train_loss_aux), ng.
 train_computation = ng.computation(batch_cost, 'all')
 
 label_indices = inputs['label'][:, 0]
+# Build the computations for inference (evaluation)
 with Layer.inference_mode_on():
     inference_prob = ng.cast_role(inception.seq2(inception.seq1(inputs['image']))[:,0,0,0,:], axes = y_onehot.axes)
     errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
@@ -102,6 +115,8 @@ with closing(ngt.make_transformer()) as transformer:
                     'eval_misclass': [], 'iteration': []}
     for step, data in enumerate(train_set):
         data['iteration'] = step
+        # Scale the image to [0., .1]
+        data['image'] = data['image'] / 255.
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output = train_function(feed_dict=feed_dict)
 
@@ -114,8 +129,11 @@ with closing(ngt.make_transformer()) as transformer:
                            interval=step // args.iter_interval,
                            iteration=step,
                            cost=interval_cost / args.iter_interval))
+            #Calculate inference on the evaluation set
             all_results, eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
             predictions = all_results['predictions']
+
+            #Save the training progression
             saved_losses['train_loss'].append(interval_cost / args.iter_interval)
             saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
             saved_losses['eval_misclass'].append(eval_losses['misclass'])
