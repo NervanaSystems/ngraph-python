@@ -1,8 +1,25 @@
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+import pytest
 import numpy as np
-from contextlib import closing
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon import Deconvolution, ConstantInit
+from ngraph.testing import executor
+
+pytestmark = [pytest.mark.transformer_dependent,
+              pytest.config.flex_disabled(reason="#1841, deconv is not yet supported by flex")]
 
 
 # TODO: add other configurations?
@@ -35,9 +52,7 @@ def test_deconv(transformer_factory):
 
     output = deconv(image)
 
-    with closing(ngt.make_transformer()) as transformer:
-        comp = transformer.computation(output, image)
-
+    with executor(output, image) as comp:
         input_val = np.zeros(image_shape + (N.length, ), dtype=float)
         input_val[0, 0, 0, 0, 0] = 1
         input_val[0, 0, 5, 5, 0] = 1

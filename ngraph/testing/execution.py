@@ -57,6 +57,11 @@ class ExecutorFactory(object):
                     placeholders.append(arg)
                 else:
                     ops.append(arg)
+            for arg in op.all_deps:
+                if isinstance(arg, ng.TensorValueOp):
+                    placeholders.append(arg)
+                else:
+                    ops.append(arg)
         return placeholders
 
     @staticmethod

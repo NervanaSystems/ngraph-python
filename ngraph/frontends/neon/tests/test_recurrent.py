@@ -34,7 +34,7 @@ import numpy as np
 from recurrent_ref import RefRecurrent, RefBidirectional, RefSeq2Seq
 
 import ngraph as ng
-from ngraph.frontends.neon import Recurrent, BiRNN, Tanh
+from ngraph.frontends.neon import Recurrent, LSTM, BiRNN, Tanh, ConstantInit
 from ngraph.testing.execution import ExecutorFactory
 from ngraph.testing.random import RandomTensorGenerator
 
@@ -170,7 +170,7 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-@pytest.config.flex_disabled(reason="RNN is not yet supported with Flex")
+@pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
@@ -244,7 +244,7 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
                                        rtol=bprop_rtol, atol=bprop_atol)
 
 
-@pytest.config.flex_disabled(reason="Several: Tensor description, placeholder (deriv), tolerance")
+@pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
@@ -591,3 +591,64 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
                                        deriv_ref_val.squeeze(),
                                        rtol=bprop_rtol,
                                        atol=1e-4)
+
+
+@pytest.mark.parametrize("recurrent_layer_cls", [Recurrent, LSTM])
+@pytest.mark.parametrize("batch_size", [4])
+@pytest.mark.parametrize("sequence_length", [6])
+@pytest.mark.parametrize("input_size", [5])
+@pytest.mark.parametrize("hidden_size", [8])
+def test_change_recurrent_axis_length(recurrent_layer_cls, batch_size, sequence_length,
+                                      input_size, hidden_size, transformer_factory):
+    """
+    Recurrent layer support for changing REC axis length
+    (needed by seq2seq inference)
+    """
+    # create three identical recurrent layers with same weights
+    W_input_val = np.random.normal(size=(hidden_size, input_size))
+    W_recur_val = np.random.normal(size=(hidden_size, hidden_size))
+    rec1 = recurrent_layer_cls(nout=hidden_size,
+                               init=ConstantInit(W_input_val),
+                               init_inner=ConstantInit(W_recur_val),
+                               activation=Tanh())
+    rec2 = recurrent_layer_cls(nout=hidden_size,
+                               init=ConstantInit(W_input_val),
+                               init_inner=ConstantInit(W_recur_val),
+                               activation=Tanh())
+    rec3 = recurrent_layer_cls(nout=hidden_size,
+                               init=ConstantInit(W_input_val),
+                               init_inner=ConstantInit(W_recur_val),
+                               activation=Tanh())
+
+    # create input placeholders and values
+    # sequence length greater than 1
+    N = ng.make_axis(length=batch_size, name='N')
+    REC = ng.make_axis(length=sequence_length, name='REC')
+    M = ng.make_axis(length=input_size, name='M')
+    xn_axes = ng.make_axes([M, REC, N])
+    xn = ng.placeholder(axes=xn_axes)
+    xn_val = np.random.normal(size=(input_size, sequence_length, batch_size))
+    # sequence length 1
+    REC1 = ng.make_axis(length=1, name='REC')
+    x1_axes = ng.make_axes([M, REC1, N])
+    x1 = ng.placeholder(axes=x1_axes)
+    x1_val = np.random.normal(size=(input_size, 1, batch_size))
+
+    # check results of switching REC axis of a layer's input
+    # computations switching REC axis
+    y1_n = rec1(xn)
+    y1_1 = rec1(x1)
+
+    # check against not switching
+    y2_n = rec2(xn)
+    y3_1 = rec3(x1)
+
+    with ExecutorFactory() as ex:
+
+        y1_n_comp = ex.executor(y1_n, xn)
+        y1_1_comp = ex.executor(y1_1, x1)
+        y2_n_comp = ex.executor(y2_n, xn)
+        y3_1_comp = ex.executor(y3_1, x1)
+
+        ng.testing.assert_allclose(y1_n_comp(xn_val), y2_n_comp(xn_val))
+        ng.testing.assert_allclose(y1_1_comp(x1_val), y3_1_comp(x1_val))
