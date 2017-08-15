@@ -210,12 +210,12 @@ class GPULayoutAssignment(StridedLayoutAssignment):
         return [GPULayoutAssignment(axes_list, layout)]
 
     @staticmethod
-    def generate_comms_recv_layout(op, max_out_axes):
+    def generate_comms_layout(op, max_out_axes):
         """
-        Generates layout assignment for scatter recv and gather recv communication operations
+        Generates layout assignment for communication operations
 
         Arguments:
-            op (GPUCudaScatterRecvOp/GPUCudaGatherRecvOp): op to generate layout for
+            op (CommunicationOp): op to generate layout for
             max_out_axes: The maximum number of strided axes supported by
                 the kernel for this operation
 
@@ -830,6 +830,16 @@ class GPULutLayoutConstraint(GPUBinaryLayoutConstraint):
             return self.get_reshape(arg_mem_order, arg_axes, self.order, arg)
 
 
+class GPUCommsLayoutConstraint(GPUFixedLayoutConstraint):
+    """
+    Constraint for CommunicationOp.
+    """
+    def __init__(self, op, arg):
+        axis_least_contig = op.axes.find_by_name(op.metadata['parallel'].name)
+        new_axes = axis_least_contig + (op.axes - axis_least_contig)
+        super(GPUCommsLayoutConstraint, self).__init__(op, arg, new_axes)
+
+
 class GPUUnaryLayoutConstraint(UnaryLayoutConstraint):
     """
     Placehold for unary constraint
@@ -896,12 +906,8 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
-    elif isinstance(op, GPUCudaScatterSendOp):
-        axis_least_contig = op.axes.find_by_name(op.metadata['parallel'].name)
-        new_axes = axis_least_contig + (op.axes - axis_least_contig)
-        return GPULayoutAssignment.generate_default_layout(new_axes, 3)
-    elif isinstance(op, (GPUCudaScatterRecvOp, GPUCudaGatherRecvOp)):
-        return GPULayoutAssignment.generate_comms_recv_layout(op, 3)
+    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherRecvOp)):
+        return GPULayoutAssignment.generate_comms_layout(op, 3)
     elif isinstance(op, GPUCudaGatherSendOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, (GPUCudaAllReduceOp)):
@@ -960,9 +966,7 @@ def gpu_constraint_factory(op, arg):
     elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
-        axis_least_contig = op.axes.find_by_name(op.metadata['parallel'].name)
-        new_axes = axis_least_contig + (op.axes - axis_least_contig)
-        return GPUFixedLayoutConstraint(op, arg, new_axes)
+        return GPUCommsLayoutConstraint(op, arg)
     elif isinstance(op, (GPUCudaAllReduceOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, CTCOp):
