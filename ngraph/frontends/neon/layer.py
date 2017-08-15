@@ -23,6 +23,7 @@ from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
+from ngraph.frontends.neon.utils import get_function_or_class_name
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
@@ -85,6 +86,8 @@ class Preprocess(Layer):
     TODO: Document
     """
     def __init__(self, functor, **kwargs):
+        if ("name" not in kwargs):
+            kwargs["name"] = get_function_or_class_name(functor)
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
@@ -472,6 +475,8 @@ class Activation(Layer):
     TODO: Document. Why should we pass through this instead of just defining functions? Caching?
     """
     def __init__(self, transform, **kwargs):
+        if ("name" not in kwargs) and (transform is not None):
+            kwargs["name"] = get_function_or_class_name(transform)
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
 
@@ -673,12 +678,12 @@ class BatchNorm(Layer):
     def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
-        # rho needs to be allocated storage because it will be changed dynamically during tuning
-        self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
+        self.init_rho = rho
         self.init_gamma = init_gamma
         self.init_beta = init_beta
 
+        self.rho = None
         self.gamma = None
         self.beta = None
         self.gmean = None
@@ -704,6 +709,7 @@ class BatchNorm(Layer):
             self.beta = ng.variable(axes=out_axes,
                                     initial_value=self.init_beta,
                                     metadata={"label": LABELS["bias"]}).named('beta')
+            self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
 
         in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
         xmean = ng.mean(in_obj, out_axes=out_axes)
@@ -720,9 +726,18 @@ class BatchNorm(Layer):
                              ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             ])
 
+    @SubGraph.scope_op_creation
     def set_tuning_iteration(self, batch_index):
-        # Following tuning, one must divide self.gvar by rho in order to debias
-        self.rho.value[()] = float(batch_index) / (batch_index + 1.0)
+        """
+        Notes:
+            Following tuning, one must multiply self.gvar by rho in order to debias
+        """
+
+        if not self.initialized:
+            self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
+
+        new_value = batch_index / (batch_index + 1.0)
+        return ng.sequential([ng.assign(self.rho, new_value), new_value])
 
 
 class Dropout(Layer):

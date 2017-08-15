@@ -26,3 +26,16 @@ def make_convolution_placeholder(shape=None):
         x.axes.set_shape(shape)
 
     return x
+
+
+def get_function_or_class_name(obj):
+
+    if hasattr(obj, "__name__"):
+        name = obj.__name__
+    elif callable(obj):
+        name = type(obj).__name__
+    else:
+        name = None
+
+    return name
+

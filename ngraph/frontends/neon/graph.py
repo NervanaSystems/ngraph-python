@@ -10,6 +10,21 @@ import ngraph as ng
 from ngraph.util.names import name_scope, NameableValue, NameScope
 
 
+class ScopedDict(OrderedDict):
+
+    def __init__(self, scope, *args, **kwargs):
+        if scope is not None:
+            self._root = scope.name
+        else:
+            self._root = None
+
+        super(ScopedDict, self).__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        key = key.rsplit("{}/".format(self._root), 1)[-1]
+        super(ScopedDict, self).__setitem__(key, value)
+
+
 @contextmanager
 def scope_ops(name=None, mode=None, subgraph=None, metadata=None):
     """
@@ -78,6 +93,7 @@ class ComputationalGraph(object):
             all_ops = ng.Op.get_all_ops()
             all_ops.append(ops)
         self.ops = ops
+        self.scope = None
 
     def __iter__(self):
         return iter(self.ops)
@@ -88,7 +104,8 @@ class ComputationalGraph(object):
         """
         A dictionary of all trainable variables in the graph as "name:variable" pairs
         """
-        return OrderedDict((op.tensor.name, op.tensor) for op in self if op.tensor.is_trainable)
+        return ScopedDict(self.scope, [(op.tensor.name, op.tensor) for op in self if
+                                       op.tensor.is_trainable])
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -96,7 +113,8 @@ class ComputationalGraph(object):
         """
         A dictionary of all placeholder ops in the graph as "name:op" pairs
         """
-        return OrderedDict((op.tensor.name, op.tensor) for op in self if op.tensor.is_placeholder)
+        return ScopedDict(self.scope, [(op.tensor.name, op.tensor) for op in self if
+                                       op.tensor.is_placeholder])
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -104,7 +122,8 @@ class ComputationalGraph(object):
         """
         A dictionary of all computations in the graph as "name:computation" pairs
         """
-        return OrderedDict((op.name, op) for op in self if isinstance(op, ng.ComputationOp))
+        return ScopedDict(self.scope, [(op.name, op) for op in self
+                                       if isinstance(op, ng.ComputationOp)])
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -117,10 +136,13 @@ class ComputationalGraph(object):
         # scopes = {scope_name: SubGraph(self.select("[scope={}]".format(scope_name)))
         #           for scope_name in scopes}
 
-        scopes = dict()
+        scopes = ScopedDict(self.scope)
         for op in self.select("[scope]"):
             scope_name = op.scope.name
-            scopes.setdefault(scope_name, SubGraph()).ops.append(op)
+            nested_scopes = [scope_name.rsplit("/", ii)[0] for ii in range(len(scope_name.split("/")))]
+            for scope_name in nested_scopes:
+                scopes.setdefault(scope_name, SubGraph(name=scope_name,
+                                                       reuse_scope=True)).ops.append(op)
 
         return scopes
 
@@ -176,7 +198,7 @@ class ComputationalGraph(object):
 
         xml.append(unravel_join(xml_dict))
         xml.append("</subgraph>")
-        return parsel.Selector(u"\n".join(xml))
+        return u"\n".join(xml)
 
     def select(self, css):
         """
@@ -212,7 +234,7 @@ class ComputationalGraph(object):
         """
 
         ops = list()
-        for selected in self._to_xml().css(css):
+        for selected in parsel.Selector(self._to_xml()).css(css):
             op = self._selector_to_op(selected)
             if op is not None:
                 ops.append(op)
@@ -230,7 +252,7 @@ class ComputationalGraph(object):
 
 class SubGraph(ComputationalGraph):
 
-    def __init__(self, ops=None, name=None, **kwargs):
+    def __init__(self, ops=None, name=None, reuse_scope=False, **kwargs):
         """
         A representation of connected subset of ops sharing a common scope
 
@@ -260,7 +282,10 @@ class SubGraph(ComputationalGraph):
 
         if name is None:
             name = type(self).__name__
-        self.scope = NameScope(name=name)
+        if reuse_scope:
+            self.scope = NameScope.get_or_create_scope(name)
+        else:
+            self.scope = NameScope(name=name)
         self.name = self.scope.name
 
     @staticmethod
@@ -295,7 +320,7 @@ class SubGraph(ComputationalGraph):
                 1. Placeholder ops
                 2. Arguments to ops in the subgraph that aren't themselves in the subgraph
         """
-        inputs = OrderedDict()
+        inputs = ScopedDict(self.scope)
         for op in self:
             if op.tensor.is_trainable:
                 continue
@@ -328,7 +353,8 @@ class SubGraph(ComputationalGraph):
             for arg_op in op.args + tuple(op.control_deps):
                 op_args.add(arg_op)
 
-        return OrderedDict((op.name, op) for op in ops.difference(op_args))
+        return ScopedDict(self.scope, [(op.tensor.name, op.tensor)
+                                       for op in ops.difference(op_args)])
 
     @property
     @cached({}, key=_cache_ops_length)
@@ -336,7 +362,7 @@ class SubGraph(ComputationalGraph):
         """
         A dictionary of all side-effect ops as "name:op" pairs.
         """
-        side_effects = OrderedDict()
+        side_effects = ScopedDict(self.scope)
         for op in self:
             for dep in op.control_deps:
                 if dep is not op.tensor:
