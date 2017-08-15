@@ -44,7 +44,7 @@ compatible across different hardware with different constraints.
 Core concepts
 =============
 
-Axis and Axes
+Axis and axes
 -------------
 
 The ``Axis`` object represents one dimension of a tensor, and can be created with the ``ng.make_axis`` method.

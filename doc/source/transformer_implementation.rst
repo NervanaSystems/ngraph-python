@@ -18,7 +18,7 @@
 Transformer implementation
 **************************
 
-This document gives an overview of how the base transformer and computation is implemented, using the CPU and GPU transformers as examples.
+This section gives an overview of how the base transformer and computation is implemented, using the CPU and GPU transformers as examples.
 
 Transformer creation
 ====================

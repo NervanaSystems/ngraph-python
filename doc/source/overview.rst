@@ -24,7 +24,7 @@ Overview
 .. Note::
    Intel® Nervana™ graph is currently a preview release, and the APIs and implementation are subject to change. We encourage you to contribute to the discussion and help shape the future of Intel Nervana graph.
 
-Intel® Nervana™ graph (ngraph) is a Python library for implementing programs that convert descriptions of neural networks into programs that run efficiently on a variety of platforms. In designing ngraph we kept three guiding motivations in mind:
+Intel® Nervana™ graph (ngraph) is a Python library for implementing programs that convert descriptions of neural networks into programs that run efficiently on a variety of platforms. In designing Intel Nervana graph we kept three guiding motivations in mind:
 
 1. A modular and flexible library designed around a unifying computational graph to empower users with composable deep learning abstractions.
 

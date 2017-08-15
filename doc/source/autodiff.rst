@@ -1,7 +1,7 @@
 .. _autodiff:
 
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -60,7 +60,7 @@ So::
 Technical details
 =================
 
-Although we write computations in a program as a series of expressions, they are converted into a series of steps that are each a function that produces a value from previously computed values.  We will use the notation :math:`t_{mj}` for a value that is computed from :math:`\{t_{ij} | i<m\}`. We start with the following independent variables:
+Although we write computations in a program as a series of expressions, the computations are converted into a series of steps that are each a function that produces a value from previously computed values.  We will use the notation :math:`t_{mj}` for a value that is computed from :math:`\{t_{ij} | i<m\}`. We start with the following independent variables:
 
 .. math:: t_{00}, t_{01}, \ldots
 

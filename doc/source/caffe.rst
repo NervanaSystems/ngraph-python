@@ -20,7 +20,7 @@ Caffe*
 
 In Intel® Nervana™ graph (ngraph), we aim to provide utilities that enable frontend interoperability
 with other frameworks such as `caffe <http://caffe.berkeleyvision.org/>`__.
-The caffe* importer allows users to build a graph of Intel Nervana graph ops from the layers in
+The Caffe* importer allows users to build a graph of Intel Nervana graph ops from the layers in
 model prototxt. This graph can be executed using Intel Nervana graph transformers.
 
 Sum example

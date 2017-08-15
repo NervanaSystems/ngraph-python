@@ -85,7 +85,7 @@ instance::
 2. Next, we could optionally add an adjoint function for computing gradients of
    the op in the ``generate_adjoints()`` function. There are two scenarios:
 
-   a. If the gradients of the op could be represented by other ops available in
+   a. If the gradients of the op can be represented by other ops available in
    ngraph, we could use those ops to implement the gradients.
    b. If that is not possible, or if we want to optimize the performance of the gradient
    computation, we could add new ops specifically for computing gradient.

@@ -18,7 +18,7 @@
 Building graphs
 ***************
 
-Frontends (or users who require the flexibility of constructing Intel® Nervana™ graph ``Ops`` directly) utilize a set of graph construction functions to construct Intel Nervana graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op``, which is not typically a concern for users or frontends but that illustrates a hierarchical structure that can be helpful.
+Frontends (or users who require the flexibility of constructing Intel® Nervana™ graph ``Ops`` directly) can utilize a set of graph construction functions to construct Intel Nervana graphs. We walk through the common patterns and arguments of these ``Ops`` here. We also discuss the underlying class structure of ``Op``, which is not typically a concern for users or frontends but that illustrates a hierarchical structure that can be helpful.
 
 Intel Nervana graph structure
 =======================

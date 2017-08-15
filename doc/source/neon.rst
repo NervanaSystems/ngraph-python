@@ -37,7 +37,7 @@ We currently have support for the following sets of deep learning primitives:
 MNIST Example
 -------------
 
-The ``mnist_mlp.py`` example provides an introduction into the neon frontend. Similiar to ``neon``, we begin with a arg parser that allows command line flags for specifying options, such as batch size and the data directory:
+The ``mnist_mlp.py`` example provides an introduction into the neon frontend. Similiar to ``neon``, we begin with an arg parser that allows command line flags for specifying options, such as batch size and the data directory:
 
 .. code-block:: python
 

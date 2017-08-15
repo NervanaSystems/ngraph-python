@@ -24,7 +24,7 @@ Installation
 Requirements
 ============
 
-Intel® Nervana™ graph runs on **Python 2.7** or **Python 3.4+**, and we support both Linux* and Mac OS X* machines. Before installing, make sure you have recent versions of the following packages (different system names shown):
+Intel® Nervana™ graph runs on **Python 2.7** or **Python 3.4+**, and we support both Linux* and Mac OS X* machines. Before installing, make sure you have recent versions of the following packages (package names on different systems shown):
 
 .. csv-table::
    :header: "Ubuntu", "OSX", "Description"

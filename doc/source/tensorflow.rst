@@ -137,7 +137,7 @@ Finally, we train the model using standard TensorFlow. The Intel Nervana graph r
 match TensorFlow's results.
 
 
-Current Limitations
+Current limitations
 ===================
 
 1. Only a subset of operations are supported.

@@ -151,7 +151,7 @@ Transformer manipulation.
    :members:
 
 ngraph.types
-~~~~~~~~~~~~
+------------
 
 .. py:module: ngraph.types
 
