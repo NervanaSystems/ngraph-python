@@ -133,7 +133,8 @@ class RecvOp(CommunicationOp):
             dtype=send_node.dtype)
         self._send_node = send_node
         self.source_id = send_node.metadata['device_id']
-        assert send_node.metadata.get('parallel', None) is not None, "send_node must have a specified parallel attribute in metadata"
+        assert send_node.metadata.get('parallel', None) is not None, \
+            "send_node must have a specified parallel attribute in metadata"
         self.metadata['parallel'] = send_node.metadata['parallel']
 
     @classmethod
