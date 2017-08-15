@@ -18,15 +18,13 @@ export CUDA_VISIBLE_DEVICES=3; python -i ./examples/inceptionv3/inceptionv3_mini
 """
 import numpy as np
 import pickle
-import ngraph as ng
-import ngraph.transformers as ngt
 from tqdm import tqdm
 from contextlib import closing
-from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
-from ngraph.frontends.neon import XavierInit, UniformInit, Layer
-from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential, Dropout
-from ngraph.frontends.neon import Rectlin, Softmax, Identity, GradientDescentMomentum
-from ngraph.frontends.neon import ax, Adam, RMSProp
+import ngraph as ng
+import ngraph.transformers as ngt
+from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import Layer
+from ngraph.frontends.neon import ax, RMSProp
 from data import make_aeon_loaders
 import inception
 
