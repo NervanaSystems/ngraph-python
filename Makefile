@@ -190,7 +190,21 @@ test_hetr: multinode_prepare test_prepare clean
 	unset https_proxy && \
 	unset HTTP_PROXY && \
 	unset HTTPS_PROXY && \
-	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
+	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" \
+  --hetr_device cpu --boxed \
+	--junit-xml=testout_test_hetr_$(PY).xml \
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
+	coverage xml -i -o coverage_test_hetr_$(PY).xml
+
+test_mgpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
+test_mgpu: export PYTHONHASHSEED=0
+test_mgpu: multinode_prepare test_prepare clean
+	echo Running unit tests for hetr dependent transformer tests...
+	unset http_proxy && \
+	unset https_proxy && \
+	unset HTTP_PROXY && \
+	unset HTTPS_PROXY && \
+	py.test --transformer hetr -m multi_device --hetr_device gpu --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
