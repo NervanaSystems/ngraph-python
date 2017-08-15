@@ -73,7 +73,7 @@ parser.add_argument('--seq_len', type=int,
                     default=32)
 parser.add_argument('--epochs', type=int,
                     help="Number of epochs",
-                    default=1000)
+                    default=200)
 parser.set_defaults()
 args = parser.parse_args()
 

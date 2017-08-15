@@ -193,7 +193,7 @@ def generate_sequence(gt_data, time_points, eval_function, predict_seq,
 
         # Find the ground truth for this prediction
         if(predict_seq is False):
-            gt_outcome = data.train['X']['data'][tp + 1][-1, :]
+            gt_outcome = np.copy(data.train['X']['data'][tp + 1][-1, :])
             # Reshape to (1, output_dim)
             gt_outcome = np.reshape(gt_outcome, (1, output_dim))
         else:

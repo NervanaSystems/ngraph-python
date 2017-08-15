@@ -18,7 +18,6 @@ import numpy as np
 
 
 class TimeSeries(object):
-
     """
     Class that generates a time-series of Lissajous function
     Attributes:
