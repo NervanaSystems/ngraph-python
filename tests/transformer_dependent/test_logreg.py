@@ -80,6 +80,6 @@ def test_logreg(transformer_factory):
         for i in range(max_iter):
             grad_np, loss_np, thetas_np = np_logreg.optimize(alpha)
             grad_ng, loss_ng, thetas_ng = train_eval_func(xs, ys, alpha)
-            assert ng.testing.allclose(loss_np, loss_ng)
-            assert ng.testing.allclose(grad_np, grad_ng)
-            assert ng.testing.allclose(thetas_np, thetas_ng)
+            ng.testing.assert_allclose(loss_np, loss_ng)
+            ng.testing.assert_allclose(grad_np, grad_ng)
+            ng.testing.assert_allclose(thetas_np, thetas_ng)

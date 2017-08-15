@@ -67,6 +67,13 @@ from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
 from ngraph.util.trace_events import is_tracing_enabled
 
 
+def align_ndarray(element_count, alignment, dtype):
+    x = np.empty(element_count + (alignment - 1), dtype)
+    offset = (x.ctypes.data % alignment) // dtype.itemsize
+    padding = 0 if offset == 0 else (alignment - offset)
+    return x[padding:padding + element_count]
+
+
 class CPUConvEngine(object):
 
     @staticmethod
@@ -706,7 +713,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
-        self.append("np.sign({}, out=out)", x, out)
+        self.append("np.sign({}, out={})", x, out)
 
     @generate_op.on_type(SinOp)
     def generate_op(self, op, out, x):
@@ -846,6 +853,7 @@ class CPUTransformer(ExecutionGraphTransformer):
         self.graph_passes = []
         if self.mkldnn.enabled:
             self.graph_passes.append(CPUFusion())
+            self.byte_alignment = 64
         self.graph_passes += [
             # ExVizPass(view=True, filename="initial"),
             CPUTensorLayout(),
@@ -872,10 +880,11 @@ class CPUTransformer(ExecutionGraphTransformer):
             LivenessPass(),
             MemLayoutPass()
         ]
-        # DumpGraphPass(filename=graph_name+'.txt').do_pass(computation_decl)
+        # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
+        # self.graph_passes += [DumpGraphPass()]
 
-        # VisualizeMemPass(filename=mem_name+'.html').do_pass(computation_decl)
-        # ExVizPass(view=False, filename=graph_name).do_pass(computation_decl)
+        # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
+        # self.graph_passes += [VisualizeMemPass()]
 
     def finish_allocate_computation(self, computation):
         self.exop_codegen.endl(2)
@@ -921,14 +930,18 @@ self.__profiler_stop__  = list()
 
     def finish_load_computation(self, computation_decl):
         device_computation = computation_decl.device_computation
-        temp_pool_size = computation_decl.exop_block.memory_footprint() // 4
-        persistent_pool_size = computation_decl.exop_block.persistent_size() // 4
-        self.exop_codegen_pools.append("{}_temporary_pool = np.empty({}, dtype=np.dtype('{}'))",
-                                       computation_decl.computation_op.name, temp_pool_size,
-                                       'float32')
-        self.exop_codegen_pools.append("{}_persistent_pool = np.empty({}, dtype=np.dtype('{}'))",
-                                       computation_decl.computation_op.name, persistent_pool_size,
-                                       'float32')
+        byte_alignment = computation_decl.execution_graph.execution_state \
+            .transformer.byte_alignment
+        self.exop_codegen_pools.append(
+            "{}_temporary_pool = align_ndarray({}, {}, np.dtype('{}'))",
+            computation_decl.computation_op.name, computation_decl.temporary_max_allocated,
+            byte_alignment,
+            'float32')
+        self.exop_codegen_pools.append(
+            "{}_persistent_pool = align_ndarray({}, {}, np.dtype('{}'))",
+            computation_decl.computation_op.name, computation_decl.persistent_max_allocated,
+            byte_alignment,
+            'float32')
 
         code = '#---------------------------------------------\n'
         code += '# memory pool\n'
@@ -995,6 +1008,7 @@ from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals
 from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
+from ngraph.transformers.cputransform import align_ndarray
         """)
 
         mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
