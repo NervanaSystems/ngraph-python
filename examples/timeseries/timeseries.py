@@ -15,30 +15,36 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 import numpy as np
-import math
 
 
 class TimeSeries(object):
 
-    '''
-    an object that generates a time-series of Lissajous function
-    npoints : points per cycle (resolution of the series)
-    ncycles : how many cycles to get for the function
-    train_ratio : percentage of the function to be used for training
-    predict_seq :
-        False : Will return X[no_samples, seq_len, no_input_features]
-                            y[no_samples, no_output_features]
-        True : Will return  X[no_samples, seq_len, no_input_features]
-                            y[no_samples, seq_len, no_output_features]
-    '''
-    def __init__(self, npoints=100, ncycles=10, train_ratio=0.8,
-                 amplitude=1, curvetype='Lissajous1', seq_len=30, batch_size=None,
+    """
+    Class that generates a time-series of Lissajous function
+    Attributes:
+        batch_size (int)
+        npoints (int,  optional): points per cycle (resolution of the series)
+        ncycles (int, optional): how many cycles to get for the function
+        train_ratio (float, optional): percentage of the function to be used for training
+        curvetype (str, optional): Type of Lissajous Curve, Lissajous1 or Lissajous2
+        seq_len (int, optional): length of the sequence for each sample
+        predict_seq (boolean, optional):
+            False : Inputs - X[no_samples, seq_len, no_input_features]
+                    Labels - y[no_samples, no_output_features]
+            True : Inputs - X[no_samples, seq_len, no_input_features]
+                   Labels - y[no_samples, seq_len, no_output_features]
+        look_ahead (int, optional): How far ahead the predicted sequence starts from the input seq
+                    Set to 1 to start predicting from next time point onwards
+                    Only used when predict_seq is False
+    """
+    def __init__(self, batch_size, npoints=100, ncycles=10, train_ratio=0.8,
+                 curvetype='Lissajous1', seq_len=30,
                  predict_seq=True, look_ahead=1):
         """
         curvetype (str, optional): 'Lissajous1' or 'Lissajous2'
         """
         self.nsamples = npoints * ncycles
-        self.x = np.linspace(0, ncycles * 2 * math.pi, self.nsamples)
+        self.x = np.linspace(0, ncycles * 2 * np.pi, self.nsamples)
 
         if curvetype not in ('Lissajous1', 'Lissajous2'):
             raise NotImplementedError()
@@ -46,10 +52,10 @@ class TimeSeries(object):
         sin_scale = 2 if curvetype is 'Lissajous1' else 6
 
         def y_x(x):
-            return 4.0 / 5 * math.sin(x / sin_scale)
+            return 4.0 / 5 * np.sin(x / sin_scale)
 
         def y_y(x):
-            return 4.0 / 5 * math.cos(x / 2)
+            return 4.0 / 5 * np.cos(x / 2)
 
         self.data = np.zeros((self.nsamples, 2))
         self.data[:, 0] = np.asarray([y_x(xs)
@@ -95,7 +101,7 @@ class TimeSeries(object):
 
     def rolling_window(self, a=None, seq_len=None):
         """
-        Convert a into time-lagged vectors
+        Convert sequence a into time-lagged vectors
         a           : (time_steps, feature_dim)
         seq_len     : length of sequence used for prediction
         returns  (time_steps - seq_len + 1, seq_len, feature_dim)  array
