@@ -192,6 +192,7 @@ def test_broadcast_ops(config):
 
     np.testing.assert_array_equal(results, c['expected_results'])
 
+
 @pytest.mark.multi_device
 @pytest.mark.parametrize('config', [
     {
@@ -209,7 +210,7 @@ def test_allreduce_hint(hetr_device, config):
     if hetr_device == 'gpu':
         if 'gpu' not in ngt.transformer_choices():
             pytest.skip("GPUTransformer not available")
-        os.environ["HETR_SERVER_GPU_NUM"] = str(len(c['device_id']))
+        os.environ["HETR_SERVER_GPU_NUM"] = str(len(config['device_id']))
 
     input = config['input']
     device_id = config['device_id']

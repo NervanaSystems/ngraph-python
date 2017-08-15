@@ -99,7 +99,11 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
 
             if (ng.op_graph.comm_nodes.CPUQueueRecvOp in op_list_instance_type or
                 ng.op_graph.comm_nodes.CPUQueueGatherRecvOp in op_list_instance_type or
-                    ng.op_graph.comm_nodes.CPUQueueScatterRecvOp in
+                ng.op_graph.comm_nodes.CPUQueueScatterRecvOp in
+                    op_list_instance_type or
+                ng.op_graph.comm_nodes.GPUQueueRecvOp in op_list_instance_type or
+                ng.op_graph.comm_nodes.GPUCudaGatherRecvOp in op_list_instance_type or
+                ng.op_graph.comm_nodes.GPUCudaScatterRecvOp in
                     op_list_instance_type) is False:
                 assert False
             del op_list_instance_type[:]
