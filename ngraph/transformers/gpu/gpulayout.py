@@ -232,21 +232,21 @@ class GPULayoutAssignment(StridedLayoutAssignment):
             split_points = list(reversed([(num_axes - (i + 1)) for i in range(num_splits)]))
             layout = split_points_to_groups(split_points, len(axes_list))
 
-            slot_index = -1
-            # Find which slot contains the parallel axis
-            for idx, slot in enumerate(layout):
-                if parallel_axis_index in slot:
-                    slot_index = idx
+            group_index = -1
+            # Find which group contains the parallel axis
+            for idx, group in enumerate(layout):
+                if parallel_axis_index in group:
+                    group_index = idx
                     break
-            # Move the parallel_axis slot to the first position
-            parallel_slot = layout[0]
-            if slot_index > 0:
-                parallel_slot = layout.pop(slot_index)
-                layout.insert(0, parallel_slot)
-            # If parallel_axis is not the first in its slot make it the first
-            if parallel_axis_index != parallel_slot[0]:
-                parallel_slot.remove(parallel_axis_index)
-                parallel_slot.insert(0, parallel_axis_index)
+            # Move the parallel_axis group to the first position
+            parallel_group = layout[0]
+            if group_index > 0:
+                parallel_group = layout.pop(group_index)
+                layout.insert(0, parallel_group)
+            # If parallel_axis is not the first in its group make it the first
+            if parallel_axis_index != parallel_group[0]:
+                parallel_group.remove(parallel_axis_index)
+                parallel_group.insert(0, parallel_axis_index)
         else:
             layout = [[i] for i in range(len(axes_list)) if i != parallel_axis_index]
             layout.insert(0, [parallel_axis_index])
