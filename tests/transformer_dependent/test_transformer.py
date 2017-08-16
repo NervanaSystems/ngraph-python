@@ -21,7 +21,7 @@ from ngraph.testing import executor
 pytestmark = pytest.mark.transformer_dependent
 
 
-def test_evaluation_twice(transformer_factory):
+def test_evaluation_twice():
     """Test executing a computation graph twice on a one layer MLP."""
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=2)
