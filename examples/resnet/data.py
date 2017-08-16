@@ -56,7 +56,7 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset="cifar10"):
+def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset="cifar10",en_aug=True):
     if(dataset=="cifar10"):
         train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
     elif(dataset=="i1k"):
@@ -66,7 +66,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
         print("Choose dataset cifar10 or i1k")
         exit()
 
-    def common_config(manifest_file, batch_size,dataset=dataset):
+    def common_config(manifest_file, batch_size,dataset=dataset,en_aug=en_aug):
         if(dataset=="cifar10"):
             cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
@@ -77,16 +77,23 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
                             "binary": False}
             augmentation = {"type": "image",
                             "padding":4,
-                            "crop_enable": False,
-                            "flip_enable": True}
-
-            return {'manifest_filename': manifest_file,
-                    'manifest_root': os.path.dirname(manifest_file),
-                    'batch_size': batch_size,
-                    'block_size': 5000,
-                    'cache_directory': cache_root,
-                    'etl': [image_config, label_config],
-                    'augmentation': [augmentation]}
+                            "crop_enable":False,
+                            "flip_enable":True}
+            if(en_aug):
+                return {'manifest_filename': manifest_file,
+                        'manifest_root': os.path.dirname(manifest_file),
+                        'batch_size': batch_size,
+                        'block_size': 50000,
+                        'cache_directory': cache_root,
+                        'etl': [image_config, label_config],
+                        'augmentation': [augmentation]}
+            else:
+                       return {'manifest_filename': manifest_file,
+                        'manifest_root': os.path.dirname(manifest_file),
+                        'batch_size': batch_size,
+                        'block_size': 50000,
+                        'cache_directory': cache_root,
+                        'etl': [image_config, label_config]}
         elif(dataset=="i1k"):
             cache_root=get_data_cache_or_nothing("i1k-cache/")
 
@@ -114,14 +121,14 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
             print("Choose dataset cifar10 or i1k")
             exit()
 
-    train_config = common_config(train_manifest, batch_size)
+    train_config = common_config(train_manifest, batch_size,en_aug=True)
     train_config['iteration_mode'] = "COUNT"
     train_config['iteration_mode_count'] = train_iterations
     train_config['shuffle_manifest'] = True
     train_config['shuffle_enable'] = True
     train_config['random_seed'] = random_seed
 
-    valid_config = common_config(valid_manifest, batch_size)
+    valid_config = common_config(valid_manifest, batch_size,en_aug=False)
     valid_config['iteration_mode'] = "ONCE"
 
     train_loader = AeonDataLoader(train_config)

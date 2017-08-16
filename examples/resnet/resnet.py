@@ -17,31 +17,34 @@ from __future__ import division, print_function
 from builtins import range
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Layer, Sequential
+from ngraph.frontends.neon import Layer, Sequential, Dropout
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import make_bound_computation, make_default_callbacks, loop_train  # noqa
 from tqdm import tqdm
 import ngraph.transformers as ngt
-import ngraph.op_graph.tensorboard.tensorboard as tb
+#import ngraph.op_graph.tensorboard.tensorboard as tb
+from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
+from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
+
 from data import make_aeon_loaders
 
 #Helpers
 def mean_subtract(x):
-    bgr_mean = ng.persistent_tensor(
-        axes=[x.axes.channel_axis()],
-        initial_value=np.array([104., 119., 127.]))
-    return (x - bgr_mean) / 255.
+      bgr_mean = ng.persistent_tensor(
+       axes=[x.axes.channel_axis()],
+      initial_value=np.array([104., 119., 127.]))
+      return (x - bgr_mean) / 255.
 
 #Returns dict of convolution layer parameters
 def conv_params(fil_size, num_fils, strides=1,en_relu=True, en_batchnorm=True):
-    return dict(fshape=(fil_size,fil_size,num_fils),
-                strides=strides,
-                padding=(1 if fil_size > 1 else 0),
-                activation=(Rectlin() if en_relu else None),
-                filter_init=KaimingInit(),
-                batch_norm=en_batchnorm)
+      return dict(fshape=(fil_size,fil_size,num_fils),
+            strides=strides,
+            padding=(1 if fil_size > 1 else 0),
+              activation=(Rectlin() if en_relu else None),
+              filter_init=KaimingInit(),
+              batch_norm=en_batchnorm)
 
 #Class for Residual Module
 class ResidualModule(object):
@@ -56,21 +59,20 @@ class ResidualModule(object):
             exit()
         else:
             #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
-            main_path=([Convolution(**conv_params(fil_size=3,num_fils=num_fils,strides=strides)),
-                        Convolution(**conv_params(fil_size=3,num_fils=num_fils))])
+            main_path=([Convolution(**conv_params(fil_size=1,num_fils=num_fils,strides=strides)),
+                        Convolution(**conv_params(fil_size=3,num_fils=num_fils)),
+                        Convolution(**conv_params(fil_size=1,num_fils=num_fils*4,en_relu=False,en_batchnorm=False))])
 
-            #Add a 1x1 Convolution with stride 2 for dimension reduction to allow proper addition
-            #Add a 1x1 Conv with stride 1 for the very first residual module
+            #Add a 1x1 Conv with strides 2 for dimension reduction to allow proper addition
             if first or strides == 2:
                 self.side_path=Convolution(
-                        **conv_params(1,num_fils,strides=strides,en_relu=False,en_batchnorm=False))
+                        **conv_params(1,num_fils*4,strides=strides,en_relu=False,en_batchnorm=False))
             else:
-                main_path=[BatchNorm(), Activation(Rectlin())]+main_path
-            
-            #Relu after addition
-            if strides == 2:
-                self.trunk=Sequential([BatchNorm(),Activation(Rectlin())])
+                main_path = [BatchNorm(), Activation(Rectlin())] + main_path
 
+            #Relu after addition (Change to control relu location)
+            if (strides==2):
+                self.trunk=Sequential([BatchNorm(), Activation(Rectlin())])
             self.main_path=Sequential(main_path)
 
     def __call__(self,in_obj):
@@ -84,7 +86,9 @@ class ResidualModule(object):
             identity_conn=self.side_path(trunk_val) if self.side_path else trunk_val
             #Calculate outputs of convolution
             convs=self.main_path(trunk_val)
-        return identity_conn+convs
+            #Do the addition
+            summed_opt=ng.add(identity_conn,convs)
+        return summed_opt
 
 #Class for constructing the network
 class BuildResnet(Sequential):
@@ -112,19 +116,21 @@ class BuildResnet(Sequential):
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
             #Axes are 10 as number of classes are 10
-            layers.append(Affine(axes=ax.Y,weight_init=KaimingInit(),activation=Softmax()))
+            layers.append(Affine(axes=ax.Y,weight_init=KaimingInit(),batch_norm=True,activation=Softmax()))
         elif net_type=='i1k':
             print("Seriously how did we come this far.")
             exit()
         else:
-            print("Unknown network")
+            print("Unknown dataset")
             exit()
-        #Sequential.__init__(self,layers=layers)
         super(BuildResnet, self).__init__(layers=layers)
 
 #Result collector
 def loop_eval(dataset, computation, metric_names):
-    dataset._dataloader.reset()
+    if(use_aeon):
+         dataset._dataloader.reset()
+    else:
+        dataset.reset()
     all_results = None
     for data in dataset:
         #dataset._dataloader.reset()
@@ -135,15 +141,16 @@ def loop_eval(dataset, computation, metric_names):
         else:
             for name, res in zip(metric_names, results):
                 all_results[name].extend(list(res))
-
-    reduced_results = {k: np.mean(v[:dataset._dataloader.ndata]) for k, v in all_results.items()}
+    ndata=dataset._dataloader.ndata if use_aeon else dataset.ndata
+    reduced_results = {k: np.mean(v[:ndata]) for k, v in all_results.items()}
     return reduced_results
 
 if __name__ == "__main__":
     #Command Line Parser
     parser = NgraphArgparser(description="Resnet for Imagenet and Cifar10")
-    parser.add_argument('--dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
-    parser.add_argument('--size', type=int, default=56, help="Enter size of resnet")
+    parser.add_argument('-dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
+    parser.add_argument('-size', type=int, default=56, help="Enter size of resnet")
+    parser.add_argument('-tb',type=int,default=0,help="1- Enables tensorboard")
     args=parser.parse_args()
 
     #Command line args
@@ -151,12 +158,22 @@ if __name__ == "__main__":
     i1k_sizes   = [18, 34, 50, 101, 152]
     resnet_size=args.size
     resnet_dataset=args.dataset
-
+    use_aeon=False
     #Checking Command line args are proper
     if resnet_dataset=='cifar10':
         if resnet_size in cifar_sizes:
-            #Create training and validation set objects
-            train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
+            if(use_aeon):
+                print("Using Aeon")
+                #Create training and validation set objects
+                train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
+            else:
+                from ngraph.frontends.neon import ArrayIterator  # noqa
+                from ngraph.frontends.neon import CIFAR10  # noqa
+                train_data, valid_data = CIFAR10(args.data_dir).load_data()
+                train_set = ArrayIterator(train_data, args.batch_size,
+                                          total_iterations=args.num_iterations)
+                valid_set = ArrayIterator(valid_data, args.batch_size)
+
             #Num of resnet modules required for cifar10
             num_resnet_mods=(args.size-2)//6
             #Only 2 layers for one resnet module
@@ -173,11 +190,10 @@ if __name__ == "__main__":
                                     'schedule': [32000, 48000],
                                     'gamma': 0.1,
                                     'base_lr': 0.1}
-            optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                              momentum_coef=0.9,
-                                              wdecay=0.0001,
-                                              iteration=input_ph['iteration'])
-
+            optimizer=GradientDescentMomentum(learning_rate=0.1,
+                            momentum_coef=0.9,
+                            wdecay=0.0001,
+                            iteration=input_ph['iteration'])
         else:
             print("Invalid cifar10 size.Select from "+str(cifar_sizes))
             exit()
@@ -198,16 +214,20 @@ if __name__ == "__main__":
 
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
-#Put 1 for tensorboard tracking
-if(0):
+args.iter_interval=50000//args.batch_size
+#Tensorboard
+if(args.tb):
     seq1=BuildResnet(resnet_dataset)
     train=seq1(input_ph['image'])
     print(type(train))
-    test=tb.ngraph_to_tensorboard(train,True)
+    tb=TensorBoard("./")
+    tb.add_graph(train,True)
+    #test=tb.ngraph_to_tensorboard(train,True)
     exit()
 train_loss=ng.cross_entropy_multi(resnet(input_ph['image']),ng.one_hot(label_indices,axis=ax.Y))
 batch_cost=ng.sequential([optimizer(train_loss),ng.mean(train_loss,out_axes=())])
 train_computation=ng.computation(batch_cost,"all")
+
 
 #Inference Parameters
 with Layer.inference_mode_on():
@@ -217,13 +237,27 @@ with Layer.inference_mode_on():
     eval_loss_names = ['cross_ent_loss', 'misclass']
     eval_computation = ng.computation([eval_loss, errors], "all")
 
-#Trainig the network by calling transformer
+#Tuning RHO
+"""batch_index=ng.placeholder(())
+rho_val=batch_index/(batch_index+1.)
+bn_layers=[layer for name,layer in resnet.scopes.items() if "BatchNorm" in name]
+import ipdb;ipdb.set_trace()
+tune_rhos=[ng.assign(layer.rho,rho_val) for layer in bn_layers]
+tune_rho_comp=ng.computation(ng.sequential(tune_rhos+[rho_val]),batch_index)
+"""
+#Training the network by calling transformer
 transformer=ngt.make_transformer()
+#Tuner
+#tune_rho_func=transformer.add_computation(tune_rho_comp)
+#Trainer
 train_function=transformer.add_computation(train_computation)
 eval_function=transformer.add_computation(eval_computation)
 tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
 interval_cost = 0.0
 
+#for step, data in enumerate(valid_set):
+#    tune_rho_func(step)
+#    import ipdb;ipdb.set_trace()
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
@@ -240,6 +274,7 @@ for step, data in enumerate(train_set):
                        cost=interval_cost / args.iter_interval))
         interval_cost = 0.0
         eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
-        tqdm.write("Avg losses: {}".format(eval_losses))
+        tqdm.write("VALID Avg losses: {}".format(eval_losses))
 
 print("Training complete.")
+
