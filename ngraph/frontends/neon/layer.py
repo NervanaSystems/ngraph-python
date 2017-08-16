@@ -171,7 +171,6 @@ class Linear(Layer):
                     "Linear.  Found {}."
                 ).format([is_shadow_axis(axis) for axis in axes]))
 
-        self.input_axes = None
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
 
@@ -1431,3 +1430,72 @@ class RNNCell(BaseRNNCell):
         feed_fwd = ng.cast_role(self.i2h(inputs), states['h'].axes)
         states['h'] = self.activation(feed_fwd + self.h2h(states['h']))
         return states['h'], states
+
+
+def ensure_no_shadow_axes(axes, variable_name='axes'):
+    if any(is_shadow_axis(axis) for axis in axes):
+        raise ValueError((
+            "Shadow Axes are not allowed in {}. Found {}."
+        ).format(
+            variable_name,
+            [is_shadow_axis(axis) for axis in axes],
+        ))
+
+
+class dotW(Layer):
+    """
+    A generic method for multiplying a input by a tensor in terms of the axes
+    that are kept and the axes that are added to the output tensor.
+    """
+    def __init__(self, keep_axes, new_axes, init, **kwargs):
+        """
+        Arguments:
+        ----------
+        keep_axes (Axes): The axes in the input tensor that should be kept
+        new_axes (Axes): The axes which the output tensor should have which the
+            input tensor does not. If there are axes included here which are also
+            in the input tensor, the weight matrix will include both the axis
+            in the input tensor as well as the axis in new_axes.
+        init (initializer): The initializer which will be used to initialize
+            the weight matrix.
+
+        """
+        super(dotW, self).__init__(**kwargs)
+
+        self._check_valid_axes(keep_axes, new_axes)
+
+        ensure_no_shadow_axes(keep_axes, 'keep_axes')
+        ensure_no_shadow_axes(new_axes, 'new_axes')
+
+        self.keep_axes = keep_axes
+        self.new_axes = new_axes
+
+        self.new_axes_map = shadow_axes_map(self.new_axes)
+
+        self.init = init
+        self.W = None
+
+    def _check_valid_axes(self, keep_axes, new_axes):
+        common_axes = keep_axes & new_axes
+        if common_axes:
+            raise IncompatibleAxesError((
+                'keep_axes and new_axes must not have any axes in common. '
+                'found: {}'
+            ).format(common_axes))
+
+    @SubGraph.scope_op_creation
+    def __call__(self, in_obj):
+
+        if not self.initialized:
+            self.w_axes = (in_obj.axes - self.keep_axes) + ng.make_axes(self.new_axes_map.keys())
+            self.W = ng.variable(axes=self.w_axes,
+                                 initial_value=self.init,
+                                 metadata={"label": LABELS["weight"]},
+                                 ).named('W')
+
+        # in the event that the in_obj feature axes and the output feature axes
+        # share axis names, self.W will have duplicate axes, which are not
+        # allowed.  To get around this, we rename the output feature axes to
+        # something unique that we can undo after the dot.  This map_roles is
+        # undoing this temporary axes name change.
+        return ng.map_roles(ng.dot(self.W, in_obj), self.new_axes_map)
