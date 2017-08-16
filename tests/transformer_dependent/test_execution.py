@@ -1187,3 +1187,17 @@ def test_broadcast_deriv_reorder():
     with ExecutorFactory() as ex:
         dx_fun = ex.executor(dx)
         ng.testing.assert_allclose(dx_fun(), np.ones((2, 3)))
+
+
+@pytest.mark.xfail(pytest.config.getvalue("transformer") == "gpu",
+                   reason="GitHub issue: #2014, GPU problem with multiplying placeholders"
+                          " with dtype converted to int32", strict=True)
+def test_multiply_unit32_convertion(transformer_factory):
+    x = ng.placeholder(axes=(), dtype=np.uint32())
+    multiplier = 1
+    ng_mul = 0.5 * x * 0.5
+
+    with executor(ng_mul, x) as ex:
+        ng_result = ex(multiplier)
+
+    assert ng_result == 0.25
