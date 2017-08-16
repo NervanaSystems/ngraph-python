@@ -22,7 +22,7 @@ rng = RandomTensorGenerator(0, np.float32)
 pytestmark = pytest.mark.transformer_dependent
 
 
-def test_flatten_deriv_simplified(transformer_factory):
+def test_flatten_deriv_simplified():
     """
     Test derivative with dot and flatten
     """
@@ -40,7 +40,7 @@ def test_flatten_deriv_simplified(transformer_factory):
 
 
 @pytest.mark.xfail(strict=True)
-def test_flatten_deriv(transformer_factory):
+def test_flatten_deriv():
     from ngraph.frontends.neon import ax
     np.random.seed(0)
 
