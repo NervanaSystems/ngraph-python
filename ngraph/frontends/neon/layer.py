@@ -895,7 +895,7 @@ class Recurrent(Layer):
         # between training and inference
         self.recurrent_axis = in_obj.axes.recurrent_axis()
         if init_state is not None:
-            self.h_init = init_state
+            self.h_init = init_state.named('h_init')
 
         # try to understand the axes from the input
         if not self.initialized:
