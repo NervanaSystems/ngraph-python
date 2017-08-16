@@ -114,6 +114,9 @@ class SendOp(CommunicationOp):
             args=tuple([from_node]),
             axes=from_node.axes,
             dtype=from_node.dtype)
+        assert from_node.metadata.get('parallel', None) is not None, \
+            "from_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = from_node.metadata['parallel']
 
 
 class RecvOp(CommunicationOp):

@@ -175,7 +175,8 @@ def test_broadcast_ops(config):
                      transformer='None', host_transformer='None'):
         to_node = ng.constant(axes=axes, const=0)
 
-    y[c['sender_index']] = CPUQueueBroadcastSendOp(from_node=from_node, to_node=to_node)
+    with ng.metadata(parallel=ax_a):
+        y[c['sender_index']] = CPUQueueBroadcastSendOp(from_node=from_node, to_node=to_node)
     for i in range(len(c['device_ids'])):
         if i != c['sender_index']:
             sc_op = CPUQueueBroadcastRecvOp(to_node=to_node, send_node=y[c['sender_index']])
