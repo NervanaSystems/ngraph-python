@@ -35,7 +35,7 @@ loss_ngraph['iteration'] = np.array(losses['iteration'])
 loss_tf_momentum = read_csv(base_path + 'losses_batch_8_momentum.csv')
 loss_tf_no_momentum = read_csv(base_path + 'losses_batch_8_no_momentum.csv')
  
-half_window_size = 1 
+half_window_size = 3 
 loss_tf_no_momentum = mov_avg(loss_tf_no_momentum, half_window_size = 6*half_window_size) 
 loss_tf_momentum = mov_avg(loss_tf_momentum, half_window_size = 6*half_window_size) 
 loss_ngraph = mov_avg(loss_ngraph, half_window_size = half_window_size)

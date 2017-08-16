@@ -136,7 +136,7 @@ with closing(ngt.make_transformer()) as transformer:
             saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
             saved_losses['eval_misclass'].append(eval_losses['misclass'])
             saved_losses['iteration'].append(step)
-            pickle.dump( saved_losses, open( "losses.pkl", "wb" ) )
+            pickle.dump( saved_losses, open( "losses_%s.pkl" % args.backend, "wb" ) )
             interval_cost = 0.0
 
 print('\n')
