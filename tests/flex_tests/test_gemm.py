@@ -28,9 +28,8 @@ pytestmark = pytest.mark.flex_only
     (2, 15, 2, "First matrix (2 x m) multiplied by second matrix (m x 2)"),
     (3, 3, 3, "Square (3 x 3) multiplied by square (3 x 3)"),
 ))
-def test_gemm_multiply_matrices(transformer_factory, rows_1, col_1, col_2, description):
+def test_gemm_multiply_matrices(rows_1, col_1, col_2, description):
     """
-    :param [FIXTURE] transformer_factory: py.test fixture to use flex calculations
     :param rows_1: number of rows for first matrix
     :param col_1: number of columns for first matrix
     :param col_2: number of columns for second matrix
@@ -51,10 +50,8 @@ def test_gemm_multiply_matrices(transformer_factory, rows_1, col_1, col_2, descr
      "Dot product of matrix and negative vector"), (4, 2, 0, [[0, 0]], 2,
                                                     "Dot product of matrix and vector of zeros")
 ))
-def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val, flex_exceptions,
-                                        iters, description):
+def test_gemm_multiply_matrix_by_vector(row, col, const_val, flex_exceptions, iters, description):
     """
-    :param [FIXTURE] transformer_factory: py.test fixture to use flex calculations
     :param row: number of rows for first matrix
     :param col: number of columns for first matrix
     :param const_val: vector is filled using this value
@@ -82,10 +79,8 @@ def test_gemm_multiply_matrix_by_vector(transformer_factory, row, col, const_val
                           [255.9921875, 255.9921875]])], 3,
      "Dot product with two expected overflows")
 ))
-def test_gemm_multiply_matrix_by_scalar(transformer_factory, row, col, scalar, flex_exceptions,
-                                        iters, description):
+def test_gemm_multiply_matrix_by_scalar(row, col, scalar, flex_exceptions, iters, description):
     """
-    :param [FIXTURE] transformer_factory: py.test fixture to use flex calculations
     :param row: number of rows for matrix
     :param col: number of columns for matrix
     :param scalar: value of scalar which is multiplied
