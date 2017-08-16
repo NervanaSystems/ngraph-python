@@ -123,7 +123,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 @pytest.mark.parametrize("backward", [True, False])
 def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                    return_sequence, weight_initializer, bias_initializer,
-                   init_state, extra_axes, backward, transformer_factory):
+                   init_state, extra_axes, backward):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -179,9 +179,8 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("return_sequence", [True])
 @pytest.mark.parametrize("init_state", [True, False])
-def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
-                       return_sequence, weight_initializer, bias_initializer,
-                       init_state, transformer_factory):
+def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size, return_sequence,
+                       weight_initializer, bias_initializer, init_state):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
     assert return_sequence is True, "the reference rnn only supports sequences for deriv"
@@ -254,9 +253,8 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
 @pytest.mark.parametrize("return_sequence", [True, False])
 @pytest.mark.parametrize("backward", [True, False])
 @pytest.mark.parametrize("init_state", [True, False])
-def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
-                             return_sequence, weight_initializer, bias_initializer,
-                             backward, init_state, transformer_factory):
+def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size, return_sequence,
+                             weight_initializer, bias_initializer, backward, init_state):
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
@@ -313,9 +311,8 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
 @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
                                                 (True, False),
                                                 (False, True)])
-def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
-                     return_sequence, weight_initializer, bias_initializer,
-                     init_state, sum_out, concat_out, transformer_factory):
+def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, return_sequence,
+                     weight_initializer, bias_initializer, init_state, sum_out, concat_out):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -379,7 +376,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                                                 (False, True)])
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
-                               sum_out, concat_out, transformer_factory):
+                               sum_out, concat_out):
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
@@ -503,8 +500,7 @@ def test_stacked_birnn_construction(recurrent_input, output_size, weight_initial
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
 def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec, input_size,
-                           hidden_size, weight_initializer, bias_initializer,
-                           transformer_factory):
+                           hidden_size, weight_initializer, bias_initializer):
 
     # TODO: are these assumptions true?
     assert batch_size == 1, "the seq2seq reference implementation only support batch size 1"
@@ -599,7 +595,7 @@ def test_seq2seq_deriv_ref(batch_size, sequence_length_enc, sequence_length_dec,
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [8])
 def test_change_recurrent_axis_length(recurrent_layer_cls, batch_size, sequence_length,
-                                      input_size, hidden_size, transformer_factory):
+                                      input_size, hidden_size):
     """
     Recurrent layer support for changing REC axis length
     (needed by seq2seq inference)
