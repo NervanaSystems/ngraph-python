@@ -19,15 +19,19 @@ import ngraph as ng
 
 
 def create_send_recv_graph():
-    axes = ng.make_axes([ng.make_axis(length=10, name='A'), ng.make_axis(length=15, name='B')])
+    ax_a = ng.make_axis(length=10, name='A')
+    ax_b = ng.make_axis(length=15, name='B')
+    axes = ng.make_axes([ax_a, ax_b])
 
-    with ng.metadata(device=None, device_id=None, transformer=None, host_transformer=None):
+    with ng.metadata(parallel=ax_a, device=None, device_id=None,
+                     transformer=None, host_transformer=None):
         from_node = ng.placeholder(axes)
         to_node = ng.placeholder(axes)
     send_x = SendOp(from_node=from_node)
     recv_x = RecvOp(to_node=to_node, send_node=send_x)
 
-    with ng.metadata(device=None, device_id=None, transformer=None, host_transformer=None):
+    with ng.metadata(parallel=ax_a, device=None, device_id=None,
+                     transformer=None, host_transformer=None):
         x_plus_one = recv_x + 1
 
     send_x_plus_one = SendOp(from_node=x_plus_one)

@@ -177,40 +177,52 @@ class GPUCommNodeFactory(CommNodeFactory):
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
             if comm_type == 'queue':
-                return GPUQueueSendOp(
+                build_op = GPUQueueSendOp(
                     from_node=from_node)
         elif node_type == 'recv':
             if comm_type == 'queue':
-                return GPUQueueRecvOp(
+                build_op = GPUQueueRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'scatter_send':
             if comm_type == 'cuda':
-                return GPUCudaScatterSendOp(
+                build_op = GPUCudaScatterSendOp(
                     from_node=from_node,
                     to_node=to_node)
         elif node_type == 'scatter_recv':
             if comm_type == 'cuda':
-                return GPUCudaScatterRecvOp(
+                build_op = GPUCudaScatterRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'gather_send':
             if comm_type == 'cuda':
-                return GPUCudaGatherSendOp(
+                build_op = GPUCudaGatherSendOp(
                     from_node=from_node)
         elif node_type == 'gather_recv':
             if comm_type == 'cuda':
-                return GPUCudaGatherRecvOp(
+                build_op = GPUCudaGatherRecvOp(
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'allreduce':
             if comm_type == 'cuda':
-                return GPUCudaAllReduceOp(
+                build_op = GPUCudaAllReduceOp(
                     input_node=from_node,
                     func=from_node.metadata['reduce_func'])
         else:
             assert False, "Not supported!!!"
+
+        if node_type == 'scatter_send' or node_type == 'scatter_recv':
+            assert to_node.metadata.get('parallel', None) is not None, \
+                "to_node must have a specified parallel attribute in metadata"
+            build_op.metadata['parallel'] = to_node.metadata['parallel']
+
+        elif node_type == 'gather_send' or node_type == 'gather_recv':
+            assert from_node.metadata.get('parallel', None) is not None, \
+                "from_node must have a specified parallel attribute in metadata"
+            build_op.metadata['parallel'] = from_node.metadata['parallel']
+
+        return build_op
 
 
 class CPUCommNodeFactory(CommNodeFactory):
@@ -236,50 +248,62 @@ class CPUCommNodeFactory(CommNodeFactory):
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
             if comm_type == 'queue':
-                return CPUQueueSendOp(
+                build_op = CPUQueueSendOp(
                     from_node=from_node)
         elif node_type == 'recv':
             if comm_type == 'queue':
-                return CPUQueueRecvOp(
+                build_op = CPUQueueRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'scatter_send':
             if comm_type == 'queue':
-                return CPUQueueScatterSendOp(
+                build_op = CPUQueueScatterSendOp(
                     from_node=from_node,
                     to_node=to_node)
         elif node_type == 'scatter_recv':
             if comm_type == 'queue':
-                return CPUQueueScatterRecvOp(
+                build_op = CPUQueueScatterRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'gather_send':
             if comm_type == 'queue':
-                return CPUQueueGatherSendOp(
+                build_op = CPUQueueGatherSendOp(
                     from_node=from_node)
         elif node_type == 'gather_recv':
             if comm_type == 'queue':
-                return CPUQueueGatherRecvOp(
+                build_op = CPUQueueGatherRecvOp(
                     from_node=from_node,
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'broadcast_send':
             if comm_type == 'queue':
-                return CPUQueueBroadcastSendOp(
+                build_op = CPUQueueBroadcastSendOp(
                     from_node=from_node,
                     to_node=to_node)
         elif node_type == 'broadcast_recv':
             if comm_type == 'queue':
-                return CPUQueueBroadcastRecvOp(
+                build_op = CPUQueueBroadcastRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'allreduce':
             if comm_type == 'queue':
-                return CPUQueueAllReduceOp(
+                build_op = CPUQueueAllReduceOp(
                     input_node=from_node,
                     func=from_node.metadata['reduce_func'])
         else:
             assert False, "Not supported!!!"
+
+        if node_type == 'scatter_send' or node_type == 'scatter_recv':
+            assert to_node.metadata.get('parallel', None) is not None, \
+                "to_node must have a specified parallel attribute in metadata"
+            build_op.metadata['parallel'] = to_node.metadata['parallel']
+
+        elif node_type == 'gather_send' or node_type == 'gather_recv':
+            assert from_node.metadata.get('parallel', None) is not None, \
+                "from_node must have a specified parallel attribute in metadata"
+            build_op.metadata['parallel'] = from_node.metadata['parallel']
+
+        return build_op
 
 
 def get_comm_pattern(from_node, to_node):

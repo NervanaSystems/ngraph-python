@@ -168,11 +168,11 @@ def test_broadcast_ops(config):
     axes = ng.make_axes([ax_a, ax_b])
 
     with ng.metadata(device='cpu', device_id=sender_id,
-                     transformer='None', host_transformer='None'):
+                     transformer='None', host_transformer='None', parallel=ax_a):
         from_node = ng.constant(axes=axes, const=c['x_input'])
 
     with ng.metadata(device='cpu', device_id=tuple(receiver_ids),
-                     transformer='None', host_transformer='None'):
+                     transformer='None', host_transformer='None', parallel=ax_a):
         to_node = ng.constant(axes=axes, const=0)
 
     with ng.metadata(parallel=ax_a):
@@ -356,48 +356,56 @@ def test_get_layouts(config):
     test_transformer = ngt.make_transformer_factory('gpu')()
 
     t = config
-    test_ops = [
-        GPUCudaScatterSendOp(
-            TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu', device_id='0',
-                          parallel=t['parallel_axis'], transformer='gpu0', host_transformer=None)),
-            ng.Op(metadata=dict(device='gpu', device_id=('0', '1'), parallel=t['parallel_axis'],
-                  transformer=['gpu0', 'gpu1'], host_transformer=None))
-        ),
-        GPUCudaScatterRecvOp(
-            ng.Op(metadata=dict(device='gpu', device_id=('0', '1'), parallel=t['parallel_axis'],
-                  transformer=['gpu0', 'gpu1'], host_transformer=None)),
+    with ng.metadata(parallel=t['parallel_axis']):
+        test_ops = [
             GPUCudaScatterSendOp(
                 TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
-                              device_id='0', transformer='gpu0', host_transformer=None)),
+                              device_id='0', parallel=t['parallel_axis'],
+                              transformer='gpu0', host_transformer=None)),
                 ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
                       parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
                       host_transformer=None))
-            )
-        ),
-        GPUCudaGatherRecvOp(
-            ng.Op(metadata=dict(device='gpu', device_id=('0', '1'), parallel=t['parallel_axis'],
-                                transformer=['gpu0', 'gpu1'], host_transformer=None)),
-            ng.Op(metadata=dict(device='gpu', device_id='0', parallel=t['parallel_axis'],
-                  transformer='gpu0', host_transformer=None)),
-            GPUCudaScatterSendOp(
-                TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
-                              device_id='0', transformer='gpu0', host_transformer=None)),
+            ),
+            GPUCudaScatterRecvOp(
                 ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
                       parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
-                      host_transformer=None))
+                      host_transformer=None)),
+                GPUCudaScatterSendOp(
+                    TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                                  device_id='0', parallel=t['parallel_axis'],
+                                  transformer='gpu0', host_transformer=None)),
+                    ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                          parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                          host_transformer=None))
+                )
+            ),
+            GPUCudaGatherRecvOp(
+                ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                                    parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                                    host_transformer=None)),
+                ng.Op(metadata=dict(device='gpu', device_id='0', parallel=t['parallel_axis'],
+                      transformer='gpu0', host_transformer=None)),
+                GPUCudaScatterSendOp(
+                    TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                                  device_id='0', parallel=t['parallel_axis'],
+                                  transformer='gpu0', host_transformer=None)),
+                    ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                          parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                          host_transformer=None))
+                )
+            ),
+            GPUCudaGatherSendOp(
+                TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                              device_id='0', transformer='gpu0',
+                              host_transformer=None, parallel=t['parallel_axis']))
+            ),
+            GPUCudaAllReduceOp(
+                input_node=TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                                         device_id='0', transformer='gpu0', host_transformer=None,
+                                         parallel=t['parallel_axis'])),
+                func='sum'
             )
-        ),
-        GPUCudaGatherSendOp(
-            TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu', device_id='0',
-                          transformer='gpu0', host_transformer=None, parallel=t['parallel_axis']))
-        ),
-        GPUCudaAllReduceOp(
-            input_node=TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
-                                     device_id='0', transformer='gpu0', host_transformer=None,
-                                     parallel=t['parallel_axis'])),
-            func='sum'
-        )
-    ]
+        ]
     test_layouts = []
     for op in test_ops:
         test_layouts.append(test_transformer.get_layouts(op)[0].axes)
