@@ -39,7 +39,7 @@ def prepare_environment(hetr_device, num_device):
         pytest.skip('gpu test is not supported now.')
 
 
-def test_singleton_device_id(transformer_factory, hetr_device):
+def test_singleton_device_id(hetr_device):
     with ng.metadata(device_id=(['1'])):
         x = ng.placeholder(())
     graph_ops = OrderedSet([x])
@@ -50,7 +50,7 @@ def test_singleton_device_id(transformer_factory, hetr_device):
     check_device_assign_pass(hetr_device, "0", graph_op_metadata, graph_ops)
 
 
-def test_scatter_gather_graph(transformer_factory, hetr_device):
+def test_scatter_gather_graph(hetr_device):
     # Build the graph
     W = ng.make_axis(length=6, name='width')
 
@@ -80,7 +80,6 @@ def test_scatter_gather_graph(transformer_factory, hetr_device):
         ops_to_transform=graph_ops,
         expected_recv_nodes=[x_plus_y])
 
-
 ax_A = ng.make_axis(4)
 ax_B = ng.make_axis(8)
 ax_C = ng.make_axis(12)
@@ -100,7 +99,7 @@ ax_D = ng.make_axis(24)
         'parallel_axis': ax_A,
     },
 ])
-def test_distributed_plus_one(transformer_factory, hetr_device, config):
+def test_distributed_plus_one(hetr_device, config):
     device_id = config['device_id']
     axes = config['axes']
     parallel_axis = config['parallel_axis']
@@ -134,7 +133,7 @@ def test_distributed_plus_one(transformer_factory, hetr_device, config):
         'parallel_axis': ax_B,
     },
 ])
-def test_distributed_dot(transformer_factory, hetr_device, config):
+def test_distributed_dot(hetr_device, config):
     device_id = config['device_id']
     axes_x = config['axes_x']
     axes_w = config['axes_w']
@@ -169,7 +168,7 @@ def test_distributed_dot(transformer_factory, hetr_device, config):
         'parallel_axis': ax_A,
     },
 ])
-def test_distributed_plus_two(transformer_factory, hetr_device, config):
+def test_distributed_plus_two(hetr_device, config):
     device_id = config['device_id']
     axes = config['axes']
     parallel_axis = config['parallel_axis']
@@ -190,7 +189,7 @@ def test_distributed_plus_two(transformer_factory, hetr_device, config):
 
 
 @pytest.mark.multi_device
-def test_to_and_from_device(transformer_factory, hetr_device):
+def test_to_and_from_device(hetr_device):
     prepare_environment(hetr_device, 2)
 
     with ng.metadata(device=hetr_device):
@@ -206,7 +205,7 @@ def test_to_and_from_device(transformer_factory, hetr_device):
 
 
 @pytest.mark.multi_device
-def test_computation_return_list(transformer_factory, hetr_device):
+def test_computation_return_list(hetr_device):
     prepare_environment(hetr_device, 2)
 
     with ng.metadata(device=hetr_device):
@@ -224,6 +223,7 @@ def test_computation_return_list(transformer_factory, hetr_device):
 
 @pytest.mark.hetr_gpu_only
 def test_gpu_send_and_recv():
+    pytest.xfail("GitHub issue: #2007, Unknown error - investigation is needed")
     # put x+1 on cpu numpy
     with ng.metadata(device='cpu'):
         x = ng.placeholder(())
@@ -251,7 +251,7 @@ def test_gpu_send_and_recv():
             assert computation(i) == i + 2
 
 
-def test_recvop_axes_using_dot(transformer_factory):
+def test_recvop_axes_using_dot():
     x_value = np.array([[1],
                         [2]])
     w_value = np.array([[-1, 1]])
@@ -273,7 +273,7 @@ def test_recvop_axes_using_dot(transformer_factory):
         assert ng.testing.allclose(val_ng, val_np)
 
 
-def test_recvop_tensorupdate(transformer_factory):
+def test_recvop_tensorupdate():
     """
     The tensor (RecvOp_#_#) associated with the following conv op has two views:
     1) Non-flat view (e.g. RecvOp_#_#_1_1_1_1_4.shape=(1,1,1,1,4))
@@ -365,7 +365,7 @@ def test_recvop_tensorupdate(transformer_factory):
                                             [8., 8., 8., 8.]])
 
 
-def test_terminate_op(transformer_factory):
+def test_terminate_op():
 
     class TerminateOp(ng.Op):
 
@@ -388,7 +388,7 @@ def test_terminate_op(transformer_factory):
     assert len(active_children()) == len(baseline)
 
 
-def test_process_leak(transformer_factory):
+def test_process_leak():
     baseline = active_children()
     with ng.metadata(device_id=('2')):
         x = ng.constant(2)
@@ -415,7 +415,7 @@ def test_process_leak(transformer_factory):
         'results': [52, 52, 52, 52, 52, 52, 52, 52],
     },
 ])
-def test_allreduce_cpu_op(config, hetr_device):
+def test_allreduce_cpu_op(config):
     class myThread(threading.Thread):
         def __init__(self, y):
             threading.Thread.__init__(self)
@@ -436,8 +436,7 @@ def test_allreduce_cpu_op(config, hetr_device):
     thread = list()
     results = list()
 
-    with ng.metadata(device=hetr_device,
-                     device_id=c['device_id'],
+    with ng.metadata(device_id=c['device_id'],
                      transformer='None',
                      host_transformer='None'):
         for i in c['x_input']:

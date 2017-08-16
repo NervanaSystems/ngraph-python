@@ -109,7 +109,7 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
             del op_list_instance_type[:]
 
 
-def test_hetr_graph_passes(transformer_factory):
+def test_hetr_graph_passes():
 
     # Build the graph
     with ng.metadata(device_id='1'):
