@@ -38,4 +38,3 @@ def get_function_or_class_name(obj):
         name = None
 
     return name
-

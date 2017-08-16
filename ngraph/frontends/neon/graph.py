@@ -1,6 +1,7 @@
 import functools
 from contextlib import contextmanager
 from collections import OrderedDict
+from six import string_types
 
 import parsel
 from cachetools import keys, cached
@@ -14,7 +15,13 @@ class ScopedDict(OrderedDict):
 
     def __init__(self, scope, *args, **kwargs):
         if scope is not None:
-            self._root = scope.name
+            if isinstance(scope, NameScope):
+                self._root = scope.name
+            elif isinstance(scope, string_types):
+                self._root = scope
+            else:
+                raise ValueError("scope must be a string or a NameScope, "
+                                 "not {}".format(type(scope)))
         else:
             self._root = None
 
@@ -23,6 +30,9 @@ class ScopedDict(OrderedDict):
     def __setitem__(self, key, value):
         key = key.rsplit("{}/".format(self._root), 1)[-1]
         super(ScopedDict, self).__setitem__(key, value)
+
+    def __str__(self):
+        return dict(self).__str__()
 
 
 @contextmanager
@@ -139,7 +149,8 @@ class ComputationalGraph(object):
         scopes = ScopedDict(self.scope)
         for op in self.select("[scope]"):
             scope_name = op.scope.name
-            nested_scopes = [scope_name.rsplit("/", ii)[0] for ii in range(len(scope_name.split("/")))]
+            nested_scopes = [scope_name.rsplit("/", ii)[0]
+                             for ii in range(len(scope_name.split("/")))]
             for scope_name in nested_scopes:
                 scopes.setdefault(scope_name, SubGraph(name=scope_name,
                                                        reuse_scope=True)).ops.append(op)

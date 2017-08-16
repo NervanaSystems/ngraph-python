@@ -701,8 +701,8 @@ class BatchNorm(Layer):
         out_axes = in_axes - red_axes
 
         if not self.initialized:
-            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0)
-            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0).named("gvar")
+            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0).named("gmean")
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,
                                      metadata={"label": LABELS["weight"]}).named('gamma')
