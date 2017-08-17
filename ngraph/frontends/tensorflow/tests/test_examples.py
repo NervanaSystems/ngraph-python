@@ -33,7 +33,6 @@ from ngraph.frontends.tensorflow.examples.mnist_mlp_shaped import \
 pytestmark = pytest.mark.transformer_dependent
 
 
-@pytest.mark.usefixtures("transformer_factory")
 class TestExamples(ImporterTester):
     @pytest.config.flex_disabled(reason="Flex fail, because learning curve is slightly different")
     def test_logistic_regression(self):

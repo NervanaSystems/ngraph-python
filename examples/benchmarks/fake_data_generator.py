@@ -40,22 +40,89 @@ def generate_data(dataset, batch_size):
         raise ValueError("Incorrect dataset provided")
 
 
-def generate_ds2_data(max_length, str_w, nbands, batch_size, num_iter):
+def preprocess_ds2_data(sample):
+    """
+    Add inputs specifying the length per element in the batch, pack char_map for ctc and
+    ensure dtypes.
+    """
+
+    bsz = sample['char_map'].shape[0]
+    pad_value = 0
+
+    def find_padding(arr):
+        assert arr.ndim == 1
+
+        if np.sum(np.abs(arr)) == 0:
+            raise ValueError("Array is all zeros!")
+
+        # Does not end in padding
+        if np.abs(arr[-1]) > 0:
+            return len(arr)
+
+        # It does end in padding, so when does padding start?
+        inds = np.where(arr == pad_value)[0]
+        nonpad_inds = np.where(np.diff(inds) > 1)[0]
+
+        # Pad value shows up earlier. Pad -> nonpad -> pad
+        if len(nonpad_inds) > 0:
+            return inds[nonpad_inds[-1] + 1]
+        # Pad value never shows up except at the end
+        elif len(inds) > 0:
+            return inds[0]
+        # Padding value never appears
+        else:
+            return len(arr)
+
+    def pack_for_ctc(arr, trans_lens):
+
+        packed = np.zeros(np.prod(arr.shape), dtype=arr.dtype)
+        start = 0
+        for ii, trans_len in enumerate(trans_lens):
+            packed[start: start + trans_len] = arr[ii, 0, :trans_len]
+            start += trans_len
+
+        return np.reshape(packed, arr.shape)
+
+    sample["trans_length"] = np.array([find_padding(sample["char_map"][ii].squeeze())
+                                       for ii in range(bsz)], dtype=np.int32)
+    sample["audio_length"] = (100 * np.array([find_padding(
+                                              sample["audio"][ii].sum(axis=1).squeeze())
+                                              for ii in range(bsz)]) / sample["audio"].shape[-1])
+    sample["audio_length"] = sample["audio_length"].astype(np.int32)
+    sample["char_map"] = pack_for_ctc(sample["char_map"], sample["trans_length"]).astype(np.int32)
+    sample["audio"] = sample["audio"].astype(np.float32)
+
+    return sample
+
+
+def generate_ds2_data(max_length, str_w, nout, nbands, batch_size, num_iter):
     frame_stride = 0.01  # seconds, hard-coded value in make_aeon_dataloaders
     max_utt_len = ((int(max_length / frame_stride) - 1) // str_w) + 1
+    max_lbl_len = (max_utt_len - 1) // 2
 
-    train_set, eval_set = make_fake_dataloader(nbands, max_utt_len, batch_size, num_iter)
+    train_set, eval_set = make_fake_dataloader(nbands, max_lbl_len, max_utt_len,
+                                               nout, batch_size, num_iter)
 
     inputs = train_set.make_placeholders()
+
+    if "audio_length" not in inputs:
+        inputs["audio_length"] = ng.placeholder([ax.N], dtype=np.uint32)
+    if "trans_length" not in inputs:
+        inputs["trans_length"] = ng.placeholder([ax.N], dtype=np.uint32)
+
     return inputs, train_set, eval_set
 
 
-def make_fake_dataloader(nbands, max_utt_len, batch_size, num_iter):
+def make_fake_dataloader(nbands, max_lbl_len, max_utt_len, nout, batch_size, num_iter):
 
     # mimic aeon data format
     dataset_info = {'audio': {"axes": [('C', 1),
                                        ('frequency', nbands),
-                                       ('time', int(max_utt_len))]}}
+                                       ('time', int(max_utt_len))]},
+                    'char_map': {"axes": [('character', 1),
+                                          ('sequence', int(max_lbl_len))],
+                                 "random": lambda s: np.random.randint(1, nout, s),
+                                 "dtype": np.int32}}
 
     train_set = FakeDataIterator(dataset_info, batch_size, num_iter, same=False)
     eval_set = FakeDataIterator(dataset_info, batch_size, num_iter, same=False)

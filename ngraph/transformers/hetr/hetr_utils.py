@@ -129,6 +129,7 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
     """
     # clone nodes with GatherSendOp as root using serde
     ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
+
     new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
 
     orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}

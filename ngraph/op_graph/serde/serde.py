@@ -230,7 +230,7 @@ def op_to_protobuf(op):
             continue
         val = getattr(op, key)
         if isinstance(val, Op) or \
-            (isinstance(val, (list, set, tuple)) and
+            (isinstance(val, (list, set, tuple, OrderedSet)) and
              len(val) > 0 and
              all(map(lambda x: isinstance(x, Op), val))):
             # These will be handled in `add_edges`
@@ -274,7 +274,7 @@ def add_edges(pb_edges, pb_ops, op):
         if isinstance(val, Op):
             edge = add_edge(op, val, ops_pb.Edge.OTHER)
             edge.attrs['_ngraph_attribute'].scalar.string_val = key
-        if isinstance(val, (list, tuple, set)):
+        if isinstance(val, (list, tuple, set, OrderedSet)):
             for item in val:
                 if isinstance(item, Op):
                     edge = add_edge(op, item, ops_pb.Edge.OTHER)
@@ -494,7 +494,6 @@ def _deserialize_graph(graph_pb):
                 setattr(head_op, edge.attrs['_ngraph_attribute'].scalar.string_val, tail_op)
             elif '_ngraph_list_attribute' in edge.attrs:
                 key = edge.attrs['_ngraph_list_attribute'].scalar.string_val
-                # import pdb; pdb.set_trace()
                 if hasattr(head_op, key):
                     getattr(head_op, key).add(tail_op)
                 else:

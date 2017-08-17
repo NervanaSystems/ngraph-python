@@ -51,7 +51,7 @@ def input_placeholder(feature_axis, batch_axis):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_linear_zeros(input_placeholder, output_size, transformer_factory):
+def test_linear_zeros(input_placeholder, output_size):
     # basic sanity check with 0 weights random inputs
     x = np.random.random(input_placeholder.axes.lengths)
     layer = Linear(nout=output_size, init=UniformInit(0.0, 0.0))
@@ -66,7 +66,7 @@ def test_linear_zeros(input_placeholder, output_size, transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_linear_ones(input_size, input_placeholder, output_size, transformer_factory):
+def test_linear_ones(input_size, input_placeholder, output_size):
     # basic sanity check with all ones on the inputs and weights, check that
     # each row in output is the sum of the weights for that output this check
     # will confirm that the correct number of operations is being run
