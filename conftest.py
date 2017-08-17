@@ -33,17 +33,13 @@ def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
 
 
-<<<<<<< HEAD
 def pytest_generate_tests(metafunc):
     if 'hetr_device' in metafunc.fixturenames:
         metafunc.parametrize("hetr_device",
                              metafunc.config.getoption('hetr_device'))
 
 
-@pytest.fixture(scope="module")
-=======
 @pytest.fixture(scope="module", autouse=True)
->>>>>>> master
 def transformer_factory(request):
     def set_and_get_factory(transformer_name):
         factory = ngt.make_transformer_factory(transformer_name)
