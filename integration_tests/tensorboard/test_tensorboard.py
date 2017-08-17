@@ -10,6 +10,7 @@ tb = TensorBoard("/tmp/test_tensorboard_integration")
 def get_simple_graph():
     ax = ng.make_axes([ng.make_axis(name='C', length=1)])
     base_op = ng.constant(5.0, ax).named("weird_name#@$")
+    base_op.metadata["string"] = "stringval"
     simple_graph = ng.log(ng.exp(base_op))
     simple_graph.metadata.update(string_val="foo",
                                  bool_val=True,
