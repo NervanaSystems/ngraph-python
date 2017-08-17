@@ -50,7 +50,7 @@ def scope_ops(name=None, mode=None, subgraph=None, metadata=None):
         instance of SubGraph
     """
     if subgraph is None:
-        subgraph = SubGraph()
+        subgraph = SubGraph(name=name, reuse_scope=True)
 
     if metadata is None:
         metadata = dict()
