@@ -15,7 +15,7 @@
 import numpy as np
 from ngraph.op_graph.op_graph import TensorValueOp
 from ngraph.factory.comm_node_factory import get_comm_pattern
-from ngraph.op_graph.comm_nodes import calculate_scatter_axes, \
+from ngraph.op_graph.comm_nodes import set_parallel_axes, \
     CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp
 from multiprocessing import Process, Event, Manager
 from ngraph.frontends.neon import UniformInit
@@ -34,37 +34,17 @@ axes = ng.make_axes([ax_A, ax_B, ax_C])
 
 
 def test_calculate_new_axes_single_device():
-    new_axes = calculate_scatter_axes(axes=axes, scatter_axis=ax_B, num_devices=1)
+    new_axes = set_parallel_axes(axes=axes, parallel_axis=ax_B)
     assert new_axes.full_lengths == axes.full_lengths
-
-
-@pytest.mark.parametrize("axis, num", [(ax_A, 2), (ax_B, 3), (ax_C, 4), (ax_A, 5), (ax_B, 5),
-                                       (ax_C, 5)])
-def test_calculate_new_axes_no_remainder(axis, num):
-    new_axes = calculate_scatter_axes(axes=axes, scatter_axis=axis, num_devices=num)
-    expected_axes = ng.make_axes(
-        [a if a != axis else ng.make_axis(length=axis.length / num, name=a.name) for a in axes])
-    assert new_axes.full_lengths == expected_axes.full_lengths
-
-
-@pytest.mark.parametrize("axis, num", [(ax_B, 2), (ax_A, 3), (ax_B, 4), (ax_B, 6), (ax_C, 7)])
-def tests_calculate_new_axes_has_remainder(axis, num):
-    with pytest.raises(AssertionError):
-        calculate_scatter_axes(axes=axes, scatter_axis=axis, num_devices=num)
-
-
-def test_calculate_new_axes_zero_devices():
-    with pytest.raises(ZeroDivisionError):
-        calculate_scatter_axes(axes=axes, scatter_axis=ax_B, num_devices=0)
 
 
 def test_calculate_new_axes_null_axes():
     with pytest.raises(TypeError):
-        calculate_scatter_axes(axes=None, scatter_axis=ax_B, num_devices=2)
+        set_parallel_axes(axes=None, parallel_axis=ax_B)
 
 
 def test_calculate_new_axes_null_parallel_axis():
-    new_axes = calculate_scatter_axes(axes=axes, scatter_axis=None, num_devices=1)
+    new_axes = set_parallel_axes(axes=axes, parallel_axis=None)
     # Checks null parallel axis. The axes calculated should have the same length as original
     assert new_axes.full_lengths == axes.full_lengths
 
@@ -241,8 +221,8 @@ def test_broadcast_ops(config):
 ])
 def test_allreduce_hint_cpu(config):
     c = config
-
-    with ng.metadata(device_id=c['device_id'], parallel=None):
+    parallel_axis = ng.make_axis(name='axis_parallel', length=16)
+    with ng.metadata(device_id=c['device_id'], parallel=parallel_axis):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
@@ -297,8 +277,8 @@ def test_allreduce_hint_gpu(config):
     ax_B_length = 16
 
     np_result = [np.full((ax_A_length, ax_B_length), c['expected_result'], np.float32)]
-
-    with ng.metadata(device_id=c['device_id'], parallel=None):
+    parallel_axis = ng.make_axis(name='axis_parallel', length=16)
+    with ng.metadata(device_id=c['device_id'], parallel=parallel_axis):
         axis_A = ng.make_axis(length=ax_A_length, name='axis_A')
         axis_B = ng.make_axis(length=ax_B_length, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')

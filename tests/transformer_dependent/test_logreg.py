@@ -41,7 +41,7 @@ class NumpyLogreg(object):
 
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
-def test_logreg(transformer_factory):
+def test_logreg():
     # xs: (C, N), y: (N,)
     xs = np.array([[0.52, 0.88, 0.52, 0.74],
                    [1.12, -1.08, 0.06, -2.49],

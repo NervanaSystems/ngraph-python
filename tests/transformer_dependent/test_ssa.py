@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
+import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.testing import ExecutorFactory
+
+pytestmark = pytest.mark.transformer_dependent
 
 
 def test_read_state():
@@ -58,6 +60,7 @@ def test_use_state():
         assert np.allclose(x_np + x_np, xx_val)
 
 
+@pytest.config.flex_disabled
 def test_modify_state():
     with ExecutorFactory() as ex:
         N = ng.make_axis(3, name='N')
@@ -102,6 +105,7 @@ def test_concatenate():
         assert ng.testing.allclose(j_val, j_np)
 
 
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 def test_specific_slice_deriv():
     #
     with ExecutorFactory() as ex:
@@ -124,7 +128,9 @@ def test_specific_slice_deriv():
                 assert ng.testing.allclose(dslice_dx_val, dslice_dx_np)
 
 
-def test_slice_deriv(transformer_factory):
+@pytest.config.flex_disabled(reason="#1954, UnsliceOp multiple slicing not yet supported by flex")
+@pytest.config.flex_disabled
+def test_slice_deriv():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
 
