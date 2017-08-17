@@ -36,7 +36,7 @@ STARTUP_TIME = 3
 def prepare_environment(hetr_device, num_device):
     if hetr_device == 'gpu':
         os.environ["HETR_SERVER_GPU_NUM"] = str(num_device)
-        pytest.skip('gpu test is not supported now.')
+        # pytest.skip('gpu test is not supported now.')
 
 
 def test_singleton_device_id(hetr_device):
