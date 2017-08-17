@@ -57,7 +57,7 @@ def ngraph_to_tf_graph_def(graph):
                 key = key.replace("_ngraph_metadata_", "")
                 value_type = value.scalar.WhichOneof("value")
                 if value_type == "string_val":
-                    node_def.attr[key].s = str(value.scalar.string_val)
+                    node_def.attr[key].s = value.scalar.string_val.encode()
                 elif value_type == "bool_val":
                     node_def.attr[key].b = value.scalar.bool_val
                 elif value_type == "double_val":
