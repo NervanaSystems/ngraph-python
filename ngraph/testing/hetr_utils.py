@@ -23,7 +23,7 @@ def create_send_recv_graph():
     ax_b = ng.make_axis(length=15, name='B')
     axes = ng.make_axes([ax_a, ax_b])
 
-    with ng.metadata(parallel=ax_a, device=None, device_id=None,
+    with ng.metadata(device=None, device_id=None,
                      transformer=None, host_transformer=None):
         from_node = ng.placeholder(axes)
         to_node = ng.placeholder(axes)
