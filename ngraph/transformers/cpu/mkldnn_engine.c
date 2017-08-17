@@ -65,14 +65,17 @@ create_mkldnn_layout_descriptor(mkldnn_engine_t engine, int ndims,
   return md;
 }
 
-// Return flattened memory descriptor if flattening is feasible
-// else return NULL
-// Can only flatten contiguous axes
+/** Return flattened memory descriptor if flattening is feasible
+*   else return NULL
+*   Can only flatten contiguous axes
+*/
 mkldnn_memory_desc_t*
 mkldnn_flatten_axes(mkldnn_memory_desc_t* in_md, int* flatten_map) {
+  // Not done yet
   return NULL;
-  // Check if layout is blocked in any dimension.
-  // Cannot flatten blocked layouts currently
+  /** Check if layout is blocked in any dimension.
+  *   Cannot flatten blocked layouts currently
+  */   
   for (size_t i = 0; i < in_md->ndims; i++) {
     if ((in_md->layout_desc.blocking.block_dims[i] != 1)
         || (in_md->layout_desc.blocking.padding_dims[i] != in_md->dims[i])
@@ -91,7 +94,6 @@ mkldnn_flatten_axes(mkldnn_memory_desc_t* in_md, int* flatten_map) {
     md->layout_desc.blocking.strides[1][md->ndims] = 1;
     md->layout_desc.blocking.offset_padding_to_data[md->ndims] = 0;
     if (flatten_map[i] == 1) {
-        // Not done yet
         md->layout_desc.blocking.strides[0][md->ndims] = 1;
         md->layout_desc.blocking.padding_dims[md->ndims] = 1;
         md->dims[md->ndims] = 1;
