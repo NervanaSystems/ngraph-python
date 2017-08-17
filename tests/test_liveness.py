@@ -67,15 +67,16 @@ def test_liveness():
 
 
 def test_memory_manager_allocate():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
+    assert 0 == mm.allocate(0)
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
     assert 20 == mm.allocate(10)
 
 
 def test_memory_manager_free_first_allocated():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
@@ -90,7 +91,7 @@ def test_memory_manager_free_first_allocated():
 
 
 def test_memory_manager_free_middle_allocated():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
@@ -110,7 +111,7 @@ def test_memory_manager_free_middle_allocated():
 
 
 def test_memory_manager_free_last_allocated():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
@@ -130,7 +131,7 @@ def test_memory_manager_free_last_allocated():
 
 
 def test_memory_manager_free_first_free():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
@@ -150,7 +151,7 @@ def test_memory_manager_free_first_free():
 
 
 def test_memory_manager_free_middle_free():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
@@ -170,7 +171,7 @@ def test_memory_manager_free_middle_free():
 
 
 def test_memory_manager_max_allocated():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     assert 0 == mm.allocate(10)
     assert 10 == mm.allocate(10)
@@ -187,7 +188,7 @@ def test_memory_manager_max_allocated():
 
 
 def test_memory_manager_bad_free():
-    mm = MemoryManager()
+    mm = MemoryManager(1)
 
     with pytest.raises(RuntimeError):
         mm.free(10)
@@ -206,11 +207,11 @@ def test_memory_manager_align():
 
 
 def test_memory_manager_memory_align():
-    mm = MemoryManager(8)
+    mm = MemoryManager(64)
 
     assert 0 == mm.allocate(4)
-    assert 8 == mm.allocate(4)
-    assert 16 == mm.allocate(4)
+    assert 64 == mm.allocate(4)
+    assert 128 == mm.allocate(4)
 
 # import ptvsd
 # ptvsd.enable_attach(secret='nervana', address = ('0.0.0.0', 8080))

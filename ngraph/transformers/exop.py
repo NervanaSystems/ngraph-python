@@ -500,6 +500,9 @@ class ExOp(ExecutionGraphElt):
     def has_side_effects(self):
         return self.op.has_side_effects
 
+    def align(self, size, alignment):
+        return - (-size // alignment) * alignment
+
     def memory_usage(self):
         """
         Get the memory usage of this op which is the sum of the sizes of all
@@ -513,7 +516,7 @@ class ExOp(ExecutionGraphElt):
         """
         size = 0
         for node in self.liveness_live_list:
-            size += node.size
+            size += self.align(node.size)
         return size
 
     def memory_footprint(self):
@@ -530,7 +533,7 @@ class ExOp(ExecutionGraphElt):
         max_mem = 0
         for node in self.liveness_live_list:
             if node.buffer_pool_offset is not None:
-                offset = node.size + node.buffer_pool_offset
+                offset = self.align(node.size) + node.buffer_pool_offset
                 max_mem = max([offset, max_mem])
         return max_mem
 
@@ -1129,6 +1132,8 @@ class ComputationDecl(ExecutionGraphElt):
 
         self.returns = ExOp(computation_decl=self, op=ReturnOp())
         self.exop_block.add_exop(self.returns, None)
+        self.temporary_max_allocated = None
+        self.persistent_max_allocated = None
 
         # Get the exops we need values for, so that if they are computed at compile-time we still
         # have a view to their value.
