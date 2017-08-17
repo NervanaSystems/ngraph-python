@@ -754,7 +754,7 @@ class Op(ScopedNameableValue):
 
     def _xml_description(self):
         element = type(self).__name__
-        op_xml = ["<{} id={}".format(element, self.name)]
+        op_xml = ["<{} id={} name={}".format(element, self.name, self.unscoped_name)]
         if self.scope is not None:
             op_xml.append(" scope={}".format(self.scope.name))
         for attr, val in self.metadata.items():

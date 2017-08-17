@@ -9,7 +9,7 @@ import ngraph as ng
 pytestmark = pytest.mark.transformer_dependent
 
 
-def test_dimshuffle_op(transformer_factory):
+def test_dimshuffle_op():
     A = ng.make_axis().named('A')
     B = ng.make_axis().named('B')
     C = ng.make_axis().named('C')
