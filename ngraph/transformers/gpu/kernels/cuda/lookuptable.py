@@ -87,7 +87,7 @@ __global__ void lut_bprop(
     else:
         code = r"""
 %(common)s
-        
+
 __global__ void lut_bprop(
     %(in_dtype)s* inputs, int* index_buffer, %(type)s* dW, %(type)s* errors,
     const int nin, const int embedding_dim, const int vocab_size,
@@ -101,7 +101,8 @@ __global__ void lut_bprop(
     int word_id = inputs[index] %(scale_i_multiply)s;
     int intermediate_max = 0;
 
-    if((bid == 0 || word_id != (inputs[index_buffer[bid - 1]] %(scale_i_multiply)s)) && word_id != pad_idx)
+    if((bid == 0 || word_id != (inputs[index_buffer[bid - 1]] %(scale_i_multiply)s)) &&
+        word_id != pad_idx)
     {
         int output_row = word_id * embedding_dim;
 
@@ -305,11 +306,11 @@ def _configure_template_vals(template_vals, in_dtype, dtype):
         template_vals["compute_dW_code"] = r"""
                 float dW_flex = dW[output_row + i] * scaleO;
                 float error_flex = errors[error_row + i] * scaleE;
-                
+
                 dW_flex += error_flex;
-                
+
                 int dW_out = fp32_to_int16(dW_flex / scaleO);
                 intermediate_max = max_abs(intermediate_max, dW_out);
-                
+
                 dW[output_row + i] = dW_out;
                 """

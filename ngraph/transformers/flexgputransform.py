@@ -260,7 +260,6 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def add_kernel(self, op):
         self.kernels.append(FlexLUTBpropKernel(self.transformer, op))
 
-
     def compile_all(self):
         """
         subclass deals with ElementWiseKernel flex interface here in order to
