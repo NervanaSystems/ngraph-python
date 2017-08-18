@@ -16,7 +16,7 @@
 from ngraph.transformers.gpu.gpulayout import DimshuffleOp
 from ngraph.transformers.passes.passes import GraphPass, PeepholeGraphPass
 from ngraph.util.generics import generic_method
-from ngraph.op_graph.op_graph import Op, tdcache
+from ngraph.op_graph.op_graph import Op, tdcache, StackOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.flex import gpuflex16
 
@@ -45,6 +45,27 @@ class FlexPropagateEntryPass(PeepholeGraphPass):
         if op.is_tensor_op:
             self.propagate_flex_entry = True
             self.flex_entry = self.transformer.get_op_tensor(op).flex_entry
+
+
+class FlexStackOpPass(PeepholeGraphPass):
+    def __init__(self, transformer, **kwargs):
+        super(FlexStackOpPass, self).__init__(**kwargs)
+        self.transformer = transformer
+
+    @generic_method(dispatch_base_type=Op)
+    def visit(self, op, *args):
+        pass
+
+    @visit.on_type(StackOp)
+    def visit(self, op, *args):
+        stack_tensor_entry = self.transformer.get_op_tensor(op.storage).flex_entry
+        stack_tensor_entry.stack_deps = []
+        for x in op.x_list:
+            for o in op.ops[0].all_deps:    # All AssignOp-s should wait for StackOp x_list Ops
+                o.add_control_dep(x)
+
+            slice_tensor_entry = self.transformer.get_op_tensor(x.forwarded).flex_entry
+            stack_tensor_entry.stack_deps.append(slice_tensor_entry)
 
 
 class ClearTensorDescriptions(GraphPass):
