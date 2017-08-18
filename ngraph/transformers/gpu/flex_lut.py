@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 
 from ngraph.transformers.gpu.float_ew2 import TensorDescriptionWrapper, FlexPtrDescription
+from ngraph.transformers.gpu.kernels.cuda.lookuptable import lut_bprop_kernel_name, \
+    lut_sort_kernel_name
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 
 
@@ -33,25 +35,20 @@ class FlexLUTBpropKernel(LUTBpropKernel):
 
     def bind_buffers(self):
         super(FlexLUTBpropKernel, self).bind_buffers()
-
-        kernel, params = self.kernels[-1]
-        maxabs_ptr = FlexPtrDescription(self.flex_entry_O)
-        params.extend([maxabs_ptr])
-
         self.flex_entry_O.allocate()
         self.flex_entry_I.allocate()
         self.flex_entry_E.allocate()
 
-        scale_o = self.flex_entry_O.scale
-        scale_i = self.flex_entry_I.scale
-        scale_e = self.flex_entry_E.scale
-
-        kernel, params = self.kernels[-1]
-        params.extend([scale_o, scale_i, scale_e])
-
-        for k in self.kernels[:-1]:
+        for k in self.kernels:
             kernel, params = k
-            params.extend([scale_i])
+            if kernel.name == lut_bprop_kernel_name:
+                maxabs_ptr = FlexPtrDescription(self.flex_entry_O)
+                params.extend([maxabs_ptr,
+                               self.flex_entry_O.scale,
+                               self.flex_entry_I.scale,
+                               self.flex_entry_E.scale])
+            elif kernel.name == lut_sort_kernel_name:
+                params.extend([self.flex_entry_I.scale])
 
         self.tensor_view_from_td(self.O.td)[:] = 0
 
