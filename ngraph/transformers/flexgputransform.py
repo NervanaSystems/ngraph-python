@@ -36,7 +36,7 @@ from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBprop
 from ngraph.transformers.gpu.flex_pool import FlexPoolFpropKernel, FlexPoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel, FlexAssignKernel
 from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexPropagateEntryPass, \
-    ClearTensorDescriptions
+    ClearTensorDescriptions, FlexStackOpPass
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
@@ -114,6 +114,7 @@ class FlexGPUTransformer(GPUTransformer):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
         FlexPropagateEntryPass(transformer=self).do_pass(ops=self.ops)
+        FlexStackOpPass(transformer=self).do_pass(ops=self.ops)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
