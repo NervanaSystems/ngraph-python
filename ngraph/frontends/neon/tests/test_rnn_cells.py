@@ -112,13 +112,12 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [pytest.config.flex_disabled(True), False])
+@pytest.mark.parametrize("return_sequence", [True, False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("extra_axes", [0, 2])
 @pytest.mark.parametrize("backward", [True, False])
