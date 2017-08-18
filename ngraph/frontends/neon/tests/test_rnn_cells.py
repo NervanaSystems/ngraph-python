@@ -112,13 +112,12 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [pytest.config.flex_disabled(True), False])
+@pytest.mark.parametrize("return_sequence", [True, False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("extra_axes", [0, 2])
 @pytest.mark.parametrize("backward", [True, False])
@@ -126,6 +125,12 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size, return_
                    weight_initializer, bias_initializer, init_state, extra_axes, backward):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
+
+    if (backward, extra_axes, init_state, return_sequence) == (True, 0, True, True) \
+            or (backward, extra_axes, init_state, return_sequence) == (True, 2, True, True) \
+            or (backward, extra_axes, init_state, return_sequence) == (False, 0, True, True) \
+            or (backward, extra_axes, init_state, return_sequence) == (False, 2, True, True):
+        pytest.config.flex_skip_now("Results mismatch by 3%")
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size,
