@@ -62,16 +62,17 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_se
     workdir is the path for tab separated files
     datadir is the path for the images
     """
-    if(dataset=="cifar10"):
+    if(dataset == "cifar10"):
         train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
-    elif(dataset=="i1k"):
-        train_manifest,valid_manifest=work_dir+"train-index-tabbed.csv",work_dir+"val-index-tabbed.csv"
+    elif(dataset == "i1k"):
+        train_manifest = work_dir + "train-index-tabbed.csv",
+        valid_manifest = work_dir + "val-index-tabbed.csv"
     else:
         print("Choose dataset cifar10 or i1k")
         exit()
 
-    def common_config(manifest_file, batch_size,dataset=dataset):
-        if(dataset=="cifar10"):
+    def common_config(manifest_file, batch_size, dataset=dataset):
+        if(dataset == "cifar10"):
             cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
             image_config = {"type": "image",
@@ -79,8 +80,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_se
                             "width": 32}
             label_config = {"type": "label",
                             "binary": False}
-            augmentation = {"type": "image",                       
-                            "padding":4,
+            augmentation = {"type": "image",
+                            "padding": 4,
                             "flip_enable": True}
 
             return {'manifest_filename': manifest_file,
@@ -90,18 +91,18 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_se
                     'cache_directory': cache_root,
                     'etl': [image_config, label_config],
                     'augmentation': [augmentation]}
-        elif(dataset=="i1k"):
-            cache_root=get_data_cache_or_nothing("i1k-cache/")
+        elif(dataset == "i1k"):
+            cache_root = get_data_cache_or_nothing("i1k-cache/")
 
-            image_config ={"type": "image",
+            image_config = {"type": "image",
                             "height": 299,
                             "width": 299}
 
-            label_config={"type": "label",
-                          "binary": False}
+            label_config = {"type": "label",
+                            "binary": False}
 
-            augmentation = {"type": "image",                       
-                            "padding":4,
+            augmentation = {"type": "image",
+                            "padding": 4,
                             "flip_enable": True}
 
             return {'manifest_filename': manifest_file,
@@ -119,7 +120,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_se
     train_config = common_config(train_manifest, batch_size)
     train_config['iteration_mode'] = "COUNT"
     train_config['iteration_mode_count'] = train_iterations
-    train_config['shuffle_manifest'] = False 
+    train_config['shuffle_manifest'] = False
     train_config['shuffle_enable'] = False
     train_config['random_seed'] = random_seed
 
