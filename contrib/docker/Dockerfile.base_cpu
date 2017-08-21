@@ -24,7 +24,7 @@ RUN wget -q https://www.open-mpi.org/software/ompi/v1.10/downloads/openmpi-1.10.
     cd openmpi-1.10.3 && \
     ./configure --prefix=/usr/local/mpi && \
     make -j all && \
-    sudo make install && cd .. && \
+    make install && cd .. && \
     rm -rf openmpi-1.10.3 openmpi-1.10.3.tar.gz
 
 # Add Open MPI to path
