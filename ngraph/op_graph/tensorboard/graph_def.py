@@ -53,7 +53,7 @@ def ngraph_to_tf_graph_def(graph):
                 dim.name = str(axis.name)
                 dim.size = int(axis.length)
         hetr_meta_key = ['host_transformer', 'transformer']
-        hetr_metadata = {}
+        hetr_metadata = {k: '' for k in hetr_meta_key}
         for key, value in op.attrs.items():
             if key.startswith("_ngraph_metadata_"):
                 key = key.replace("_ngraph_metadata_", "")
@@ -72,7 +72,7 @@ def ngraph_to_tf_graph_def(graph):
                 if key in hetr_meta_key:
                     hetr_metadata[key] = value.scalar.string_val
 
-        if hetr_metadata:
+        if hetr_metadata['host_transformer'] is not '' and hetr_metadata['transformer'] is not '':
             node_def.device = ('/host:{}/transformer:{}'.format(
                 hetr_metadata['host_transformer'],
                 hetr_metadata['transformer'])).encode()

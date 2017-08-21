@@ -20,10 +20,28 @@ import logging
 import six
 
 from ngraph.transformers.passes.passes import GraphPass
+from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
 
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.serde import serde as ser
 from ngraph.op_graph.serde import ops_pb2 as ops_pb
+
+
+class TensorBoardPass(GraphPass):
+    """
+    A pass that saves graph for TensorBoard graph dispaly
+
+    Arguments:
+        logdir: directory to save the log
+    """
+    def __init__(self, logdir):
+        super(TensorBoardPass, self).__init__()
+        self.logdir = logdir
+
+    def do_pass(self, ops):
+        tb = TensorBoard(self.logdir)
+        tb.add_graph(ops)
+        return ops
 
 
 class JSONPass(GraphPass):
