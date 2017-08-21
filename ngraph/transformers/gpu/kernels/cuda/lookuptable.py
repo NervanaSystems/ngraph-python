@@ -117,8 +117,7 @@ __global__ void lut_bprop(
     %(atomic_max)s
 }
 """
-        template_vals = _configure_template_vals_bprop(in_dtype, dtype)
-        code = code % template_vals
+        code %= _configure_template_vals_bprop(in_dtype, dtype)
 
         module = SourceModule(code, options=["--use_fast_math"])
         kernel = module.get_function("lut_bprop")
@@ -256,8 +255,7 @@ __global__ void sort_inputs4(
     }
 }
 """
-    template_vals = _configure_template_vals_sort(block_size, kernel_id, in_dtype)
-    code = code % template_vals
+    code %= _configure_template_vals_sort(block_size, kernel_id, in_dtype)
     module = SourceModule(code, options=["--use_fast_math"])
 
     function_name = "sort_inputs" + native_str(kernel_id)
@@ -269,13 +267,17 @@ __global__ void sort_inputs4(
 
 
 def _configure_template_vals_bprop(in_dtype, dtype):
-    template_vals = dict()
-    template_vals["in_dtype"] = _get_register_type(in_dtype, memory=True)
-    template_vals["type"] = _get_register_type(dtype, memory=True)
-    template_vals["compute_dW_code"] = r"""dW[output_row + i] += errors[error_row + i];"""
+    template_vals = {
+        "in_dtype": _get_register_type(in_dtype, memory=True),
+        "type": _get_register_type(dtype, memory=True),
+        "compute_dW_code": r"""dW[output_row + i] += errors[error_row + i];""",
 
-    for key in ("stats_args", "atomic_max", "compute_input", "common"):
-        template_vals[key] = ""
+        "stats_args": "",
+        "atomic_max": "",
+        "compute_input": "",
+        "common": "",
+    }
+
     if isinstance(dtype, Flex):
         template_vals["stats_args"] = ", int* maxabs, float scaleO, float scaleI, float scaleE"
         template_vals["atomic_max"] = r"""atomicMax(maxabs, intermediate_max);"""
@@ -300,11 +302,11 @@ def _configure_template_vals_sort(block_size, kernel_id, in_dtype):
     template_vals = {
         "threads": block_size,
         "store_blocksum": (1 if kernel_id == 1 else 0),
-        "in_dtype": _get_register_type(in_dtype, memory=True)
-    }
+        "in_dtype": _get_register_type(in_dtype, memory=True),
 
-    for key in ("stats_args", "compute_input"):
-        template_vals[key] = ""
+        "stats_args": "",
+        "compute_input": "",
+    }
 
     if isinstance(in_dtype, Flex):
         template_vals["stats_args"] = ", float scaleI"
