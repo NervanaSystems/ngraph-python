@@ -107,6 +107,21 @@ class FlexGPUTransformer(GPUTransformer):
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
 
+    def add_flex_id_to_ops(self):
+        for op in self.ops:
+            if op.is_tensor_op:
+                base = op.forwarded.tensor_description().base
+                tensor = self.op_tensors.get(base, None)
+                if hasattr(tensor, 'flex_entry'):
+                    op.metadata['flex_id'] = tensor.flex_entry.flex_id
+                    base.op.metadata['flex_id'] = tensor.flex_entry.flex_id
+
+    def start_transform_allocate(self):
+        super(FlexGPUTransformer, self).start_transform_allocate()
+        self.add_flex_id_to_ops()
+
+        # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
+
     def gpu_kernel_group(self, name):
         return FlexGPUKernelGroup(self, name)
 
