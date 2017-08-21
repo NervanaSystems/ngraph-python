@@ -23,6 +23,7 @@ decorator==4.0.11
 pynvrtc==7.5
 # Python 2 and 3 compatible monotonic clock for tracing
 monotonic==1.3
+pillow==4.2.0
 
 # notebooks
 jupyter==1.0.0

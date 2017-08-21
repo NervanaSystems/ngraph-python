@@ -121,10 +121,10 @@ test_input_types_cases = (
 
 
 @pytest.mark.parametrize("operation, operands, test_name", test_data_single_operand, ids=id_func)
-def test_single_operand(transformer_factory, operation, operands, test_name):
+def test_single_operand(operation, operands, test_name):
     template_one_placeholder(operands, operation)
 
 
 @pytest.mark.parametrize("operation, operands, test_name", test_input_types_cases, ids=id_func)
-def test_input_types(transformer_factory, operation, operands, test_name):
+def test_input_types(operation, operands, test_name):
     template_one_placeholder(operands, operation)
