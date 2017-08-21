@@ -26,7 +26,7 @@ from __future__ import print_function
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
-import ngraph.transformers.passes.nviz
+from ngraph.op_graph.tensorboard.tensorboardpass import TensorBoardPass
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -48,7 +48,7 @@ with ng.metadata(device_id=('0', '1'), parallel=N):
 with closing(ngt.make_transformer_factory('hetr')()) as hetr:
     # Visualize the graph
     if args.visualize:
-        hetr.register_graph_pass(ngraph.transformers.passes.nviz.TensorBoardPass('/tmp/hetr_tb'))
+        hetr.register_graph_pass(TensorBoardPass('/tmp/hetr_tb'))
 
     # Define a computation
     computation = hetr.computation(dot, x, w)
