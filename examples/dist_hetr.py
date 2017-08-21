@@ -12,6 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+To visualize HeTr computational graph with Tensorboard
+
+1. apply the following diff to hetrtransform.py:
+diff --git a/ngraph/transformers/hetrtransform.py b/ngraph/transformers/hetrtransform.py
+--- a/ngraph/transformers/hetrtransform.py
++++ b/ngraph/transformers/hetrtransform.py
+@@ -230,6 +230,9 @@ class HetrComputation(Computation):
+         for graph_pass in self.transformer.graph_passes:
+             pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
+             graph_pass.do_pass(ops=pass_ops)
++        from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
++        tb = TensorBoard("/tmp/hetr_tb")
++        tb.add_graph(pass_ops)
+
+2. run `tensorboard --logdir /tmp/hetr_tb/ --port 6006`
+
+use ssh port forwarding to run on remote server
+https://stackoverflow.com/questions/37987839/how-can-i-run-tensorboard-on-a-remote-server
+"""
 from __future__ import print_function
 from contextlib import closing
 import ngraph as ng
