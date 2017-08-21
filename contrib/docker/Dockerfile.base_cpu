@@ -35,5 +35,7 @@ ENV MPI_ROOT="/usr/local/mpi"
 # build ngraph requirements
 ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
+ADD multinode_requirements.txt /tmp/multinode_requirements.txt
+RUN pip install -r /tmp/multinode_requirements.txt
 
 WORKDIR /root/ngraph-test
