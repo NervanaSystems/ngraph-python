@@ -34,6 +34,7 @@ def pytest_xdist_node_collection_finished(node, ids):
 
 
 def pytest_generate_tests(metafunc):
+    # define hetr_device parametrization and enable passing from command line
     if 'hetr_device' in metafunc.fixturenames:
         metafunc.parametrize("hetr_device",
                              metafunc.config.getoption('hetr_device'))
