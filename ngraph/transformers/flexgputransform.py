@@ -18,6 +18,7 @@ from __future__ import division
 import numpy as np
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
 from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
@@ -41,6 +42,7 @@ from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescripti
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
+from ngraph.op_graph.lookuptable import update_lut
 
 
 # kernels that do not require flex integration
@@ -269,6 +271,10 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def add_kernel(self, op):
         self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
                                            op.reduction_axes.size))
+
+    @add_kernel.on_type(update_lut)
+    def add_kernel(self, op):
+        self.kernels.append(FlexLUTBpropKernel(self.transformer, op))
 
     def compile_all(self):
         """
