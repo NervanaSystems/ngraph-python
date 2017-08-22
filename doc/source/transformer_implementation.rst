@@ -30,6 +30,8 @@ Computation Creation
 
 To create a computation, a user calls the transformer's ``computation`` method. This is a relatively lightweight operation that creates a new ``Computation`` object and stores it in the set of all computations. The ``Computation`` constructor updates the transformer's set of results and builds a set of all ops that are dependencies of the results by traversing the graph backwards from the result nodes. Computations can only be created through a transformer before the transformer has been initialized. This is partially because the transformer in its current state modifies the graph through passes and tensor description initialization, but this will likely change in the future.
 
+.. _transformer-initialization:
+
 Transformer Initialization
 ==========================
 
@@ -77,10 +79,13 @@ The ``@visit.on_type(Add)`` line indicates that this method will be called when 
 
 Passes present a major opportunity for performance optimization that we plan to exploit in the future. This will likely include device specific fusion of operations that will allow generation of kernels to execute multiple ops at once and buffer sharing that will allow non-overlapping operations to share device memory. These passes would improve execution time and memory usage respectively. We currently have machinery for doing fusion and buffer sharing in ngraph.analysis, but it is not working in the pre-release and has been disabled until we can refactor it to utilize passses.
 
+.. Note: the section below is outdated.
+.. Op.initializers was removed in https://github.com/NervanaSystems/ngraph/commit/f3a964b33e0ff4f5ae6cd806edbd54766b2c55c6
+
 Intialization Computation
 -------------------------
 
-A special initialization computation is created in ``Transformer._transform_computations`` which is responsible for executing any initializers attached to graph ops. Initializers are discovered and enumerated in ``Transformer.ordered_initializers`` by tranversing the graph and checking for the ``Op.initializers`` member. This set of initializers is used to construct the initialization computation
+A special initialization computation is created in ``Transformer._transform_computations`` which is responsible for executing any initializers attached to graph ops. Initializers are discovered and enumerated in ``Transformer.ordered_initializers`` by traversing the graph and checking for the ``Op.initializers`` member. This set of initializers is used to construct the initialization computation
 
 .. code-block:: python
 
@@ -95,6 +100,9 @@ A special initialization computation is created in ``Transformer._transform_comp
         self.init_computation = self.computation(init_op, name="init")
 
 This computation is then transformed in the same manner as other computations and run later in ``Transformer.initialize``.
+
+.. Note: the section below is outdated.
+.. Transformer.initialize_tensor_descriptions removed in https://github.com/NervanaSystems/ngraph/commit/a6d4153f00c5bfb9f50c9834b8819b8805f487e0
 
 Tensor Description Initialization
 ---------------------------------
