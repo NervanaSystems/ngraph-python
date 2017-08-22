@@ -163,7 +163,7 @@ test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_cpu: export PYTHONHASHSEED=0
 test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
-	py.test -m "not hetr_only and not flex_only" --boxed \
+	py.test -m "not hetr_only and not flex_only and not hetr_gpu_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_cpu_$(PY).xml

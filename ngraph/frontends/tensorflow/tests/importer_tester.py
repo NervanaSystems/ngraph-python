@@ -24,7 +24,6 @@ from ngraph.frontends.tensorflow.tf_importer.importer import TFImporter
 from ngraph.testing.execution import ExecutorFactory
 
 
-@pytest.mark.usefixtures("transformer_factory")
 class ImporterTester(object):
     """
     Tester class for py.test

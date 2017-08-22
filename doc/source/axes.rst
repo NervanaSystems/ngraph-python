@@ -19,9 +19,9 @@ Axes
 Introduction
 ------------
 
-An ``Axis`` labels a dimension of a tensor. The op-graph uses
-the identity of ``Axis`` objects to pair and specify dimensions in
-symbolic expressions. This system has several advantages over
+An ``Axis`` (``ngraph.op_graph.axes.Axis``) labels a dimension of a tensor.
+The op-graph uses the identity of ``Axis`` objects to pair and specify
+dimensions in symbolic expressions. This system has several advantages over
 using the length and position of the axis as in other frameworks:
 
 1. **Convenience.** The dimensions of tensors, which may be nested
@@ -69,8 +69,8 @@ We can also delay the specification of the axis length.
 
   ::
 
-    H = ng.make_axis(length=3, name='height')
-    W = ng.make_axis(length=4, name='width')
+    H = ng.make_axis(name='height')
+    W = ng.make_axis(name='width')
     image = ng.placeholder([H, W])
     H.length = 3
     W.length = 4
@@ -120,67 +120,10 @@ Properties
       x = ng.constant(np.ones((2, 2)), [H, H])  # throws exception
       x = ng.constant(np.ones((2, 2)), [H, W])  # good
 
-3. Axes have context
-
-  A set of standard neon axes are defined for neon frontends.
-
-  - Axes roles
-
-  ::
-
-    ar = Namespace()
-    ar.Height = ng.make_axis_role()
-    ar.Width = ng.make_axis_role()
-    ar.Depth = ng.make_axis_role()
-    ar.Channel = ng.make_axis_role()
-    ar.Channelout = ng.make_axis_role()
-    ar.Time = ng.make_axis_role()
-
-  - Image / feature map
-
-  ::
-
-    ax = Namespace()
-    ax.N = ng.make_axis(name='N', docstring="minibatch size")
-    ax.C = ng.make_axis(roles=[ar.Channel], docstring="number of input feature maps")
-    ax.D = ng.make_axis(roles=[ar.Depth], docstring="input image depth")
-    ax.H = ng.make_axis(roles=[ar.Height], docstring="input image height")
-    ax.W = ng.make_axis(roles=[ar.Width], docstring="input image width")
-
-  - Filter (convolution kernel)
-
-  ::
-
-    ax.R = ng.make_axis(roles=[ar.Height], docstring="filter height")
-    ax.S = ng.make_axis(roles=[ar.Width], docstring="filter width")
-    ax.T = ng.make_axis(roles=[ar.Depth], docstring="filter depth")
-    ax.J = ng.make_axis(roles=[ar.Channel], docstring="filter channel size (for crossmap pooling)")
-    ax.K = ng.make_axis(roles=[ar.Channelout], docstring="number of output feature maps")
-
-  - Output
-
-  ::
-
-    ax.M = ng.make_axis(roles=[ar.Depth], docstring="output image depth")
-    ax.P = ng.make_axis(roles=[ar.Height], docstring="output image height")
-    ax.Q = ng.make_axis(roles=[ar.Width], docstring="output image width")
-
-  - Recurrent
-
-  ::
-
-    ax.REC = ng.make_axis(name='R', roles=[ar.Time], docstring="recurrent axis")
-
-  - Target
-
-  ::
-
-    ax.Y = ng.make_axis(docstring="target")
-
 
 Axes Operations
 ---------------
-``Axes`` has ``list`` and ``set`` behaviors at the same time. ``Axes`` are
+``Axes`` (``ngraph.op_graph.axes.Axes``) has ``list`` and ``set`` behaviors at the same time. ``Axes`` are
 internally stored and can be used as ``list``, while we also have use cases of
 ``Axes`` as ``set``. Here's a list of supported operations by ``Axes`` and their
 expected behavors.
@@ -218,7 +161,7 @@ Elementwise Binary Ops
   Axis order is determined by the following rules:
   1. If the set of axes for both operands match exactly, but the order is different, use the order of the left operand.
   2. If one operand's axes are a superset of the other's, use that operand's axis order
-  3. Otherwise order is determined by concatenating the left operand's axes with the axes from the right operand which are not present in the left operand (left_axes + (right_axes - left_axes)).
+  3. Otherwise order is determined by concatenating the left operand's axes with the axes from the right operand which are not present in the left operand (left_axes + (right_axes - left_axes)). ::
 
   (H, W, N) + (N, H) -> (H, W, N)
   (H, W) + (N, H, W) -> (N, H, W)
@@ -297,13 +240,15 @@ Axes Reduction
 
 Examples: ::
 
-    from ngraph.frontends.neon.axis import ax
-    x = ng.placeholder([ax.C, ax.H, ax.W])
-    ng.sum(x, reduction_axes=[])            -> [ax.C, ax.H, ax.W]
-    ng.sum(x, reduction_axes=[ax.C])        -> [ax.H, ax.W]
-    ng.sum(x, reduction_axes=[ax.C, ax.W])  -> [ax.H]
-    ng.sum(x, reduction_axes=[ax.W, ax.C])  -> [ax.H]
-    ng.sum(x, reduction_axes=x.axes)        -> []
+    ax_C = ng.make_axis(name="C", docstring="number of input feature maps")
+    ax_H = ng.make_axis(name="H", docstring="input image height")
+    ax_W = ng.make_axis(name="W", docstring="input image width")
+    x = ng.placeholder([ax_C, ax_H, ax_W])
+    ng.sum(x, reduction_axes=[])            #-> [C, H, W]
+    ng.sum(x, reduction_axes=[ax_C])        #-> [H, W]
+    ng.sum(x, reduction_axes=[ax_C, ax_W])  #-> [H]
+    ng.sum(x, reduction_axes=[ax_W, ax_C])  #-> [H]
+    ng.sum(x, reduction_axes=x.axes)        #-> []
 
 
 Axes Casting
@@ -331,10 +276,9 @@ Axes Broadcasting
 Use ``ng.broadcast`` to broadcast to new axes. The new axes must be a superset
 of the original axes. The order of the new axes can be arbitrary. Examples: ::
 
-    from ngraph.frontends.neon.axis import ax
-    x = ng.placeholder([ax.C, ax.H])
-    ng.broadcast(x, [ax.C, ax.H, ax.W])  -> [ax.C, ax.H, ax.W]
-    ng.broadcast(x, [ax.W, ax.H, ax.C])  -> [ax.W, ax.H, ax.C]
+    x = ng.placeholder([ax_C, ax_H])
+    ng.broadcast(x, [ax_C, ax_H, ax_W])  #-> [C, H, W]
+    ng.broadcast(x, [ax_W, ax_H, ax_C])  #-> [W, H, C]
 
 
 .. Axes reordering

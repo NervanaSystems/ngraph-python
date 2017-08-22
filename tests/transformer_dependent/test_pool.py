@@ -178,7 +178,7 @@ n2_c1_hw4_2x2_str2_avg = dict(
                          ids=['n4_c1_hw4_2x2_max',
                               'n2_c1_hw5_3x3_str2_max',
                               'n2_c1_hw4_2x2_str2_avg'])
-def test_gen_reference(transformer_factory, pool_args):
+def test_gen_reference(pool_args):
 
     pf = PoolParams(**pool_args['settings'])
 
