@@ -18,8 +18,8 @@ import pytest
 
 import ngraph as ng
 from ngraph.op_graph.pooling import BpropPoolOp
-from ngraph.testing import executor, is_flex_factory
-from ngraph.frontends.neon.layer import output_dim
+from ngraph.testing import executor
+from ngraph.frontends.common.utils import conv_output_dim
 
 
 class PoolParams(object):
@@ -28,10 +28,10 @@ class PoolParams(object):
                  str_c=1, str_d=1, str_h=1, str_w=1,
                  op='max'):
 
-        K = output_dim(C, J, pad_c, str_c)
-        M = output_dim(D, T, pad_d, str_d)
-        P = output_dim(H, R, pad_h, str_h)
-        Q = output_dim(W, S, pad_w, str_w)
+        K = conv_output_dim(C, J, pad_c, str_c)
+        M = conv_output_dim(D, T, pad_d, str_d)
+        P = conv_output_dim(H, R, pad_h, str_h)
+        Q = conv_output_dim(W, S, pad_w, str_w)
 
         self.dimO = (K, M, P, Q, N)
         self.dimI = (C, D, H, W, N)
@@ -169,19 +169,16 @@ n2_c1_hw4_2x2_str2_avg = dict(
 
 
 @pytest.mark.transformer_dependent
-@pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("pool_args",
-                         [n4_c1_hw4_2x2_max,
+                         [pytest.config.flex_disabled(n4_c1_hw4_2x2_max,
+                                                      reason='#1823 flex pool fail when stride=1'),
                           n2_c1_hw5_3x3_str2_max,
-                          n2_c1_hw4_2x2_str2_avg],
+                          pytest.config.argon_disabled(n2_c1_hw4_2x2_str2_avg,
+                                                       reason='TODO Triage')],
                          ids=['n4_c1_hw4_2x2_max',
                               'n2_c1_hw5_3x3_str2_max',
                               'n2_c1_hw4_2x2_str2_avg'])
-def test_gen_reference(transformer_factory, pool_args):
-    # X-FAIL for flex_disabled known issue
-    if pool_args == n4_c1_hw4_2x2_max:
-        if is_flex_factory(transformer_factory):
-            pytest.xfail('GitHub issue #1823, flex pooling does not work well when stride = 1')
+def test_gen_reference(pool_args):
 
     pf = PoolParams(**pool_args['settings'])
 

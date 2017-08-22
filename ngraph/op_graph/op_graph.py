@@ -29,7 +29,7 @@ from future.utils import with_metaclass
 from ngraph.op_graph.axes import TensorDescription, \
     make_axis, make_axes, Axes, FlattenedAxis, slice_axis, default_dtype, \
     default_int_dtype, AxesMap, UnmatchedAxesError
-from ngraph.util.names import NameableValue
+from ngraph.util.names import ScopedNameableValue
 from ngraph.util.threadstate import get_thread_state
 from orderedset import OrderedSet
 from cached_property import cached_property
@@ -140,7 +140,7 @@ class DebugInfo(object):
             filename=self.filename, lineno=self.lineno)
 
 
-class Op(NameableValue):
+class Op(ScopedNameableValue):
     """
     Any operation that can be in an AST.
 
@@ -341,8 +341,6 @@ class Op(NameableValue):
 
         self.style = {}
         self._forward = None
-
-        self.scope = None
 
     def copy_with_new_args(self, args):
         """
@@ -754,6 +752,20 @@ class Op(NameableValue):
         """
         return False
 
+    def _xml_description(self):
+        element = type(self).__name__
+        op_xml = ["<{} id={} name={}".format(element, self.name, self.unscoped_name)]
+        if self.scope is not None:
+            op_xml.append(" scope={}".format(self.scope.name))
+        for attr, val in self.metadata.items():
+            if attr == "label":
+                attr = "class"
+            op_xml.append(" {}={}".format(str(attr), str(val)))
+
+        op_xml.append("></{}>".format(element))
+
+        return "".join(op_xml)
+
 
 class MutateInsteadOfCopyWithNewArgsMixin(object):
     """
@@ -761,6 +773,7 @@ class MutateInsteadOfCopyWithNewArgsMixin(object):
     The information available at this point is not sufficient to create them (issue #1410).
 
     """
+
     def __init__(self, **kwargs):
         super(MutateInsteadOfCopyWithNewArgsMixin, self).__init__(**kwargs)
 
@@ -826,7 +839,7 @@ class AssignOp(Op):
         # TODO: requires explicit broadcast in future
         if len(val.axes - tensor.axes) > 0:
             raise ValueError(
-                "tensor(LHS) has axes %s, val(RHS) has axes %s,"
+                "tensor(LHS) has axes %s. val(RHS) has axes %s. "
                 "val's axes should be subset of tensor's axes" %
                 (val.axes, tensor.axes))
         val = broadcast(val, tensor.axes)
@@ -900,6 +913,7 @@ class ControlBlockOp(Op):
     """
     An Op that affects execution sequencing.
     """
+
     def __init__(self, **kwargs):
         super(ControlBlockOp, self).__init__(**kwargs)
 
@@ -921,6 +935,7 @@ class ParallelOp(ControlBlockOp):
         all: Ops to be computed.
         **kwargs: Args for related classes.
     """
+
     def __init__(self, all, **kwargs):
         super(ParallelOp, self).__init__(**kwargs)
         for op in all:
@@ -953,6 +968,7 @@ class ComputationOp(ParallelOp):
         returns: Ops returned.
         parameters: Parameter ops.
     """
+
     def __init__(self, returns, *args, **kwargs):
         if isinstance(returns, collections.Container):
             all = type(returns)(as_op(ret) for ret in returns)
@@ -1050,6 +1066,9 @@ class Fill(Op):
     def has_side_effects(self):
         return True
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.scalar)
+
 
 def fill(x, scalar):
     return Fill(x, scalar)
@@ -1131,7 +1150,6 @@ class TensorOp(Op):
                 deriv_handler = o.deriv_handler
 
                 # find hetr distribution metadata, pass other data if exists
-                # todo add reduce func metadata key when fixed #1436
                 hetr_meta_key = ['device', 'device_id', 'parallel']
                 hetr_metadata = {k: o.metadata[k] for k in hetr_meta_key
                                  if o.metadata.get(k) is not None}
@@ -1272,20 +1290,17 @@ class TensorOp(Op):
         Returns:
           TensorDescription for this op.
         """
-        if "layout" in self.metadata:
-            return TensorDescription(self.axes,
-                                     op=self,
-                                     layout=self.metadata["layout"],
-                                     dtype=self.dtype,
-                                     is_persistent=self.is_persistent,
-                                     is_input=self.is_input,
-                                     is_placeholder=self.is_placeholder)
-        else:
-            return TensorDescription(self.axes, dtype=self.dtype, name=self.name,
-                                     op=self,
-                                     is_persistent=self.is_persistent,
-                                     is_input=self.is_input,
-                                     is_placeholder=self.is_placeholder)
+
+        _layout = self.metadata.get("layout", None)
+
+        return TensorDescription(self.axes,
+                                 op=self,
+                                 layout=_layout,
+                                 dtype=self.dtype,
+                                 name=self.safe_name,
+                                 is_persistent=self.is_persistent,
+                                 is_input=self.is_input,
+                                 is_placeholder=self.is_placeholder)
 
     @property
     def axes(self):
@@ -1375,6 +1390,7 @@ class ValueOp(TensorOp, ControlBlockOp):
     Arguments:
         tensor: The tensor supplying the value for this op.
     """
+
     def __init__(self, tensor=None, **kwargs):
         super(ValueOp, self).__init__(args=(), is_value_op=True, **kwargs)
         self._tensor = tensor
@@ -1490,6 +1506,7 @@ class SequentialOp(ValueOp):
     Attributes:
         ops: The list of ops to be computed. The last op is the returned value.
     """
+
     def __init__(self, ops=None, **kwargs):
         super(SequentialOp, self).__init__(**kwargs)
         self.value_tensor = None
@@ -1580,6 +1597,7 @@ class TensorValueOp(ValueOp):
     Arguments:
         tensor: The tensor being wrapped.
     """
+
     def __init__(self, tensor, **kwargs):
         super(TensorValueOp, self).__init__(tensor=tensor, **kwargs)
         for key in ['device', 'device_id', 'parallel']:
@@ -1603,6 +1621,7 @@ class PatternLabelOp(TensorOp):
     label to its matching op. By default, constraint_fn is always true.
 
     """
+
     def __init__(self, label, constraint_fn=(lambda op: True), axes=None, **kwargs):
         if axes is None:
             axes = {}
@@ -1619,6 +1638,7 @@ class PatternSkipOp(TensorOp):
     optional ops. By default, is_optional_op_fn is false.
 
     """
+
     def __init__(self, arg, is_optional_op_fn=(lambda op: False), **kwargs):
         super(PatternSkipOp, self).__init__(axes={}, args=(arg,), **kwargs)
         self.is_optional_op_fn = is_optional_op_fn
@@ -1634,6 +1654,7 @@ class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
     Returns:
         A view of the tensor.
     """
+
     def __init__(self, x, **kwargs):
         super(IndexOp, self).__init__(
             args=(x,),
@@ -1734,6 +1755,9 @@ class AxesCastOp(IndexOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, cast_axes(delta, x.axes))
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
 
 
 class RoleCastOp(AxesCastOp):
@@ -2266,7 +2290,6 @@ class AssignableTensorOp(TensorOp):
             is_trainable=False,
             is_placeholder=False,
             const=None,
-            scope=None,
             **kwargs):
         super(AssignableTensorOp, self).__init__(**kwargs)
         self._is_input = is_input
@@ -2276,7 +2299,6 @@ class AssignableTensorOp(TensorOp):
         self._is_placeholder = is_placeholder
         self._const = const
         self.initial_value = None
-        self.scope = scope
 
         if initial_value is not None:
             # convert callable initial value
@@ -2446,7 +2468,7 @@ def placeholder(axes, dtype=None, initial_value=None, **kwargs):
                               **kwargs)
 
 
-def temporary(axes, dtype=None, initial_value=None, **kwargs):
+def temporary(axes, dtype=None, **kwargs):
     """
     Temporary storage.
 
@@ -2455,18 +2477,14 @@ def temporary(axes, dtype=None, initial_value=None, **kwargs):
     Args:
         axes (Axes): The axes of the storage.
         dtype (optional): The dtype of the storage.
-        initial_value (optional): A host constant or callable. If callable, will
-            be called to generate an initial value.
         constant (optional): Once initialization is complete, this tensor should not change.
 
     Returns:
         AssignableTensorOp: The placeholder.
     """
-    if initial_value is not None:
-        raise ValueError("Initial value for temporary is not currently supported")
     return AssignableTensorOp(graph_label_type="Temp",
                               axes=axes, dtype=dtype,
-                              initial_value=initial_value,
+                              initial_value=None,
                               **kwargs)
 
 
@@ -2493,7 +2511,7 @@ def persistent_tensor(axes, dtype=None, initial_value=None, **kwargs):
                               **kwargs)
 
 
-def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
+def variable(axes, dtype=None, initial_value=None, **kwargs):
     """
     A trainable tensor.
 
@@ -2502,8 +2520,6 @@ def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
         dtype (optional): The dtype for the tensor.
         initial_value: A constant or callable. If a callable, the callable
             will be called to provide an initial value.
-        scope (optional): scope of variable, can be used to filter on when
-                          selecting variables in an Op
 
     Returns:
         AssignableTensorOp: The variable.
@@ -2514,7 +2530,6 @@ def variable(axes, dtype=None, initial_value=None, scope=None, **kwargs):
                               is_trainable=True,
                               axes=axes, dtype=dtype,
                               initial_value=initial_value,
-                              scope=scope,
                               **kwargs)
 
 
@@ -2691,6 +2706,7 @@ def concat_along_axis(x_list, axis):
 
 
 class UnsliceOp(SequentialOp):
+
     def __init__(self, x, slices, axes, **kwargs):
         super(UnsliceOp, self).__init__(**kwargs)
         self.x = x
@@ -3121,6 +3137,7 @@ class Add(CommutativeBinaryElementWiseOp):
         x: A tensor
         y: A tensor
     """
+
     def __init__(self, x, y, **kwargs):
         super(Add, self).__init__(x, y, **kwargs)
 
@@ -3153,6 +3170,7 @@ class Subtract(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Subtract, self).__init__(x, y, **kwargs)
 
@@ -3185,6 +3203,7 @@ class Multiply(CommutativeBinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Multiply, self).__init__(x, y, **kwargs)
 
@@ -3217,6 +3236,7 @@ class Divide(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Divide, self).__init__(x, y, **kwargs)
 
@@ -3249,6 +3269,7 @@ class FloorDivide(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(FloorDivide, self).__init__(x, y, **kwargs)
 
@@ -3281,6 +3302,7 @@ class Mod(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Mod, self).__init__(x, y, **kwargs)
 
@@ -3312,6 +3334,7 @@ class Maximum(CommutativeBinaryElementWiseOp):
         y: A tensor.
 
     """
+
     def __init__(self, x, y, **kwargs):
         super(Maximum, self).__init__(x, y, **kwargs)
 
@@ -3345,6 +3368,7 @@ class Minimum(CommutativeBinaryElementWiseOp):
         y: A tensor.
 
     """
+
     def __init__(self, x, y, **kwargs):
         super(Minimum, self).__init__(x, y, **kwargs)
 
@@ -3377,6 +3401,7 @@ class Power(BinaryElementWiseOp):
         x: A tensor for the base.
         y: A tensor for the exponent.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Power, self).__init__(x, y, **kwargs)
 
@@ -3408,6 +3433,7 @@ class Equal(CommutativeBinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Equal, self).__init__(x, y, **kwargs)
 
@@ -3435,6 +3461,7 @@ class NotEqual(CommutativeBinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(NotEqual, self).__init__(x, y, **kwargs)
 
@@ -3462,6 +3489,7 @@ class Greater(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Greater, self).__init__(x, y, **kwargs)
 
@@ -3490,6 +3518,7 @@ class Less(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(Less, self).__init__(x, y, **kwargs)
 
@@ -3518,6 +3547,7 @@ class GreaterEqual(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(GreaterEqual, self).__init__(x, y, **kwargs)
 
@@ -3546,6 +3576,7 @@ class LessEqual(BinaryElementWiseOp):
         x: A tensor.
         y: A tensor.
     """
+
     def __init__(self, x, y, **kwargs):
         super(LessEqual, self).__init__(x, y, **kwargs)
 
@@ -3668,8 +3699,12 @@ class DotLowDimension(TensorOp):
         else:
             super(DotLowDimension, self).__init__(args=(x, y, bias), axes=axes, **kwargs)
 
+    def copy_with_new_args(self, args):
+        return type(self)(*args, axes=self.axes)
+
 
 class SoftmaxOp(ValueOp):
+
     def __init__(self, x, normalization_axes=None, **kwargs):
         super(SoftmaxOp, self).__init__(**kwargs)
 
@@ -4044,6 +4079,7 @@ class SigmoidOp(ValueOp):
     Parameters:
         x: The tensor argument.
     """
+
     def __init__(self, x, **kwargs):
         super(SigmoidOp, self).__init__(**kwargs)
         self.x = x
@@ -4119,6 +4155,7 @@ def mean(x, reduction_axes=None, out_axes=None):
 
 
 class DerivOp(ValueOp):
+
     def __init__(self, dependent, independent, error):
         super(DerivOp, self).__init__()
 
@@ -4255,6 +4292,7 @@ class CrossEntropyBinaryInnerOp(ValueOp):
     Raises:
         UnmatchedAxesError: If y and t do not have matching axes
     """
+
     def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
         if y.axes.is_not_equal_set(t.axes):
             raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
@@ -4343,6 +4381,7 @@ class LiteralScalarOp(TensorOp):
 
     This Op is internal to execution graph compilation.
     """
+
     def __init__(self, scalar):
         super(LiteralScalarOp, self).__init__(axes=[])
         self.scalar = scalar

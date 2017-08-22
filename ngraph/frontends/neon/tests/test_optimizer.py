@@ -153,6 +153,38 @@ def compare_optimizer(opt_ng, opt_ref):
             ng.testing.assert_allclose(np_W, ng_W, rtol=1e-3)
 
 
+def compare_optimizer_variable_select(opt_ng, opt_ref):
+
+    # Set up data placeholders
+    C = ng.make_axis(20)
+    N = ng.make_axis(32, name='N')
+
+    data = ng.placeholder([C, N])
+    target = ng.placeholder([N])
+
+    # params to be updated using optimizer to be tested
+    np_W1 = np.random.rand(C.length)
+    np_W2 = np.random.rand(C.length)
+    W1 = ng.variable([C], initial_value=np_W1)
+    W2 = ng.variable([C], initial_value=np_W2)
+
+    # Set up op graph
+    cost = ng.sum(target - ng.dot(W1, data) - ng.dot(W2, data), out_axis=())
+    updated_weights = ng.sequential([opt_ng(cost, variables=[W1]), W1])
+
+    # Set up the computation and run the "train" loop
+    with ExecutorFactory() as ex:
+        opt_ng_comp = ex.transformer.computation([updated_weights, W2], data, target)
+        mock_dataset = data_generator(20, C.length, N.length)
+
+        for x, y in mock_dataset:
+            [ng_W1, ng_W2] = opt_ng_comp(x, y)  # updated weights for ngraph optimizer
+            np_W1 = opt_ref(x, np_W1)   # updated weights for reference optimizer
+
+            ng.testing.assert_allclose(np_W1, ng_W1, rtol=1e-3)
+            ng.testing.assert_allclose(np_W2, ng_W2, rtol=1e-3)
+
+
 def data_generator(iteration_count, C, N):
     for i in range(iteration_count):
         yield (np.random.rand(C, N).astype('float32'),
@@ -172,10 +204,12 @@ def random_momentum_coef():
     return np.random.random()
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_skip(reason="The most cases fail because of too strict assert tolerance")
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
-def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov):
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov,
+             select_variables):
 
     # Setup the baseline and reference optimizers to be tested
     gdm_args = {'learning_rate': random_learning_rate,
@@ -187,12 +221,17 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov):
     gdm = GradientDescentMomentum(**gdm_args)
 
     # test baseline against reference
-    compare_optimizer(gdm, gdm_ref)
+    if select_variables:
+        compare_optimizer_variable_select(gdm, gdm_ref)
+    else:
+        compare_optimizer(gdm, gdm_ref)
 
 
+@pytest.config.flex_disabled(reason="Results totally mismatch")
 @pytest.mark.parametrize("decay_rate", [0.95, 1])
 @pytest.mark.parametrize("epsilon", [1e-6])
-def test_rmsprop(random_learning_rate, decay_rate, epsilon):
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_rmsprop(random_learning_rate, decay_rate, epsilon, select_variables):
     rmsprop_args = {'learning_rate': random_learning_rate,
                     'epsilon': epsilon,
                     'decay_rate': decay_rate}
@@ -201,7 +240,10 @@ def test_rmsprop(random_learning_rate, decay_rate, epsilon):
     rms = RMSProp(**rmsprop_args)
 
     # test baseline against reference
-    compare_optimizer(rms, rmsprop_ref)
+    if select_variables:
+        compare_optimizer_variable_select(rms, rmsprop_ref)
+    else:
+        compare_optimizer(rms, rmsprop_ref)
 
 
 @pytest.fixture(params=[0, 1])
@@ -215,9 +257,11 @@ def random_beta_2():
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
+@pytest.config.flex_skip(reason="Usually all cases fail but very rarely some pass for flex - "
+                                "because of the random character of the parameters")
 @pytest.mark.parametrize("epsilon", [1e-8])
-def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, transformer_factory):
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, select_variables):
 
     # Setup the baseline and reference optimizers to be tested
     adam_args = {'learning_rate': random_learning_rate,
@@ -229,12 +273,15 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, trans
     adam = Adam(**adam_args)
 
     # test baseline against reference
-    compare_optimizer(adam, adam_reference)
+    if select_variables:
+        compare_optimizer_variable_select(adam, adam_reference)
+    else:
+        compare_optimizer(adam, adam_reference)
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
-def test_learning_policy_step(transformer_factory):
+@pytest.config.flex_disabled(reason="Unknown problem yet")
+def test_learning_policy_step():
     base_learning_rate = 1.0
     drop_factor = 0.1
     step = 20
@@ -254,10 +301,10 @@ def test_learning_policy_step(transformer_factory):
             baseline_value = stepped_learning_rate(iter_input)
             reference_value = base_learning_rate * (drop_factor ** (iter_input // step))
 
-            assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
+            ng.testing.assert_allclose(baseline_value, reference_value, rtol=1e-5)
 
 
-def test_learning_policy_fixed_with_input(transformer_factory):
+def test_learning_policy_fixed_with_input():
     base_learning_rate = 0.1
 
     iteration = ng.placeholder((), dtype=np.dtype(np.uint32))
@@ -269,10 +316,10 @@ def test_learning_policy_fixed_with_input(transformer_factory):
         for iter_input in [10, 50, 90, 6, 15]:
             baseline_value = fixed_learning_rate(iter_input)
 
-            assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
+            ng.testing.assert_allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
-def test_learning_policy_fixed_without_input(transformer_factory):
+def test_learning_policy_fixed_without_input():
     base_learning_rate = 0.1
 
     lro = LearningRateOptimizer(learning_rate=base_learning_rate)
@@ -280,13 +327,13 @@ def test_learning_policy_fixed_without_input(transformer_factory):
     with ExecutorFactory() as ex:
         fixed_learning_rate = ex.transformer.computation(lro.lrate)
         baseline_value = fixed_learning_rate()
-        assert ng.testing.allclose(baseline_value, base_learning_rate, rtol=1e-6)
+        ng.testing.assert_allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("drop_factor", [0.1,
                                          [0.1, 0.2, 0.3, 0.4, 0.5]])
-def test_learning_policy_schedule(transformer_factory, drop_factor):
+def test_learning_policy_schedule(drop_factor):
     base_learning_rate = 1.0
     schedule = [20, 100, 300, 750, 1000]
 
@@ -312,7 +359,7 @@ def test_learning_policy_schedule(transformer_factory, drop_factor):
             else:
                 scale_factor = drop_factor ** max_step_ind
             reference_value = base_learning_rate * scale_factor
-            assert ng.testing.allclose(baseline_value, reference_value, rtol=1e-5)
+            ng.testing.assert_allclose(baseline_value, reference_value, rtol=1e-5)
 
 
 if __name__ == '__main__':

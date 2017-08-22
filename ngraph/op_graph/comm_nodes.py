@@ -13,10 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes, \
-    MutateInsteadOfCopyWithNewArgsMixin
-from orderedset import OrderedSet
 import multiprocessing
+import collections
+from orderedset import OrderedSet
+from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
+    MutateInsteadOfCopyWithNewArgsMixin
+from ngraph.op_graph.axes import Axes, make_axes, make_axis
 
 
 def calculate_gather_axes(axes, gather_axis, num_devices):
@@ -26,20 +28,17 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
     return new_axes
 
 
-def calculate_scatter_axes(axes, scatter_axis, num_devices):
-    new_axes = list()
-    for a in axes:
-        if scatter_axis == a:
-            assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
-                .format(scatter_axis, num_devices)
+def set_parallel_axes(axes, parallel_axis):
+    new_axes = []
+    for axis in Axes.as_nested_list(axes):
+        if axis == parallel_axis:
+            axis = parallel_axis
+        elif isinstance(axis, collections.Iterable):
+            # flattened axis
+            axis = [parallel_axis if a == parallel_axis else a for a in axis]
+        new_axes.append(axis)
 
-            new_length = a.length // num_devices
-            new_axis = make_axis(new_length, a.name)
-            new_axes.append(new_axis)
-        else:
-            new_axes.append(a)
-    new_axes = make_axes(new_axes)
-    return new_axes
+    return make_axes(new_axes)
 
 
 def get_slices(axes, parallel_axis, num_devices):
@@ -133,6 +132,7 @@ class RecvOp(CommunicationOp):
             axes=self.calculate_recv_axes(send_node.axes, fragment_axis, fragments),
             dtype=send_node.dtype)
         self._send_node = send_node
+        self.source_id = send_node.metadata['device_id']
 
     @classmethod
     def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
@@ -222,7 +222,7 @@ class GatherRecvOp(RecvOp):
         """
         :return: iterable of send nodes
         """
-        from ngraph.util.hetr_utils import get_iterable
+        from ngraph.transformers.hetr.hetr_utils import get_iterable
         return OrderedSet(i for i in get_iterable(self._send_node))
 
     @send_nodes.setter
@@ -372,7 +372,6 @@ class CPUQueueGatherRecvOp(GatherRecvOp):
         return self._shared_queues
 
 
-# TODO : WIP. This will be updated once we define the logic in issue #1378
 class AllReduceOp(CommunicationOp):
     """
     Represents an AllReduce op. Sets reduction axes and out axes.
@@ -434,6 +433,10 @@ class GPUCudaAllReduceOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
         self.device_ids = input_node.metadata['device_id']
         self._shared_queues = \
             {i: multiprocessing.Queue() for i in input_node.metadata['device_id']}
+
+    @property
+    def shared_queues(self):
+        return self._shared_queues
 
 
 class BroadcastSendOp(SendOp):

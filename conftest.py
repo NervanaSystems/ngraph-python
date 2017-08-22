@@ -31,7 +31,7 @@ def pytest_xdist_node_collection_finished(node, ids):
     ids.sort()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def transformer_factory(request):
     def set_and_get_factory(transformer_name):
         factory = ngt.make_transformer_factory(transformer_name)
@@ -67,8 +67,28 @@ def force_serialization_computations(monkeypatch):
         monkeypatch.setattr(ngt.Transformer, 'add_computation', monkey_add_computation)
 
 
+def pass_method(*args, **kwargs):
+    pass
+
+
 def pytest_configure(config):
-    # Define a reusable marker
+
+    # when marking argon_disabled for a whole test, but flex_disabled only on one
+    # parametrized version of that test, the argon marking disappeared
+    config.flex_and_argon_disabled = pytest.mark.xfail(config.getvalue("transformer") == "flexgpu" or
+                                                       config.getvalue("transformer") == "argon",
+                                                       reason="Not supported by argon or flex backend",
+                                                       strict=True)
     config.argon_disabled = pytest.mark.xfail(config.getvalue("transformer") == "argon",
-                            reason="Not supported by argon backend",
-                            strict=True)
+                                              reason="Not supported by argon backend",
+                                              strict=True)
+    config.flex_disabled = pytest.mark.xfail(config.getvalue("transformer") == "flexgpu",
+                                             reason="Failing test for Flex",
+                                             strict=True)
+    config.cpu_enabled_only = pytest.mark.xfail(config.getvalue("transformer") != "cpu",
+                                                reason="Only CPU transformer supported",
+                                                strict=True)
+    config.flex_skip = pytest.mark.skipif(config.getvalue("transformer") == "flexgpu",
+                                          reason="Randomly failing test for Flex")
+    config.flex_skip_now = pytest.skip if config.getvalue("transformer") == "flexgpu" \
+        else pass_method

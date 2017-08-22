@@ -13,11 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 import pytest
-from ngraph.util.hetr_utils import comm_path_exists, update_comm_deps, find_recvs
-from ngraph.testing.hetr_utils import create_send_recv_graph, create_scatter_gather_graph
-from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
-from ngraph.op_graph.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
+
 import ngraph as ng
+from ngraph.op_graph.comm_nodes import RecvOp, ScatterRecvOp, GatherRecvOp
+from ngraph.op_graph.comm_nodes import SendOp, ScatterSendOp, GatherSendOp
+from ngraph.testing.hetr_utils import create_send_recv_graph, create_scatter_gather_graph
+from ngraph.transformers.hetr.hetr_utils import comm_path_exists, update_comm_deps, find_recvs
 
 pytestmark = pytest.mark.hetr_only
 
@@ -191,4 +192,4 @@ def test_scatter_gather_node_axes(config):
     assert t['slices'] == gather_recv_op.slices
 
 
-# todo def test_clone_graph():
+# TODO: Add def test_clone_graph() - Issue #1864

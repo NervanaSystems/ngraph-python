@@ -24,9 +24,9 @@ from ngraph.testing import executor
 pytestmark = pytest.mark.flex_only
 
 # Known issues
-bug_1064 = pytest.mark.xfail(strict=True, reason="GitHub issue #1064, flex lower priority issues:"
-                                                 "modulus and ZeroDivisionError clarification")
-bug_1227 = pytest.mark.xfail(strict=True, reason="GitHub issue #1227, find explanation of results")
+bug_1064 = pytest.config.flex_disabled(reason="GitHub issue #1064, flex lower priority issues:"
+                                              "modulus and ZeroDivisionError clarification")
+bug_1227 = pytest.config.flex_disabled(reason="GitHub issue #1227, find explanation of results")
 
 test_assign_data = (
     # template: ([(operand, expected_result, *case_description)], test_description),
@@ -207,17 +207,17 @@ test_data_double_operand = (
 
 
 @pytest.mark.parametrize("operation, operands, test_name", test_data_single_operand, ids=id_func)
-def test_single_operand(transformer_factory, operation, operands, test_name):
+def test_single_operand(operation, operands, test_name):
     template_one_placeholder(operands, operation)
 
 
 @pytest.mark.parametrize("operation, operands, test_name", test_data_double_operand, ids=id_func)
-def test_double_operand(transformer_factory, operation, operands, test_name):
+def test_double_operand(operation, operands, test_name):
     template_two_placeholders(operands, operation)
 
 
 @pytest.mark.parametrize("operands, test_name", test_assign_data, ids=id_func)
-def test_assign(transformer_factory, operands, test_name):
+def test_assign(operands, test_name):
     v = ng.variable(())
     ng_placeholder = ng.placeholder(())
     vset = ng.sequential([

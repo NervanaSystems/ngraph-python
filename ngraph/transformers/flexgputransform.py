@@ -18,6 +18,7 @@ from __future__ import division
 import numpy as np
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
 from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
@@ -36,11 +37,12 @@ from ngraph.transformers.gpu.flex_conv import FlexConvFpropKernel, FlexConvBprop
 from ngraph.transformers.gpu.flex_pool import FlexPoolFpropKernel, FlexPoolBpropKernel
 from ngraph.transformers.gpu.tensor_ops import FlexFillKernel, FlexRngFillKernel, FlexAssignKernel
 from ngraph.transformers.passes.flexpass import FlexDtypePass, FlexPropagateEntryPass, \
-    ClearTensorDescriptions
+    ClearTensorDescriptions, FlexStackOpPass
 from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescription, \
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
+from ngraph.op_graph.lookuptable import update_lut
 
 
 # kernels that do not require flex integration
@@ -76,7 +78,7 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     default_rtol = 1e-02
-    default_atol = 1e-05
+    default_atol = 2e-05
 
     def __init__(self, fixed_point=False, flex_verbose=False, collect_flex_data=False, **kwargs):
 
@@ -97,11 +99,30 @@ class FlexGPUTransformer(GPUTransformer):
         if self.collect_flex_data:
             self.set_flex_data_file(statistics_file)
 
+    def save_output_statistics_file(self):
+        if self.collect_flex_data:
+            self.flex_manager.save_diagnostic_data()
+
     def set_flex_data_file(self, data_file):
         self.flex_manager.set_h5py_file(data_file)
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
+
+    def add_flex_id_to_ops(self):
+        for op in self.ops:
+            if op.is_tensor_op:
+                base = op.forwarded.tensor_description().base
+                tensor = self.op_tensors.get(base, None)
+                if hasattr(tensor, 'flex_entry'):
+                    op.metadata['flex_id'] = tensor.flex_entry.flex_id
+                    base.op.metadata['flex_id'] = tensor.flex_entry.flex_id
+
+    def start_transform_allocate(self):
+        super(FlexGPUTransformer, self).start_transform_allocate()
+        self.add_flex_id_to_ops()
+
+        # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
 
     def gpu_kernel_group(self, name):
         return FlexGPUKernelGroup(self, name)
@@ -110,6 +131,7 @@ class FlexGPUTransformer(GPUTransformer):
         super(FlexGPUTransformer, self).finish_transform_allocate()
 
         FlexPropagateEntryPass(transformer=self).do_pass(ops=self.ops)
+        FlexStackOpPass(transformer=self).do_pass(ops=self.ops)
 
     def transform_ordered_ops(self, computation, ordered_ops, name):
         ret_val = super(FlexGPUTransformer, self).transform_ordered_ops(
@@ -250,6 +272,10 @@ class FlexGPUKernelGroup(GPUKernelGroup):
         self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
                                            op.reduction_axes.size))
 
+    @add_kernel.on_type(update_lut)
+    def add_kernel(self, op):
+        self.kernels.append(FlexLUTBpropKernel(self.transformer, op))
+
     def compile_all(self):
         """
         subclass deals with ElementWiseKernel flex interface here in order to
@@ -334,10 +360,5 @@ class FlexGPUKernelGroup(GPUKernelGroup):
 
     def __call__(self):
         self.transformer.flex_manager.autoflex_count += 1
-
-        # this only saves data if flex_manager.set_h5py_file(cbs.callback_data)
-        # has been called before loop_train in example file
-        # where cbs is CallbackContainer instance returned by make_default_callbacks
-        self.transformer.flex_manager.save_diagnostic_data()
 
         super(FlexGPUKernelGroup, self).__call__()

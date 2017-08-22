@@ -64,6 +64,15 @@ from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
     CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
     CPUQueueBroadcastRecvOp
 
+from ngraph.util.trace_events import is_tracing_enabled
+
+
+def align_ndarray(element_count, alignment, dtype):
+    x = np.empty(element_count + (alignment - 1), dtype)
+    offset = (x.ctypes.data % alignment) // dtype.itemsize
+    padding = 0 if offset == 0 else (alignment - offset)
+    return x[padding:padding + element_count]
+
 
 class CPUConvEngine(object):
 
@@ -422,25 +431,24 @@ class CPUCodeGenerator(PyGen):
         pass
 
     @allocate_op.on_type(ConvolutionOp)
-    def allocate_op(self, op, outputs, inputs, filters):
-        self.conv_params[op.name] = op.conv_params
-        self.conv_slices[op.name] = \
+    def allocate_op(self, op, outputs, inputs, filters, bias=None):
+        self.conv_params[op.safe_name] = op.conv_params
+        self.conv_slices[op.safe_name] = \
             CPUConvEngine.get_slices(inputs, filters, outputs, op.conv_params)
 
     @allocate_op.on_type(DeconvolutionOp)
     def allocate_op(self, op, outputs, inputs, filters):
         # get_slices args: Swap outputs and inputs
-        self.conv_params[op.name] = op.conv_params
-        self.conv_slices[op.name] = \
+        self.conv_params[op.safe_name] = op.conv_params
+        self.conv_slices[op.safe_name] = \
             CPUConvEngine.get_slices(outputs, filters, inputs, op.conv_params)
 
     @allocate_op.on_type(PoolingOp)
     def allocate_op(self, op, arrO, arrI):
-        self.pool_params[op.name] = op.pool_params
-        self.pool_slices[op.name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
+        self.pool_params[op.safe_name] = op.pool_params
+        self.pool_slices[op.safe_name] = CPUPoolEngine.get_slices(arrI, arrO, op.pool_params)
 
     def generate_op_pre(self, op):
-        pass
         # exop = self.exop
         # self.append("\n# {} pre", exop.name)
         # for input_decl in exop.input_decls:
@@ -449,9 +457,10 @@ class CPUCodeGenerator(PyGen):
         # for output_decl in exop.output_decls:
         #     output_decl_name = 'a_'+output_decl.tensor.tensor_name
         #     self.append("#    output_decl {}", val_name)
+        if is_tracing_enabled():
+            self.append("self.__profiler_start__.append(monotonic())")
 
     def generate_op_post(self, op):
-        pass
         # exop = self.exop
         # self.append("print('{{}}'.format('{}'))", op.name)
         # for input_decl in exop.input.decls:
@@ -462,6 +471,8 @@ class CPUCodeGenerator(PyGen):
         #     self.append("#    output_decl {}", output_decl_name)
         #     self.append("print('   output_decl {} = {{}}'.format({}))", \
         #            output_decl_name, output_decl_name)
+        if is_tracing_enabled():
+            self.append("self.__profiler_stop__.append(monotonic())")
 
     @generic_method(Op)
     def generate_op(self, op, *args):
@@ -495,7 +506,7 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(Add)
     def generate_op(self, op, out, x, y):
         self.append("mkldnn.elementwise_add('{}', I_array1={}, I_array2={}, O_array={})",
-                    op.name, x, y, out)
+                    op.safe_name, x, y, out)
 
     @generate_op.on_type(Argmax)
     def generate_op(self, op, out, x):
@@ -506,39 +517,39 @@ class CPUCodeGenerator(PyGen):
         self.append("np.ndarray.argmin({}, axis={}, out={})", x, self.np_reduction_axis(op), out)
 
     @generate_op.on_type(ConvolutionOp)
-    def generate_op(self, op, outputs, inputs, filters):
-        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                    op.name, op.name, inputs, filters, outputs)
+    def generate_op(self, op, outputs, inputs, filters, bias=None):
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, B={}, O={})",
+                    op.safe_name, op.safe_name, inputs, filters, bias, outputs)
 
     @generate_op.on_type(bprop_conv)
     def generate_op(self, op, outputs, delta, filters):
         self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
-                    op.name, op.fprop.forwarded.name, delta, filters, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
     def generate_op(self, op, outputs, delta, inputs):
         self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={})",
-                    op.name, op.fprop.forwarded.name, inputs, delta, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, inputs, delta, outputs)
 
     @generate_op.on_type(DeconvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
         self.append("mkldnn.bprop_conv('{}', self.conv_slices['{}'], E={}, F={}, gI={})",
-                    op.name, op.name, inputs, filters, outputs)
+                    op.safe_name, op.safe_name, inputs, filters, outputs)
 
     @generate_op.on_type(DeconvDerivOp)
     def generate_op(self, op, outputs, delta, filters):
-        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, O={})",
-                    op.name, op.fprop.forwarded.name, delta, filters, outputs)
+        self.append("mkldnn.fprop_conv('{}', self.conv_slices['{}'], I={}, F={}, B={},  O={})",
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, filters, None, outputs)
 
     @generate_op.on_type(PoolingOp)
     def generate_op(self, op, outputs, inputs):
         self.append("mkldnn.fprop_pool('{}', self.pool_slices['{}'], arrI={}, arrO={})",
-                    op.name, op.name, inputs, outputs)
+                    op.safe_name, op.safe_name, inputs, outputs)
 
     @generate_op.on_type(BpropPoolOp)
     def generate_op(self, op, outputs, delta):
         self.append("mkldnn.bprop_pool('{}', self.pool_slices['{}'], arrE={}, arrD={})",
-                    op.name, op.fprop.forwarded.name, delta, outputs)
+                    op.safe_name, op.fprop.forwarded.safe_name, delta, outputs)
 
     @generate_op.on_type(LookupTableOp)
     def generate_op(self, op, outputs, lut, idx):
@@ -571,7 +582,9 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(ContiguousOp)
     def generate_op(self, op, out, x):
-        self.append("{}[()] = {}", out, x)
+        # self.append("{}[()] = {}", out, x)
+        self.append("mkldnn.mkl_contiguous('{}', {}, {})",
+                    op.safe_name, out, x)
 
     @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
@@ -588,28 +601,28 @@ class CPUCodeGenerator(PyGen):
     @generate_op.on_type(DotLowDimension)
     def generate_op(self, op, out, x, y, bias=None):
         self.append("mkldnn.innerproduct_fprop('{}', {}, {}, {}, out={})",
-                    op.name, x, y, bias, out)
+                    op.safe_name, x, y, bias, out)
 
     @generate_op.on_type(BatchnormOp)
     def generate_op(self, op, output, inputs, gamma, bias, epsilon, mean, variance):
         self.append("mkldnn.fprop_batchnorm('{}', inputs={}, outputs={}, gamma={},\
-                    bias={}, mean={}, variance={}, epsilon={})", op.name, inputs,
+                    bias={}, mean={}, variance={}, epsilon={})", op.safe_name, inputs,
                     output, gamma, bias, mean, variance, epsilon)
 
     @generate_op.on_type(BpropBatchnormOp)
     def generate_op(self, op, output, delta, inputs, gamma, bias, mean, variance):
         self.append("mkldnn.bprop_batchnorm('{}', outputs={}, delta={}, inputs={}, \
-                    gamma={}, bias={}, mean={}, variance={}, epsilon={})", op.name, output,
+                    gamma={}, bias={}, mean={}, variance={}, epsilon={})", op.safe_name, output,
                     delta, inputs, gamma, bias, mean, variance, op.fprop.eps)
 
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):
-        self.append("mkldnn.fprop_relu('{}', {}, {}, {})", op.name, inputs, outputs, op.slope)
+        self.append("mkldnn.fprop_relu('{}', {}, {}, {})", op.safe_name, inputs, outputs, op.slope)
 
     @generate_op.on_type(BpropReluOp)
     def generate_op(self, op, outputs, delta, inputs):
         self.append("mkldnn.bprop_relu('{}', {}, {}, {}, {})",
-                    op.name, delta, outputs, inputs, op.fprop.slope)
+                    op.safe_name, delta, outputs, inputs, op.fprop.slope)
 
     @generate_op.on_type(Equal)
     def generate_op(self, op, out, x, y):
@@ -661,7 +674,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(MklReorderOp)
     def generate_op(self, op, output, input):
-        self.append("mkldnn.mkl_reorder('{}', {}, {})", op.name, output, input)
+        self.append("mkldnn.mkl_reorder('{}', {}, {})", op.safe_name, output, input)
 
     @generate_op.on_type(Multiply)
     def generate_op(self, op, out, x, y):
@@ -702,7 +715,7 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(SignOp)
     def generate_op(self, op, out, x):
-        self.append("np.sign({}, out=out)", x, out)
+        self.append("np.sign({}, out={})", x, out)
 
     @generate_op.on_type(SinOp)
     def generate_op(self, op, out, x):
@@ -839,22 +852,25 @@ class CPUTransformer(ExecutionGraphTransformer):
         # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
         # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
 
-        self.graph_passes = [
+        self.graph_passes = []
+        if self.mkldnn.enabled:
+            self.graph_passes.append(CPUFusion())
+            self.byte_alignment = 64
+        self.graph_passes += [
             # ExVizPass(view=True, filename="initial"),
-            CPUFusion(),
             CPUTensorLayout(),
             SimplePrune(),
             RequiredTensorShaping(),
             CPUTensorShaping(),
             DeadCodeEliminationPass(),
         ]
+
         add_layout_conversion = AddLayoutConversions(None)
         if self.mkldnn.enabled:
-            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn)),
-            DeadCodeEliminationPass(),
+            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn))
             self.graph_passes.append(MklAddLayoutConversions(mkldnn=self.mkldnn,
-                                                             layoutpass=add_layout_conversion)),
-            DeadCodeEliminationPass()
+                                                             layoutpass=add_layout_conversion))
+
         self.graph_passes += [
             SSAConversion(),
             IndexElision(),
@@ -865,10 +881,11 @@ class CPUTransformer(ExecutionGraphTransformer):
             LivenessPass(),
             MemLayoutPass()
         ]
-        # DumpGraphPass(filename=graph_name+'.txt').do_pass(computation_decl)
+        # from ngraph.transformers.passes.dumpgraphpass import DumpGraphPass
+        # self.graph_passes += [DumpGraphPass()]
 
-        # VisualizeMemPass(filename=mem_name+'.html').do_pass(computation_decl)
-        # ExVizPass(view=False, filename=graph_name).do_pass(computation_decl)
+        # from ngraph.transformers.passes.visualizemem import VisualizeMemPass
+        # self.graph_passes += [VisualizeMemPass()]
 
     def finish_allocate_computation(self, computation):
         self.exop_codegen.endl(2)
@@ -879,6 +896,11 @@ class CPUTransformer(ExecutionGraphTransformer):
         with indenting(self.exop_codegen):
             self.exop_codegen.append("def __init__(self, **kwargs):")
             with indenting(self.exop_codegen):
+                if is_tracing_enabled():
+                    self.exop_codegen.append("""
+self.__profiler_start__ = list()
+self.__profiler_stop__  = list()
+""")
                 self.exop_codegen.append('super({}, self).__init__(**kwargs)',
                                          computation_decl.computation_op.name)
                 for exop in computation_decl.exop_block:
@@ -909,14 +931,18 @@ class CPUTransformer(ExecutionGraphTransformer):
 
     def finish_load_computation(self, computation_decl):
         device_computation = computation_decl.device_computation
-        temp_pool_size = computation_decl.exop_block.memory_footprint() // 4
-        persistent_pool_size = computation_decl.exop_block.persistent_size() // 4
-        self.exop_codegen_pools.append("{}_temporary_pool = np.empty({}, dtype=np.dtype('{}'))",
-                                       computation_decl.computation_op.name, temp_pool_size,
-                                       'float32')
-        self.exop_codegen_pools.append("{}_persistent_pool = np.empty({}, dtype=np.dtype('{}'))",
-                                       computation_decl.computation_op.name, persistent_pool_size,
-                                       'float32')
+        byte_alignment = computation_decl.execution_graph.execution_state \
+            .transformer.byte_alignment
+        self.exop_codegen_pools.append(
+            "{}_temporary_pool = align_ndarray({}, {}, np.dtype('{}'))",
+            computation_decl.computation_op.name, computation_decl.temporary_max_allocated,
+            byte_alignment,
+            'float32')
+        self.exop_codegen_pools.append(
+            "{}_persistent_pool = align_ndarray({}, {}, np.dtype('{}'))",
+            computation_decl.computation_op.name, computation_decl.persistent_max_allocated,
+            byte_alignment,
+            'float32')
 
         code = '#---------------------------------------------\n'
         code += '# memory pool\n'
@@ -971,6 +997,7 @@ import numpy as np
 import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
+from monotonic import monotonic as monotonic
 try:
     import mlsl
     import ctypes
@@ -982,6 +1009,7 @@ from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals
 from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
+from ngraph.transformers.cputransform import align_ndarray
         """)
 
         mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")

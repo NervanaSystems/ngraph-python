@@ -40,9 +40,8 @@ class NumpyLogreg(object):
         return grad, loss, self.thetas
 
 
-# Flex disabled - because of the strict tolerance (rtol, atol)
-@pytest.mark.flex_disabled
-def test_logreg(transformer_factory):
+@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
+def test_logreg():
     # xs: (C, N), y: (N,)
     xs = np.array([[0.52, 0.88, 0.52, 0.74],
                    [1.12, -1.08, 0.06, -2.49],
@@ -81,6 +80,6 @@ def test_logreg(transformer_factory):
         for i in range(max_iter):
             grad_np, loss_np, thetas_np = np_logreg.optimize(alpha)
             grad_ng, loss_ng, thetas_ng = train_eval_func(xs, ys, alpha)
-            assert ng.testing.allclose(loss_np, loss_ng)
-            assert ng.testing.allclose(grad_np, grad_ng)
-            assert ng.testing.allclose(thetas_np, thetas_ng)
+            ng.testing.assert_allclose(loss_np, loss_ng)
+            ng.testing.assert_allclose(grad_np, grad_ng)
+            ng.testing.assert_allclose(thetas_np, thetas_ng)

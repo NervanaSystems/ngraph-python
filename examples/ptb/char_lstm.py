@@ -13,6 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+
+"""
+Train a LSTM or GRU based recurrent network on the Penn Treebank
+dataset parsing on character-level.
+
+Reference:
+
+    Andrej Karpathy's char-rnn `[Karpathy]`_
+.. _[Karpathy]: http://github.com/karpathy/char-rnn
+
+Usage:
+
+    python examples/ptb/char_lstm.py -b gpu -r 0 -t 15940 --iter_interval 1594
+
+    This dataset using this model configuration has 1594 minibatches. This
+    command is to run 10 epochs to compare with the benchmark accuracy.
+
+"""
 from contextlib import closing
 import ngraph as ng
 from ngraph.frontends.neon import (Layer, Sequential, Preprocess, LSTM,
@@ -59,12 +77,15 @@ def expand_onehot(x):
 init = UniformInit(low=-0.08, high=0.08)
 
 if args.layer_type == "lstm":
-    rlayer = LSTM(hidden_size, init, activation=Tanh(),
-                  gate_activation=Logistic(), return_sequence=True)
+    rlayer1 = LSTM(hidden_size, init, activation=Tanh(),
+                   gate_activation=Logistic(), return_sequence=True)
+    rlayer2 = LSTM(hidden_size, init, activation=Tanh(),
+                   gate_activation=Logistic(), return_sequence=True)
 
 # model initialization
 seq1 = Sequential([Preprocess(functor=expand_onehot),
-                   rlayer,
+                   rlayer1,
+                   rlayer2,
                    Affine(init, activation=Softmax(), bias_init=init, axes=(ax.Y,))])
 
 optimizer = RMSProp(gradient_clip_value=gradient_clip_value)
@@ -78,10 +99,16 @@ train_outputs = dict(batch_cost=batch_cost)
 
 with Layer.inference_mode_on():
     inference_prob = seq1(inputs['inp_txt'])
+
+errors = ng.not_equal(ng.argmax(inference_prob, reduction_axes=[ax.Y]), inputs['tgt_txt'])
+errors_last_char = ng.slice_along_axis(errors, ax.REC, time_steps - 1)
+
 eval_loss = ng.cross_entropy_multi(inference_prob,
                                    ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
                                    usebits=True)
-eval_outputs = dict(cross_ent_loss=eval_loss)
+eval_outputs = dict(cross_ent_loss=eval_loss,
+                    misclass_pct=errors,
+                    misclass_last_pct=errors_last_char)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:

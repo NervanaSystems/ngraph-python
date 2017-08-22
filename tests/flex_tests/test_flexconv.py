@@ -18,8 +18,8 @@ from ngraph.testing.flex_util import execute_convolution, id_func
 
 pytestmark = pytest.mark.flex_only
 
-bug_1805 = pytest.mark.xfail(strict=True, reason="GitHub issue #1805, LogicError when filter has "
-                                                 "more dimensions than image")
+bug_1805 = pytest.config.flex_disabled(reason="GitHub issue #1805, LogicError when filter has "
+                                              "more dimensions than image")
 
 test_data_execute_convolution = (
     # template: (image_height, image_width, image_3rd_dim,
@@ -56,9 +56,8 @@ test_data_convolution_limitation = (
                          "filter_height, filter_width, filter_3rd_dim, "
                          "padding, stride, description",
                          test_data_execute_convolution, ids=id_func)
-def test_execute_convolution(transformer_factory, image_height, image_width, image_3rd_dim,
-                             filter_height, filter_width, filter_3rd_dim,
-                             padding, stride, description):
+def test_execute_convolution(image_height, image_width, image_3rd_dim, filter_height, filter_width,
+                             filter_3rd_dim, padding, stride, description):
     out, np_out = execute_convolution(image_height=image_height, image_width=image_width,
                                       image_3rd_dim=image_3rd_dim, filter_height=filter_height,
                                       filter_width=filter_width, filter_3rd_dim=filter_3rd_dim,
@@ -72,8 +71,7 @@ def test_execute_convolution(transformer_factory, image_height, image_width, ima
 
 @pytest.mark.parametrize("filter_count, batch_size, dilation, description",
                          test_data_convolution_limitation, ids=id_func)
-def test_convolution_limitation(transformer_factory, filter_count, batch_size, dilation,
-                                description):
+def test_convolution_limitation(filter_count, batch_size, dilation, description):
     with pytest.raises(AssertionError) as excinfo:
         execute_convolution(image_height=7, image_width=7, filter_height=3, filter_width=3,
                             channel=16, batch_size=batch_size, filter_count=filter_count,

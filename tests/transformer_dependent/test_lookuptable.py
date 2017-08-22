@@ -65,9 +65,9 @@ def lut_update_ref(error, lut, idx, pad_idx):
     return dw_ref
 
 
-@pytest.mark.flex_disabled
+@pytest.config.flex_disabled(reason="Results slightly mismatch - #2040")
 @pytest.config.argon_disabled  # TODO triage
-def test_lut(transformer_factory, lut_args):
+def test_lut(lut_args):
     """
     test lut fprop and bprop
     """

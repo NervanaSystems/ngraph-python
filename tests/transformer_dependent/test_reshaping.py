@@ -27,7 +27,7 @@ rtol = atol = 1e-2
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_expand_dims(transformer_factory):
+def test_expand_dims():
     """TODO."""
     C = ng.make_axis()
     D = ng.make_axis()
@@ -90,14 +90,13 @@ def test_expand_dims(transformer_factory):
                     # Test backpropagation
                     numeric_deriv = num_deriv_fun(tensor_np)
                     sym_deriv = sym_deriv_fun(tensor_np)
-                    assert ng.testing.allclose(
+                    ng.testing.assert_allclose(
                         numeric_deriv, sym_deriv, rtol=rtol, atol=atol
                     )
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
-def test_slice(transformer_factory):
+def test_slice():
     """TODO."""
 
     C = ng.make_axis()
@@ -166,12 +165,12 @@ def test_slice(transformer_factory):
             numeric_deriv = num_deriv_fun(tensor_np)
             sym_deriv = sym_deriv_fun(tensor_np)
 
-            assert ng.testing.allclose(
+            ng.testing.assert_allclose(
                 numeric_deriv, sym_deriv, rtol=rtol, atol=atol
             )
 
 
-def test_reverse_slice(transformer_factory):
+def test_reverse_slice():
     """TODO."""
 
     C = ng.make_axis(length=10)
@@ -186,8 +185,8 @@ def test_reverse_slice(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
-def test_multiple_slices(transformer_factory):
+@pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
+def test_multiple_slices():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
 
@@ -214,23 +213,22 @@ def test_multiple_slices(transformer_factory):
         x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
         y1_val = y1_fun(x_np)
         y1_np = np.array([23, 46, 69])
-        assert ng.testing.allclose(y1_val, y1_np)
+        ng.testing.assert_allclose(y1_val, y1_np)
         y2_val = y2_fun(x_np)
         y2_np = np.array([27, 54, 81])
-        assert ng.testing.allclose(y2_val, y2_np)
+        ng.testing.assert_allclose(y2_val, y2_np)
 
         f1_num = num_deriv_fun1(x_np)
         f1_sym = sym_deriv_fun1(x_np)
-        assert ng.testing.allclose(f1_num, f1_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(f1_num, f1_sym, rtol=rtol, atol=atol)
 
         f2_num = num_deriv_fun2(x_np)
         f2_sym = sym_deriv_fun2(x_np)
-        assert ng.testing.allclose(f2_num, f2_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(f2_num, f2_sym, rtol=rtol, atol=atol)
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
-def test_padding(transformer_factory):
+def test_padding():
     """TODO."""
     C = ng.make_axis()
     D = ng.make_axis()
@@ -292,14 +290,11 @@ def test_padding(transformer_factory):
             numeric_deriv = numeric_deriv_fun(tensor_np)
             sym_deriv = sym_deriv_fun(tensor_np)
 
-            assert ng.testing.allclose(
-                numeric_deriv, sym_deriv, rtol=rtol, atol=atol
-            )
+            ng.testing.assert_allclose(numeric_deriv, sym_deriv, rtol=rtol, atol=atol)
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
-def test_cast_axes(transformer_factory):
+def test_cast_axes():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
 
@@ -322,14 +317,14 @@ def test_cast_axes(transformer_factory):
         x_np = np.array([[10, 20, 30], [1, 2, 3]], dtype='float32')
         y_fun_np = np.array([[11, 22, 33], [2, 4, 6]], dtype='float32')
         y_fun_ng = y_fun(x_np)
-        assert ng.testing.allclose(y_fun_ng, y_fun_np)
+        ng.testing.assert_allclose(y_fun_ng, y_fun_np)
 
         deriv_num = num_deriv_fun(x_np)
         deriv_sym = sym_deriv_fun(x_np)
-        assert ng.testing.allclose(deriv_num, deriv_sym, rtol=rtol, atol=atol)
+        ng.testing.assert_allclose(deriv_num, deriv_sym, rtol=rtol, atol=atol)
 
 
-def test_shuffled_deriv(transformer_factory):
+def test_shuffled_deriv():
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated
     C = ng.make_axis(length=3)
@@ -350,7 +345,7 @@ def test_shuffled_deriv(transformer_factory):
         d_fun()
 
 
-def test_slice_tensor_description(transformer_factory):
+def test_slice_tensor_description():
     C = ng.make_axis(2)
 
     td = TensorDescription(ng.make_axes(C))
@@ -361,7 +356,7 @@ def test_slice_tensor_description(transformer_factory):
         )
 
 
-def test_tensor_description_init(transformer_factory):
+def test_tensor_description_init():
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
         TensorDescription(ng.make_axes(ng.make_axis()))

@@ -23,10 +23,10 @@ delta = 1e-3
 rtol = atol = 1e-2
 
 
-@pytest.mark.flex_disabled  # Allowed to fail until PR2
+# Flex - Allowed to fail until PR2 - ref: 6714cc5
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
-def test_stack(transformer_factory):
+def test_stack():
     W = ng.make_axis(length=4)
     H = ng.make_axis(length=5)
     I = ng.make_axis(length=3)
@@ -52,4 +52,4 @@ def test_stack(transformer_factory):
                 na_is = list(na_i for na_i in a_v if na_i is not a_i)
                 d_n = n_fun(a_i, *na_is)
                 d_s = s_fun(a_i, *na_is)
-            ng.testing.allclose(d_n, d_s, rtol=rtol, atol=atol)
+                ng.testing.assert_allclose(d_n, d_s, rtol=rtol, atol=atol)

@@ -36,7 +36,7 @@ def input_axes(request):
     ])
 
 
-def test_exit_condition(transformer_factory):
+def test_exit_condition():
     bsz = 16
     class_num = 10
 
@@ -54,8 +54,8 @@ def test_exit_condition(transformer_factory):
         np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
 
-@pytest.mark.flex_disabled
-def test_4d_elementwise(transformer_factory, input_axes):
+@pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
+def test_4d_elementwise(input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))
     x = ng.constant(x_val, input_axes)
@@ -66,11 +66,10 @@ def test_4d_elementwise(transformer_factory, input_axes):
     with executor(out) as ex:
         graph_val = ex()
     np_val = np.add(x_val, y_val)
-    np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+    ng.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
 
-@pytest.mark.flex_disabled
-def test_4d_reduction(transformer_factory, input_axes):
+def test_4d_reduction(input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     x = ng.constant(x_val, input_axes)
 
@@ -81,12 +80,12 @@ def test_4d_reduction(transformer_factory, input_axes):
         graph_val1, graph_val2 = ex()
         np_val1 = np.sum(x_val, 1)
         np_val2 = np.sum(x_val, 3)
-        np.testing.assert_allclose(graph_val1, np_val1, rtol=1e-4)
-        np.testing.assert_allclose(graph_val2, np_val2, rtol=1e-4)
+        ng.testing.assert_allclose(graph_val1, np_val1, rtol=1e-4)
+        ng.testing.assert_allclose(graph_val2, np_val2, rtol=1e-4)
 
 
-@pytest.mark.flex_disabled
-def test_4d_chained(transformer_factory, input_axes):
+@pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
+def test_4d_chained(input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))
     x = ng.constant(x_val, input_axes)
@@ -98,11 +97,11 @@ def test_4d_chained(transformer_factory, input_axes):
     with executor(out) as ex:
         graph_val = ex()
     np_val = np.sum(np.add(np.reciprocal(x_val), y_val), 0)
-    np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+    ng.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
 
-@pytest.mark.flex_disabled
-def test_kernel_cache(transformer_factory):
+@pytest.config.flex_disabled(reason='Results mismatch')
+def test_kernel_cache():
     X = ng.make_axis(32)
     Y = ng.make_axis(32)
     C = ng.make_axis(16384)
@@ -129,4 +128,4 @@ def test_kernel_cache(transformer_factory):
     with executor(out) as ex:
         graph_val = ex()
     np_val = np.add(np.add(x_val.reshape(32, 32, 1), y_val), z_val)
-    np.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
+    ng.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
