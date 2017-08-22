@@ -123,6 +123,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
 
     valid_config = common_config(valid_manifest, batch_size)
     valid_config['iteration_mode'] = "ONCE"
+    valid_config['shuffle_manifest'] = True
+    valid_config['shuffle_enable'] = True
 
     train_loader = AeonDataLoader(train_config)
     valid_loader = AeonDataLoader(valid_config)
