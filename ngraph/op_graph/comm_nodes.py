@@ -157,6 +157,9 @@ class ScatterSendOp(SendOp):
         self._slices = get_slices(self.axes,
                                   to_node.metadata['parallel'],
                                   len(self.to_id))
+        assert to_node.metadata.get('parallel', None) is not None, \
+            "to_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = to_node.metadata['parallel']
 
     @property
     def slices(self):
@@ -176,6 +179,9 @@ class ScatterRecvOp(RecvOp):
         super(ScatterRecvOp, self).__init__(to_node, send_node,
                                             fragment_axis=to_node.metadata['parallel'],
                                             fragments=len(to_node.metadata['device_id']))
+        assert to_node.metadata.get('parallel', None) is not None, \
+            "to_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = to_node.metadata['parallel']
 
 
 class GatherSendOp(SendOp):
@@ -188,6 +194,9 @@ class GatherSendOp(SendOp):
 
     def __init__(self, from_node):
         super(GatherSendOp, self).__init__(from_node)
+        assert from_node.metadata.get('parallel', None) is not None, \
+            "from_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = from_node.metadata['parallel']
 
 
 class GatherRecvOp(RecvOp):
@@ -206,6 +215,8 @@ class GatherRecvOp(RecvOp):
                                            fragment_axis=from_node.metadata['parallel'],
                                            fragments=len(from_node.metadata['device_id']))
         self.metadata['marker'] = 'gather'
+        assert from_node.metadata.get('parallel', None) is not None, \
+            "from_node must have a specified parallel attribute in metadata"
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']
         # use _slices to avoid serialization

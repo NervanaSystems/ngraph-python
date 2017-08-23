@@ -59,10 +59,41 @@ if "MKLDNN_ROOT" in os.environ:
                                    'ngraph/transformers/cpu/pooling.c', \
                                    'ngraph/transformers/cpu/batchnorm.c']))
 
+requirements = [
+    "numpy",
+    "h5py",
+    "appdirs",
+    "six",
+    "tensorflow",
+    "scipy",
+    "protobuf",
+    "requests",
+    "frozendict",
+    "cached-property",
+    "orderedset",
+    "tqdm",
+    "enum34",
+    "future",
+    "configargparse",
+    "cachetools",
+    "decorator",
+    "pynvrtc",
+    "monotonic",
+    "pillow",
+    "jupyter",
+    "nbconvert",
+    "nbformat",
+    "setuptools",
+    "cffi>=1.0",
+    "parsel",
+]
+
+
 setup(
     name="ngraph",
     version="0.4.0",
     packages=find_packages(exclude=["tests"]),
+    install_requires=requirements,
     author='Nervana Systems',
     author_email='info@nervanasys.com',
     url='http://www.nervanasys.com',

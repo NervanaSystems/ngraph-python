@@ -80,7 +80,7 @@ def make_placeholder(input_size, sequence_length, batch_size, extra_axes=0):
     input_axes = ng.make_axes([ng.make_axis(length=1, name='features_' + str(i))
                                for i in range(extra_axes)]) + input_axes
 
-    input_placeholder = ng.placeholder(input_axes)
+    input_placeholder = ng.placeholder(input_axes).named("X_input")
     input_value = rng.uniform(-0.01, 0.01, input_axes)
 
     return input_placeholder, input_value
@@ -117,7 +117,7 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [pytest.config.flex_and_argon_disabled(True), False])
+@pytest.mark.parametrize("return_sequence", [pytest.config.argon_disabled(True), False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("extra_axes", [0, 2])
 @pytest.mark.parametrize("backward", [True, False])
@@ -126,6 +126,12 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
                    init_state, extra_axes, backward):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
+
+    if (backward, extra_axes, init_state, return_sequence) == (True, 0, True, True) \
+            or (backward, extra_axes, init_state, return_sequence) == (True, 2, True, True) \
+            or (backward, extra_axes, init_state, return_sequence) == (False, 0, True, True) \
+            or (backward, extra_axes, init_state, return_sequence) == (False, 2, True, True):
+        pytest.config.flex_skip_now("Results mismatch by 3%")
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size,
@@ -306,7 +312,7 @@ def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_siz
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [pytest.config.flex_disabled(True), False])
+@pytest.mark.parametrize("return_sequence", [True, False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("sum_out,concat_out", [(False, False),
                                                 (True, False),
@@ -316,7 +322,12 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
-    if (sum_out, concat_out) == (False, True):
+    if (sum_out, concat_out, init_state, return_sequence) == (True, False, True, True) \
+            or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, True) \
+            or (sum_out, concat_out, init_state, return_sequence) == (False, False, True, True) \
+            or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, False) \
+            or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, True) \
+            or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, False):
         pytest.config.flex_skip_now("because of the strict tolerance (rtol, atol)")
 
     # Get input placeholder and numpy array
