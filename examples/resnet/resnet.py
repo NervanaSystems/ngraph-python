@@ -28,6 +28,8 @@ from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
 from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
 from data import make_aeon_loaders
 
+#Hyperparameters
+rho=0.3
 
 #Helpers
 def mean_subtract(x):
@@ -88,7 +90,6 @@ class ResidualModule(object):
 class BuildResnet(Sequential):
     def __init__(self,net_type):
         num_fils=[16,32,64]
-        rho=0.9
         if net_type=='cifar10' or 'cifar100':
             layers=[#Subtracting mean as suggested in paper
                     Preprocess(functor=mean_subtract),
@@ -188,7 +189,7 @@ if __name__ == "__main__":
                                     'base_lr': 0.1}
             optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
                             momentum_coef=0.9,
-                            wdecay=0.0001,
+                            wdecay=0.00001,
                             iteration=input_ph['iteration'])
         else:
             print("Invalid cifar10 size.Select from "+str(cifar_sizes))
@@ -270,7 +271,7 @@ interval_cost = 0.0
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-    #t1=rho_calc_comp(step)
+    t1=rho_calc_comp(step)
     #t2=gvar_calc_comp(step)
     output = train_function(feed_dict=feed_dict)
     tpbar.update(1)
