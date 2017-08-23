@@ -112,8 +112,8 @@ def test_distributed_plus_one(hetr_device, config):
             x_plus_one = x + 1
 
     np_x = np.random.randint(100, size=axes.lengths)
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_one, x)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.add_computation(x_plus_one, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 1)
 
