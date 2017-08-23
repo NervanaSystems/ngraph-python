@@ -71,8 +71,6 @@ Computations are created with the ``Transformer.computation`` method. When creat
 
 This example creates a simple graph to evaluate the function ``e = ((a * b) + c)``. The first argument is the result of the computation and the remaining arguments are inputs to the computation. The only result that we need to specify to create the computation is ``e`` since ``d`` will be discovered when the transformer traverses the graph. In this example, ``a`` is a constant so it does not need to be passed in as an input, but ``b`` and ``c`` are placeholder tensors which must be filled as inputs.
 
-After all computations are created, the ``Transformer.initialize`` method must be called to finalize transformation and allocate all device memory for tensors (this will be called automatically if a computation is called before manually calling ``initialize``). **Note** that new computations cannot be created with a transformer after ``initialize`` has been called. For more information on this initialization process, see the :ref:`transformer-initialization` documentation.
-
 Computation Execution
 ---------------------
 

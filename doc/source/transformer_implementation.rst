@@ -30,8 +30,6 @@ Computation Creation
 
 To create a computation, a user calls the transformer's ``computation`` method. This is a relatively lightweight operation that creates a new ``Computation`` object and stores it in the set of all computations. The ``Computation`` constructor updates the transformer's set of results and builds a set of all ops that are dependencies of the results by traversing the graph backwards from the result nodes. Computations can only be created through a transformer before the transformer has been initialized. This is partially because the transformer in its current state modifies the graph through passes and tensor description initialization, but this will likely change in the future.
 
-.. _transformer-initialization:
-
 Transformer Initialization
 ==========================
 

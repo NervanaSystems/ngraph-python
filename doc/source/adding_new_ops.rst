@@ -43,19 +43,12 @@ instance ::
 1. First, we need to register the new op in ``op_graph``. In general, an op is
    a sub-class of ``ngraph.op_graph.op_graph.Op``. To add a new op, we could
    inherit from the class ``Op`` or one of its descendant classes and implement
-   the functionalities. We need to implement the ``__init__()``, and if we want
-   to define the derivative of the op, we need to implement the
+   required methods. We need to implement ``__init__()``, and if we
+   want to define the derivative of the op, we need to implement
    ``generate_adjoints()``. For other advanced functionalities, please refer to
    the the source of ``ngraph.op_graph.op_graph.Op``.
 
-   There is a helper functions (``create_reduction_op``) to accelerate op registration process.
-   In this case, since ``Prod`` is a reduction op, we could use this helper function. So in
-   ``ngraph/op_graph/op_graph.py``, we add ::
-
-        Prod, prod = create_reduction_op('Prod', 'prod', prod_adjoints)
-
-   Now let's look at ``DotOp`` for an example where we use subclassing ``Op``
-   instead of using helper functions. In this example, ``DotOp`` inherits
+   Let's look at ``DotOp`` for an example. ``DotOp`` inherits
    ``TensorOp`` which is a descendant of ``Op``. In the ``__init__()`` function,
    we do input arguments checking and set up the output axes in ``DotOp.axes``.::
 
