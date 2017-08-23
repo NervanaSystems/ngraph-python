@@ -17,7 +17,7 @@ from __future__ import division, print_function
 from builtins import range
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Layer, Sequential, Dropout
+from ngraph.frontends.neon import Layer, Sequential, Dropout, XavierInit
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
@@ -37,11 +37,14 @@ def mean_subtract(x):
     return (x - bgr_mean) / 255.
 
 #Returns dict of convolution layer parameters
-def conv_params(fil_size, num_fils,strides=1):
+def conv_params(fil_size, num_fils,rho,strides=1,batch_norm=True,relu=True):
     return dict(fshape=(fil_size,fil_size,num_fils),
+                rho=rho,
                 strides=strides,
                 padding=(1 if fil_size > 1 else 0),
-                filter_init=KaimingInit())
+                batch_norm=batch_norm,
+                activation=(Rectlin() if relu else None),
+                filter_init=XavierInit())
 #Class for Residual Module
 class ResidualModule(object):
     def __init__(self,num_fils,rho,first=False,strides=1):
@@ -53,21 +56,17 @@ class ResidualModule(object):
             exit()
         else:
             #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
-            main_path=([Convolution(**conv_params(1,num_fils,strides=strides)),
-                        BatchNorm(rho=rho),
-                        Activation(Rectlin()),
-                        Convolution(**conv_params(3,num_fils)),
-                        BatchNorm(rho=rho),
-                        Activation(Rectlin()),
-                        Convolution(**conv_params(1,num_fils*4))])
+            main_path=([Convolution(**conv_params(1,num_fils,rho,strides=strides)),
+                        Convolution(**conv_params(3,num_fils,rho,)),
+                        Convolution(**conv_params(1,num_fils*4,rho,relu=False,batch_norm=False))])
             #Add a 1x1 Conv with strides 2 for dimension reduction to allow proper addition
             if first or strides == 2:
-                self.side_path=Convolution(**conv_params(1,num_fils*4,strides=strides))
+                self.side_path=Convolution(**conv_params(1,num_fils*4,rho,strides=strides,relu=False,batch_norm=False))
             else:
                 main_path = [BatchNorm(rho=rho),Activation(Rectlin())] + main_path
             #Relu after addition (Change to control relu location)
             if (strides==2):
-                self.trunk=Sequential([BatchNorm(rho=rho),Activation(Rectlin())])
+                self.trunk=Sequential([BatchNorm(rho=rho), Activation(Rectlin())])
             self.main_path=Sequential(main_path)
 
     def __call__(self,in_obj):
@@ -89,14 +88,12 @@ class ResidualModule(object):
 class BuildResnet(Sequential):
     def __init__(self,net_type):
         num_fils=[16,32,64]
-        rho=0.3
+        rho=0.9
         if net_type=='cifar10' or 'cifar100':
             layers=[#Subtracting mean as suggested in paper
                     Preprocess(functor=mean_subtract),
                     #First Conv with 3x3 and stride=1
-                    Convolution(**conv_params(3,16)),
-                    BatchNorm(rho=rho),
-                    Activation(Rectlin())]
+                    Convolution(**conv_params(3,16,rho))]
             first=True
             #Lay out residual layers. Hardcoding 3 as there are only 3 sets of filters
             for fil in range(3):
@@ -114,7 +111,9 @@ class BuildResnet(Sequential):
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
             #Axes are 10 as number of classes are 10
-            layers.append(Affine(axes=ax.Y,weight_init=KaimingInit(),activation=Softmax()))
+            layers.append(Affine(axes=ax.Y,weight_init=XavierInit()))
+            layers.append(BatchNorm(rho=rho))
+            layers.append(Activation(Softmax()))
         elif net_type=='i1k':
             print("Seriously how did we come this far.")
             exit()
@@ -131,7 +130,6 @@ def loop_eval(dataset, computation, metric_names):
         dataset.reset()
     all_results = None
     for data in dataset:
-        #dataset._dataloader.reset()
         feed_dict = {input_ph[k]: data[k] for k in data.keys()}
         results = computation(feed_dict=feed_dict)
         if all_results is None:
@@ -185,12 +183,12 @@ if __name__ == "__main__":
             ax.Y.length = 10
             resnet = BuildResnet(resnet_dataset)
             learning_rate_policy = {'name': 'schedule',
-                                    'schedule': [14000, 32000, 48000],
+                                    'schedule': [32000, 48000],
                                     'gamma': 0.1,
-                                    'base_lr': 0.05}
+                                    'base_lr': 0.1}
             optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
                             momentum_coef=0.9,
-                            wdecay=0.00001,
+                            wdecay=0.0001,
                             iteration=input_ph['iteration'])
         else:
             print("Invalid cifar10 size.Select from "+str(cifar_sizes))
@@ -217,7 +215,6 @@ args.iter_interval=50000//args.batch_size
 if(args.tb):
     seq1=BuildResnet(resnet_dataset)
     train=seq1(input_ph['image'])
-    print(type(train))
     tb=TensorBoard("./")
     tb.add_graph(train)
     exit()
