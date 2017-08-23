@@ -19,8 +19,8 @@
 void create_mkldnn_innerproduct_fprop_kernel(
     mkldnn_engine_t engine, int src_dims, int weights_dims, int bias_dims,
     int dst_dims, int* src_sizes, int* weights_sizes, int* bias_sizes,
-    int* dst_sizes, mkldnn_primitive_desc_t src_pd,
-    mkldnn_primitive_desc_t weights_pd, mkldnn_primitive_desc_t bias_pd,
+    int* dst_sizes, mkldnn_memory_desc_t* input_src_md,
+    mkldnn_memory_desc_t* input_weights_md, mkldnn_memory_desc_t* input_bias_md,
     mkldnn_data_type_t data_type, mkldnn_opkernel_t opkernel) {
   // assert(src_dims == 2);
   // assert(weights_dims == 2);
@@ -72,30 +72,24 @@ void create_mkldnn_innerproduct_fprop_kernel(
   const_mkldnn_primitive_desc_t kernel_bias_pd;
   if (bias_sizes)
   {
-  // Bias code
     kernel_bias_pd =
         mkldnn_primitive_desc_query_pd(opkernel->op_desc, mkldnn_query_weights_pd, 1);
- //end bias code 
   }
   const_mkldnn_primitive_desc_t kernel_dst_pd =
       mkldnn_primitive_desc_query_pd(opkernel->op_desc, mkldnn_query_dst_pd, 0);
   // ------------------------------------------------------------------------
 
   /* Create memory descriptors that are demanded from this op. */
-  if (src_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)src_pd));
-    create_mkldnn_tensor_from_pd(src_dims, src_sizes, &md, engine,
+  if (input_src_md) {
+    create_mkldnn_tensor_from_md(src_dims, src_sizes, input_src_md, engine,
                                  &(opkernel->inputs[0]));
   } else {
     create_mkldnn_tensor(src_dims, src_sizes, data_type, mkldnn_nc, engine,
                          &(opkernel->inputs[0]));
   }
 
-  if (weights_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)weights_pd));
-    create_mkldnn_tensor_from_pd(weights_dims, weights_sizes, &md, engine,
+  if (input_weights_md) {
+    create_mkldnn_tensor_from_md(weights_dims, weights_sizes, input_weights_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
     create_mkldnn_tensor(weights_dims, weights_sizes, data_type, mkldnn_oi,
@@ -103,16 +97,12 @@ void create_mkldnn_innerproduct_fprop_kernel(
   }
   mkldnn_memory_desc_t output_md =
       *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
-  create_mkldnn_tensor_from_pd(dst_dims, dst_sizes, &output_md, engine,
+  create_mkldnn_tensor_from_md(dst_dims, dst_sizes, &output_md, engine,
                                &(opkernel->outputs[0]));
   if(bias_sizes)
   {
-    // TODO: add support for bias
-    if (bias_pd) {
-        mkldnn_memory_desc_t md = *(
-            mkldnn_primitive_desc_query_memory_d(
-                (const_mkldnn_primitive_desc_t) bias_pd));
-        create_mkldnn_tensor_from_pd(bias_dims, bias_sizes, &md,
+    if (input_bias_md) {
+        create_mkldnn_tensor_from_md(bias_dims, bias_sizes, input_bias_md,
                             engine, &(opkernel->inputs[2]));
     } else {
         create_mkldnn_tensor(bias_dims, bias_sizes, data_type, mkldnn_x,
@@ -133,7 +123,7 @@ void create_mkldnn_innerproduct_fprop_kernel(
                                           kernel_src_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
-    create_mkldnn_tensor_from_pd(src_dims, src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, src_sizes, &md, engine,
                                  &(opkernel->internal_inputs[0]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
@@ -151,7 +141,7 @@ void create_mkldnn_innerproduct_fprop_kernel(
                                           kernel_weights_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_weights_pd);
-    create_mkldnn_tensor_from_pd(weights_dims, weights_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(weights_dims, weights_sizes, &md, engine,
                                  &(opkernel->internal_inputs[1]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
@@ -171,7 +161,7 @@ void create_mkldnn_innerproduct_fprop_kernel(
                                             kernel_bias_pd)) {
       mkldnn_memory_desc_t md =
           *mkldnn_primitive_desc_query_memory_d(kernel_bias_pd);
-      create_mkldnn_tensor_from_pd(bias_dims, bias_sizes, &md, engine,
+      create_mkldnn_tensor_from_md(bias_dims, bias_sizes, &md, engine,
                                  &(opkernel->internal_inputs[2]));
       mkldnn_primitive_desc_t reorder_pd;
       MKL_CHECK(mkldnn_reorder_primitive_desc_create(
@@ -189,7 +179,7 @@ void create_mkldnn_innerproduct_fprop_kernel(
                                           kernel_dst_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
-    create_mkldnn_tensor_from_pd(src_dims, src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, src_sizes, &md, engine,
                                  &(opkernel->internal_outputs[0]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(

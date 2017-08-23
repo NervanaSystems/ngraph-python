@@ -61,7 +61,7 @@ def ctc_ref(acts, lbls, utt_lens, lbl_lens):
     return costs, grads
 
 
-def test_ctc(transformer_factory, data_args):
+def test_ctc(data_args):
     """
     test ctc fprop and bprop
     """

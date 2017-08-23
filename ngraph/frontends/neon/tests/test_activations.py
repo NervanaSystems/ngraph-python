@@ -179,13 +179,13 @@ def all_inputs(request):
     return request.param.astype(np.float32)
 
 
-def test_activation(all_inputs, activation_pair, transformer_factory):
+def test_activation(all_inputs, activation_pair):
     ng.testing.assert_allclose(activation_pair.baseline_value(all_inputs),
                                activation_pair.reference_value(all_inputs),
                                rtol=activation_pair.tolerance)
 
 
-def test_derivative(all_inputs, activation_pair, transformer_factory):
+def test_derivative(all_inputs, activation_pair):
     if all_inputs.shape[1] != 1 and isinstance(activation_pair, TanhPair):
         pytest.xfail('Expected tolerance issues for tanh on large-ish values')
 

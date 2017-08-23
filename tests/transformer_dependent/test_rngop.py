@@ -33,7 +33,7 @@ def input_tensor():
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_uniform_range_pos(transformer_factory, input_tensor):
+def test_uniform_range_pos(input_tensor):
     """TODO."""
     ng_a = ng.uniform(input_tensor, low=0.0, high=0.5)
 
@@ -47,7 +47,7 @@ def test_uniform_range_pos(transformer_factory, input_tensor):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_uniform_range_posneg(transformer_factory, input_tensor):
+def test_uniform_range_posneg(input_tensor):
     """TODO."""
     ng_a = ng.uniform(input_tensor, low=-0.5, high=0.5)
 
@@ -61,7 +61,7 @@ def test_uniform_range_posneg(transformer_factory, input_tensor):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_rng_repetition(transformer_factory):
+def test_rng_repetition():
     """
     Tests rng ops, to make sure they run every execution and not just initialization
     """
@@ -78,7 +78,7 @@ def test_rng_repetition(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_normal_negative_mean(transformer_factory):
+def test_normal_negative_mean():
     """TODO."""
     M = ng.make_axis(100).named('M')
     N = ng.make_axis(100).named('N')
