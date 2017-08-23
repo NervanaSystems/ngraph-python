@@ -16,8 +16,6 @@ import ngraph as ng
 
 
 _SHADOW_AXIS_POSTFIX = '__NG_SHADOW'
-_WIDTH = '__NG_WIDTH'
-_DEPTH = '__NG_DEPTH'
 
 
 class Namespace():
@@ -57,34 +55,34 @@ def reorder_spatial_axes(tensor):
     """
     Assumes we are getting a C, H, N, or C, H, W, N, or C, D, H, W, N
     """
-    spatial_axes = tensor.axes.spatial_axes()
-    batch_axes = tensor.axes.batch_axes()
 
-    if len(spatial_axes) == 0 or len(spatial_axes) > 3:
-        raise ValueError(
-            'spatial ops can only operate on tensors with 1, 2, or 3 spatial axes.'
-            'Found {}'.format(spatial_axes)
-        )
+    def expand_with_role(tensor, role, index=0):
+        axis = ng.make_role_axis(role, length=1)
+        return ng.expand_dims(tensor, axis, index), axis
 
-    if not batch_axes:
-        raise ValueError(
-            'spatial ops require a batch axis'
-        )
+    channel_axis = tensor.axes.channel_axis()
+    spatial_roles = ("depth", "height", "width")
+    spatial_axes = [tensor.axes.role_axis(role) for role in spatial_roles]
+    batch_axis = tensor.axes.batch_axis()
+    role_axes = set([ax for ax in spatial_axes + [channel_axis, batch_axis] if ax is not None])
+    diff_axes = role_axes.difference(set(tensor.axes))
+    if len(diff_axes) > 0:
+        raise ValueError("Found extra axes: {}".format(list(diff_axes)))
 
-    if not tensor.axes.channel_axis():
-        c = ng.make_axis(length=1, name='C')
-        tensor = ng.expand_dims(tensor, c, 0)
-    channel_axes = ng.make_axes(tensor.axes.channel_axis())
+    if batch_axis is None:
+        raise ValueError('spatial ops require a batch axis')
 
-    if len(spatial_axes) == 1:
-        w = ng.make_axis(length=1, name=_WIDTH)
-        tensor = ng.expand_dims(tensor, w, 0)
-        spatial_axes = spatial_axes + w
+    if all((ax is None) for ax in spatial_axes):
+        raise ValueError("spatial ops require at least one spatial axis, found none")
 
-    if len(spatial_axes) == 2:
-        d = ng.make_axis(length=1, name=_DEPTH)
-        tensor = ng.expand_dims(tensor, d, 0)
-        spatial_axes = ng.make_axes([d]) + spatial_axes
+    if channel_axis is None:
+        tensor, channel_axis = expand_with_role(tensor, "channel")
 
-    new_axes = channel_axes + spatial_axes + batch_axes
+    for ii, role in enumerate(spatial_roles):
+        ax = spatial_axes[ii]
+        if ax is None:
+            tensor, ax = expand_with_role(tensor, role)
+            spatial_axes[ii] = ax
+
+    new_axes = channel_axis + spatial_axes + batch_axis
     return ng.axes_with_order(tensor, new_axes)

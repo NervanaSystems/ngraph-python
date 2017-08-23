@@ -18,6 +18,8 @@ import collections
 import itertools
 from contextlib import contextmanager
 
+import numpy as np
+
 import ngraph as ng
 from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
@@ -280,68 +282,129 @@ class ConvBase(Layer):
     Convolutional layer that requires explicit binding of all spatial roles
 
     Args:
-        fshape (dict): filter shape -- must contain keys 'T', 'R', 'S', 'K'
+        fshape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
         init (function): function for later initializing filters
-        strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
-        padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
-        dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
+        strides (dict): stride specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+        padding (dict): pad specification -- can contain keys 'D', 'H', 'W' - defaults to 0
+        dilation (dict): dilation specification -- can contain keys 'D', 'H', 'W' - defaults to 1
     """
 
     def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
-        self.convparams = dict(T=None, R=None, S=None, K=None,
-                               pad_h=None, pad_w=None, pad_d=None,
-                               str_h=None, str_w=None, str_d=None,
-                               dil_h=None, dil_w=None, dil_d=None)
 
-        for d in [fshape, strides, padding, dilation]:
-            self.convparams.update(d)
+        for obj in (fshape, strides, padding, dilation):
+            if not isinstance(obj, dict):
+                raise TypeError("All arguments to ConvBase must be dicts")
 
-        missing_keys = [k for k, v in self.convparams.items() if v is None]
-        if len(missing_keys) > 0:
-            raise ValueError("Missing conv keys: {}".format(missing_keys))
+        # Setup filter parameters
+        self.nout = fshape["K"]
+        self.filter_shape = {"W": fshape["W"], "H": fshape["H"], "D": fshape["D"]}
+        self.strides = collections.defaultdict(lambda:1)
+        self.strides.update(strides)
+        self.padding = collections.defaultdict(lambda:0)
+        self.padding.update(padding)
+        self.dilation = collections.defaultdict(lambda:1)
+        self.dilation.update(dilation)
 
         self.init = init
         self.W = None
-        self.W_name = 'convwt'
-        self.layer_name = 'convolution'
 
-    def _filter_axes(self, in_object):
-        f_axes = ng.make_axes([in_object.axes[0]])
-        for nm in 'TRSK':
-            f_axes |= ng.make_axis(length=self.convparams[nm], name=nm)
+    def _make_convparams(self, in_obj, pad_int):
+        """
+        Create convparams to be used by the core ngraph convolution op
+        
+        Arguments:
+            in_obj (Op): Input op to convolve 
+            pad_int (dict): Dictionary of paddings expressed as ints 
+        Returns:
+            convparams dict
+        """
+        convparams = {}
+        for name, value in zip("TRS", [self.filter_shape[nm] for nm in "DHW"]):
+            convparams[name] = value
+
+        for name in "dhw":
+            for prefix, prop in zip(("str", "pad", "dil"),
+                                    (self.strides, pad_int, self.dilation)):
+                convparams["{}_{}".format(prefix, name)] = prop[name.upper()]
+
+        return convparams
+
+    def _filter_axes(self, in_obj):
+        f_axes = in_obj.axes.channel_axis()
+        for role in ("depth", "height", "width"):
+            ax = in_obj.axes.role_axis(role)
+            assert ax is not None  # We require all roles currently
+            f_axes |= ng.make_axis(length=self.filter_shape[role[0].upper()], name=ax.name)
+        # TODO: What is the role here? Use 'K' or ng.make_role_axis?
+        f_axes |= ng.make_axis(length=self.nout, name="K")
         return f_axes
 
-    def _output_axes(self, in_object):
-        in_axes = in_object.axes
+    def _output_axes(self, in_obj, pad_int):
+        in_axes = in_obj.axes
+        output_axes = []
+        output_axes.append(ng.make_axis(length=self.nout, name=in_axes.channel_axis().name))
+        for role in ("depth", "height", "width"):
+            ax = in_axes.role_axis(role)
+            key = role[0].upper()
+            assert ax is not None
+            out_ax = ng.make_axis(name=ax.name,
+                                  length=conv_output_dim(ax.length,
+                                                         self.filter_shape[key],
+                                                         pad_int[key],
+                                                         self.strides[key],
+                                                         False,
+                                                         self.dilation[key]))
+            output_axes.append(out_ax)
 
-        output_axes = ng.make_axes([
-            ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
-        ])
-        # set lengths
-        output_axes.set_shape(self._out_shape(in_axes))
-        output_axes |= in_axes.batch_axis()
+        return ng.make_axes(output_axes) | in_axes.batch_axis()
 
-        return output_axes
+    def _get_pad_int(self, in_obj):
+        # Manual padding might be required for asymmetric paddings
+        manual_pad = collections.OrderedDict([(ax.name, (0, 0)) for ax in in_obj.axes])
 
-    def _out_shape(self, in_axes):
-        cpm = self.convparams.copy()
-        out_shape = [
-            self.W.axes[-1].length,
-            conv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
-                            cpm['dil_d']),
-            conv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
-                            cpm['dil_h']),
-            conv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
-                            cpm['dil_w'])
-        ]
-        return out_shape
+        def same_padding(n, s, d, k):
+
+            return int(s * (np.ceil(n / s) - 1) + 1 - n + d * (k - 1))
+
+        padding_int = {}
+        for role in ("depth", "height", "width"):
+            ax = in_obj.axes.role_axis(role)
+            assert ax is not None
+            name = role[0].upper()
+            pad = self.padding[name]
+            if isinstance(pad, int):
+                padding_int[name] = pad
+            elif isinstance(pad, str):
+                if pad not in ("same", "valid", "causal"):
+                    raise ValueError("If padding is a string, it must be one of "
+                                     "'same', 'valid', or 'causal', not {}".format(pad))
+                if pad == "valid":
+                    padding_int[name] = 0
+                elif pad == "same":
+                    total_pad = same_padding(ax.length, self.strides[name],
+                                             self.dilation[name], self.filter_shape[name])
+                    padding_int[name] = total_pad // 2
+                    if total_pad % 2:  # If padding is odd, add an extra 0 at the end
+                        manual_pad[ax.name] = (0, 1)
+                elif pad == "causal":
+                    padding_int[name] = 0
+                    manual_pad[ax.name] = (self.dilation[name] * (self.filter_shape[name] - 1), 0)
+
+        return padding_int, manual_pad
 
     def _conv_op(self, in_obj):
-        return ng.convolution(self.convparams.copy(),
+
+        pad_int, manual_pad = self._get_pad_int(in_obj)
+        if any((pad != (0, 0)) for pad in manual_pad.values()):
+            in_obj = ng.pad(in_obj, manual_pad.values())
+        output_axes = self._output_axes(in_obj, pad_int)
+        convparams = self._make_convparams(in_obj, pad_int)
+
+        return ng.convolution(convparams,
                               in_obj,
                               self.W,
-                              axes=self._output_axes(in_obj))
+                              axes=output_axes)
 
     @SubGraph.scope_op_creation
     def __call__(self, in_obj):
@@ -356,10 +419,10 @@ class ConvBase(Layer):
             for axis in filter_axes
         ])
 
-        if self.W is None:
+        if not self.initialized:
             self.W = ng.variable(axes=filter_axes,
                                  initial_value=self.init,
-                                 metadata={"label": LABELS["weight"]}).named(self.W_name)
+                                 metadata={"label": LABELS["weight"]}).named("W")
         else:
             if filter_axes != self.W.axes:
                 raise ValueError((
@@ -370,7 +433,7 @@ class ConvBase(Layer):
                     "{new_filter_axes} which are different than the existing "
                     "filter axes."
                 ).format(
-                    layer_name=self.layer_name,
+                    layer_name=self.name,
                     existing_filter_axes=self.W.axes,
                     input_axes=in_obj.axes,
                     new_filter_axes=filter_axes,

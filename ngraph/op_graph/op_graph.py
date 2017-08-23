@@ -3956,7 +3956,7 @@ def pad(x, paddings, axes=None):
         in which case the padding will be symmetrical, or a tuple
         of the form (before, after)
       axes: the axes to be given to the padded tensor.
-        If unsupplied, we create anonymous axes of the correct lengths.
+        If unsupplied, we create new axes of the correct lengths.
 
     Returns:
         TensorOp: symbolic expression for the padded tensor
@@ -3983,7 +3983,7 @@ def pad(x, paddings, axes=None):
     paddings = tuple(pad_to_tuple(pad) for pad in paddings)
     if axes is None:
         axes = make_axes(
-            make_axis(length=axis.length + pad[0] + pad[1])
+            make_axis(length=axis.length + pad[0] + pad[1], name=axis.name)
             if pad != (0, 0) else axis
             for axis, pad in zip(x.axes, paddings)
         )

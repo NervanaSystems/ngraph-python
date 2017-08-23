@@ -20,7 +20,7 @@ import json
 import logging
 import logging.config
 import ngraph.transformers as transformers
-from ngraph.op_graph.axes import make_axis, make_axes
+from ngraph.op_graph.axes import make_axis, make_axes, make_role_axis
 from ngraph.transformers.base import UnsupportedTransformerException
 
 from ngraph.op_graph.convolution import convolution, deconvolution
@@ -61,6 +61,7 @@ __all__ = [
     'ctc',
     'make_axes',
     'make_axis',
+    'make_role_axis',
     'negative',
     'one_hot',
     'pad',
