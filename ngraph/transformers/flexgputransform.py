@@ -18,6 +18,7 @@ from __future__ import division
 import numpy as np
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
 from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
@@ -41,6 +42,7 @@ from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescripti
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
+from ngraph.op_graph.lookuptable import update_lut
 
 
 # kernels that do not require flex integration
@@ -106,6 +108,21 @@ class FlexGPUTransformer(GPUTransformer):
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
+
+    def add_flex_id_to_ops(self):
+        for op in self.ops:
+            if op.is_tensor_op:
+                base = op.forwarded.tensor_description().base
+                tensor = self.op_tensors.get(base, None)
+                if hasattr(tensor, 'flex_entry'):
+                    op.metadata['flex_id'] = tensor.flex_entry.flex_id
+                    base.op.metadata['flex_id'] = tensor.flex_entry.flex_id
+
+    def start_transform_allocate(self):
+        super(FlexGPUTransformer, self).start_transform_allocate()
+        self.add_flex_id_to_ops()
+
+        # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
 
     def gpu_kernel_group(self, name):
         return FlexGPUKernelGroup(self, name)
@@ -254,6 +271,10 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def add_kernel(self, op):
         self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
                                            op.reduction_axes.size))
+
+    @add_kernel.on_type(update_lut)
+    def add_kernel(self, op):
+        self.kernels.append(FlexLUTBpropKernel(self.transformer, op))
 
     def compile_all(self):
         """
