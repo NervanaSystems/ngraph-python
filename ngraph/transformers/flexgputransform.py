@@ -16,7 +16,7 @@
 from __future__ import print_function
 from __future__ import division
 import numpy as np
-from ngraph.transformers.passes.nviz import VizPass
+# from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import UnsupportedTransformerException
 from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
