@@ -96,7 +96,7 @@ def get_strides_mkl_order(td, order):
         return [td.strides[index] for index in order]
 
 
-def get_native_layout(mkldnn, td, order, use_formats=False):
+def get_native_layout(mkldnn, td, order, use_formats=True):
     '''
     Create an MKL layout object in transformer-visible layout
     :param td: tensor description of the op. Currently owns tensor layout info in graph
@@ -135,7 +135,7 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     return (native_layout, mkl_axes)
 
 
-def get_mkl_layout(mkldnn, op, order, use_formats=False):
+def get_mkl_layout(mkldnn, op, order, use_formats=True):
     if op.name in mkldnn.op_layouts:
         return mkldnn.op_layouts[op.name]
     else:
@@ -167,7 +167,7 @@ def get_rotated_layout(mkldnn, in_layout, from_axes, to_axes):
     return new_layout
 
 
-def get_mkl_op_shape_and_layout(mkldnn, op, mkl_order, use_formats=False):
+def get_mkl_op_shape_and_layout(mkldnn, op, mkl_order, use_formats=True):
     op_axes_mkl = [op.axes[idx] for idx in mkl_order]
     mkl_shape = [a.length for a in op_axes_mkl]
     if op.name in mkldnn.op_layouts:
@@ -840,7 +840,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
                 new_args.append(arg)
         if replace:
             new_op = op.copy_with_new_args(new_args)
-            self.replace_op(op, new_op)
+	    self.replace_op(op, new_op)
 
     @visit.on_type(ContiguousOp)
     def visit(self, op, arg):
