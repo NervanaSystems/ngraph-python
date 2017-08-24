@@ -22,7 +22,7 @@ from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
 from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
-    from ngraph.flex import GPUFlexManager, GPUFlex
+    from ngraph.flex import GPUFlexManager, GPUFlex, gpuflex16
 except ImportError:
     raise UnsupportedTransformerException("autoflex package not installed")
 
@@ -43,7 +43,6 @@ from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescripti
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
 from ngraph.op_graph.lookuptable import update_lut
-
 
 # kernels that do not require flex integration
 # non_flex_kernels: output_flex_ids set to empty list
@@ -94,6 +93,26 @@ class FlexGPUTransformer(GPUTransformer):
         # flex manager manages autoflex mechanics
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
+
+    def add_flex_id_to_ops(self):
+        for op in self.ops:
+            if op.is_tensor_op:
+                base = op.forwarded.tensor_description().base
+                tensor = self.op_tensors.get(base, None)
+                if hasattr(tensor, 'flex_entry'):
+                    op.metadata['flex_id'] = tensor.flex_entry.flex_id
+                    base.op.metadata['flex_id'] = tensor.flex_entry.flex_id
+
+    def start_transform_allocate(self):
+        super(FlexGPUTransformer, self).start_transform_allocate()
+        self.add_flex_id_to_ops()
+
+        # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
+
+    @classmethod
+    def get_atol(cls, desired, *args):
+        scale = gpuflex16.get_scale(np.max(abs(desired)))
+        return scale * 8
 
     def set_output_statistics_file(self, statistics_file):
         if self.collect_flex_data:

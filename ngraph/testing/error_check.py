@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
+import pytest
 import numpy as np
 import ngraph as ng
-
 
 def transformer_name():
     return ng.transformers.base.__transformer_factory.name
 
 
-def __overwrite_rtol_atol(rtol, atol):
+def __overwrite_rtol_atol(rtol, atol, desired):
     """
     Overwrite atol, rtol by the transformer's default atol rtol if the default
     is less strict.
@@ -38,9 +37,13 @@ def __overwrite_rtol_atol(rtol, atol):
         name = transformer_name()
         # get transformer class
         tr = ng.transformers.Transformer.transformers[name]
+        # get atol according to used transformer
+        atol = tr.get_atol(desired, atol)
+
         # rewrite rtol, atol if default is coarser
         rtol = tr.default_rtol if tr.default_rtol > rtol else rtol
         atol = tr.default_atol if tr.default_atol > atol else atol
+        print("atol: ", atol)
     except:
         # if transformer not found, not make changes
         pass
@@ -67,7 +70,7 @@ def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
     TODO: handle heter
     """
     if transformer_overwrite:
-        rtol, atol = __overwrite_rtol_atol(rtol, atol)
+        rtol, atol = __overwrite_rtol_atol(rtol, atol, desired)
     np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol,
                                equal_nan=equal_nan, err_msg=err_msg,
                                verbose=verbose)
