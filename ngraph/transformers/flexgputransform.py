@@ -16,6 +16,7 @@
 from __future__ import print_function
 from __future__ import division
 import numpy as np
+from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import UnsupportedTransformerException
 from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
@@ -77,7 +78,7 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     default_rtol = 1e-02
-    default_atol = 2e-05
+    atol_precision_multiplier = 8
 
     def __init__(self, fixed_point=False, flex_verbose=False, collect_flex_data=False, **kwargs):
 
@@ -110,9 +111,11 @@ class FlexGPUTransformer(GPUTransformer):
         # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
 
     @classmethod
-    def get_atol(cls, desired, *args):
+    def get_default_tolerance(cls, desired):
         scale = gpuflex16.get_scale(np.max(abs(desired)))
-        return scale * 8
+        atol = scale * FlexGPUTransformer.atol_precision_multiplier
+        rtol = FlexGPUTransformer.default_rtol
+        return atol, rtol
 
     def set_output_statistics_file(self, statistics_file):
         if self.collect_flex_data:

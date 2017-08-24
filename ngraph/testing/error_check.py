@@ -37,8 +37,8 @@ def __overwrite_rtol_atol(rtol, atol, desired):
         name = transformer_name()
         # get transformer class
         tr = ng.transformers.Transformer.transformers[name]
-        # get atol according to used transformer
-        atol = tr.get_atol(desired, atol)
+        # get default atol, rtol according to used transformer
+        tr.default_atol, tr.default_rtol = tr.get_default_tolerance(desired)
 
         # rewrite rtol, atol if default is coarser
         rtol = tr.default_rtol if tr.default_rtol > rtol else rtol
