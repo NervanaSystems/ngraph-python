@@ -325,7 +325,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
     # if (sum_out, concat_out, init_state, return_sequence) == (True, False, True, True) \
     #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, True) \
     #         or (sum_out, concat_out, init_state, return_sequence) == (False, False, True, True) \
-    #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, False) \
+    #        or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, False) \
     #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, True) \
     #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, False):
     #     pytest.config.flex_skip_now("because of the strict tolerance (rtol, atol)")

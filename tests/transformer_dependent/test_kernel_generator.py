@@ -54,7 +54,8 @@ def test_exit_condition():
         np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
 
-# @pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
+# @pytest.config.flex_skip(
+# reason="Fail for flex, but randomly passing, due to random input -> SKIP")
 def test_4d_elementwise(input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))
@@ -84,7 +85,8 @@ def test_4d_reduction(input_axes):
         ng.testing.assert_allclose(graph_val2, np_val2, rtol=1e-4)
 
 
-# @pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
+# @pytest.config.flex_skip(
+# reason="Fail for flex, but randomly passing, due to random input -> SKIP")
 def test_4d_chained(input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))

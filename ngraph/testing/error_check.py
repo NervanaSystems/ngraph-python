@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import pytest
+# import pytest
+from __future__ import print_function
 import numpy as np
 import ngraph as ng
+
 
 def transformer_name():
     return ng.transformers.base.__transformer_factory.name
