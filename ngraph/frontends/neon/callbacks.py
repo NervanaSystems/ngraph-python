@@ -241,10 +241,10 @@ def loop_eval(dataset, computation):
 
     def top_results(inference_prob, data):
         if inference_prob is not None:
-            infer_sorted = np.argsort(inference_prob, axis=0)[-5:]  # top5
-            data_tr = data[dataset.tgt_key].T  #true labels
-            top1_results = np.any(np.equal(data_tr, infer_sorted[-1:]), axis=0)
-            top5_results = np.any(np.equal(data_tr, infer_sorted), axis=0)
+            top5_sorted = np.argsort(inference_prob, axis=0)[-5:]
+            data_tr = data[dataset.tgt_key].T  # true labels
+            top1_results = np.any(np.equal(data_tr, top5_sorted[-1:]), axis=0)
+            top5_results = np.any(np.equal(data_tr, top5_sorted), axis=0)
             return {'top_1_acc': top1_results, 'top_5_acc': top5_results}
 
     for data in dataset:

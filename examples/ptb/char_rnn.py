@@ -51,8 +51,8 @@ parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
-args.batch_size = 45
-time_steps = 15
+args.batch_size = 50
+time_steps = 150
 hidden_size = 500
 
 # download penn treebank

@@ -35,6 +35,7 @@ class ArrayIterator(object):
             batch_size (int): number of examples in each minibatch
             total_iterations (int): number of minibatches to cycle through on this iterator.
                                     If not provided, it will cycle through all of the data once.
+            tgt_key (str): name of the target (labels) key in data_arrays
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
