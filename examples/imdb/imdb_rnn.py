@@ -87,7 +87,9 @@ errors = ng.not_equal(ng.argmax(inference_prob, reduction_axes=[ax.Y]), inputs['
 eval_loss = ng.cross_entropy_multi(inference_prob,
                                    ng.one_hot(inputs['label'], axis=ax.Y),
                                    usebits=True)
-eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
+eval_outputs = dict(cross_ent_loss=eval_loss,
+                    misclass_pct=errors,
+                    results=inference_prob)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:

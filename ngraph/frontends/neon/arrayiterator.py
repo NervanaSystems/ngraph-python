@@ -22,7 +22,8 @@ import collections
 
 class ArrayIterator(object):
 
-    def __init__(self, data_arrays, batch_size, total_iterations=None):
+    def __init__(self, data_arrays, batch_size,
+                 total_iterations=None, tgt_key='label'):
         """
         During initialization, the input data will be converted to backend tensor objects
         (e.g. CPUTensor or GPUTensor). If the backend uses the GPU, the data is copied over to the
@@ -38,6 +39,7 @@ class ArrayIterator(object):
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
         self.axis_names = None
+        self.tgt_key = tgt_key
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v['data'] for k, v in data_arrays.items()}
             self.axis_names = {k: v['axes'] for k, v in data_arrays.items()}
@@ -125,12 +127,14 @@ class ArrayIterator(object):
 class SequentialArrayIterator(object):
 
     def __init__(self, data_arrays, time_steps, batch_size,
-                 total_iterations=None, reverse_target=False, get_prev_target=False):
+                 total_iterations=None, reverse_target=False,
+                 get_prev_target=False, tgt_key='tgt_txt'):
         self.get_prev_target = get_prev_target
         self.reverse_target = reverse_target
 
         self.batch_size = batch_size
         self.time_steps = time_steps
+        self.tgt_key = tgt_key
         self.index = 0
 
         if isinstance(data_arrays, dict):
@@ -156,10 +160,10 @@ class SequentialArrayIterator(object):
         ) for k, x in viewitems(self.data_arrays)}
 
         if self.reverse_target:
-            self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
+            self.data_arrays[self.tgt_key][:] = self.data_arrays[self.tgt_key][:, :, ::-1]
 
         if self.get_prev_target:
-            self.data_arrays['prev_tgt'] = np.roll(self.data_arrays['tgt_txt'], shift=1, axis=2)
+            self.data_arrays['prev_tgt'] = np.roll(self.data_arrays[self.tgt_key], shift=1, axis=2)
 
     def make_placeholders(self):
         ax.N.length = self.batch_size

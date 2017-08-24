@@ -51,8 +51,8 @@ parser.set_defaults()
 args = parser.parse_args()
 
 # these hyperparameters are from the paper
-args.batch_size = 50
-time_steps = 150
+args.batch_size = 45
+time_steps = 15
 hidden_size = 500
 
 # download penn treebank
@@ -102,15 +102,10 @@ train_outputs = dict(batch_cost=batch_cost)
 with Layer.inference_mode_on():
     inference_prob = seq1(inputs['inp_txt'])
 
-errors = ng.not_equal(ng.argmax(inference_prob, reduction_axes=[ax.Y]), inputs['tgt_txt'])
-errors_last_char = ng.slice_along_axis(errors, ax.REC, time_steps - 1)
-
 eval_loss = ng.cross_entropy_multi(inference_prob,
                                    ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
                                    usebits=True)
-eval_outputs = dict(cross_ent_loss=eval_loss,
-                    misclass_pct=errors,
-                    misclass_last_pct=errors_last_char)
+eval_outputs = dict(cross_ent_loss=eval_loss, results=inference_prob)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:
