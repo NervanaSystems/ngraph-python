@@ -159,7 +159,7 @@ def test_sequential_side(M):
         assert np.allclose(x2_final_val, x2_np)
 
 
-@pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
+# @pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
 @pytest.config.argon_disabled  # TODO triage
 def test_concatenate(concatenate_variables):
     x_list, np_list, pos = concatenate_variables
