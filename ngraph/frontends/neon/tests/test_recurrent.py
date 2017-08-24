@@ -322,13 +322,13 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
-    if (sum_out, concat_out, init_state, return_sequence) == (True, False, True, True) \
-            or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, True) \
-            or (sum_out, concat_out, init_state, return_sequence) == (False, False, True, True) \
-            or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, False) \
-            or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, True) \
-            or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, False):
-        pytest.config.flex_skip_now("because of the strict tolerance (rtol, atol)")
+    # if (sum_out, concat_out, init_state, return_sequence) == (True, False, True, True) \
+    #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, True) \
+    #         or (sum_out, concat_out, init_state, return_sequence) == (False, False, True, True) \
+    #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, False) \
+    #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, False, True) \
+    #         or (sum_out, concat_out, init_state, return_sequence) == (False, True, True, False):
+    #     pytest.config.flex_skip_now("because of the strict tolerance (rtol, atol)")
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
