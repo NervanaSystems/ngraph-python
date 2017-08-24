@@ -468,6 +468,10 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     def close(self):
         pass
 
+    @classmethod
+    def get_atol(cls, desired, atol):
+        return atol
+
     def __del__(self):
         self.close()
 

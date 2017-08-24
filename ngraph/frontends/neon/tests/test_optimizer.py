@@ -204,7 +204,7 @@ def random_momentum_coef():
     return np.random.random()
 
 
-@pytest.config.flex_skip(reason="The most cases fail because of too strict assert tolerance")
+@pytest.config.flex_disabled(reason="The most cases fail because of too strict assert tolerance")
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
 @pytest.mark.parametrize("select_variables", [False, True])
