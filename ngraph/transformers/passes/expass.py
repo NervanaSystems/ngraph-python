@@ -50,8 +50,6 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
         # TODO when more than one block, we would iterate over each block
         self.exop_block = computation_decl.exop_block
 
-        self.begin_pass(**kwargs)
-
         # TODO Add other types when they are in use
         assert isinstance(self.exop_block, ExOpBlock)
         self.did_something = True
@@ -59,8 +57,7 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
             self.did_something = False
             for exop in self.exop_block:
                 self.visit_exop(exop, *exop.input_decls)
-
-        return self.end_pass(**kwargs)
+        return
 
     @abc.abstractmethod
     def visit_exop(self, exop, *exop_args):
