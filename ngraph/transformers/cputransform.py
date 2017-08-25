@@ -822,7 +822,7 @@ class CPUTransformer(ExecutionGraphTransformer):
     import imp
     try:
         imp.find_module('mlsl')
-        use_mlsl = True
+        use_mlsl = False
     except ImportError:
         use_mlsl = False
 
