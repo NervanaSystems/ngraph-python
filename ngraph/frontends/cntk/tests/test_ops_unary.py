@@ -162,6 +162,86 @@ def test_relu_5():
     assert np.array_equal(cntk_ret, ng_ret)
 
 
+def test_reciprocal_1():
+    cntk_op = C.reciprocal([-1 / 3, 1 / 5, -2, 3])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_negate_1():
+    cntk_op = C.negate([-1, 1, -2, 3])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_log_1():
+    cntk_op = C.log([1., 2.])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_sqrt_1():
+    cntk_op = C.sqrt([0., 4.])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_floor_1():
+    cntk_op = C.floor([0.2, 1.3, 4., 5.5, 0.0])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_floor_2():
+    cntk_op = C.floor([[0.6, 3.3], [1.9, 5.6]])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_floor_3():
+    cntk_op = C.floor([-5.5, -4.2, -3., -0.7, 0])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
+def test_floor_4():
+    cntk_op = C.floor([[-0.6, -4.3], [1.9, -3.2]])
+    cntk_ret = cntk_op.eval()
+
+    ng_op, _ = CNTKImporter().import_model(cntk_op)
+    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
+
+    assert np.array_equal(cntk_ret, ng_ret)
+
+
 if __name__ == "__main__":
     test_sigmoid_1()
     test_sigmoid_2()
@@ -177,3 +257,11 @@ if __name__ == "__main__":
     test_relu_3()
     test_relu_4()
     test_relu_5()
+    test_reciprocal_1()
+    test_negate_1()
+    test_log_1()
+    test_sqrt_1()
+    test_floor_1()
+    test_floor_2()
+    test_floor_3()
+    test_floor_4()

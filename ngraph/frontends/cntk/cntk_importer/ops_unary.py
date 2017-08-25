@@ -21,6 +21,66 @@ class OpsUnary:
     Bridging unary operations between CNTK and ngraph.
     """
 
+    def Negate(self, cntk_op, inputs):
+        """
+        Returns element-wise negation of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return ng.negative(inputs[0]).named(cntk_op.uid)
+
+    def Log(self, cntk_op, inputs):
+        """
+        Returns element-wise natural logarithm of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return ng.LogOp(inputs[0]).named(cntk_op.uid)
+
+    def Sqrt(self, cntk_op, inputs):
+        """
+        Returns element-wise square-root of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return ng.sqrt(inputs[0]).named(cntk_op.uid)
+
+    def Floor(self, cntk_op, inputs):
+        """
+        Returns element-wise value rounded to the largest integer less than or equal to inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return ng.subtract(inputs[0], ng.mod(inputs[0], 1)).named(cntk_op.uid)
+
     def Sigmoid(self, cntk_op, inputs):
         """
         Returns element-wise sigmoid of inputs[0].
