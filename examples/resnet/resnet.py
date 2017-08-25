@@ -29,8 +29,25 @@ from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
 from data import make_aeon_loaders
 
 #Hyperparameters
-rho=0.3
+#Optimizer
+base_lr=0.1
+gamma=0.1
+learning_schedule=[32000, 48000]
+momentum_coef=0.9
+wdecay=0.0001
+#BatchNorm
+rho=0.3 #0.3
+do_tuning=False
+#initializer
+weight_init=KaimingInit()
 
+print("HyperParameters")
+print("Learning Rate:     "+str(base_lr))
+print("Learning Schedule: "+str(learning_schedule))
+print("Momentum:          "+str(momentum_coef))
+print("Weight Decay:      "+str(wdecay))
+print("TuningEnabled:     "+str(do_tuning))
+print("Rho:               "+str(rho))
 #Helpers
 def mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
@@ -39,17 +56,18 @@ def mean_subtract(x):
     return (x - bgr_mean) / 255.
 
 #Returns dict of convolution layer parameters
-def conv_params(fil_size, num_fils,rho,strides=1,batch_norm=True,relu=True):
+def conv_params(fil_size, num_fils,rho,batch_size,strides=1,batch_norm=True,relu=True):
     return dict(fshape=(fil_size,fil_size,num_fils),
                 rho=rho,
+                bz=batch_size,
                 strides=strides,
                 padding=(1 if fil_size > 1 else 0),
                 batch_norm=batch_norm,
                 activation=(Rectlin() if relu else None),
-                filter_init=XavierInit())
+                filter_init=weight_init)
 #Class for Residual Module
 class ResidualModule(object):
-    def __init__(self,num_fils,rho,first=False,strides=1):
+    def __init__(self,num_fils,rho,batch_size,first=False,strides=1):
         self.side_path =None
         #Trunk represents the operation after addition
         self.trunk =None
@@ -58,17 +76,14 @@ class ResidualModule(object):
             exit()
         else:
             #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
-            main_path=([Convolution(**conv_params(1,num_fils,rho,strides=strides)),
-                        Convolution(**conv_params(3,num_fils,rho,)),
-                        Convolution(**conv_params(1,num_fils*4,rho,relu=False,batch_norm=False))])
+            main_path=([Convolution(**conv_params(3,num_fils,rho,batch_size,strides=strides)),
+                        Convolution(**conv_params(3,num_fils,rho,batch_size,relu=False))])
             #Add a 1x1 Conv with strides 2 for dimension reduction to allow proper addition
-            if first or strides == 2:
-                self.side_path=Convolution(**conv_params(1,num_fils*4,rho,strides=strides,relu=False,batch_norm=False))
-            else:
-                main_path = [BatchNorm(rho=rho),Activation(Rectlin())] + main_path
+            if strides == 2:
+                self.side_path=Convolution(**conv_params(1,num_fils,rho,batch_size,strides=strides,relu=False))
             #Relu after addition (Change to control relu location)
-            if (strides==2):
-                self.trunk=Sequential([BatchNorm(rho=rho), Activation(Rectlin())])
+            if not first:
+                self.trunk=Sequential([Activation(Rectlin())])
             self.main_path=Sequential(main_path)
 
     def __call__(self,in_obj):
@@ -88,32 +103,31 @@ class ResidualModule(object):
 
 #Class for constructing the network
 class BuildResnet(Sequential):
-    def __init__(self,net_type):
+    def __init__(self,net_type,batch_size):
         num_fils=[16,32,64]
         if net_type=='cifar10' or 'cifar100':
             layers=[#Subtracting mean as suggested in paper
                     Preprocess(functor=mean_subtract),
                     #First Conv with 3x3 and stride=1
-                    Convolution(**conv_params(3,16,rho))]
+                    Convolution(**conv_params(3,16,rho,batch_size))]
             first=True
             #Lay out residual layers. Hardcoding 3 as there are only 3 sets of filters
             for fil in range(3):
                 for resmods in range(num_resnet_mods):
                     if(resmods==0):
                         if(first):
-                            layers.append(ResidualModule(num_fils[fil],rho,strides=1,first=first))
+                            layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1,first=first))
                             first=False
                         else:
-                            layers.append(ResidualModule(num_fils[fil],rho,strides=2))
+                            layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=2))
                     else:
-                        layers.append(ResidualModule(num_fils[fil],rho,strides=1))
-            layers.append(BatchNorm(rho=rho))
+                        layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1))
             layers.append(Activation(Rectlin()))
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
             #Axes are 10 as number of classes are 10
-            layers.append(Affine(axes=ax.Y,weight_init=XavierInit()))
-            layers.append(BatchNorm(rho=rho))
+            layers.append(Affine(axes=ax.Y,weight_init=weight_init))
+            layers.append(BatchNorm(rho=rho,bz=batch_size))
             layers.append(Activation(Softmax()))
         elif net_type=='i1k':
             print("Seriously how did we come this far.")
@@ -172,7 +186,7 @@ if __name__ == "__main__":
                 valid_set = ArrayIterator(valid_data, args.batch_size)
 
             #Num of resnet modules required for cifar10
-            num_resnet_mods=(args.size-2)//9
+            num_resnet_mods=(args.size-2)//6
             #Only 2 layers for one resnet module
             en_bottleneck=False
             ax.Y.length=10
@@ -182,14 +196,15 @@ if __name__ == "__main__":
             #Make placeholders
             input_ph=train_set.make_placeholders(include_iteration=True)
             ax.Y.length = 10
-            resnet = BuildResnet(resnet_dataset)
+            resnet = BuildResnet(resnet_dataset,args.batch_size)
             learning_rate_policy = {'name': 'schedule',
-                                    'schedule': [32000, 48000],
-                                    'gamma': 0.1,
-                                    'base_lr': 0.1}
+                                    'schedule': learning_schedule,
+                                    'gamma': gamma,
+                                    'base_lr': base_lr}
             optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
-                            momentum_coef=0.9,
-                            wdecay=0.00001,
+                            momentum_coef=momentum_coef,
+                            wdecay=wdecay,
+                            nestrov=True,
                             iteration=input_ph['iteration'])
         else:
             print("Invalid cifar10 size.Select from "+str(cifar_sizes))
@@ -214,7 +229,7 @@ label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_ax
 args.iter_interval=50000//args.batch_size
 #Tensorboard
 if(args.tb):
-    seq1=BuildResnet(resnet_dataset)
+    seq1=BuildResnet(resnet_dataset,args.batch_size)
     train=seq1(input_ph['image'])
     tb=TensorBoard("./")
     tb.add_graph(train)
@@ -259,7 +274,7 @@ gvar_calc=ng.computation(ng.sequential([debiaser]+gvar_ops),batch_index)
 transformer=ngt.make_transformer()
 #Tuner
 rho_calc_comp=transformer.add_computation(rho_calc)   
-#gvar_calc_comp=transformer.add_computation(gvar_calc)
+gvar_calc_comp=transformer.add_computation(gvar_calc)
 #Trainer
 train_function=transformer.add_computation(train_computation)
 #Inference
@@ -271,8 +286,10 @@ interval_cost = 0.0
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-    t1=rho_calc_comp(step)
-    #t2=gvar_calc_comp(step)
+    if(do_tuning):
+        t1=rho_calc_comp(step)
+        if(step>=10):
+            t2=gvar_calc_comp(step)
     output = train_function(feed_dict=feed_dict)
     tpbar.update(1)
     tpbar.set_description("Training {:0.4f}".format(output[()]))

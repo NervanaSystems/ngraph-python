@@ -66,7 +66,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
         print("Choose dataset cifar10 or i1k")
         exit()
 
-    def common_config(manifest_file, batch_size,dataset=dataset):
+    def common_config(manifest_file, batch_size,dataset=dataset,valid_set=False):
         if(dataset=="cifar10"):
             cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
@@ -79,14 +79,22 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
                             "padding":4,
                             "crop_enable": False,
                             "flip_enable": True}
-
+            if(valid_set):
+                return {'manifest_filename': manifest_file,
+                        'manifest_root': os.path.dirname(manifest_file),
+                        'batch_size': batch_size,
+                        'block_size': 5000,
+                        'cache_directory': cache_root,
+                        'etl': [image_config, label_config]}
+            #Training Set
             return {'manifest_filename': manifest_file,
-                    'manifest_root': os.path.dirname(manifest_file),
-                    'batch_size': batch_size,
-                    'block_size': 5000,
-                    'cache_directory': cache_root,
-                    'etl': [image_config, label_config],
-                    'augmentation': [augmentation]}
+                        'manifest_root': os.path.dirname(manifest_file),
+                        'batch_size': batch_size,
+                        'block_size': 5000,
+                        'cache_directory': cache_root,
+                        'etl': [image_config, label_config],
+                        'augmentation': [augmentation]}
+            
         elif(dataset=="i1k"):
             cache_root=get_data_cache_or_nothing("i1k-cache/")
 
@@ -121,7 +129,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
     train_config['shuffle_enable'] = True
     train_config['random_seed'] = random_seed
 
-    valid_config = common_config(valid_manifest, batch_size)
+    valid_config = common_config(valid_manifest, batch_size,valid_set=True)
     valid_config['iteration_mode'] = "ONCE"
     valid_config['shuffle_manifest'] = True
     valid_config['shuffle_enable'] = True
