@@ -4298,7 +4298,7 @@ class CrossEntropyMultiOp(ValueOp):
     def __init__(self, y, t, usebits=False, out_axes=None,
                  enable_softmax_opt=True,
                  enable_diff_opt=True, **kwargs):
-        #if y.axes.is_not_equal_set(t.axes):
+        # if y.axes.is_not_equal_set(t.axes):
         if not y.axes.is_super_set(t.axes):
             raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
                                                                                          t.axes))
