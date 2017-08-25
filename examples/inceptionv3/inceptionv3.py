@@ -98,11 +98,13 @@ optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=5., e
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))[:, 0, 0, 0, :]
-train_prob_main = ng.cast_role(train_prob_main, axes=y_onehot.axes)
+#train_prob_main = ng.cast_role(train_prob_main, axes=y_onehot.axes)
+train_prob_main = ng.map_roles(train_prob_main, {"C":ax.Y.name})
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
 
 train_prob_aux = inception.seq_aux(inception.seq1(inputs['image']))[:, 0, 0, 0, :]
-train_prob_aux = ng.cast_role(train_prob_aux, axes=y_onehot.axes)
+#train_prob_aux = ng.cast_role(train_prob_aux, axes=y_onehot.axes)
+train_prob_aux = ng.map_roles(train_prob_aux, {"C":ax.Y.name})
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot)
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
