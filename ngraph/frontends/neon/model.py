@@ -25,17 +25,14 @@ class Parallel(SubGraph):
     Output of each branch is concatenated to form a larger tensor
     Future Work: option to sum the outputs of branches rather than concatenate
     """
-    def __init__(self, layers, name=None, **kwargs):
+    def __init__(self, branches, name=None, **kwargs):
         super(Parallel, self).__init__(name=name, **kwargs)
-        self.layers = layers
+        self.branches = branches
 
     @SubGraph.scope_op_creation
     def __call__(self, in_obj, concat_axis=None, mode='concat'):
+        outputs = [branch(in_obj) for branch in self.branches]
         if mode == 'concat':
-            outputs = []
-            for l in self.layers:
-                outputs.append(l(in_obj))
-
             if concat_axis is None:
                 concat_axis = outputs[0].axes.channel_axis()
 

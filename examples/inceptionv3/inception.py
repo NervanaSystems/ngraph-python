@@ -30,7 +30,7 @@ def conv_params(filt_params, strides=1, batch_norm=True, activation=Rectlin(),
                 bias_init=bias_init)
 
 
-class Inceptionv3_b1(Sequential):
+class Inceptionv3_b1(object):
 
     def __init__(self, branch_units=[(64,), (48, 64), (64, 96, 96), (64,)]):
 
@@ -63,11 +63,9 @@ class Inceptionv3_b1(Sequential):
         return self.model(in_obj)
 
 
-class Inceptionv3_b2(Sequential):
+class Inceptionv3_b2(object):
 
-    def __init__(self, branch_units=[(384,), (64, 96, 96)], activation=Rectlin(),
-                 bias_init=UniformInit(low=-0.08, high=0.08),
-                 filter_init=XavierInit()):
+    def __init__(self, branch_units=[(384,), (64, 96, 96)]):
 
         """
         Second inception block with three branches, concatenated in the end
@@ -96,7 +94,7 @@ class Inceptionv3_b2(Sequential):
         return self.model(in_obj)
 
 
-class Inceptionv3_b3(Sequential):
+class Inceptionv3_b3(object):
 
     def __init__(self, branch_units=[(192), (160, 160, 192), (160, 160, 160, 160, 192), (192,)]):
 
@@ -146,7 +144,7 @@ class Inceptionv3_b3(Sequential):
         return self.model(in_obj)
 
 
-class Inceptionv3_b4(Sequential):
+class Inceptionv3_b4(object):
 
     def __init__(self, branch_units=[(192, 320), (192, 192, 192, 192)]):
 
@@ -180,7 +178,7 @@ class Inceptionv3_b4(Sequential):
         return self.model(in_obj)
 
 
-class Inceptionv3_b5(Sequential):
+class Inceptionv3_b5(object):
 
     def __init__(self, branch_units=[(320,), (384, 384, 384), (448, 384, 384, 384), (192,)]):
 
