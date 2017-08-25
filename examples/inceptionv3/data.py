@@ -12,86 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import os
-import numpy as np
-from PIL import Image
-from tqdm import tqdm
 from ngraph.frontends.neon.aeon_shim import AeonDataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
-from ngraph.frontends.neon import CIFAR10
 
 
-def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
-    '''
-    Save CIFAR-10 dataset as PNG files
-    '''
-    out_dir = os.path.join(root_dir, 'cifar10')
-
-    set_names = ('train', 'valid')
-    manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
-
-    if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
-        return manifest_files
-
-    datasets = CIFAR10(out_dir).load_data()
-
-    pad_size = (padded_size - 32) // 2 if padded_size > 32 else 0
-    pad_width = ((0, 0), (pad_size, pad_size), (pad_size, pad_size))
-
-    # Now write out image files and manifests
-    for setn, manifest, data in zip(set_names, manifest_files, datasets):
-        records = [('@FILE', 'STRING')]
-        img_path = os.path.join(out_dir, setn)
-        if not os.path.isdir(img_path):
-            os.makedirs(img_path)
-
-        for idx, (img, lbl) in enumerate(tqdm(zip(data['image']['data'], data['label']['data']))):
-            im = np.pad(img.reshape((3, 32, 32)), pad_width, mode='mean')
-            im = Image.fromarray(np.uint8(np.transpose(im, axes=[1, 2, 0]).copy()))
-            fname = os.path.join(img_path, '{}_{:05d}.png'.format(lbl, idx))
-            im.save(fname, format='PNG')
-            records.append((os.path.relpath(fname, out_dir), lbl))
-        np.savetxt(manifest, records, fmt='%s\t%s')
-
-    return manifest_files
-
-
-def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_seed=0,
-                      dataset="cifar10"):
+def make_aeon_loaders(train_manifest, valid_manifest,
+                      batch_size, train_iterations, datadir, random_seed=0,
+                      dataset="i1k"):
     """
-    workdir is the path for tab separated files
     datadir is the path for the images
+    train_manifest is the name of tab separated file for AEON for training images
+    valid_manifest is the name of tab separated file for AEON for validation images
+    Both manifest files are assumed to be under datadir
     """
-    if(dataset == "cifar10"):
-        train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
-    elif(dataset == "i1k"):
-        train_manifest = work_dir + "train-index-tabbed.csv",
-        valid_manifest = work_dir + "val-index-tabbed.csv"
+    if(dataset == "i1k"):
+        train_manifest = datadir + "train-index-tabbed.csv"
+        valid_manifest = datadir + "val-index-tabbed.csv"
     else:
-        print("Choose dataset cifar10 or i1k")
+        print("Only Imagenet 1K is supported")
         exit()
 
     def common_config(manifest_file, batch_size, dataset=dataset):
-        if(dataset == "cifar10"):
-            cache_root = get_data_cache_or_nothing('cifar10-cache/')
-
-            image_config = {"type": "image",
-                            "height": 32,
-                            "width": 32}
-            label_config = {"type": "label",
-                            "binary": False}
-            augmentation = {"type": "image",
-                            "padding": 4,
-                            "flip_enable": True}
-
-            return {'manifest_filename': manifest_file,
-                    'manifest_root': os.path.dirname(manifest_file),
-                    'batch_size': batch_size,
-                    'block_size': 5000,
-                    'cache_directory': cache_root,
-                    'etl': [image_config, label_config],
-                    'augmentation': [augmentation]}
-        elif(dataset == "i1k"):
+        if(dataset == "i1k"):
             cache_root = get_data_cache_or_nothing("i1k-cache/")
 
             image_config = {"type": "image",
@@ -106,7 +48,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_se
                             "flip_enable": True}
 
             return {'manifest_filename': manifest_file,
-                    'manifest_root': "/dataset/aeon/I1K/i1k-extracted/",
+                    'manifest_root': datadir,
+                    # 'manifest_root': "/dataset/aeon/I1K/i1k-extracted/",
                     'batch_size': batch_size,
                     'block_size': 5000,
                     'cache_directory': cache_root,
@@ -114,7 +57,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, datadir, random_se
                     'augmentation': [augmentation]}
             print("Imagenet")
         else:
-            print("Choose dataset cifar10 or i1k")
+            print("Only Imagenet 1K is supported")
             exit()
 
     train_config = common_config(train_manifest, batch_size)

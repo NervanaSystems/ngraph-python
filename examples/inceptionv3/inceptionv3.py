@@ -16,13 +16,12 @@
 
 """
 Usage:
-export CUDA_VISIBLE_DEVICES=3; python -i ./examples/inceptionv3/inceptionv3_mini.py -b gpu
+export CUDA_VISIBLE_DEVICES=3; python ./inceptionv3.py -b gpu --mini -z 8
 
 Inception v3 network based on:
 https://github.com/tensorflow/models/blob/master/slim/nets/inception_v3.py
 
-Assumes Imagenet 1000-class data is downlaoded and extracted to:
-/dataset/aeon/I1K/i1k-extracted/
+Imagenet data needs to be downloaded and extracted from:
 http://www.image-net.org/
 """
 import numpy as np
@@ -66,20 +65,25 @@ def eval_loop(dataset, computation, metric_names):
 parser = NgraphArgparser(description=__doc__)
 parser.add_argument('--mini', default=False, dest='mini', action='store_true',
                     help='If given, builds a mini version of Inceptionv3')
+parser.add_argument("--image_dir", default='/dataset/aeon/I1K/i1k-extracted/',
+                    help="Path to extracted imagenet data")
+parser.add_argument("--train_manifest_file", default='train-index-tabbed.csv',
+                    help="Name of tab separated Aeon training manifest file")
+parser.add_argument("--valid_manifest_file", default='val-index-tabbed.csv',
+                    help="Name of tab separated Aeon validation manifest file")
 parser.set_defaults(batch_size=8, num_iterations=1000000, iter_interval=2000)
 args = parser.parse_args()
 
 # Number of outputs of last layer.
 ax.Y.length = 1000
-# Directory where AEON manifest files (csv's) exist
-manifest_dir = './'
-# Directory where images exist
-data_dir = '/dataset/aeon/I1K/i1k-extracted/'
 
 # Build AEON data loader objects
-train_set, valid_set = make_aeon_loaders(manifest_dir, args.batch_size,
-                                         args.num_iterations, dataset='i1k',
-                                         datadir=data_dir)
+train_set, valid_set = make_aeon_loaders(train_manifest=args.train_manifest_file,
+                                         valid_manifest=args.valid_manifest_file,
+                                         batch_size=args.batch_size,
+                                         train_iterations=args.num_iterations,
+                                         dataset='i1k',
+                                         datadir=args.image_dir)
 inputs = train_set.make_placeholders(include_iteration=True)
 
 # Input size is 299 x 299 x 3

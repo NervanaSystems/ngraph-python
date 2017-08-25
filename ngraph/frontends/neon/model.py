@@ -16,6 +16,32 @@ from __future__ import division
 
 from operator import itemgetter
 from ngraph.frontends.neon.graph import SubGraph
+import ngraph as ng
+
+
+class Parallel(SubGraph):
+    """
+    Class that consists of branches that operate on the same input
+    Output of each branch is concatenated to form a larger tensor
+    Future Work: option to sum the outputs of branches rather than concatenate
+    """
+    def __init__(self, layers, name=None, **kwargs):
+        super(Parallel, self).__init__(name=name, **kwargs)
+        self.layers = layers
+
+    @SubGraph.scope_op_creation
+    def __call__(self, in_obj, concat_axis=None, mode='concat'):
+        if mode == 'concat':
+            outputs = []
+            for l in self.layers:
+                outputs.append(l(in_obj))
+
+            if concat_axis is None:
+                concat_axis = outputs[0].axes.channel_axis()
+
+            outputs = ng.concat_along_axis(outputs, concat_axis)
+
+        return outputs
 
 
 class Sequential(SubGraph):
