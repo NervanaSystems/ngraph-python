@@ -194,3 +194,29 @@ class IndexElision(SequentialExOpPass):
         exop.output_decls[0].tensor_decl = output_decl.tensor_decl
         output_decl.exop.take_output_decl(exop.output_decls[0])
         self.exop_block.remove_exop(exop)
+
+
+class CopyElimination(SequentialExOpPass):
+    @exop_method(dispatch_base_type=Op)
+    def visit_exop(self, exop, *args):
+        pass
+
+    @visit_exop.on_type(WriteOp)
+    def visit_exop(self, exop, *args):
+        if len(args) == 1:
+            source_output_decl = exop.input_decls[0].source_output_decl
+            source_exop = source_output_decl.exop
+            if source_exop.write_args and source_exop.input_decls:
+                update_tensor_description = source_exop.write_args[1].tensor_description
+                source_exop.write_args.clear()
+                if source_exop.input_decls[0].tensor_decl is exop.write_args[0].tensor_decl:
+                    source_exop.add_write_arg(exop.write_args[0].source_output_decl,
+                                              update_tensor_description)
+                    source_exop.input_decls.pop(0)
+                else:
+                    source_exop.add_write_arg(exop.write_args[0].source_output_decl)
+                    source_exop.add_write_arg(exop.write_args[0].source_output_decl,
+                                              update_tensor_description)
+                self.exop_block.replace_output_decl(source_exop.output_decls[0],
+                                                    exop.write_args[0].source_output_decl)
+                self.exop_block.remove_exop(exop)
