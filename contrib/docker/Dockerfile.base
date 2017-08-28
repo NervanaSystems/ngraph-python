@@ -19,12 +19,4 @@ ENV PATH="/tmp/env3/bin:$PATH"
 # do we still need these if we don't install OpenMPI?
 RUN apt-get install -y bzip2 wget coreutils libjasper1 libjpeg8 libpng12-0
 
-# build ngraph requirements
-ADD requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt
-ADD gpu_requirements.txt /tmp/gpu_requirements.txt
-RUN pip install -r /tmp/gpu_requirements.txt
-ADD multinode_requirements.txt /tmp/multinode_requirements.txt
-RUN pip install -r /tmp/multinode_requirements.txt
-
-WORKDIR /root/ngraph-test
+WORKDIR /root
