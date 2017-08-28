@@ -24,6 +24,7 @@ from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
 from ngraph.frontends.neon.utils import get_function_or_class_name
+from ngraph.op_graph.debug import PrintOp
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph

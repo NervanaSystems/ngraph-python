@@ -31,7 +31,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
     ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
-    ReductionOp, WriteOp, ReadOp
+    ReductionOp, WriteOp, ReadOp, AssignableTensorOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
     DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -805,7 +805,6 @@ class CPUCodeGenerator(PyGen):
         self.append("self.broadcast_recv_from_queue_broadcast_send({}, out={})",
                     broadcast_recv_id, out)
 
-
 class CPUTransformer(ExecutionGraphTransformer):
     """
     Transformer for executing graphs on a CPU, backed by numpy.
@@ -857,7 +856,7 @@ class CPUTransformer(ExecutionGraphTransformer):
             self.graph_passes.append(CPUFusion())
             self.byte_alignment = 64
         self.graph_passes += [
-            # ExVizPass(view=True, filename="initial"),
+            #ExVizPass(view=True, filename="initial"),
             CPUTensorLayout(),
             SimplePrune(),
             RequiredTensorShaping(),

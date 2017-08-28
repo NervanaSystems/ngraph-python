@@ -779,9 +779,17 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     def init_mkldnn_reorder(self, op):
         (mkl_layout, mkl_axes) = op.in_layout
         check_flatten = False
-        # for axis_indx, each_axis in enumerate(op.axes):
-        #    if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened):
-        #        check_flatten = True
+        mkl_flattend_axis = False
+        # check if any one of axis in mkl_axes is Flattend
+        for axis in mkl_axes:
+            if isinstance(axis, FlattenedAxis):
+               mkl_flattend_axis = True
+
+        for axis_indx, each_axis in enumerate(op.axes):
+           if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened) \
+                   and not(mkl_flattend_axis):
+               check_flatten = True
+
         if check_flatten:
             mkl_axes_order = get_order_from_axes(unflatten(op).axes, mkl_axes)
         else:
@@ -825,11 +833,13 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         # layout.
         # ex: ConvolutionOp -> MKL_reorder_Op ->Flatten -> bn_op can be reduced to
         # ConvolutionOp -> Flatten -> bn_op
-        #if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
-        #    metadata = op.metadata["neon_layer"].split("/")
-        #    if re.search("BatchNorm(_\d+)", metadata[-1]):
-        #        return
+        if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
+           metadata = op.metadata["neon_layer"].split("/")
+           if re.search("BatchNorm(_\d+)", metadata[-1]):
+               return
         print "OP " + str(op)
+        if (str(op) == "Sequential/Convolution/BatchNorm/Unflatten[Sequential/Convolution/BatchNorm/Unflatten]"):
+            pass
         replace = False
         new_args = []
         for arg in args:
