@@ -182,16 +182,18 @@ class Linear(Layer):
                     'found: {}'
                 ).format(common_axes))
         else:
-            if axes.batch_axis() is not None:
+            self.keep_axes = None
+
+            if self.axes.batch_axis() is not None:
                 raise ValueError((
                     'Axes passed to Linear layer should only be the output feature'
                     'axis.  A batch axis {} was included.'
-                ).format(axes.batch_axis()))
-            if axes.recurrent_axis() is not None:
+                ).format(self.axes.batch_axis()))
+            if self.axes.recurrent_axis() is not None:
                 raise ValueError((
                     'Axes passed to Linear layer should only be the output feature'
                     'axis.  A recurrent axis {} was included.'
-                ).format(axes.recurrent_axis()))
+                ).format(self.axes.recurrent_axis()))
 
         self.init = init
         self.W = None
@@ -200,8 +202,8 @@ class Linear(Layer):
     def __call__(self, in_obj, reuse=True):
 
         if not self.initialized:
-            if self.keep_axes:
-                w_in_axes = (in_obj - self.keep_axes)
+            if self.keep_axes is not None:
+                w_in_axes = (in_obj.axes - self.keep_axes)
             else:
                 w_in_axes = in_obj.axes.feature_axes()
 
