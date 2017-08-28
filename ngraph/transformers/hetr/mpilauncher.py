@@ -40,7 +40,7 @@ class Launcher(object):
                 raise RuntimeError("Process launch failed!")
 
     def close(self):
-        if self.mpirun_proc.poll() is None:
+        if self.mpirun_proc and self.mpirun_proc.poll() is None:
             self.mpirun_proc.terminate()
             time.sleep(STARTUP_TIME)
             if self.mpirun_proc:

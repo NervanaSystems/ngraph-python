@@ -121,14 +121,14 @@ def test_distributed_plus_one(hetr_device, config):
 @pytest.mark.multi_device
 @pytest.mark.parametrize('config', [
     {
-        'axes_x': ng.make_axes([ax_A, ax_B]),
-        'axes_w': ng.make_axes([ax_C, ax_A]),
+        'axes_x': ng.make_axes([ax_B, ax_A]),
+        'axes_w': ng.make_axes([ax_A, ax_C]),
         'device_id': ('0', '1'),
         'parallel_axis': ax_B,
     },
     {
-        'axes_x': ng.make_axes([ax_A, ax_B]),
-        'axes_w': ng.make_axes([ax_C, ax_A]),
+        'axes_x': ng.make_axes([ax_B, ax_A]),
+        'axes_w': ng.make_axes([ax_A, ax_C]),
         'device_id': ('0', '1', '2', '3'),
         'parallel_axis': ax_B,
     },
@@ -141,18 +141,18 @@ def test_distributed_dot(hetr_device, config):
 
     prepare_environment(hetr_device, len(device_id))
 
+    np_weight = np.ones(axes_w.lengths)
     with ng.metadata(device=hetr_device):
         x = ng.placeholder(axes=axes_x)
-        w = ng.placeholder(axes=axes_w)
         with ng.metadata(device_id=device_id, parallel=parallel_axis):
-            dot = ng.dot(w, x)
+            w = ng.variable(axes=axes_w, initial_value=np_weight)
+            dot = ng.dot(x, w)
 
     np_x = np.random.randint(100, size=axes_x.lengths)
-    np_weight = np.random.randint(100, size=axes_w.lengths)
-    with ExecutorFactory() as ex:
-        computation = ex.executor(dot, x, w)
-        res = computation(np_x, np_weight)
-        np.testing.assert_array_equal(res, np.dot(np_weight, np_x))
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(dot, x)
+        res = computation(np_x)
+        np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
 
 
 @pytest.mark.multi_device
@@ -182,8 +182,8 @@ def test_distributed_plus_two(hetr_device, config):
         x_plus_two = x_plus_one + 1
 
     np_x = np.random.randint(100, size=axes.lengths)
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_two, x)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(x_plus_two, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 2)
 
@@ -198,8 +198,8 @@ def test_to_and_from_device(hetr_device):
             x_plus_one = x + 1
         x_plus_two = x_plus_one + 1
 
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_two, x)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(x_plus_two, x)
         for i in [10, 20, 30]:
             assert computation(i) == i + 2
 
@@ -215,8 +215,8 @@ def test_computation_return_list(hetr_device):
         x_plus_two = x + 2
         x_mul_three = x * 3
 
-    with ExecutorFactory() as ex:
-        computation = ex.executor([x_plus_one, x_plus_two, x_mul_three], x)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation([x_plus_one, x_plus_two, x_mul_three], x)
         for i in [10, 20, 30]:
             assert computation(i) == (i + 1, i + 2, i * 3)
 
