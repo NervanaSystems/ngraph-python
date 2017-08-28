@@ -23,8 +23,6 @@ RUN cp *.a /usr/local/lib
 WORKDIR /root/ngraph-test
 ADD contrib/docker/private-aeon /root/private-aeon
 WORKDIR /root/private-aeon
-# workaround for missing requirement for aeon install
-RUN echo "future" >> requirements.txt
 RUN pip install -r requirements.txt
 RUN mkdir -p build && cd build && cmake .. && pip install . && cd ..
 
