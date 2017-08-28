@@ -32,22 +32,22 @@ from data import make_aeon_loaders
 #Optimizer
 base_lr=0.1
 gamma=0.1
-learning_schedule=[32000, 48000]
+#learning_schedule=[78200, 94200]
 momentum_coef=0.9
 wdecay=0.0001
 #BatchNorm
-rho=0.3 #0.3
+rho=0.3
 do_tuning=False
 #initializer
 weight_init=KaimingInit()
 
 print("HyperParameters")
 print("Learning Rate:     "+str(base_lr))
-print("Learning Schedule: "+str(learning_schedule))
 print("Momentum:          "+str(momentum_coef))
 print("Weight Decay:      "+str(wdecay))
 print("TuningEnabled:     "+str(do_tuning))
 print("Rho:               "+str(rho))
+
 #Helpers
 def mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
@@ -127,7 +127,7 @@ class BuildResnet(Sequential):
             layers.append(Pool2D(8,op='avg'))
             #Axes are 10 as number of classes are 10
             layers.append(Affine(axes=ax.Y,weight_init=weight_init))
-            layers.append(BatchNorm(rho=rho,bz=batch_size))
+            #layers.append(BatchNorm(rho=rho,bz=batch_size))
             layers.append(Activation(Softmax()))
         elif net_type=='i1k':
             print("Seriously how did we come this far.")
@@ -163,6 +163,10 @@ if __name__ == "__main__":
     parser.add_argument('-size', type=int, default=56, help="Enter size of resnet")
     parser.add_argument('-tb',type=int,default=0,help="1- Enables tensorboard")
     args=parser.parse_args()
+    #rho=args.batch_size/(args.batch_size+1.0)
+    args.iter_interval=50000//args.batch_size 
+    learning_schedule=[82*args.iter_interval, 124*args.iter_interval]
+    print("Learning Schedule: "+str(learning_schedule))
 
     #Command line args
     cifar_sizes = [8, 14, 20, 32, 44, 56, 200]
@@ -226,7 +230,6 @@ if __name__ == "__main__":
 
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
-args.iter_interval=50000//args.batch_size
 #Tensorboard
 if(args.tb):
     seq1=BuildResnet(resnet_dataset,args.batch_size)
@@ -273,8 +276,8 @@ gvar_calc=ng.computation(ng.sequential([debiaser]+gvar_ops),batch_index)
 #Training the network by calling transformer
 transformer=ngt.make_transformer()
 #Tuner
-rho_calc_comp=transformer.add_computation(rho_calc)   
-gvar_calc_comp=transformer.add_computation(gvar_calc)
+#rho_calc_comp=transformer.add_computation(rho_calc)   
+#gvar_calc_comp=transformer.add_computation(gvar_calc)
 #Trainer
 train_function=transformer.add_computation(train_computation)
 #Inference
@@ -286,10 +289,10 @@ interval_cost = 0.0
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-    if(do_tuning):
-        t1=rho_calc_comp(step)
-        if(step>=10):
-            t2=gvar_calc_comp(step)
+    #if(do_tuning):
+    #    t1=rho_calc_comp(step)
+    #    if(step>=10):
+    #        t2=gvar_calc_comp(step)
     output = train_function(feed_dict=feed_dict)
     tpbar.update(1)
     tpbar.set_description("Training {:0.4f}".format(output[()]))
