@@ -825,10 +825,11 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         # layout.
         # ex: ConvolutionOp -> MKL_reorder_Op ->Flatten -> bn_op can be reduced to
         # ConvolutionOp -> Flatten -> bn_op
-        if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
-            metadata = op.metadata["neon_layer"].split("/")
-            if re.search("BatchNorm(_\d+)", metadata[-1]):
-                return
+        #if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
+        #    metadata = op.metadata["neon_layer"].split("/")
+        #    if re.search("BatchNorm(_\d+)", metadata[-1]):
+        #        return
+        print "OP " + str(op)
         replace = False
         new_args = []
         for arg in args:
