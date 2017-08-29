@@ -740,8 +740,15 @@ class Convolution(SubGraph):
             width: The width axis with default name "W".
              
     Examples:
-        
-        
+        # Create a 5x5 convolutional layer with batch normalization and a ReLU activation
+        conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
+                           activation=Rectlin(), batch_norm=True)
+        output = conv(input)
+
+        # Convolve along the "time" axis of a spectrogram
+        conv = Convolution((nfrequencies, 11, 16), filter_init=GaussianInit(var=.05),
+                           padding="same", activation=Rectlin(), bias_init=ConstantInit(0))
+        output = conv(input, spatial_axes={"W": "time"})
     """
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
