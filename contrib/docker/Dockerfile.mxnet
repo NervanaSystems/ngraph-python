@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y \
 	apt-get clean autoclean && apt-get autoremove -y
 
 # Required Python packages
-RUN pip install --upgrade pip && pip install \
-    numpy
+RUN easy_install -U pip
+RUN pip install numpy
 
 # Copy MXNet
 WORKDIR /root/ngraph-test
