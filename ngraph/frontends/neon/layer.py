@@ -158,6 +158,8 @@ class Linear(Layer):
             axes (Axes, optional): axes of feature axes the Linear layer
                 should output.  Must not be provided in combination with nout.
                 Axes should not include recurrent or batch axes.
+            keep_axes (Axes, optional): in_obj axes which should be preserved.
+                Defaults to preserving batch and recurrent axes.
         """
         super(Linear, self).__init__(**kwargs)
 
