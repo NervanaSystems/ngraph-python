@@ -218,9 +218,6 @@ def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params):
 
 
 def test_batchnorm_bprop(input_placeholder, bn_params):
-    # if input_placeholder._axes.lengths == (32, 32):
-    #     pytest.config.flex_skip_now("Results mismatch - too strict tolerance (rtol, atol)")
-
     layer = BatchNorm(**bn_params)
     fprop = layer(input_placeholder)
 
