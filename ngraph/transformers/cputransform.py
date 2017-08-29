@@ -874,12 +874,12 @@ class CPUTransformer(ExecutionGraphTransformer):
 
         self.graph_passes += [
             SSAConversion(),
-            IndexElision(),
-            CopyElimination(),
             # DCE here eliminates return values. Need to figure out why.
             # DeadCodeEliminationPass(),
             LivenessPass(),
             MemOptimizePass(),
+            CopyElimination(),
+            IndexElision(),
             LivenessPass(),
             MemLayoutPass()
         ]

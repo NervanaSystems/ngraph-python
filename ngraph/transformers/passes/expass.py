@@ -207,8 +207,18 @@ class CopyElimination(SequentialExOpPass):
             source_output_decl = exop.input_decls[0].source_output_decl
             source_exop = source_output_decl.exop
             if source_exop.write_args and source_exop.input_decls:
+                nexop = source_exop.next_exop
+                in_use = False
+                while (nexop is not exop) and (not nexop.is_exop_end_of_list):
+                    for input_decl in nexop.input_decls:
+                        if exop.write_args[0].tensor_decl is input_decl.tensor_decl:
+                            in_use = True
+                    nexop = nexop.next_exop
+                if in_use:
+                    return
+
                 update_tensor_description = source_exop.write_args[1].tensor_description
-                source_exop.write_args.clear()
+                del source_exop.write_args[:]
                 if source_exop.input_decls[0].tensor_decl is exop.write_args[0].tensor_decl:
                     source_exop.add_write_arg(exop.write_args[0].source_output_decl,
                                               update_tensor_description)
