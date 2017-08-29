@@ -856,7 +856,7 @@ class CPUTransformer(ExecutionGraphTransformer):
             self.graph_passes.append(CPUFusion())
             self.byte_alignment = 64
         self.graph_passes += [
-            #ExVizPass(view=True, filename="initial"),
+            # ExVizPass(view=True, filename="initial"),
             CPUTensorLayout(),
             SimplePrune(),
             RequiredTensorShaping(),
