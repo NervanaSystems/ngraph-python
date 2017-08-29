@@ -102,7 +102,7 @@ def test_concatenate():
         j_ng = ng.concat_along_axis([x0_ng, x1_ng], A)
         f = ex.executor(j_ng)
         j_val = f()
-        assert ng.testing.allclose(j_val, j_np)
+        ng.testing.assert_allclose(j_val, j_np)
 
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
@@ -125,7 +125,7 @@ def test_specific_slice_deriv():
                 dslice_dx_val = dslice_dx_fun()
                 dslice_dx_np = np.zeros_like(x_np)
                 dslice_dx_np[i, j] = 1
-                assert ng.testing.allclose(dslice_dx_val, dslice_dx_np)
+                ng.testing.assert_allclose(dslice_dx_val, dslice_dx_np)
 
 
 @pytest.config.flex_disabled(reason="#1954, UnsliceOp multiple slicing not yet supported by flex")
@@ -146,4 +146,4 @@ def test_slice_deriv():
         for i in range(D.length):
             for j in range(C.length):
                 val_np[i, j, i] = 1
-        assert ng.testing.allclose(val_ng, val_np)
+        ng.testing.assert_allclose(val_ng, val_np)
