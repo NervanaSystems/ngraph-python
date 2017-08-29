@@ -16,7 +16,6 @@
 from __future__ import print_function
 from __future__ import division
 import numpy as np
-# from ngraph.transformers.passes.nviz import VizPass
 
 from ngraph.transformers.base import UnsupportedTransformerException
 from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
@@ -94,21 +93,6 @@ class FlexGPUTransformer(GPUTransformer):
         # flex manager manages autoflex mechanics
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
-
-    def add_flex_id_to_ops(self):
-        for op in self.ops:
-            if op.is_tensor_op:
-                base = op.forwarded.tensor_description().base
-                tensor = self.op_tensors.get(base, None)
-                if hasattr(tensor, 'flex_entry'):
-                    op.metadata['flex_id'] = tensor.flex_entry.flex_id
-                    base.op.metadata['flex_id'] = tensor.flex_entry.flex_id
-
-    def start_transform_allocate(self):
-        super(FlexGPUTransformer, self).start_transform_allocate()
-        self.add_flex_id_to_ops()
-
-        # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
 
     @classmethod
     def get_default_tolerance(cls, desired):

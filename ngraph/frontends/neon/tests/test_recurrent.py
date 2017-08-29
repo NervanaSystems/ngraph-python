@@ -316,10 +316,8 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
-    if (sum_out, concat_out, init_state, return_sequence) == \
-            (sum_out, concat_out, init_state, return_sequence) in \
-            [(False, True, True, True),
-             (False, True, True, False)]:
+    if (sum_out, concat_out, init_state, return_sequence) in [(False, True, True, True),
+                                                              (False, True, True, False)]:
         pytest.config.flex_skip_now("Result mismatch")
 
     # Get input placeholder and numpy array
