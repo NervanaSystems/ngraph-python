@@ -186,9 +186,11 @@ def test_reduction(reduction, sub_axes):
 @pytest.config.argon_disabled  # TODO Triage
 def test_reduction_deriv(reduction, sub_axes):
     if reduction in ('max', 'min'):
-        pytest.skip("max/min needed to be tested differently")
-    # if sub_axes in (slice(0, 2, None), slice(1, None, None)) and reduction == "prod":
-    #     pytest.config.flex_skip_now("Too big values for Flex ( > 32767 )")
+        print("SKIP")
+        print (reduction)
+        # pytest.skip("max/min needed to be tested differently")
+    if sub_axes in (slice(0, 2, None), slice(1, None, None)) and reduction == "prod":
+        pytest.config.flex_skip_now("Too big values for Flex ( > 32767 )")
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=10),
                          ng.make_axis(length=10)])
