@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 # import pytest
-from __future__ import print_function
 import numpy as np
 import ngraph as ng
 
@@ -45,7 +44,6 @@ def __overwrite_rtol_atol(rtol, atol, *desired):
         # rewrite rtol, atol if default is coarser
         rtol = tr.default_rtol if tr.default_rtol > rtol else rtol
         atol = tr.default_atol if tr.default_atol > atol else atol
-        print("atol: ", atol)
     except:
         # if transformer not found, not make changes
         pass

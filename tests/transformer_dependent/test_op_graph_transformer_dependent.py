@@ -23,9 +23,8 @@ pytestmark = pytest.mark.transformer_dependent
 
 @pytest.fixture(params=[(1, 2, 1),
                         (2, 3, 2),
-                        pytest.config.flex_disabled((15, 5, 1), reason="Results mismatch")])
+                        pytest.config.flex_disabled((15, 5, 1), reason="Result mismatch")])
 def concatenate_variables(request):
-    print(request)
     num_vars, num_axes, concat_pos = request.param
     common_axes = [ng.make_axis(length=2) for _ in range(num_axes - 1)]
     x_list = list()
@@ -163,6 +162,7 @@ def test_sequential_side(M):
 @pytest.config.argon_disabled  # TODO triage
 def test_concatenate(concatenate_variables):
     x_list, np_list, pos = concatenate_variables
+
     with ExecutorFactory() as ex:
         v = ng.concat_along_axis(x_list, x_list[0].axes[pos])
         d = ng.deriv(v, x_list[0],
