@@ -96,6 +96,8 @@ def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
         return (0, 0, 0, 0)
 
 
+
+
 def squeeze_axes(inputs):
     """
     Removes axes with length of 1 for each tensor.
@@ -190,15 +192,10 @@ def conv_output_dim(X, S, padding, strides, pooling=False, dilation=1):
         dilation (int): dilation of filter
     """
 
-    S = dilation * (S - 1) + 1
-    size = ((X - S + 2 * padding) // strides) + 1
+    # if pooling and padding >= S:
+    #     raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
 
-    if pooling and padding >= S:
-        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-    if size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(size))
-    return size
+    return PaddedConv(X, S, strides, dilation).get_output(padding)
 
 
 def deconv_output_dim(X, S, padding, strides, dilation=1):
@@ -219,3 +216,110 @@ def deconv_output_dim(X, S, padding, strides, dilation=1):
     if max_size < 0:
         raise ValueError('output_dim {} can not be < 0'.format(max_size))
     return max_size
+
+
+def make_convparams(nout, filter_shape, strides, padding, dilation):
+    """
+    Make the convparams dictionary to be used by core ngraph
+    
+    Arguments:
+        nout (int): Number of output filters 
+        filter_shape (dict): int filter shape with keys of "D", "H", and "W" 
+        strides (dict): int strides with keys of "D", "H", and "W"
+        padding: int padding with keys of "D", "H", and "W"
+        dilation: int dilation with keys of "D", "H", and "W"
+
+    Returns:
+        Properly formatted convparams dictionary
+    """
+    convparams = dict()
+    convparams["K"] = nout
+
+    for name, value in zip("TRS", [filter_shape[nm] for nm in "DHW"]):
+        convparams[name] = value
+
+    for name in "DHW":
+        for prefix, prop in zip(("str", "pad", "dil"),
+                                (strides, padding, dilation)):
+            convparams["{}_{}".format(prefix, name.lower())] = prop[name]
+
+    return convparams
+
+
+class PaddedConv(object):
+
+    def __init__(self, input_size, filter_size, stride=1, dilation=1, pooling=False):
+
+        self.input_size = input_size
+        self.filter_size = filter_size
+        self.stride = stride
+        self.dilation = dilation
+        self.pooling = pooling
+
+    def get_padding(self, padding):
+        if isinstance(padding, int):
+            return (padding, padding)
+        elif isinstance(padding, tuple):
+            return padding
+        elif isinstance(padding, str):
+            if padding == "valid":
+                return self._get_valid_padding()
+            elif padding == "same":
+                return self._get_same_padding()
+            elif padding == "causal":
+                return self._get_causal_padding()
+            elif padding == "full":
+                return self._get_full_padding()
+            elif padding == "caffe_full":
+                return self._get_caffe_full_padding()
+            else:
+                raise ValueError("Padding is not a valid string value: {}".format(padding))
+
+    def get_output(self, padding):
+        padding = self.get_padding(padding)
+        k = self.dilation * (self.filter_size - 1)
+        output = math.ceil((self.input_size + sum(padding) - k) / self.stride)
+        if output < 0:
+            raise ValueError("Output after conv will be < 0")
+        return int(output)
+
+    def _get_valid_padding(self):
+        """
+        'Valid' returns only outputs only when the input and filter overlap completely, so padding 
+        is 0.
+        """
+        return (0, 0)
+
+    def _get_same_padding(self):
+        """
+        'Same' returns outputs
+        
+        Notes:
+            See https://www.tensorflow.org/api_guides/python/nn#Notes_on_SAME_Convolution_Padding 
+            for a good reference
+        """
+
+        # This could be reduced, if desired.
+        total_pad = int(self.stride * (math.ceil(self.input_size / self.stride) - 1) +
+                        1 - self.input_size + self.dilation * (self.filter_size - 1))
+
+        return (total_pad // 2, int(math.ceil(total_pad / 2)))
+
+    def _get_causal_padding(self):
+        """
+        'Causal' returns outputs that only aggregate over past indices in the input.
+        """
+        return (self.dilation * (self.filter_size - 1), 0)
+
+    def _get_full_padding(self):
+        """
+        'Full' returns all values where there is any overlap between the input and the filter
+        """
+        return (self.dilation * (self.filter_size - 1), self.dilation * (self.filter_size - 1))
+
+    def _get_caffe_full_padding(self):
+        raise NotImplementedError()
+
+
+
+

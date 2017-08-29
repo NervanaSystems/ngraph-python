@@ -20,7 +20,6 @@ import operator
 import itertools
 from functools import reduce, wraps
 from frozendict import frozendict
-from contextlib import contextmanager
 
 import numpy as np
 import types
@@ -28,98 +27,6 @@ from builtins import object, map, zip
 
 from ngraph.util.names import NameableValue
 from ngraph.flex.base import Flex
-
-
-ROLES = {"height": set(("H",)),
-         "width": set(("W",)),
-         "depth": set(("D",)),
-         "channel": set(("C",)),
-         "batch": set(("N",)),
-         "recurrent": set(("REC",))}
-
-
-def add_role(role, *axes):
-    """
-    Register a new role and accepted axis names
-    
-    Arguments:
-        role (str): role name
-        *axes (str): axis names that will match 
-    """
-    if role in ROLES:
-        raise ValueError("Role named {} already exists".format(role))
-    ROLES[role] = set(axes)
-
-
-def set_role_axis(role, *axes):
-    """
-    Set the accepted axis names for the specified role
-    
-    Arguments:
-        role (str): role name  
-        *axes (str): axis names that should match
-    """
-    ROLES[role] = set(axes)
-
-
-def make_role_axis(role, length=None):
-    """
-    Make an axis matching the specified role. The name will be chosen from the accepted names for
-    the role
-    
-    Arguments:
-        role (str): role name 
-
-    Returns:
-        Axis
-    """
-    if role not in ROLES:
-        raise ValueError("Role named {} is not defined".format(role))
-    nm = next(iter(ROLES[role]))
-    return make_axis(name=nm, length=length)
-
-
-@contextmanager
-def _role_context(role, *axes):
-    orig = ROLES[role]
-    if len(axes) > 0:
-        ROLES[role] = set(axes)
-    yield ROLES[role]
-    ROLES[role] = orig
-
-
-@contextmanager
-def spatial_axes(width=None, height=None, depth=None):
-    def to_iter(axes):
-        if axes is None:
-            return ()
-        if not isinstance(axes, collections.Iterable):
-            axes = (axes,)
-        return axes
-
-    width, height, depth = [to_iter(axes) for axes in (width, height, depth)]
-    with _role_context("width", *width) as width:
-        with _role_context("height", *height) as height:
-            with _role_context("depth", *depth) as depth:
-                yield (width, height, depth)
-
-
-@contextmanager
-def recurrent_axis(*recurrent):
-    with _role_context("recurrent", *recurrent) as recurrent:
-        yield recurrent
-
-
-@contextmanager
-def channel_axis(*channel):
-    with _role_context("channel", *channel) as channel:
-        yield channel
-
-
-@contextmanager
-def batch_axis(*batch):
-    with _role_context("batch", *batch) as batch:
-        yield batch
 
 
 def default_dtype(dtype=None):
@@ -243,7 +150,7 @@ class Axis(object):
             bool: True if the axis is a batch axis.
 
         """
-        return self.name in ROLES["batch"]
+        return self.name == 'N'
 
     @property
     def is_recurrent(self):
@@ -254,7 +161,7 @@ class Axis(object):
             bool: True if the axis is a recurrent axis.
 
         """
-        return self.name in ROLES["recurrent"]
+        return self.name == 'REC'
 
     @property
     def is_channel(self):
@@ -265,7 +172,7 @@ class Axis(object):
             bool: True if the axis is a channel axis.
 
         """
-        return self.name in ROLES["channel"]
+        return self.name == 'C'
 
     @property
     def length(self):
@@ -525,13 +432,35 @@ class Axes(object):
         Returns:
             tuple: The lengths of the outer axes.
         """
-        if len(self):
-            names, lengths = zip(*[(x.name, x.length) for x in self])
-        else:
-            names, lengths = (), ()
 
-        # return collections.namedtuple("Axes", names)(*lengths)
-        return lengths
+        return tuple(x.length for x in self)
+
+    def get_by_names(self, *names):
+        """
+        Get multiple axis objects by their names
+
+        Arguments:
+            *names: One name for each axis to return   
+
+        Returns:
+            Axis or tuple: Returns the requested axis. If multiple are requested, returns a tuple.
+            
+        Raises:
+            KeyError: If a name is not found.
+        """
+
+        axes = []
+        for name in names:
+            ax = self.find_by_name(name)
+            if ax is not None:
+                axes.append(ax[0])
+            else:
+                raise KeyError("No axis of name {}".format(name))
+
+        if len(axes) > 1:
+            return tuple(axes)
+        else:
+            return axes[0]
 
     def batch_axes(self):
         """
@@ -579,14 +508,9 @@ class Axes(object):
     def spatial_axes(self):
         """
         Returns:
-            The Axes matching "depth", "height", or "width" roles, in that order.
+            The Axes subset that are not batch, recurrent, or channel axes.
         """
-        spatial_axes = list()
-        for role in ("depth", "height", "width"):
-            ax = self.role_axis(role)
-            if ax is not None:
-                spatial_axes.append(ax)
-        return Axes(spatial_axes)
+        return self.feature_axes() - self.channel_axis()
 
     def sample_axes(self):
         """
@@ -779,7 +703,7 @@ class Axes(object):
         Returns:
             bool, true if other is superset of self
         """
-        return not self.is_sub_set(other)
+        return set(self.names).issuperset(set(make_axes(other).names))
 
     def is_equal_set(self, other):
         """

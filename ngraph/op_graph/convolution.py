@@ -72,6 +72,8 @@ class ConvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
+        self.spatial_axes = inputs.axes[1:4]
+        self.channel_axes = inputs.axes[0]
         self.__has_side_effects = False
 
     def copy_with_new_args(self, args):
@@ -151,6 +153,8 @@ class DeconvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
+        self.spatial_axes = inputs.axes[1:4]
+        self.channel_axes = inputs.axes[0]
         self.__has_side_effects = False
 
     @property

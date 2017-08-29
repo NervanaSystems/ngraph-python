@@ -16,6 +16,36 @@
 neon
 ****
 
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Examples
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Fundamentals
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Models
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Layers
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Advanced
+
+   subgraph.rst
+
+
+
+
 The neon frontend to ngraph provides common deep learning primitives, such as activation functions. optimizers, layers, and more. We include in this release several examples to illustrate how to use the neon frontend to construct your models:
 
 - ``examples/minst/mnist_mlp.py``: Multi-layer perceptron on the MNIST digits dataset.

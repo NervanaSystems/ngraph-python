@@ -51,18 +51,20 @@ def is_shadow_axis(axis):
     return axis.name.endswith(_SHADOW_AXIS_POSTFIX)
 
 
-def reorder_spatial_axes(tensor):
+def reorder_spatial_axes(tensor, channel_axis, spatial_axes):
     """
     Assumes we are getting a C, H, N, or C, H, W, N, or C, D, H, W, N
     """
 
-    def expand_with_role(tensor, role, index=0):
-        axis = ng.make_role_axis(role, length=1)
+    def expand_with_name(tensor, name, index=0):
+        axis = ng.make_axis(name=name, length=1)
         return ng.expand_dims(tensor, axis, index), axis
 
-    channel_axis = tensor.axes.channel_axis()
-    spatial_roles = ("depth", "height", "width")
-    spatial_axes = [tensor.axes.role_axis(role) for role in spatial_roles]
+    channel_name = channel_axis
+    channel_axis = tensor.axes.get(channel_axis)
+    spatial_names = spatial_axes
+    spatial_axes = [tensor.axes.get(name) if name in tensor.axes.names else None
+                    for name in spatial_axes]
     batch_axis = tensor.axes.batch_axis()
     role_axes = set([ax for ax in spatial_axes + [channel_axis, batch_axis] if ax is not None])
     diff_axes = role_axes.difference(set(tensor.axes))
@@ -76,13 +78,14 @@ def reorder_spatial_axes(tensor):
         raise ValueError("spatial ops require at least one spatial axis, found none")
 
     if channel_axis is None:
-        tensor, channel_axis = expand_with_role(tensor, "channel")
+        tensor, channel_axis = expand_with_name(tensor, channel_name, 0)
 
-    for ii, role in enumerate(spatial_roles):
+    for ii, name in enumerate(spatial_names):
         ax = spatial_axes[ii]
         if ax is None:
-            tensor, ax = expand_with_role(tensor, role)
+            tensor, ax = expand_with_name(tensor, name, ii + 1)
             spatial_axes[ii] = ax
 
-    new_axes = channel_axis + spatial_axes + batch_axis
-    return ng.axes_with_order(tensor, new_axes)
+    new_axes = channel_axis + ng.make_axes(spatial_axes) + batch_axis
+    orig_axes = tensor.axes
+    return ng.axes_with_order(tensor, new_axes), orig_axes

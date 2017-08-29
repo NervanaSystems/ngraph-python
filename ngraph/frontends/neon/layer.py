@@ -18,10 +18,8 @@ import collections
 import itertools
 from contextlib import contextmanager
 
-import numpy as np
-
 import ngraph as ng
-from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
+from ngraph.frontends.common import utils
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
@@ -279,138 +277,157 @@ class LookupTable(Layer):
 
 class ConvBase(Layer):
     """
-    Convolutional layer that requires explicit binding of all spatial roles
-
-    Args:
-        fshape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
+    Convolutional layer that performs 3D convolutions. This layer provides an 
+    interface to the core convolution support within ngraph. 1D and 2D convolutions are 
+    automatically represented as 3D convolutions, with extra axes introduced as needed.
+       
+    Arguments:
+        filter_shape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
         init (function): function for later initializing filters
         strides (dict): stride specification -- can contain keys 'D', 'H', 'W' - defaults to 1
         padding (dict): pad specification -- can contain keys 'D', 'H', 'W' - defaults to 0
         dilation (dict): dilation specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+        
+    Attributes:
+        W (TensorOp): The convolutional filters. Axes are ordered as:
+            C: input channels
+            D: depth
+            H: height
+            W: width
+            K: output channels
+        nout (int): The number of output channels
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is 
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
+            
+    Notes:
+        This layer must act on 5D tensors with 1 channel axis, 3 spatial axes and 1 batch axis, 
+        in any order. If these axes do not exist in the input, they will be created. The output 
+        of the layer will always have 5 dimensions. 
     """
 
-    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
+    def __init__(self, filter_shape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
 
-        for obj in (fshape, strides, padding, dilation):
+        for obj in (filter_shape, strides, padding, dilation):
             if not isinstance(obj, dict):
                 raise TypeError("All arguments to ConvBase must be dicts")
 
+        self.init = init
+
         # Setup filter parameters
-        self.nout = fshape["K"]
-        self.filter_shape = {"W": fshape["W"], "H": fshape["H"], "D": fshape["D"]}
-        self.strides = collections.defaultdict(lambda:1)
+        self.nout = filter_shape.pop("K")
+        self.filter_shape = filter_shape
+
+        # Setup strides - default to 1
+        self.strides = {key: 1 for key in "DHW"}
         self.strides.update(strides)
-        self.padding = collections.defaultdict(lambda:0)
+
+        # Setup padding - default to 0
+        self.padding = {key: 0 for key in "DHW"}
         self.padding.update(padding)
-        self.dilation = collections.defaultdict(lambda:1)
+
+        # Setup dilation - default to 1
+        self.dilation = {key: 1 for key in "DHW"}
         self.dilation.update(dilation)
 
-        self.init = init
         self.W = None
 
-    def _make_convparams(self, in_obj, pad_int):
+    def _filter_axes(self, channel_axis, spatial_axes):
         """
-        Create convparams to be used by the core ngraph convolution op
-        
-        Arguments:
-            in_obj (Op): Input op to convolve 
-            pad_int (dict): Dictionary of paddings expressed as ints 
-        Returns:
-            convparams dict
+        Create the filter axes. They are ordered as (C, D, H, W, K).
         """
-        convparams = {}
-        for name, value in zip("TRS", [self.filter_shape[nm] for nm in "DHW"]):
-            convparams[name] = value
-
-        for name in "dhw":
-            for prefix, prop in zip(("str", "pad", "dil"),
-                                    (self.strides, pad_int, self.dilation)):
-                convparams["{}_{}".format(prefix, name)] = prop[name.upper()]
-
-        return convparams
-
-    def _filter_axes(self, in_obj):
-        f_axes = in_obj.axes.channel_axis()
-        for role in ("depth", "height", "width"):
-            ax = in_obj.axes.role_axis(role)
-            assert ax is not None  # We require all roles currently
-            f_axes |= ng.make_axis(length=self.filter_shape[role[0].upper()], name=ax.name)
-        # TODO: What is the role here? Use 'K' or ng.make_role_axis?
+        f_axes = channel_axis
+        for key, ax in zip("DHW", spatial_axes):
+            f_axes |= ng.make_axis(length=self.filter_shape[key],
+                                   name=ax.name)
         f_axes |= ng.make_axis(length=self.nout, name="K")
         return f_axes
 
-    def _output_axes(self, in_obj, pad_int):
-        in_axes = in_obj.axes
-        output_axes = []
-        output_axes.append(ng.make_axis(length=self.nout, name=in_axes.channel_axis().name))
-        for role in ("depth", "height", "width"):
-            ax = in_axes.role_axis(role)
-            key = role[0].upper()
-            assert ax is not None
-            out_ax = ng.make_axis(name=ax.name,
-                                  length=conv_output_dim(ax.length,
-                                                         self.filter_shape[key],
-                                                         pad_int[key],
-                                                         self.strides[key],
-                                                         False,
-                                                         self.dilation[key]))
-            output_axes.append(out_ax)
+    def _output_axes(self, channel_axis, spatial_axes, batch_axis, pad_int):
+        """
+        Create the convolution output axes.
 
-        return ng.make_axes(output_axes) | in_axes.batch_axis()
+        TODO: This should be done in the core since it's fully determined.
+        """
+        output_axes = ng.make_axis(length=self.nout, name=channel_axis.name)
+        for key, ax in zip("DHW", spatial_axes):
+            output_axes |= ng.make_axis(name=ax.name,
+                                        length=utils.conv_output_dim(ax.length,
+                                                                     self.filter_shape[key],
+                                                                     pad_int[key],
+                                                                     self.strides[key],
+                                                                     False,
+                                                                     self.dilation[key]))
+        return output_axes | batch_axis
 
-    def _get_pad_int(self, in_obj):
+    def _get_pad_int(self, spatial_axes):
+        """
+        Get integer padding values for each spatial axis. If padding is asymmetric,
+        return the required manual paddings.
+        """
         # Manual padding might be required for asymmetric paddings
-        manual_pad = collections.OrderedDict([(ax.name, (0, 0)) for ax in in_obj.axes])
-
-        def same_padding(n, s, d, k):
-
-            return int(s * (np.ceil(n / s) - 1) + 1 - n + d * (k - 1))
-
+        manual_pad = {}
         padding_int = {}
-        for role in ("depth", "height", "width"):
-            ax = in_obj.axes.role_axis(role)
-            assert ax is not None
-            name = role[0].upper()
-            pad = self.padding[name]
-            if isinstance(pad, int):
-                padding_int[name] = pad
-            elif isinstance(pad, str):
-                if pad not in ("same", "valid", "causal"):
-                    raise ValueError("If padding is a string, it must be one of "
-                                     "'same', 'valid', or 'causal', not {}".format(pad))
-                if pad == "valid":
-                    padding_int[name] = 0
-                elif pad == "same":
-                    total_pad = same_padding(ax.length, self.strides[name],
-                                             self.dilation[name], self.filter_shape[name])
-                    padding_int[name] = total_pad // 2
-                    if total_pad % 2:  # If padding is odd, add an extra 0 at the end
-                        manual_pad[ax.name] = (0, 1)
-                elif pad == "causal":
-                    padding_int[name] = 0
-                    manual_pad[ax.name] = (self.dilation[name] * (self.filter_shape[name] - 1), 0)
+        for name, ax in zip("DHW", spatial_axes):
+            pad = utils.PaddedConv(ax.length,
+                                   self.filter_shape[name],
+                                   self.strides[name],
+                                   self.dilation[name]).get_padding(self.padding[name])
+            symm_pad = min(pad)
+            padding_int[name] = symm_pad
+            if pad[0] != pad[1]:
+                manual_pad[ax.name] = (pad[0] - symm_pad, pad[1] - symm_pad)
 
         return padding_int, manual_pad
 
-    def _conv_op(self, in_obj):
+    def _conv_op(self, in_obj, channel_axis, spatial_axes):
+        """
+        Setup for the call to ng.convolution.
+        """
 
-        pad_int, manual_pad = self._get_pad_int(in_obj)
+        manual_pad = collections.OrderedDict([(ax.name, (0, 0)) for ax in in_obj.axes])
+        pad_int, extra_pad = self._get_pad_int(spatial_axes)
+        manual_pad.update(extra_pad)
         if any((pad != (0, 0)) for pad in manual_pad.values()):
             in_obj = ng.pad(in_obj, manual_pad.values())
-        output_axes = self._output_axes(in_obj, pad_int)
-        convparams = self._make_convparams(in_obj, pad_int)
-
+        output_axes = self._output_axes(channel_axis, spatial_axes, in_obj.axes.batch_axis(),
+                                        pad_int)
+        convparams = utils.make_convparams(self.nout, self.filter_shape,
+                                           self.strides, pad_int, self.dilation)
         return ng.convolution(convparams,
                               in_obj,
                               self.W,
                               axes=output_axes)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
-        in_obj = reorder_spatial_axes(in_obj)
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+        """
+        Arguments:
+            in_obj (Op): Input op
+            channel_axes (str): name of the expected channel axis type - defaults to "C"
+            spatial_axes (tuple): names of expected depth, height and width axis types - defaults
+                                  to "D", "H", and "W"
+        """
+        if isinstance(spatial_axes, dict):
+            spatial_axes = tuple(spatial_axes.get(name, name)
+                                 for name in ("D", "H", "W"))
+        elif isinstance(spatial_axes, tuple):
+            if len(spatial_axes) < 3:
+                raise ValueError("spatial_axes must have length 3 (e.g. ('D', 'H', 'W'))")
+            spatial_axes = tuple(name if name else default
+                                 for name, default in zip(spatial_axes, ("D", "H", "W")))
 
-        filter_axes = self._filter_axes(in_obj)
+        in_obj, orig_axes = reorder_spatial_axes(in_obj, channel_axes, spatial_axes)
+        channel_axes = in_obj.axes.get_by_names(channel_axes)
+        spatial_axes = in_obj.axes.get_by_names(*spatial_axes)
+
+        filter_axes = self._filter_axes(channel_axes, spatial_axes)
 
         # mark 'K' as a shadow axis for the initializers.
         axes_map = shadow_axes_map(filter_axes.find_by_name('K'))
@@ -439,7 +456,12 @@ class ConvBase(Layer):
                     new_filter_axes=filter_axes,
                 ))
 
-        return ng.map_roles(self._conv_op(in_obj), axes_map)
+        output = ng.map_roles(self._conv_op(in_obj, channel_axes, spatial_axes), axes_map)
+        # Reorder the output to match the input order (with additional axes)
+        # TODO: Should we also remove extra axes?
+        output_axis_order = ng.make_axes([output.axes.find_by_name(ax.name)[0]
+                                          for ax in orig_axes])
+        return ng.axes_with_order(output, output_axis_order)
 
 
 class DeconvBase(ConvBase):
@@ -476,12 +498,12 @@ class DeconvBase(ConvBase):
         cpm = self.convparams.copy()
         # axes for deconv output shape without any trimming
         out_max_shape = [
-            deconv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'],
-                              cpm['str_d'], cpm['dil_d']),
-            deconv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'],
-                              cpm['str_h'], cpm['dil_h']),
-            deconv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'],
-                              cpm['str_w'], cpm['dil_w'])
+            utils.deconv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'],
+                                    cpm['str_d'], cpm['dil_d']),
+            utils.deconv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'],
+                                    cpm['str_h'], cpm['dil_h']),
+            utils.deconv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'],
+                                    cpm['str_w'], cpm['dil_w'])
         ]
         # output slice indices when output shape is specified
         if self.deconv_out_shape is not None:
@@ -518,13 +540,13 @@ def make_conv2d(fshape, init, strides, padding, dilation, deconv=False,
             fshape = (1, fshape[0], fshape[0], fshape[1])
         elif len(fshape) == 3:
             fshape = (1, fshape[0], fshape[1], fshape[2])
-        fshape = {k: x for k, x in zip('TRSK', fshape)}
+        fshape = {k: x for k, x in zip('DHWK', fshape)}
     if isinstance(strides, int):
-        strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
-    if isinstance(padding, int):
-        padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
+        strides = {'H': strides, 'W': strides, 'D': 1}
+    if isinstance(padding, (int, str)):
+        padding = {'H': padding, 'W': padding, 'D': 0}
     if isinstance(dilation, int):
-        dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
+        dilation = {'H': dilation, 'W': dilation, 'D': 1}
 
     if deconv:
         return DeconvBase(fshape, init, strides, padding, dilation,
@@ -590,10 +612,10 @@ class PoolBase(Layer):
             ])
             # set lengths
             out_shape = [
-                conv_output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
-                conv_output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
-                conv_output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
-                conv_output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
+                utils.conv_output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
+                utils.conv_output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
+                utils.conv_output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
+                utils.conv_output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
             self.o_axes |= in_axes.batch_axis()
@@ -676,9 +698,50 @@ class Affine(Layer):
         return self.activation_layer(bn_out)
 
 
-class Convolution(Layer):
+class Convolution(SubGraph):
     """
-    TODO: Document, bias should not be used when batch norm is
+    Compute a 2D convolution over the input.
+    
+    A multi-part layer that computes a 2D convolution over its input. Following convolution, 
+    it adds a bias or performs batch normalization, then passes the output through an activation 
+    function.
+    
+    Arguments:
+        fshape (tuple, dict): Filter shape expressed as (height, width, output_channels) or
+            {"H": height, "W": width, "K": output_channels}
+        filter_init (function): The filter initialization function
+        strides (int, dict, optional): Filter strides. If strides is a dictionary, it should be
+            formatted as {"H": str_h, "W": str_w}, where str_h and str_w should be integers.
+        padding (int, str, dict, optional): Filter paddings. If padding is an integer, symmetric
+            padding will be applied. If padding is a string, it can be one of "same", "valid",
+            or "causal". If padding is a dictionary, it should be formatted as
+            {"H": pad_h, "W": pad_w}, where pad_h and pad_w can be integers or strings.
+        dilation (int, dict, optional): Filter dilations. If dilation is a dictionary, it should be
+            formatted as {"H": dil_h, "W": dil_w}, where dil_h and dil_w should be integers.
+        bias_init (function, optional): The bias initialization function. If bias_init is None,
+            then no bias is applied. If batch normalization is used, bias_init should be None.
+        activation (function, optional): Activation function to be applied to the output. The
+            default uses the identity function.
+        batch_norm (bool, optional): Whether or not to apply batch normalization. Batch
+            normalization contains its own bias, so if True, bias_init should not be supplied.
+                
+    Attributes:
+        conv (Layer): The `ConvBase` layer that performs the convolution
+        bias (Layer): The `Bias` layer that performs bias addition
+        batch_norm (Layer): The `BatchNorm` layer that performs batch normalization
+        activation (Layer): The `Activation` layer to transform the output
+    
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is 
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
+             
+    Examples:
+        
+        
     """
     def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
@@ -694,8 +757,8 @@ class Convolution(Layer):
                                 deconv=False, **kwargs)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
-        l_out = self.conv(in_obj)
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+        l_out = self.conv(in_obj, channel_axes=channel_axes, spatial_axes=spatial_axes)
         b_out = self.bias(l_out)
         bn_out = self.batch_norm(b_out) if self.batch_norm else b_out
         return self.activation(bn_out)
