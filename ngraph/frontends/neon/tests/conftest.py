@@ -48,6 +48,7 @@ def spatial_axes(height, width):
 def channel_axis_1(input_size):
     return ng.make_axis(length=16, name="C")
 
+
 @pytest.fixture
 def spatial_axes_1(height, width):
     H = ng.make_axis(length=height, name="height")
@@ -55,9 +56,11 @@ def spatial_axes_1(height, width):
     D = ng.make_axis(length=1, name="Depth")
     return ng.make_axes([D, H, W])
 
+
 @pytest.fixture
 def channel_axis(input_size):
     return ng.make_axis(length=input_size, name="C")
+
 
 @pytest.fixture
 def input_placeholder(input_axis, batch_axis, extra_feature_axes):

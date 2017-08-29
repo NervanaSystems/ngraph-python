@@ -31,7 +31,7 @@ from ngraph.op_graph.op_graph import AbsoluteOp, Add, Argmax, Argmin, \
     LogOp, Max, Maximum, Min, Minimum, Multiply, NegativeOp, NotEqual, OneHotOp, \
     ReciprocalOp, Power, AssignOp, SignOp, SinOp, SqrtOp, SquareOp, RngOp, \
     Subtract, Sum, Prod, TanhOp, TensorSizeOp, Fill, TensorDescription, \
-    ReductionOp, WriteOp, ReadOp, AssignableTensorOp
+    ReductionOp, WriteOp, ReadOp
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, \
     DeconvolutionOp, DeconvDerivOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
@@ -804,6 +804,7 @@ class CPUCodeGenerator(PyGen):
         self.broadcast_recv_nodes.append(op)
         self.append("self.broadcast_recv_from_queue_broadcast_send({}, out={})",
                     broadcast_recv_id, out)
+
 
 class CPUTransformer(ExecutionGraphTransformer):
     """
