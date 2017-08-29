@@ -36,7 +36,7 @@ gamma=0.1
 momentum_coef=0.9
 wdecay=0.0001
 #BatchNorm
-rho=0.3
+rho=0.9
 do_tuning=False
 #initializer
 weight_init=KaimingInit()
@@ -49,6 +49,7 @@ print("TuningEnabled:     "+str(do_tuning))
 print("Rho:               "+str(rho))
 
 #Helpers
+#TODO: Fix mean_subtract for imagenet
 def mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
     axes=[x.axes.channel_axis()],
@@ -103,9 +104,9 @@ class ResidualModule(object):
 
 #Class for constructing the network
 class BuildResnet(Sequential):
-    def __init__(self,net_type,batch_size):
+    def __init__(self,net_type,batch_size,en_bottleneck=False):
         num_fils=[16,32,64]
-        if net_type=='cifar10' or 'cifar100':
+        if net_type=='cifar10':
             layers=[#Subtracting mean as suggested in paper
                     Preprocess(functor=mean_subtract),
                     #First Conv with 3x3 and stride=1
@@ -125,13 +126,37 @@ class BuildResnet(Sequential):
             layers.append(Activation(Rectlin()))
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
-            #Axes are 10 as number of classes are 10
             layers.append(Affine(axes=ax.Y,weight_init=weight_init))
-            #layers.append(BatchNorm(rho=rho,bz=batch_size))
+            layers.append(BatchNorm(rho=rho,bz=batch_size))
             layers.append(Activation(Softmax()))
         elif net_type=='i1k':
-            print("Seriously how did we come this far.")
-            exit()
+            if(en_bottleneck):
+                print("Still bottlenecking Resnet50")
+                exit()
+            else:
+                num_fils=[64,128,256,512]
+                layers=[#Subtract mean
+                        Preprocess(functor=mean_subtract),
+                        #First Conv Layer and Max pool
+                        Convolution(**conv_params(7,64,rho,batch_size)),
+                        Pool2D(3,strides=2,op="max")]
+                first=True
+                for fil in range(4):
+                    for resmods in range(num_resnet_mods):
+                            if(resmods==0):
+                                if(first):
+                                    layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1,first=first))
+                                    first=False
+                                else:
+                                    layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=2))
+                            else:
+                                layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1))
+                layers.append(Activation(Rectlin()))
+                #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
+                layers.append(Pool2D(7,op='avg'))
+                layers.append(Affine(axes=ax.Y,weight_init=weight_init))
+                layers.append(BatchNorm(rho=rho,bz=batch_size))
+                layers.append(Activation(Softmax()))
         else:
             print("Unknown dataset")
             exit()
@@ -169,7 +194,7 @@ if __name__ == "__main__":
     print("Learning Schedule: "+str(learning_schedule))
 
     #Command line args
-    cifar_sizes = [8, 14, 20, 32, 44, 56, 200]
+    cifar_sizes = [20, 32, 44, 56, 200]
     i1k_sizes   = [18, 34, 50, 101, 152]
     resnet_size=args.size
     resnet_dataset=args.dataset
@@ -177,18 +202,8 @@ if __name__ == "__main__":
     #Checking Command line args are proper
     if resnet_dataset=='cifar10':
         if resnet_size in cifar_sizes:
-            if(use_aeon):
-                print("Using Aeon")
-                #Create training and validation set objects
-                train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
-            else:
-                from ngraph.frontends.neon import ArrayIterator  # noqa
-                from ngraph.frontends.neon import CIFAR10  # noqa
-                train_data, valid_data = CIFAR10(args.data_dir).load_data()
-                train_set = ArrayIterator(train_data, args.batch_size,
-                                          total_iterations=args.num_iterations)
-                valid_set = ArrayIterator(valid_data, args.batch_size)
-
+            #Create training and validation set objects
+            train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
             #Num of resnet modules required for cifar10
             num_resnet_mods=(args.size-2)//6
             #Only 2 layers for one resnet module
@@ -199,28 +214,27 @@ if __name__ == "__main__":
             np.random.seed(args.rng_seed)
             #Make placeholders
             input_ph=train_set.make_placeholders(include_iteration=True)
-            ax.Y.length = 10
-            resnet = BuildResnet(resnet_dataset,args.batch_size)
-            learning_rate_policy = {'name': 'schedule',
-                                    'schedule': learning_schedule,
-                                    'gamma': gamma,
-                                    'base_lr': base_lr}
-            optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
-                            momentum_coef=momentum_coef,
-                            wdecay=wdecay,
-                            nestrov=True,
-                            iteration=input_ph['iteration'])
         else:
             print("Invalid cifar10 size.Select from "+str(cifar_sizes))
             exit()
     elif resnet_dataset=='i1k':
         if resnet_size in i1k_sizes:
+            #Enable or disable bottleneck depending on resnet size
             if(resnet_size in [18,34]):
                 en_bottleneck=False
+                num_resnet_mods=(args.size-2)//6
             else:
                 en_bottleneck=True
+                num_resnet_mods=(args.size-2)//9
+            #Creating training and validation set objects
             train_set,valid_set=make_aeon_loaders(args.data_dir,args.batch_size,args.num_iterations,dataset=resnet_dataset)
-            exit()
+            # of Classes
+            ax.Y.length=1000
+            print("Completed loading Imagenet dataset")
+            #Randomize seed
+            np.random.seed(args.rng_seed)
+            #Make placeholders
+            input_ph=train_set.make_placeholders(include_iteration=True)
         else:
             print("Invalid i1k size. Select from "+str(i1k_sizes))
             exit()
@@ -228,6 +242,19 @@ if __name__ == "__main__":
         print("Invalid Dataset. Dataset should be either cifar10 or i1k")
         exit()
 
+#Build the network
+resnet = BuildResnet(resnet_dataset,args.batch_size,en_bottleneck)
+#Optimizer
+learning_rate_policy = {'name': 'schedule',
+                        'schedule': learning_schedule,
+                        'gamma': gamma,
+                        'base_lr': base_lr}
+
+optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
+                                  momentum_coef=momentum_coef,
+                                  wdecay=wdecay,
+                                  nestrov=True,
+                                  iteration=input_ph['iteration'])
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
 #Tensorboard
