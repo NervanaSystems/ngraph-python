@@ -2,11 +2,10 @@ FROM ngraph_test_cpu
 
 # install mkl-dnn
 WORKDIR /root
-RUN apt-get update && \
-    apt-get install -y cmake doxygen wget && \
-    apt-get clean autoclean && \
-    apt-get autoremove -y
-
+RUN apt-get install -y cmake
+RUN apt-get install -y doxygen
+RUN apt-get install -y wget
+RUN which wget
 RUN git clone https://github.com/01org/mkl-dnn.git
 WORKDIR mkl-dnn
 RUN git checkout 171572a205c71f5bbb08657de5660c9d06cf2d8f
@@ -17,6 +16,12 @@ RUN make install
 
 # set environment to build mkldnn_engine.so and run with mkldnn_engine
 # setup with `pip install -e .`
-ENV MKLDNN_ROOT /usr/local
-ENV LD_LIBRARY_PATH $MKLDNN_ROOT/lib:$LD_LIBRARY_PATH
-WORKDIR /root
+ENV MKLDNN_ROOT=/usr/local
+ENV LD_LIBRARY_PATH=$MKLDNN_ROOT/lib:$LD_LIBRARY_PATH
+WORKDIR /root/ngraph-test
+ADD . /root/ngraph-test
+RUN make install
+RUN make test_prepare 
+
+# save the library so a temporary location so it doesn't get overwritten by docker volume
+RUN cp ./mkldnn_engine.so /tmp/mkldnn_engine.so
