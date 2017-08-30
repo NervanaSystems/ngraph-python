@@ -23,7 +23,7 @@ pytestmark = pytest.mark.transformer_dependent
 
 @pytest.fixture(params=[(1, 2, 1),
                         (2, 3, 2),
-                        (15, 5, 1)])
+                        pytest.config.flex_disabled((15, 5, 1), reason="Result mismatch")])
 def concatenate_variables(request):
     num_vars, num_axes, concat_pos = request.param
     common_axes = [ng.make_axis(length=2) for _ in range(num_axes - 1)]
@@ -159,7 +159,6 @@ def test_sequential_side(M):
         assert np.allclose(x2_final_val, x2_np)
 
 
-@pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
 @pytest.config.argon_disabled  # TODO triage
 def test_concatenate(concatenate_variables):
     x_list, np_list, pos = concatenate_variables
