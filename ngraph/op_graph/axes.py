@@ -453,7 +453,7 @@ class Axes(object):
         for name in names:
             ax = self.find_by_name(name)
             if ax is not None:
-                axes.append(ax[0])
+                axes.append(ax[0])  # Only one axis can be named `name`.
             else:
                 raise KeyError("No axis of name {}".format(name))
 

@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from six import string_types
 import ngraph as ng
+from ngraph.op_graph.axes import Axis, IncompatibleAxesError
 
 
 _SHADOW_AXIS_POSTFIX = '__NG_SHADOW'
@@ -53,39 +55,66 @@ def is_shadow_axis(axis):
 
 def reorder_spatial_axes(tensor, channel_axis, spatial_axes):
     """
-    Assumes we are getting a C, H, N, or C, H, W, N, or C, D, H, W, N
+    Reorders the axes of the input tensor in preparation for a spatial op (i.e. convolution, 
+    deconvolution, or pooling).
+    
+    Arguments:
+        tensor (TensorOp): The input tensor whose axes must be a subset of those specified in 
+            channel_axis, spatial_axes and a batch axis. Missing axes in tensor will be added.
+        channel_axis (Axis, str): The axis or axis name to use as the "channel" axis type
+        spatial_axes (tuple of Axis or str): Tuple of axis or axis names to use as the "depth", 
+            "height", and "width" axis types, in that order.
+    
+    Returns:
+        tensor with 5 dimensions, ordered as "channel", "depth", "height", "width", "batch"
+        
+    Raises:
+        IncompatibleAxesError: The tensors' axes are incompatible with spatial ops using the 
+            given axis types.
     """
 
-    def expand_with_name(tensor, name, index=0):
-        axis = ng.make_axis(name=name, length=1)
+    if len(tensor.axes) > 5:
+        raise IncompatibleAxesError("spatial ops cannot have more than 5 axes, "
+                                    "found {}".format(len(tensor.axes)))
+
+    def expand_with_name(tensor, axis, index=0):
+        if axis in tensor.axes:
+            return tensor, axis
+
+        if isinstance(axis, Axis):
+            if (axis.length is not None) and (axis.length > 1):
+                raise IncompatibleAxesError("Cannot expand tensor to an axis with length > 1: {}"
+                                            ", length={}".format(axis.name, axis.length))
+            axis.length = 1
+        else:
+            axis = ng.make_axis(name=axis, length=1)
         return ng.expand_dims(tensor, axis, index), axis
 
-    channel_name = channel_axis
-    channel_axis = tensor.axes.get(channel_axis)
-    spatial_names = spatial_axes
-    spatial_axes = [tensor.axes.get(name) if name in tensor.axes.names else None
-                    for name in spatial_axes]
+    def not_in(axes, ax):
+        if isinstance(ax, string_types):
+            return not_in(axes, ng.make_axis(name=ax))
+
+        return ax not in axes
+
     batch_axis = tensor.axes.batch_axis()
-    role_axes = set([ax for ax in spatial_axes + [channel_axis, batch_axis] if ax is not None])
-    diff_axes = role_axes.difference(set(tensor.axes))
-    if len(diff_axes) > 0:
-        raise ValueError("Found extra axes: {}".format(list(diff_axes)))
-
     if batch_axis is None:
-        raise ValueError('spatial ops require a batch axis')
+        raise IncompatibleAxesError('Spatial ops require a batch axis, but none were found: '
+                                    '{}'.format(tensor.axes))
 
-    if all((ax is None) for ax in spatial_axes):
-        raise ValueError("spatial ops require at least one spatial axis, found none")
+    if all(not_in(tensor.axes, ax) for ax in spatial_axes):
+        raise IncompatibleAxesError("spatial_axes provided were {}, but none were found in the "
+                                    "tensor: {}. All spatial ops require at least one spatial "
+                                    "dimension.".format(spatial_axes, tensor.axes))
 
-    if channel_axis is None:
-        tensor, channel_axis = expand_with_name(tensor, channel_name, 0)
+    tensor, channel_axis = expand_with_name(tensor, channel_axis)
 
-    for ii, name in enumerate(spatial_names):
-        ax = spatial_axes[ii]
-        if ax is None:
-            tensor, ax = expand_with_name(tensor, name, ii + 1)
-            spatial_axes[ii] = ax
+    for ii, ax in enumerate(spatial_axes):
+        tensor, ax = expand_with_name(tensor, ax)
+        spatial_axes[ii] = ax
 
     new_axes = channel_axis + ng.make_axes(spatial_axes) + batch_axis
-    orig_axes = tensor.axes
-    return ng.axes_with_order(tensor, new_axes), orig_axes
+    if tensor.axes.is_not_equal_set(new_axes):
+        raise IncompatibleAxesError("Found extra axes: "
+                                    "{}".format(set(tensor.axes).difference(set(new_axes))))
+
+    return ng.axes_with_order(tensor, new_axes)

@@ -195,7 +195,7 @@ def conv_output_dim(X, S, padding, strides, pooling=False, dilation=1):
     # if pooling and padding >= S:
     #     raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
 
-    return PaddedConv(X, S, strides, dilation).get_output(padding)
+    return ConvParameters(X, S, strides, dilation).get_output_size(padding)
 
 
 def deconv_output_dim(X, S, padding, strides, dilation=1):
@@ -246,7 +246,21 @@ def make_convparams(nout, filter_shape, strides, padding, dilation):
     return convparams
 
 
-class PaddedConv(object):
+class ConvParameters(object):
+    """
+    Helper class to compute the output size and required padding for convolution and pooling 
+    operations.
+    
+    Arguments:
+        input_size (int): Length of the input
+        filter_size (int): Length of the filter
+        stride (int, optional): Filter stride
+        dilation (int, optional): Filter dilation for dilated / atrous convolutions
+        pooling (bool, optional): Whether the computation is for a pooling op.
+        
+    Raises:
+        ValueError: If the parameters produce invalid output or padding values
+    """
 
     def __init__(self, input_size, filter_size, stride=1, dilation=1, pooling=False):
 
@@ -256,7 +270,26 @@ class PaddedConv(object):
         self.dilation = dilation
         self.pooling = pooling
 
-    def get_padding(self, padding):
+    def get_padding_size(self, padding):
+        """
+        Get the padding size
+
+        Arguments:
+            padding (int, tuple, or str): Desired padding value. int values produce symmetric 
+                padding. tuple values are passed through as-is. str values can be one of:
+                - valid: No padding
+                - same: Padding to produce the same output size as ceil(input_size / stride)
+                - causal: Padding to offset the filter so outputs only rely on leftward 
+                          values of the input
+                - full: Padding such that the output contains all points with nonzero overlap 
+                        between the filters and the input
+
+        Returns:
+            Tuple of padding integers
+        
+        Raises:
+            ValueError: If padding is a str and not in the support str values
+        """
         if isinstance(padding, int):
             return (padding, padding)
         elif isinstance(padding, tuple):
@@ -275,9 +308,31 @@ class PaddedConv(object):
             else:
                 raise ValueError("Padding is not a valid string value: {}".format(padding))
 
-    def get_output(self, padding):
-        padding = self.get_padding(padding)
+    def get_output_size(self, padding):
+        """
+        Get the output size following convolution or pooling
+
+        Arguments:
+            padding (int, tuple, or str): Desired padding value. int values produce symmetric 
+                padding. tuple values are passed through as-is. str values can be one of:
+                - valid: No padding
+                - same: Padding to produce the same output size as ceil(input_size / stride)
+                - causal: Padding to offset the filter so outputs only rely on leftward 
+                          values of the input
+                - full: Padding such that the output contains all points with nonzero overlap 
+                        between the filters and the input
+
+        Returns:
+            output size (int)
+        
+        Raises:
+            ValueError: If padding or output sizes are not valid
+        """
+        padding = self.get_padding_size(padding)
         k = self.dilation * (self.filter_size - 1)
+        if self.pooling and (max(padding) > k):
+            raise ValueError("Padding dim {} incompatible with filter size {}".format(padding, k))
+
         output = math.ceil((self.input_size + sum(padding) - k) / self.stride)
         if output < 0:
             raise ValueError("Output after conv will be < 0")
