@@ -45,19 +45,6 @@ def spatial_axes(height, width):
 
 
 @pytest.fixture
-def channel_axis_1(input_size):
-    return ng.make_axis(length=16, name="C")
-
-
-@pytest.fixture
-def spatial_axes_1(height, width):
-    H = ng.make_axis(length=height, name="height")
-    W = ng.make_axis(length=width, name="width")
-    D = ng.make_axis(length=1, name="Depth")
-    return ng.make_axes([D, H, W])
-
-
-@pytest.fixture
 def channel_axis(input_size):
     return ng.make_axis(length=input_size, name="C")
 
