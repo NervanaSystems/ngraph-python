@@ -207,6 +207,9 @@ class CopyElimination(SequentialExOpPass):
             source_output_decl = exop.input_decls[0].source_output_decl
             source_exop = source_output_decl.exop
             if source_exop.write_args and source_exop.input_decls:
+                # Check if the persistent tensor written to is live
+                # at the point where the temporary write is created
+                # and skip this copy
                 nexop = source_exop.next_exop
                 in_use = False
                 while (nexop is not exop) and (not nexop.is_exop_end_of_list):
