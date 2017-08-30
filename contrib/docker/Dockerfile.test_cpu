@@ -58,3 +58,7 @@ ADD contrib/docker/chown_files.sh /tmp/chown_files.sh
 ADD . /root/ngraph-test
 RUN make install
 RUN make test_prepare
+
+WORKDIR /root/ngraph-test
+ADD tests/config/jupyter_nbconvert_config.py /root/.jupyter/jupyter_nbconvert_config.py
+
