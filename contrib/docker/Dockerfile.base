@@ -16,7 +16,4 @@ RUN if [ $python_version -eq 3 ]; then \
     virtualenv -p python3 /tmp/env3; fi
 ENV PATH="/tmp/env3/bin:$PATH"
 
-# do we still need these if we don't install OpenMPI?
-RUN apt-get install -y bzip2 wget coreutils libjasper1 libjpeg8 libpng12-0
-
 WORKDIR /root
