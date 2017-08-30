@@ -468,6 +468,10 @@ class Transformer(with_metaclass(Transformer_ABC_Meta, object)):
     def close(self):
         pass
 
+    @classmethod
+    def get_default_tolerance(cls, desired):
+        return cls.default_atol, cls.default_rtol
+
     def __del__(self):
         self.close()
 
