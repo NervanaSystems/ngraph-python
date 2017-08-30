@@ -27,6 +27,10 @@ import ngraph.transformers as ngt
 from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
 from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
 from data import make_aeon_loaders
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 
 #Hyperparameters
 #Optimizer
@@ -36,8 +40,7 @@ gamma=0.1
 momentum_coef=0.9
 wdecay=0.0001
 #BatchNorm
-rho=0.9
-do_tuning=False
+rho=0.3
 #initializer
 weight_init=KaimingInit()
 
@@ -45,7 +48,6 @@ print("HyperParameters")
 print("Learning Rate:     "+str(base_lr))
 print("Momentum:          "+str(momentum_coef))
 print("Weight Decay:      "+str(wdecay))
-print("TuningEnabled:     "+str(do_tuning))
 print("Rho:               "+str(rho))
 
 #Helpers
@@ -104,7 +106,7 @@ class ResidualModule(object):
 
 #Class for constructing the network
 class BuildResnet(Sequential):
-    def __init__(self,net_type,batch_size,en_bottleneck=False):
+    def __init__(self,net_type,batch_size):
         num_fils=[16,32,64]
         if net_type=='cifar10':
             layers=[#Subtracting mean as suggested in paper
@@ -151,12 +153,12 @@ class BuildResnet(Sequential):
                                     layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=2))
                             else:
                                 layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1))
-                layers.append(Activation(Rectlin()))
-                #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
-                layers.append(Pool2D(7,op='avg'))
-                layers.append(Affine(axes=ax.Y,weight_init=weight_init))
-                layers.append(BatchNorm(rho=rho,bz=batch_size))
-                layers.append(Activation(Softmax()))
+            layers.append(Activation(Rectlin()))
+            #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
+            layers.append(Pool2D(7,op='avg'))
+            layers.append(Affine(axes=ax.Y,weight_init=weight_init))
+            #layers.append(BatchNorm(rho=rho,bz=batch_size))
+            layers.append(Activation(Softmax()))
         else:
             print("Unknown dataset")
             exit()
@@ -187,6 +189,7 @@ if __name__ == "__main__":
     parser.add_argument('-dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
     parser.add_argument('-size', type=int, default=56, help="Enter size of resnet")
     parser.add_argument('-tb',type=int,default=0,help="1- Enables tensorboard")
+    parser.add_argument('-name',type=str,help="Name of experiment for graph")
     args=parser.parse_args()
     #rho=args.batch_size/(args.batch_size+1.0)
     args.iter_interval=50000//args.batch_size 
@@ -243,7 +246,7 @@ if __name__ == "__main__":
         exit()
 
 #Build the network
-resnet = BuildResnet(resnet_dataset,args.batch_size,en_bottleneck)
+resnet = BuildResnet(resnet_dataset,args.batch_size)
 #Optimizer
 learning_rate_policy = {'name': 'schedule',
                         'schedule': learning_schedule,
@@ -277,34 +280,8 @@ with Layer.inference_mode_on():
     eval_loss_names = ['cross_ent_loss', 'misclass']
     eval_computation = ng.computation([eval_loss, errors], "all")
 
-#Tuning RHO
-#Calculate rho
-batch_index=ng.placeholder(())
-rho_val=batch_index/(batch_index+1.0)
-#Select all the rhos
-rhos=resnet.select('[name=rho]')
-rho_ops=[]
-#Then assign the new value of rho
-for iter in range(len(rhos)):
-    rho_ops.append(ng.assign(rhos[iter],rho_val))
-rho_calc=ng.computation(ng.sequential([rho_val]+rho_ops),batch_index)
-
-#Tuning gvar
-#Calculate debiaser
-debiaser=(batch_index+1.0)/batch_index
-#Select all gvar
-gvars=resnet.select('[name=gvar]')
-gvar_ops=[]
-for gvar_iter in range(len(gvars)):
-    gvar_ops.append(ng.assign(gvars[iter],gvars[iter]*debiaser))
-gvar_calc=ng.computation(ng.sequential([debiaser]+gvar_ops),batch_index)
-
-
 #Training the network by calling transformer
 transformer=ngt.make_transformer()
-#Tuner
-#rho_calc_comp=transformer.add_computation(rho_calc)   
-#gvar_calc_comp=transformer.add_computation(gvar_calc)
 #Trainer
 train_function=transformer.add_computation(train_computation)
 #Inference
@@ -312,27 +289,34 @@ eval_function=transformer.add_computation(eval_computation)
 #Progress bar
 tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
 interval_cost = 0.0
-
+train_result=[]
+test_result=[]
+err_result=[]
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-    #if(do_tuning):
-    #    t1=rho_calc_comp(step)
-    #    if(step>=10):
-    #        t2=gvar_calc_comp(step)
     output = train_function(feed_dict=feed_dict)
     tpbar.update(1)
     tpbar.set_description("Training {:0.4f}".format(output[()]))
     interval_cost += output[()]
     if (step + 1) % args.iter_interval == 0 and step > 0:
+        eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
         tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                   "Avg Train Cost {cost:0.4f}".format(
+                   "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
                        interval=step // args.iter_interval,
                        iteration=step,
-                       cost=interval_cost / args.iter_interval))
+                       cost=interval_cost / args.iter_interval,tcost=eval_losses))
+        #For graph plotting
+        train_result.append(interval_cost/args.iter_interval)
+        test_result.append(eval_losses['cross_ent_loss'])
+        err_result.append(eval_losses['misclass'])
         interval_cost = 0.0
-        eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
-        tqdm.write("VALID Avg losses: {}".format(eval_losses))
-
+        #tqdm.write("VALID Avg losses: {}".format(eval_losses))
+print("Plotting and Saving the plot")
+plt.plot(train_result,'g--',label="Training Cost")
+plt.plot(test_result,'r-o',label="Test Cost")
+plt.plot(err_result,label="Error")
+plt.legend()
+plt.savefig(args.name+"_graph.png")
 print("Training complete.")
 
