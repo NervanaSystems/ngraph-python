@@ -65,7 +65,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('reflstmargs', fargs)
 
 
-def test_ref_compare_rand(transformer_factory, reflstmargs):
+def test_ref_compare_rand(reflstmargs):
         # run comparison with reference code
         # for Gaussian random init
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
@@ -74,7 +74,7 @@ def test_ref_compare_rand(transformer_factory, reflstmargs):
                    num_iter=num_iter)
 
 
-def test_ref_stacked(transformer_factory, reflstmargs):
+def test_ref_stacked(reflstmargs):
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,
                            GaussianInit(0.0, 0.1), reset_cells=reset_cells,

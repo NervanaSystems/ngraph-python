@@ -145,7 +145,7 @@ def bn_params(request):
 
 
 @pytest.config.flex_disabled(reason="#1975 BatchNorm not yet supported - Results mismatch")
-def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
+def test_batchnorm_fprop(input_placeholder, bn_params):
     """This checks that that we are doing batch norm across a feature make_axis
     and properly tracking the side effect variables
     """
@@ -181,8 +181,8 @@ def test_batchnorm_fprop(input_placeholder, bn_params, transformer_factory):
             ng.testing.assert_allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
-@pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
-def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params, transformer_factory):
+@pytest.config.flex_disabled(reason="Result mismatch")
+def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params):
     """This checks that that we are doing batch norm across multiple axes
     and properly tracking the side effect variables
     """
@@ -212,15 +212,12 @@ def test_conv_batchnorm_fprop(conv_input_placeholder, bn_params, transformer_fac
             # Compute ngraph fprop and stats
             out = fprop_function(x)
             gm, gv = stats_function()
-            assert ng.testing.allclose(out, out_ref, rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
-            assert ng.testing.allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
+            ng.testing.assert_allclose(out, out_ref, rtol=rtol, atol=atol)
+            ng.testing.assert_allclose(gm, bn_params['gmean'], rtol=rtol, atol=atol)
+            ng.testing.assert_allclose(gv, bn_params['gvar'], rtol=rtol, atol=atol)
 
 
-def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
-    if input_placeholder._axes.lengths == (32, 32):
-        pytest.config.flex_skip_now("Results mismatch - too strict tolerance (rtol, atol)")
-
+def test_batchnorm_bprop(input_placeholder, bn_params):
     layer = BatchNorm(**bn_params)
     fprop = layer(input_placeholder)
 
@@ -253,8 +250,7 @@ def test_batchnorm_bprop(input_placeholder, bn_params, transformer_factory):
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
-def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
-                                   bn_params, transformer_factory):
+def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size, bn_params):
     """Compare fprop RNN with batch norm to numpy batch norm followed by rnn without"""
 
     helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)
@@ -306,12 +302,11 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size,
             ng.testing.assert_allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
 
 
-@pytest.config.flex_disabled(reason="#1975 BatchNorm not yet supported - Results mismatch")
+@pytest.config.flex_skip(reason="#1975 BatchNorm not yet supported - Results mismatch")
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
 @pytest.mark.parametrize("RNN", [Recurrent, LSTM])
-def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size,
-                                   bn_params, transformer_factory):
+def test_recurrent_batchnorm_bprop(RNN, recurrent_input, output_size, bn_params):
     """Compare bprop gated RNN with batch norm to numpy batch norm followed by rnn without"""
 
     helper = RNNHelper(recurrent_input, output_size, RNN, bn_params)

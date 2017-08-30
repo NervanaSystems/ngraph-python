@@ -112,19 +112,17 @@ def make_weights(input_placeholder, hidden_size, weight_initializer, bias_initia
 
 
 @pytest.config.argon_disabled  # TODO triage
-@pytest.mark.flex_disabled
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("sequence_length", [3])
 @pytest.mark.parametrize("input_size", [5])
 @pytest.mark.parametrize("hidden_size", [10])
-@pytest.mark.parametrize("return_sequence", [pytest.config.flex_disabled(True), False])
+@pytest.mark.parametrize("return_sequence", [True, False])
 @pytest.mark.parametrize("init_state", [True, False])
 @pytest.mark.parametrize("extra_axes", [0, 2])
 @pytest.mark.parametrize("backward", [True, False])
-def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
-                   return_sequence, weight_initializer, bias_initializer,
-                   init_state, extra_axes, backward, transformer_factory):
+def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size, return_sequence,
+                   weight_initializer, bias_initializer, init_state, extra_axes, backward):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
@@ -182,9 +180,8 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size,
 @pytest.mark.parametrize("hidden_size", [10])
 @pytest.mark.parametrize("return_sequence", [True])
 @pytest.mark.parametrize("init_state", [True, False])
-def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
-                       return_sequence, weight_initializer, bias_initializer,
-                       init_state, transformer_factory):
+def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size, return_sequence,
+                       weight_initializer, bias_initializer, init_state):
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
     assert return_sequence is True, "the reference rnn only supports sequences for deriv"
@@ -259,9 +256,8 @@ def test_rnn_deriv_ref(sequence_length, input_size, hidden_size, batch_size,
 @pytest.mark.parametrize("return_sequence", [True, False])
 @pytest.mark.parametrize("backward", [True, False])
 @pytest.mark.parametrize("init_state", [True, False])
-def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
-                             return_sequence, weight_initializer, bias_initializer,
-                             backward, init_state, transformer_factory):
+def test_rnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size, return_sequence,
+                             weight_initializer, bias_initializer, backward, init_state):
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)

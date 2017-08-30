@@ -31,7 +31,7 @@ atol, rtol = 0, 1e-6
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.75, 0.5])
-def test_dropout_train(nin, batch_size, keep, transformer_factory):
+def test_dropout_train(nin, batch_size, keep):
 
     # set inputs
     N = ng.make_axis(batch_size, name='N')
@@ -59,7 +59,7 @@ def test_dropout_train(nin, batch_size, keep, transformer_factory):
 
 
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
-def test_dropout_inference(nin, batch_size, transformer_factory):
+def test_dropout_inference(nin, batch_size):
     # set inputs
     N = ng.make_axis(batch_size, name='N')
     F = ng.make_axis(nin, name='F')
@@ -86,7 +86,7 @@ def test_dropout_inference(nin, batch_size, transformer_factory):
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.5])
-def test_dropout_bprop_single_comp(nin, batch_size, keep, transformer_factory):
+def test_dropout_bprop_single_comp(nin, batch_size, keep):
     # set inputs
     N = ng.make_axis(batch_size, name='N')
     F = ng.make_axis(nin, name='F')
