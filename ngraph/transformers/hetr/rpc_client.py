@@ -3,13 +3,15 @@ from six import iteritems
 
 from . import hetr_pb2
 from . import hetr_pb2_grpc
-from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, _serialize_graph,\
+from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, add_edges,\
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
+from ngraph.op_graph.op_graph import Op
 
 
 _TIMEOUT_SECONDS = 600
 _SLEEP_SECONDS = 1
+_OPS_PER_MSG = 10
 
 
 def is_channel_ready(channel):
@@ -80,21 +82,56 @@ class RPCTransformerClient(object):
             self.initialized = False
 
     def computation(self, returns, placeholders):
+
+        def make_computation_request(pb_ops, pb_edges, pb_returns=None, pb_placeholders=None):
+            if pb_returns or pb_placeholders:
+                return hetr_pb2.ComputationRequest(
+                    ops=pb_ops,
+                    edges=pb_edges,
+                    returns=pb_returns,
+                    placeholders=pb_placeholders)
+            else:
+                return hetr_pb2.ComputationRequest(
+                    ops=pb_ops,
+                    edges=pb_edges)
+
+        def generate_returns_placeholders():
+            pb_returns = []
+            pb_placeholders = []
+            for op in returns:
+                pb_returns.append(op_to_protobuf(op))
+            for op in placeholders:
+                pb_placeholders.append(op_to_protobuf(op))
+            return pb_returns, pb_placeholders
+
+        def generate_messages():
+            ops = Op.all_op_references(returns + list(placeholders))
+            for i, op in enumerate(ops):
+                if (i == 0):
+                    pb_ops = []
+                    pb_edges = []
+                    pb_returns, pb_placeholders = generate_returns_placeholders()
+                elif (i % _OPS_PER_MSG == 0):
+                    pb_ops = []
+                    pb_edges = []
+                    pb_returns = []
+                    pb_placeholders = []
+
+                pb_ops.append(op_to_protobuf(op))
+                add_edges(pb_edges, pb_ops, op)
+
+                if ((i + 1) % _OPS_PER_MSG == 0) or ((i + 1) == len(ops)):
+                    msg = make_computation_request(pb_ops,
+                                                   pb_edges,
+                                                   pb_returns,
+                                                   pb_placeholders)
+                    yield msg
+
         if not self.initialized:
             raise RuntimeError("RPC build_transformer request failed!")
         update_comm_deps(returns)
-        pb_subgraph = _serialize_graph(returns + list(placeholders))
-        pb_returns = []
-        pb_placeholders = []
-        for op in returns:
-            pb_returns.append(op_to_protobuf(op))
-        for op in placeholders:
-            pb_placeholders.append(op_to_protobuf(op))
         response = self.RPC.Computation(
-            hetr_pb2.ComputationRequest(
-                subgraph=pb_subgraph,
-                returns=pb_returns,
-                placeholders=pb_placeholders),
+            generate_messages(),
             _TIMEOUT_SECONDS)
         if response.comp_id >= 0:
             rpcComputationClient = RPCComputationClient(response.comp_id, self.RPC)

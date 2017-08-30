@@ -7,8 +7,8 @@ import hetr_pb2
 import hetr_pb2_grpc
 from mpi4py import MPI
 from ngraph.op_graph.op_graph import Op
-from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, _deserialize_graph,\
-    tensor_to_protobuf, assign_scalar, protobuf_scalar_to_python, is_scalar_type
+from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, tensor_to_protobuf,\
+    _deserialize_graph_ops_edges, assign_scalar, protobuf_scalar_to_python, is_scalar_type
 from ngraph.transformers.hetrtransform import build_transformer
 
 
@@ -39,31 +39,43 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
         except:
             return hetr_pb2.BuildReply(status=False)
 
-    def Computation(self, request, context):
+    def Computation(self, request_iterator, context):
         if not self.transformer:
             return hetr_pb2.ComputationReply(comp_id=-1)
 
         try:
             comp_id = self.new_comp_id()
-            subgraph = _deserialize_graph(request.subgraph)
+            pb_ops = []
+            pb_edges = []
             returns = []
             placeholders = []
-            for pb_op in request.returns:
-                returns.append(protobuf_to_op(pb_op))
-            for pb_op in request.placeholders:
-                placeholders.append(protobuf_to_op(pb_op))
-            return_list = []
-            placeholder_list = []
+            reconstructed_returns = []
+            reconstructed_placeholders = []
+            for i, request in enumerate(request_iterator):
+                if (i == 0):
+                    pb_ops = request.ops
+                    pb_edges = request.edges
+                    for pb_op in request.returns:
+                        returns.append(protobuf_to_op(pb_op))
+                    for pb_op in request.placeholders:
+                        placeholders.append(protobuf_to_op(pb_op))
+                else:
+                    pb_ops.extend(request.ops)
+                    pb_edges.extend(request.edges)
+
+            subgraph = _deserialize_graph_ops_edges(pb_ops, pb_edges)
             ops = Op.ordered_ops(subgraph)
             for r in returns:
                 for op in ops:
                     if op.uuid == r.uuid:
-                        return_list.append(op)
+                        reconstructed_returns.append(op)
             for p in placeholders:
                 for op in ops:
                     if op.uuid == p.uuid:
-                        placeholder_list.append(op)
-            computation = self.transformer.computation(return_list, *placeholder_list)
+                        reconstructed_placeholders.append(op)
+
+            computation = self.transformer.computation(reconstructed_returns,
+                                                       *reconstructed_placeholders)
 
             self.computations[comp_id] = computation
             return hetr_pb2.ComputationReply(comp_id=comp_id)

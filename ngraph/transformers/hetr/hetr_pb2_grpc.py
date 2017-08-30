@@ -17,7 +17,7 @@ class HetrStub(object):
         request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildRequest.SerializeToString,
         response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildReply.FromString,
         )
-    self.Computation = channel.unary_unary(
+    self.Computation = channel.stream_unary(
         '/Hetr/Computation',
         request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationRequest.SerializeToString,
         response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationReply.FromString,
@@ -41,7 +41,7 @@ class HetrServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Computation(self, request, context):
+  def Computation(self, request_iterator, context):
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
@@ -64,7 +64,7 @@ def add_HetrServicer_to_server(servicer, server):
           request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildRequest.FromString,
           response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildReply.SerializeToString,
       ),
-      'Computation': grpc.unary_unary_rpc_method_handler(
+      'Computation': grpc.stream_unary_rpc_method_handler(
           servicer.Computation,
           request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationRequest.FromString,
           response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationReply.SerializeToString,
