@@ -492,19 +492,6 @@ class Axes(object):
             if axis.is_channel:
                 return axis
 
-    def role_axis(self, role):
-        """        
-        Returns:
-            The first axis that matches a specified role
-        """
-
-        if role not in ROLES:
-            raise ValueError("Role named {} is not defined".format(role))
-
-        for axis in self:
-            if axis.name in ROLES[role]:
-                return axis
-
     def spatial_axes(self):
         """
         Returns:
