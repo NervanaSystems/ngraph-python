@@ -187,7 +187,7 @@ if __name__ == '__main__':
     ng_results = tester.ng_run(
         target, tf_feed_dict=feed_dict, print_ng_result=False, verbose=False)
     print(tf_results, ng_results)
-    assert ng.testing.allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
+    ng.testing.assert_allclose(tf_results, ng_results, rtol=1e-3, atol=1e-3)
     tester.teardown(delete_dump=False)
 
     # start tensorboard (optional)
