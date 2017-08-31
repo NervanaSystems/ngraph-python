@@ -105,27 +105,21 @@ class RPCTransformerClient(object):
             return pb_returns, pb_placeholders
 
         def generate_messages():
+            pb_ops, pb_edges = [], []
+            pb_returns, pb_placeholders = generate_returns_placeholders()
             ops = Op.all_op_references(returns + list(placeholders))
             for i, op in enumerate(ops):
-                if (i == 0):
-                    pb_ops = []
-                    pb_edges = []
-                    pb_returns, pb_placeholders = generate_returns_placeholders()
-                elif (i % _OPS_PER_MSG == 0):
-                    pb_ops = []
-                    pb_edges = []
-                    pb_returns = []
-                    pb_placeholders = []
-
                 pb_ops.append(op_to_protobuf(op))
                 add_edges(pb_edges, pb_ops, op)
-
-                if ((i + 1) % _OPS_PER_MSG == 0) or ((i + 1) == len(ops)):
+                if (i != 0) and (i % _OPS_PER_MSG == 0 or i == len(ops) - 1):
                     msg = make_computation_request(pb_ops,
                                                    pb_edges,
                                                    pb_returns,
                                                    pb_placeholders)
                     yield msg
+
+                    pb_ops, pb_edges = [], []
+                    pb_returns, pb_placeholders = [], []
 
         if not self.initialized:
             raise RuntimeError("RPC build_transformer request failed!")

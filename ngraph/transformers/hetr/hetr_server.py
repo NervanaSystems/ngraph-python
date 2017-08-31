@@ -45,23 +45,14 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
 
         try:
             comp_id = self.new_comp_id()
-            pb_ops = []
-            pb_edges = []
-            returns = []
-            placeholders = []
-            reconstructed_returns = []
-            reconstructed_placeholders = []
-            for i, request in enumerate(request_iterator):
-                if (i == 0):
-                    pb_ops = request.ops
-                    pb_edges = request.edges
-                    for pb_op in request.returns:
-                        returns.append(protobuf_to_op(pb_op))
-                    for pb_op in request.placeholders:
-                        placeholders.append(protobuf_to_op(pb_op))
-                else:
-                    pb_ops.extend(request.ops)
-                    pb_edges.extend(request.edges)
+            pb_ops, pb_edges = [], []
+            returns, placeholders = [], []
+            reconstructed_returns, reconstructed_placeholders = [], []
+            for request in request_iterator:
+                pb_ops.extend(request.ops)
+                pb_edges.extend(request.edges)
+                returns.extend([protobuf_to_op(op) for op in request.returns])
+                placeholders.extend([protobuf_to_op(op) for op in request.placeholders])
 
             subgraph = _deserialize_graph_ops_edges(pb_ops, pb_edges)
             ops = Op.ordered_ops(subgraph)
