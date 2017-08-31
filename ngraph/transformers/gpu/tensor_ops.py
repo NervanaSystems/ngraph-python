@@ -34,6 +34,7 @@ ITEMS_PER_THREAD = 32
 TAG_IPC = 11
 TAG_GATHER = 22
 TAG_SCATTER = 33
+TAG_DIRECT = 44
 
 
 def setup_ipc_handle(op, comm, cmd, handle=None, dest=None):
@@ -47,7 +48,7 @@ def setup_ipc_handle(op, comm, cmd, handle=None, dest=None):
                 buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
             comm.send((local, buf_ipc_hdl), dest=int(d), tag=TAG_IPC)
     else:
-        (local, buf_ipc_hdl) = comm.recv(source=op.source_id, tag=TAG_IPC)
+        (local, buf_ipc_hdl) = comm.recv(source=int(op.source_id), tag=TAG_IPC)
         if local:
             return (buf_ipc_hdl)
         else:
@@ -247,19 +248,22 @@ class FillKernel(GPUKernel):
 
 class QueueSendKernel(GPUKernel):
 
-    def __init__(self, transformer, send_op):
+    def __init__(self, transformer, comm, op):
         super(QueueSendKernel, self).__init__(transformer)
-        self.q = send_op.queue
-        self.tensor = send_op.args[0].tensor_description()
+        self.tensor = op.args[0].tensor_description()
+        self.send_op = op
+        self.comm = comm
 
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(QueueSendKernel, self).bind_buffers()
+        buf_ipc_hdl = drv.mem_get_ipc_handle(
+            self.tensor.tensor.gpudata)
+        self.comm.send((False, buf_ipc_hdl), dest=int(self.send_op.dest_id), tag=TAG_IPC)
 
     def execute(self):
-        value = self.tensor.get(None)
-        self.q.put(value)
+        self.comm.send(True, dest=int(self.send_op.dest_id), tag=TAG_DIRECT)
 
 
 class QueueRecvKernel(GPUKernel):
@@ -276,10 +280,11 @@ class QueueRecvKernel(GPUKernel):
         tensor (GPUTensor): Dest tensor
     """
 
-    def __init__(self, transformer, op):
+    def __init__(self, transformer, comm, op):
         super(QueueRecvKernel, self).__init__(transformer)
         self.recv_op = op
         self.tensor = op.tensor_description()
+        self.comm = comm
 
     def bind_buffers(self):
         """
@@ -288,18 +293,18 @@ class QueueRecvKernel(GPUKernel):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(QueueRecvKernel, self).bind_buffers()
+        self.sender_buf  = setup_ipc_handle(op=self.recv_op, comm=self.comm, cmd='recv')
 
     def execute(self):
         """
         Receive tensor
         """
-        q = self.recv_op.queue
-        x = q.get()
-
-        if self.tensor.shape == ():
-            self.tensor.tensor.fill(x)
-        else:
-            self.tensor.__setitem__(None, x)
+        ready = self.comm.recv(source=int(self.recv_op.source_id), tag=TAG_DIRECT)
+        if ready:
+            drv.memcpy_dtod(
+                self.tensor.tensor.gpudata,
+                self.sender_buf,
+                self.tensor.tensor.size * self.recv_op.dtype.itemsize)
 
 
 class CudaScatterSendKernel(GPUKernel):

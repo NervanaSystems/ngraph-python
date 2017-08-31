@@ -247,8 +247,9 @@ class GatherRecvOp(RecvOp):
 
 class GPUQueueSendOp(MutateInsteadOfCopyWithNewArgsMixin, SendOp):
 
-    def __init__(self, from_node):
+    def __init__(self, from_node, to_node):
         super(GPUQueueSendOp, self).__init__(from_node=from_node)
+        self.dest_id = to_node.metadata['device_id']
         self._queue = multiprocessing.Queue()
 
     @property
@@ -260,6 +261,7 @@ class GPUQueueRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
         super(GPUQueueRecvOp, self).__init__(to_node, send_node)
+        self.source_id = send_node.metadata['device_id']
         self._queue = send_node.queue
 
     @property

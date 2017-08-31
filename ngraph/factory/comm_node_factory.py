@@ -121,7 +121,8 @@ class CommNodePair(object):
             self.send_node = send_node_factory.build(
                 node_type='send',
                 comm_type=comm_type,
-                from_node=from_node)
+                from_node=from_node,
+                to_node=to_node)
             self.recv_node = recv_node_factory.build(
                 node_type='recv',
                 comm_type=comm_type,
@@ -176,11 +177,12 @@ class GPUCommNodeFactory(CommNodeFactory):
 
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
-            if comm_type == 'queue':
+            if comm_type in ['queue', 'cuda']:
                 return GPUQueueSendOp(
-                    from_node=from_node)
+                    from_node=from_node,
+                    to_node=to_node)
         elif node_type == 'recv':
-            if comm_type == 'queue':
+            if comm_type in ['queue', 'cuda']:
                 return GPUQueueRecvOp(
                     to_node=to_node,
                     send_node=send_node)

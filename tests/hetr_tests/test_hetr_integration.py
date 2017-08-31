@@ -196,12 +196,12 @@ def test_to_and_from_device(hetr_device):
         x = ng.placeholder(())
         with ng.metadata(device_id='1'):
             x_plus_one = x + 1
-        x_plus_two = x_plus_one + 1
+        x_plus_two = x_plus_one * 2
 
     with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
         computation = transformer.computation(x_plus_two, x)
         for i in [10, 20, 30]:
-            assert computation(i) == i + 2
+            assert computation(i) == (i + 1) * 2
 
 
 @pytest.mark.multi_device
@@ -224,6 +224,7 @@ def test_computation_return_list(hetr_device):
 @pytest.mark.hetr_gpu_only
 def test_gpu_send_and_recv():
     pytest.xfail("GitHub issue: #2007, Unknown error - investigation is needed")
+    prepare_environment(hetr_device, 1)
     # put x+1 on cpu numpy
     with ng.metadata(device='cpu'):
         x = ng.placeholder(())

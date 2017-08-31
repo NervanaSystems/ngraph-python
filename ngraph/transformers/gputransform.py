@@ -53,7 +53,6 @@ from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
 # from ngraph.transformers.passes.nviz import VizPass
-
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
@@ -456,11 +455,11 @@ class GPUKernelGroup(object):
 
     @add_kernel.on_type(GPUQueueSendOp)
     def add_kernel(self, op):
-        self.kernels.append(QueueSendKernel(self.transformer, op))
+        self.kernels.append(QueueSendKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUQueueRecvOp)
     def add_kernel(self, op):
-        self.kernels.append(QueueRecvKernel(self.transformer, op))
+        self.kernels.append(QueueRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaScatterSendOp)
     def add_kernel(self, op):
