@@ -1,3 +1,5 @@
+import warnings
+
 import ngraph as ng
 from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
 from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
@@ -246,14 +248,30 @@ class CPUFusion(GraphRewritePass):
         """
         for (label_map, op) in label_map_op_list:
             # Matched bprop batchnorm pattern, do the replacement here.
-            input_tensor = label_map[self.batchnorm_bprop_input_tensor]
+            inputs = label_map[self.batchnorm_bprop_input_tensor].args[0]
             delta = label_map[self.batchnorm_bprop_delta]
-            if input_tensor in self.op_replacement_dict:
-                batchnorm_fprop = self.op_replacement_dict[input_tensor]
-                self.replace_op(op, BpropBatchnormOp(delta, input_tensor, batchnorm_fprop))
+
+            if len(inputs.axes) != 5 or inputs.axes[1].length != 1 or inputs.axes[0].length % 8 != 0:
+                return
+            if op.dtype.name != 'float32':
+                return
+
+            if inputs in self.op_replacement_dict:
+                delta_exop  = self.op_accessor.computation_decl.get_exop(delta)
+                dgamma = None
+                dbeta = None
+                for delta_child_decl in delta_exop.output_decls[0].user_input_decls:
+                    if isinstance(delta_child_decl.exop.op, Sum):
+                        dbeta = delta_child_decl.exop.op
+                    elif isinstance(delta_child_decl.exop.op, Multiply):
+                        for mul_child_decl in delta_child_decl.exop.output_decls[0].user_input_decls:
+                            if isinstance(mul_child_decl.exop.op, Sum):
+                                dgamma = mul_child_decl.exop.op
+                batchnorm_fprop = self.op_replacement_dict[inputs]
+                self.replace_op(op, BpropBatchnormOp(delta.args[0], inputs, dgamma, dbeta, batchnorm_fprop))
             else:
-                assert("No matching fprop BatchnormOp for the input_tensor \
-                       {}".format(input_tensor))
+                warnings.warn("No matching fprop BatchnormOp for the input_tensor \
+                       {}".format(inputs))
 
     def construct_batchnorm_bprop_pattern(self):
         """
@@ -282,7 +300,9 @@ class CPUFusion(GraphRewritePass):
 
         # bind the op's to the label
         input_tensor = PatternLabelOp(self.batchnorm_bprop_input_tensor,
-                                      (lambda op: isinstance(op, Flatten)))
+                                      (lambda op: isinstance(op, ContiguousOp)))
+        flatten_tensor = PatternSkipOp(input_tensor,
+                                       (lambda op: isinstance(op, Flatten)))
         var = PatternLabelOp(self.batchnorm_bprop_var_label,
                              (lambda op: isinstance(op, Divide)))
         gamma = PatternLabelOp(self.batchnorm_bprop_gamma_label,
@@ -345,7 +365,8 @@ class CPUFusion(GraphRewritePass):
 
         dx1 = Add(dxmu1, dxmu2_div_plus_dxmu2)
         dxmu1_mul = Multiply(Sum(ng.negative(dxmu1)), mean_1)
-        dxmu1_div = Divide(dxmu1_mul, Sum(input_tensor))
+        # dxmu1_div = Divide(dxmu1_mul, Sum(input_tensor))
+        dxmu1_div = Divide(dxmu1_mul, Sum(flatten_tensor))
         dxmu1_div_w_broadcast = ng.PatternSkipOp(dxmu1_div,
                                                  (lambda op: isinstance(op, BroadcastOp)))
         dx = Add(dxmu1_div_w_broadcast, dx1)
@@ -367,7 +388,9 @@ class CPUFusion(GraphRewritePass):
 
         # bind the label to the op's which needed to be updated in the dict
         in_obj = PatternLabelOp(self.batchnorm_fprop_input_tensor_label,
-                                (lambda op: isinstance(op, Flatten)))
+                                (lambda op: isinstance(op, ContiguousOp)))
+        flatten_tensor = PatternSkipOp(in_obj,
+                             (lambda op: isinstance(op, Flatten)))
         gamma = PatternLabelOp(self.batchnorm_fprop_gamma_label,
                                (lambda op: isinstance(op, BroadcastOp)))
         beta = PatternLabelOp(self.batchnorm_fprop_beta_label,
@@ -377,7 +400,7 @@ class CPUFusion(GraphRewritePass):
         epsilon = PatternLabelOp(self.batchnorm_fprop_epsilon_label,
                                  (lambda op: isinstance(op, BroadcastOp)))
         mean = PatternLabelOp(self.batchnorm_fprop_mean_label,
-                              (lambda op: isinstance(op, BroadcastOp)))
+                             (lambda op: isinstance(op, Divide)))
 
         # construct the fprop batchnorm pattern matching the computation graph
         # ng.sqrt(xvar + self.eps)
@@ -386,12 +409,15 @@ class CPUFusion(GraphRewritePass):
         reciprocal_op = ng.reciprocal(SqrtofVarianceAndEps)
         reciprocal_op_w_braodcast = ng.PatternSkipOp(reciprocal_op,
                                                      lambda op: isinstance(op, BroadcastOp))
+
+        mean_bcast = ng.PatternSkipOp(mean, lambda op: isinstance(op, BroadcastOp))
         # (in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))
-        mul_op_1 = ng.multiply(ng.subtract(in_obj, mean), reciprocal_op_w_braodcast)
+        mul_op_1 = ng.multiply(ng.subtract(flatten_tensor, mean_bcast), reciprocal_op_w_braodcast)
+        # mul_op_1 = ng.multiply(ng.subtract(in_obj, mean), reciprocal_op_w_braodcast)
         # "self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps)))
         MultiplyGamma = ng.multiply(mul_op_1, gamma)
         # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta
-        AddBeta = ng.Add(MultiplyGamma, beta)
+        AddBeta = ng.Unflatten(ng.Add(MultiplyGamma, beta))
         return AddBeta
 
     def fuse_batchnorm_fprop_callback(self, op, label_map_op_list):
@@ -399,15 +425,20 @@ class CPUFusion(GraphRewritePass):
         Callback function that handles fusion for batchnorm fprop pattern
         """
         for (label_map, op) in label_map_op_list:
-            # Matched bprop batchnorm pattern, do the replacement here.
-            inputs = label_map[self.batchnorm_fprop_input_tensor_label]
+            # Matched fprop batchnorm pattern, do the replacement here.
+            inputs = label_map[self.batchnorm_fprop_input_tensor_label].args[0]
             gamma = label_map[self.batchnorm_fprop_gamma_label]
             beta = label_map[self.batchnorm_fprop_beta_label]
             variance = label_map[self.batchnorm_fprop_variance_label]
             mean = label_map[self.batchnorm_fprop_mean_label]
             epsilon = self.op_arg(label_map[self.batchnorm_fprop_epsilon_label], 0).tensor.const
-            batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
 
+            if len(inputs.axes) != 5 or inputs.axes[1].length != 1 or inputs.axes[0].length % 8 != 0:
+                return
+            if op.dtype.name != 'float32':
+                return
+
+            batchnorm_fwd_op = BatchnormOp(inputs, gamma, beta, epsilon, mean, variance)
             # book keep the fprop batchnorm op to use during back propogation
             self.op_replacement_dict[inputs] = batchnorm_fwd_op
             self.replace_op(op, batchnorm_fwd_op)

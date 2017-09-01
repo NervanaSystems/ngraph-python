@@ -38,6 +38,9 @@ class BatchnormOp(TensorOp):
         bprop_batchnorm_op.add_control_dep(self)
         inputs.generate_add_delta(adjoints, bprop_batchnorm_op)
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], args[2], args[3], args[4], args[5])
+
 
 class BpropBatchnormOp(TensorOp):
     """
@@ -47,7 +50,7 @@ class BpropBatchnormOp(TensorOp):
     inputs: fprop src input to the batchnormOp
     """
 
-    def __init__(self, delta, inputs, fprop, **kwargs):
+    def __init__(self, delta, inputs, dgamma, dbeta, fprop, **kwargs):
         gamma = fprop.args[1]
         beta = fprop.args[2]
         mean = fprop.args[4]
@@ -58,10 +61,16 @@ class BpropBatchnormOp(TensorOp):
             args=(
                 delta,
                 inputs,
+                dgamma,
+                dbeta,
                 gamma,
                 beta,
                 mean,
-                variance),
+                variance
+            ),
             axes=inputs.axes,
             **kwargs)
         self.fprop = fprop
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], args[2], args[3], self.fprop)

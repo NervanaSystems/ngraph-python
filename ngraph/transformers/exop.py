@@ -1069,6 +1069,7 @@ class TensorViewDecl(ExecutionGraphElt):
         self.initializers = OrderedSet()
         self.readers = OrderedSet()
         self.writers = OrderedSet()
+        self.mkl_layout = None
         self.value = None
 
     @property

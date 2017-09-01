@@ -96,7 +96,7 @@ def get_strides_mkl_order(td, order):
         return [td.strides[index] for index in order]
 
 
-def get_native_layout(mkldnn, td, order, use_formats=False):
+def get_native_layout(mkldnn, td, order, use_formats=True):
     '''
     Create an MKL layout object in transformer-visible layout
     :param td: tensor description of the op. Currently owns tensor layout info in graph
@@ -135,7 +135,7 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     return (native_layout, mkl_axes)
 
 
-def get_mkl_layout(mkldnn, op, order, use_formats=False):
+def get_mkl_layout(mkldnn, op, order, use_formats=True):
     if op.name in mkldnn.op_layouts:
         return mkldnn.op_layouts[op.name]
     else:
@@ -166,29 +166,16 @@ def get_rotated_layout(mkldnn, in_layout, from_axes, to_axes):
     mkldnn.native_layouts += [new_layout]
     return new_layout
 
+def get_arg_output_idx(exop, arg_exop):
+    for i, output_decl in enumerate(arg_exop.output_decls):
+        for input_decl in output_decl.user_input_decls:
+            if input_decl.exop == exop:
+                # Assumes only arg comes from arg_exop to exop
+                return i
+    # assert False
+    return 0
 
-def get_mkl_op_shape_and_layout(mkldnn, op, mkl_order, use_formats=False):
-    op_axes_mkl = [op.axes[idx] for idx in mkl_order]
-    mkl_shape = [a.length for a in op_axes_mkl]
-    if op.name in mkldnn.op_layouts:
-        in_layout, in_axes = mkldnn.op_layouts[op.name]
-        # Check if we need to rotate axes in the MKL layout object
-        if op_axes_mkl != in_axes:
-            assert Axes(
-                get_flattened_axes(in_axes)).is_equal_set(
-                Axes(
-                    get_flattened_axes(op_axes_mkl)))
-            mkl_layout = get_rotated_layout(
-                mkldnn,
-                in_layout,
-                get_flattened_axes(in_axes),
-                get_flattened_axes(op_axes_mkl))
-        else:
-            mkl_layout = in_layout
-    else:
-        mkl_layout = get_native_layout(mkldnn, op.tensor_description(), mkl_order, use_formats)[0]
 
-    return mkl_shape, mkl_layout
 
 
 class MklCreateOpDescriptors(PeepholeGraphPass):
@@ -212,11 +199,77 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         super(MklCreateOpDescriptors, self).__init__(**kwargs)
         assert mkldnn.enabled
         self.mkldnn = mkldnn
+    
+    def get_exop(self, op):
+        return self.op_accessor.computation_decl.get_exop(op)
 
-    def set_mkl_layout_data(self, op, mkl_axes):
-        mkl_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], 0)
-        if mkl_layout:
-            self.mkldnn.op_layouts[op.name] = (mkl_layout, mkl_axes)
+    def set_mkl_layout(self, op, mkl_axes, index=0):
+        exop = self.get_exop(op)
+        layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], index)
+        if layout:
+            self.mkldnn.op_layouts[op.name] = (layout, mkl_axes)
+            exop.output_decls[index].tensor_view_decl.mkl_layout = (layout, mkl_axes)
+    
+    def get_arg_shape_and_layout(self, op, arg, mkl_order):
+        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(arg))
+        return self.get_op_shape_and_layout(arg, mkl_order, arg_idx)
+
+    def get_op_shape_and_layout(self, op, mkl_order, index=0):
+        exop = self.get_exop(op)
+        mkl_layout = exop.output_decls[index].tensor_view_decl.mkl_layout
+        op_axes_mkl = [op.axes[idx] for idx in mkl_order]
+        mkl_shape = [a.length for a in op_axes_mkl]
+        if op.name in self.mkldnn.op_layouts:
+            temp_layout = self.mkldnn.op_layouts[op.name]
+            assert mkl_layout != None and mkl_layout == temp_layout
+            in_layout, in_axes = self.mkldnn.op_layouts[op.name]
+            # Check if we need to rotate axes in the MKL layout object
+            if op_axes_mkl != in_axes:
+                assert Axes(
+                    get_flattened_axes(in_axes)).is_equal_set(
+                    Axes(
+                        get_flattened_axes(op_axes_mkl)))
+                mkl_layout = get_rotated_layout(
+                    self.mkldnn,
+                    in_layout,
+                    get_flattened_axes(in_axes),
+                    get_flattened_axes(op_axes_mkl))
+            else:
+                mkl_layout = in_layout
+        else:
+            mkl_layout = get_native_layout(self.mkldnn, op.tensor_description(), mkl_order, True)[0]
+
+        return mkl_shape, mkl_layout
+
+    def move_child_exops(self, exop, after_exop):
+        """
+        Recursively move exop's children/deps to after after_exop if needed
+        """
+        for output_decl in exop.output_decls:
+            for child_input_decl in output_decl.user_input_decls:
+                child_exop = child_input_decl.exop
+                n_exop = child_exop
+                while n_exop != after_exop and not n_exop.is_exop_end_of_list:
+                    n_exop = n_exop.next_exop
+                if n_exop == after_exop and child_exop != after_exop:
+                    self.op_accessor.exop_block.move_exop_to_after_exop(child_exop, after_exop)
+                    self.move_child_exops(child_exop, child_exop)
+
+
+    def replace_exop(self, new_op, old_op):
+        """
+        1) Replace old_op's output decl with a new output_decl from new_op
+        2) Adjust the position of old_op's children
+        3) Delete old_op's exop
+        """
+        new_exop = self.op_accessor.computation_decl.get_exop(new_op)
+        old_exop = self.op_accessor.computation_decl.get_exop(old_op)
+        old_td = old_op.tensor_description()
+        old_tensor_decl = self.op_accessor.computation_decl.get_tensor_decl(old_op)
+        new_output_decl = new_exop.add_output_decl(old_tensor_decl, old_td)
+        self.move_child_exops(old_exop, new_exop)
+        self.op_accessor.exop_block.replace_output_decl(old_exop.output_decls[0], new_output_decl)
+        self.op_accessor.exop_block.remove_exop(old_exop)
 
     @generic_method(dispatch_base_type=Op)
     def visit(self, op, *args):
@@ -224,6 +277,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     @visit.on_type(BatchnormOp)
     def visit(self, op, inputs, gamma, bias, epsilon, mean, variance):
+        inputs_f = get_flattened_axes(inputs.axes)
         # unflatten the inputs and extract C H W N params
         if isinstance(inputs, Flatten):
             unflatten_inputs = unflatten(inputs)
@@ -236,6 +290,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # Only single precision float supported for now
         if op.dtype != np.float32:
             return
+        # Depth needs to be 1 for MKLDNN. Need channels to be a multiple of 8
+        if inputs.axes[1].length != 1 or inputs.axes[0].length % 8 != 0:
+            return
+
         mkl_order = [4, 0, 2, 3]
         data_type = self.mkldnn.datatype[op.dtype.type]
         inputs_shape = get_size_mkl_order(inputs.axes, mkl_order)
@@ -281,11 +339,15 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 op.name])
 
         out_axes = get_axes_mkl_order(op.axes, mkl_order)
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
+        self.replace_exop(op, mean)
+        self.replace_exop(op, variance)
+
+
     @visit.on_type(BpropBatchnormOp)
-    def visit(self, op, delta, fprop_src, gamma, bias, mean, variance):
+    def visit(self, op, delta, fprop_src, dgamma, dbeta, gamma, bias, mean, variance):
         axis_len_5d = False
         # Only single precision float supported for now
         if op.dtype != np.float32:
@@ -296,11 +358,14 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 C, Flatten_axis = op.axes
                 if (len(unflatten(Flatten_axis).axes.lengths) != 4):
                     return
-                else:
-                    outputs_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
-                    axis_len_5d = True
             else:
                 return
+        elif len(op.axes.lengths) != 5:
+            return
+
+        outputs_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
+        axis_len_5d = True
+
         data_type = self.mkldnn.datatype[op.dtype.type]
         mean_dims = 1
         variance_dims = 1
@@ -322,14 +387,16 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             (fprop_src_layout, _) = get_mkl_layout(
                 self.mkldnn, unflatten(fprop_src), [4, 0, 2, 3], True)
 
-        fprop_src_layout = self.mkldnn.op_layouts.get(fprop_src.name)
+        if fprop_src.name in self.mkldnn.op_layouts:
+            (fprop_src_layout, _) = self.mkldnn.op_layouts.get(fprop_src.name)
+
         mean_layout = None
-        if mean.name in self.mkldnn.kernels:
-            mean_layout = self.mkldnn.op_layouts[mean.name]
+        # if mean.name in self.mkldnn.kernels:
+        #    mean_layout = self.mkldnn.op_layouts[mean.name]
 
         variance_layout = None
-        if variance.name in self.mkldnn.kernels:
-            variance_layout = self.mkldnn.op_layouts[variance.name]
+        # if variance.name in self.mkldnn.kernels:
+        #     variance_layout = self.mkldnn.op_layouts[variance.name]
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
@@ -359,8 +426,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 op.name])
         mkl_order = get_order_from_axes(unflatten(delta).axes, mkl_axes)
         out_axes = get_axes_mkl_order(unflatten(op).axes, mkl_order)
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
+
+        self.replace_exop(op, dgamma)
+        self.replace_exop(op, dbeta)
 
     @visit.on_type(ConvolutionOp)
     def visit(self, op, input, filter, bias=None):
@@ -374,9 +444,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         # Assumes (C, D, H, W, N) for convolution axes and (I, D, H, W, O) for filter axes
-        (input_shape, input_layout) = get_mkl_op_shape_and_layout(self.mkldnn, input, [4, 0, 2, 3])
-        (filter_shape, filter_layout) = get_mkl_op_shape_and_layout(
-            self.mkldnn, filter, [4, 0, 2, 3])
+
+        (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
+        (filter_shape, filter_layout) = self.get_arg_shape_and_layout(op, filter, [4, 0, 2, 3])
         bias_shape = get_size_mkl_order(bias.axes, [0]) if bias else None
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
@@ -407,7 +477,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.kernels[
                 op.name])
 
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(bprop_conv)
@@ -421,9 +491,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         # Assumes (C, D, H, W, N) for convolution axes and (I, D, H, W, O) for filter axes
-        (input_shape, input_layout) = get_mkl_op_shape_and_layout(self.mkldnn, input, [4, 0, 2, 3])
-        (filter_shape, filter_layout) = get_mkl_op_shape_and_layout(
-            self.mkldnn, filter, [4, 0, 2, 3])
+        (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
+        (filter_shape, filter_layout) = self.get_arg_shape_and_layout(op, filter, [4, 0, 2, 3])
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         pad_d, pad_h, pad_w = itemgetter(
@@ -451,7 +520,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.kernels[
                 op.name])
 
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(update_conv)
@@ -465,11 +534,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         # Assumes (C, D, H, W, N) for convolution axes and (I, D, H, W, O) for filter axes
-        (delta_shape, delta_layout) = get_mkl_op_shape_and_layout(self.mkldnn, delta, [4, 0, 2, 3])
-        (inputs_shape, inputs_layout) = get_mkl_op_shape_and_layout(
-            self.mkldnn, inputs, [4, 0, 2, 3])
+        (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [4, 0, 2, 3])
+        (inputs_shape, inputs_layout) = self.get_arg_shape_and_layout(op, inputs, [4, 0, 2, 3])
         # Output
-        (filter_shape, filter_layout) = get_mkl_op_shape_and_layout(self.mkldnn, op, [4, 0, 2, 3])
+        (filter_shape, filter_layout) = self.get_op_shape_and_layout(op, [4, 0, 2, 3], 0)
         pad_d, pad_h, pad_w = itemgetter(
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(
@@ -507,11 +575,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         if len(op.axes) == 5:
-            (input_shape, input_layout) = get_mkl_op_shape_and_layout(
-                self.mkldnn, input, [4, 0, 2, 3])
+            (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
             out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         elif len(op.axes) == 2:
-            (input_shape, input_layout) = get_mkl_op_shape_and_layout(self.mkldnn, input, [1, 0])
+            (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [1, 0])
             out_axes = get_axes_mkl_order(op.axes, [1, 0])
 
         input_size = np.prod(input.axes.lengths)
@@ -524,7 +591,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             data_type,
             self.mkldnn.kernels[op.name])
 
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropReluOp)
@@ -536,16 +603,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         if len(op.axes) == 5:
-            (delta_shape, delta_layout) = get_mkl_op_shape_and_layout(
-                self.mkldnn, delta, [4, 0, 2, 3], True)
-            (fprop_src_shape, fprop_src_layout) = get_mkl_op_shape_and_layout(
-                self.mkldnn, fprop_src, [4, 0, 2, 3], True)
+            (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [4, 0, 2, 3])
+            (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(op, fprop_src, [4, 0, 2, 3])
             out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         elif len(op.axes) == 2:
-            (delta_shape, delta_layout) = get_mkl_op_shape_and_layout(
-                self.mkldnn, delta, [1, 0], True)
-            (fprop_src_shape, fprop_src_layout) = get_mkl_op_shape_and_layout(
-                self.mkldnn, fprop_src, [1, 0], True)
+            (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [1, 0])
+            (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(op, fprop_src, [1, 0])
             out_axes = get_axes_mkl_order(op.axes, [1, 0])
 
         input_size = np.prod(delta.axes.lengths)
@@ -558,7 +621,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             data_type,
             self.mkldnn.kernels[op.name])
 
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(PoolingOp)
@@ -577,8 +640,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         # Assumes (C, D, H, W, N) for pooling axes
-        (input_shape, input_layout) = get_mkl_op_shape_and_layout(
-            self.mkldnn, input, [4, 0, 2, 3], True)
+        (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         kernel = [op.pool_params['R'], op.pool_params['S']]
@@ -600,7 +662,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             get_ctypes_arg(stride), get_ctypes_arg(pad), pool_type,
             input_layout, data_type, self.mkldnn.kernels[op.name])
 
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropPoolOp)
@@ -619,8 +681,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         data_type = self.mkldnn.datatype[op.dtype.type]
         # Assumes (C, D, H, W, N) for pooling axes
-        (input_shape, input_layout) = get_mkl_op_shape_and_layout(
-            self.mkldnn, input, [4, 0, 2, 3], True)
+        (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
         output_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
         out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         kernel = [op.pool_params['R'], op.pool_params['S']]
@@ -644,7 +705,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.kernels[op.fprop.forwarded.name],
             self.mkldnn.kernels[op.name])
 
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(DotLowDimension)
@@ -657,8 +718,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if op.dtype != np.float32:
             return
 
-        (x_shape, x_layout) = get_mkl_op_shape_and_layout(self.mkldnn, x, [0, 1])
-        (y_shape, y_layout) = get_mkl_op_shape_and_layout(self.mkldnn, y, [1, 0])
+        (x_shape, x_layout) = self.get_arg_shape_and_layout(op, x, [0, 1])
+        (y_shape, y_layout) = self.get_arg_shape_and_layout(op, y, [1, 0])
+
         o_shape = get_size_mkl_order(op.axes, [1, 0])
         bias_shape = [o_shape[1]] if bias else None
 
@@ -676,7 +738,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             data_type, self.mkldnn.kernels[op.name])
 
         out_axes = get_axes_mkl_order(op.axes, [1, 0])
-        self.set_mkl_layout_data(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(Add)
@@ -691,8 +753,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             return
 
         data_type = self.mkldnn.datatype[op.dtype.type]
-        (x_shape, x_layout) = get_mkl_op_shape_and_layout(self.mkldnn, x, list(range(len(x.axes))))
-        (y_shape, y_layout) = get_mkl_op_shape_and_layout(self.mkldnn, y, list(range(len(y.axes))))
+        (x_shape, x_layout) = self.get_arg_shape_and_layout(op, x, list(range(len(x.axes))))
+        (y_shape, y_layout) = self.get_arg_shape_and_layout(op, y, list(range(len(y.axes))))
         out_shape = op.axes.lengths
 
         op_id = len(self.mkldnn.kernels)
@@ -712,14 +774,15 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
+            self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = self.mkldnn.op_layouts[arg.name]
         elif (not arg.tensor_description().c_contiguous and
                 all(stride != 0 for stride in arg.tensor_description().strides)):
             # TODO(jbobba): Disabled until MKLDNN coversion bug is fixed
             return
             ndims = len(op.axes)
             order = list(range(ndims))
-            (in_shape, in_layout) = get_mkl_op_shape_and_layout(self.mkldnn, arg, order)
-            (out_shape, out_layout) = get_mkl_op_shape_and_layout(self.mkldnn, op, order)
+            (in_shape, in_layout) = self.get_arg_shape_and_layout(op, arg, order)
+            (out_shape, out_layout) = self.get_op_shape_and_layout(op, order, 0)
 
             op_id = len(self.mkldnn.kernels)
             self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
@@ -739,11 +802,13 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             order = get_order_from_axes(arg.axes, mkl_axes)
             new_axes = get_axes_mkl_order(op.axes, order)
             self.mkldnn.op_layouts[op.name] = (mkl_layout, new_axes)
+            self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = (mkl_layout, new_axes)
 
     @visit.on_type(ReorderAxes)
     def visit(self, op, arg):
         if arg.name in self.mkldnn.op_layouts:
             self.mkldnn.op_layouts[op.name] = self.mkldnn.op_layouts[arg.name]
+            self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = self.mkldnn.op_layouts[arg.name]
 
     @visit.on_type(Unflatten)
     def visit(self, op, arg):
@@ -753,6 +818,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 order = get_order_from_axes(arg.axes, mkl_axes)
                 new_axes = get_axes_mkl_order(op.axes, order)
                 self.mkldnn.op_layouts[op.name] = (mkl_layout, new_axes)
+                self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = (mkl_layout, new_axes)
 
     @visit.on_type(Flatten)
     def visit(self, op, arg):
@@ -762,7 +828,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 order = get_order_from_axes(arg.axes, mkl_axes)
                 new_axes = get_axes_mkl_order(op.axes, order)
                 self.mkldnn.op_layouts[op.name] = (mkl_layout, new_axes)
-
+                self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = (mkl_layout, new_axes)
 
 class MklAddLayoutConversions(PeepholeGraphPass):
     """
@@ -770,10 +836,9 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     non-MKL op
     """
 
-    def __init__(self, mkldnn, layoutpass, **kwargs):
+    def __init__(self, mkldnn, **kwargs):
         super(MklAddLayoutConversions, self).__init__(**kwargs)
         self.mkldnn = mkldnn
-        self.layoutpass = layoutpass
         self.reorder_ops = dict()   # Maps op.name to reorder op
 
     def init_mkldnn_reorder(self, op):
@@ -807,16 +872,32 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         if op.name in self.reorder_ops:
             return self.reorder_ops[op.name]
         else:
+            mkl_layout = self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout
+            assert mkl_layout == self.mkldnn.op_layouts[op.name]
             reorder_op = MklReorderOp(
-                op, in_layout=self.mkldnn.op_layouts[
-                    op.name], out_layout=None)
+                op, in_layout=mkl_layout, out_layout=None)
             self.reorder_ops[op.name] = reorder_op
             self.init_mkldnn_reorder(reorder_op)
             return reorder_op
 
+    def get_exop(self, op):
+        return self.op_accessor.computation_decl.get_exop(op)
+
+    def get_arg_mkl_layout(self, op, arg):
+        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(arg))
+        return self.get_exop(arg).output_decls[arg_idx].tensor_view_decl.mkl_layout
+
+    def is_mkl_pass_through(self, op):
+        if isinstance(op, (Flatten, Unflatten, ReorderAxes, ContiguousOp)) \
+            and self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout is not None:
+            return True
+        else:
+            return False
+
     @generic_method(dispatch_base_type=Op)
     def visit(self, op, *args):
-        if op.name in self.mkldnn.kernels or op.name in self.mkldnn.op_layouts:
+        # if op.name in self.mkldnn.kernels or op.name in self.mkldnn.op_layouts:
+        if op.name in self.mkldnn.kernels or self.is_mkl_pass_through(op):
             # MKL Op or an MKL layout pass-through op
             return
         # This checks if the Op is Flatten Op and belongs to neon_layer, if so
@@ -832,7 +913,9 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         replace = False
         new_args = []
         for arg in args:
-            if arg.name in self.mkldnn.op_layouts:
+            mkl_layout = self.get_arg_mkl_layout(op, arg)
+            if mkl_layout is not None:
+                assert arg.name in self.mkldnn.op_layouts
                 reorder_op = self.get_reorder_op(arg)
                 new_args.append(reorder_op)
                 replace = True
@@ -844,8 +927,9 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     @visit.on_type(ContiguousOp)
     def visit(self, op, arg):
-        if arg.name in self.mkldnn.op_layouts:
-            # Input in MKL layout.
+        mkl_layout = self.get_arg_mkl_layout(op, arg)
+        if mkl_layout is not None:
+            assert op.name in self.mkldnn.op_layouts
             # Expect downstream ops to handle MKL layout or insert explicit conversions
             self.replace_op(op, arg)
         elif isinstance(arg, MklReorderOp):
@@ -894,7 +978,14 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     @visit.on_type(ReturnOp)
     def visit(self, op, *returns):
         # This version only runs with the exec-graph transformer
-        for orig_op in returns:
-            if orig_op.name in self.mkldnn.op_layouts:
-                reorder_op = self.get_reorder_op(orig_op)
-                self.replace_op(orig_op, reorder_op)
+        return_exop = self.get_exop(op)
+        for i, input_decl in enumerate(return_exop.input_decls):
+            mkl_layout = input_decl.source_output_decl.tensor_view_decl.mkl_layout
+            if mkl_layout is not None:
+                input_op = input_decl.source_output_decl.exop.op
+                input_exop = input_decl.source_output_decl.exop
+                reorder_op = self.get_reorder_op(input_op)
+                self.op_accessor.computation_decl.exop_block.add_ops([reorder_op], input_exop)
+                reorder_exop = self.get_exop(reorder_op)
+                return_exop.input_decls[i].source_output_decl = reorder_exop.output_decls[0]
+                reorder_exop.output_decls[0].user_input_decls.add(return_exop.input_decls[i])
