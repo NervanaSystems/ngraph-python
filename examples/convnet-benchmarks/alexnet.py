@@ -29,7 +29,7 @@ from contextlib import closing
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import GaussianInit, UniformInit
-from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
+from ngraph.frontends.neon import Affine, Convolution, Pooling, Sequential
 from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax
 
@@ -61,11 +61,11 @@ init = UniformInit(low=-0.08, high=0.08)
 seq1 = Sequential([Convolution((11, 11, 64), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=3, strides=4),
-                   Pool2D(3, strides=2),
+                   Pooling((3, 3), strides=2),
                    Convolution((5, 5, 192), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=2),
-                   Pool2D(3, strides=2),
+                   Pooling((3, 3), strides=2),
                    Convolution((3, 3, 384), filter_init=GaussianInit(var=0.03),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
@@ -75,7 +75,7 @@ seq1 = Sequential([Convolution((11, 11, 64), filter_init=GaussianInit(var=0.01),
                    Convolution((3, 3, 256), filter_init=GaussianInit(var=0.03),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Pool2D(3, strides=2),
+                   Pooling((3, 3), strides=2),
                    Affine(nout=4096, weight_init=GaussianInit(var=0.01),
                           bias_init=init,
                           activation=Rectlin()),

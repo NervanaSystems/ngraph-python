@@ -29,7 +29,7 @@ from contextlib import closing
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import XavierInit, UniformInit
-from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
+from ngraph.frontends.neon import Affine, Convolution, Pooling, Sequential
 from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax
 
@@ -81,7 +81,7 @@ class Inception(Sequential):
                          Convolution((5, 5, p3[1]), activation=activation,
                                      bias_init=bias_init,
                                      filter_init=filter_init, padding=2)]
-        self.branch_4 = [Pool2D(fshape=3, padding=1, strides=1, op="max"),
+        self.branch_4 = [Pooling(pool_shape=(3, 3), padding=1, strides=1, pool_type="max"),
                          Convolution((1, 1, p3[0]), activation=activation,
                                      bias_init=bias_init,
                                      filter_init=filter_init)]
@@ -104,25 +104,25 @@ class Inception(Sequential):
 seq1 = Sequential([Convolution((7, 7, 64), padding=3, strides=2,
                                activation=Rectlin(), bias_init=bias_init,
                                filter_init=XavierInit()),
-                   Pool2D(fshape=3, padding=1, strides=2, op='max'),
+                   Pooling(pool_shape=(3, 3), padding=1, strides=2, pool_type='max'),
                    Convolution((1, 1, 64), activation=Rectlin(),
                                bias_init=bias_init, filter_init=XavierInit()),
                    Convolution((3, 3, 192), activation=Rectlin(),
                                bias_init=bias_init, filter_init=XavierInit(),
                                padding=1),
-                   Pool2D(fshape=3, padding=1, strides=2, op='max'),
+                   Pooling(pool_shape=(3, 3), padding=1, strides=2, pool_type='max'),
                    Inception([(64,), (96, 128), (16, 32), (32,)]),
                    Inception([(128,), (128, 192), (32, 96), (64,)]),
-                   Pool2D(fshape=3, padding=1, strides=2, op='max'),
+                   Pooling(pool_shape=(3, 3), padding=1, strides=2, pool_type='max'),
                    Inception([(192,), (96, 208), (16, 48), (64,)]),
                    Inception([(160,), (112, 224), (24, 64), (64,)]),
                    Inception([(128,), (128, 256), (24, 64), (64,)]),
                    Inception([(112,), (144, 288), (32, 64), (64,)]),
                    Inception([(256,), (160, 320), (32, 128), (128,)]),
-                   Pool2D(fshape=3, padding=1, strides=2, op='max'),
+                   Pooling(pool_shape=(3, 3), padding=1, strides=2, pool_type='max'),
                    Inception([(256,), (160, 320), (32, 128), (128,)]),
                    Inception([(384,), (192, 384), (48, 128), (128,)]),
-                   Pool2D(fshape=7, strides=1, op="avg"),
+                   Pooling(pool_shape=(7, 7), strides=1, pool_type="avg"),
                    Affine(axes=ax.Y, weight_init=XavierInit(),
                           bias_init=bias_init, activation=Softmax())])
 

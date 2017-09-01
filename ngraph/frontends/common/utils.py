@@ -242,6 +242,32 @@ def make_convparams(nout, filter_shape, strides, padding, dilation):
     return convparams
 
 
+def make_poolparams(op, pool_shape, strides, padding):
+    """
+    Make the poolparams dictionary to be used by core ngraph
+
+    Arguments:
+        op (str): One of the supported pooling op types. Currently ["avg", "max"].
+        pool_shape (dict): int filter shape with keys of "C", "D", "H", and "W" 
+        strides (dict): int strides with keys of "C", "D", "H", and "W"
+        padding: int padding with keys of "C", "D", "H", and "W"
+
+    Returns:
+        Properly formatted poolparams dictionary
+    """
+    poolparams = dict()
+    poolparams["op"] = op
+
+    for name, value in zip("JTRS", [pool_shape[nm] for nm in "CDHW"]):
+        poolparams[name] = value
+
+    for name in "CDHW":
+        for prefix, prop in zip(("str", "pad"), (strides, padding)):
+            poolparams["{}_{}".format(prefix, name.lower())] = prop[name]
+
+    return poolparams
+
+
 class ConvParameters(object):
     """
     Helper class to compute the output size and required padding for convolution and pooling 
