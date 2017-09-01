@@ -52,6 +52,14 @@ def make_shadow_axis(axis):
 def is_shadow_axis(axis):
     return axis.name.endswith(_SHADOW_AXIS_POSTFIX)
 
+def assert_no_shadow_axes(axes, variable_name='axes'):
+    if any(is_shadow_axis(axis) for axis in axes):
+        raise ValueError((
+            "Shadow Axes are not allowed in {}. Found {}."
+        ).format(
+            variable_name,
+            [axis for axis in axes if is_shadow_axis(axis)],
+        ))
 
 def reorder_spatial_axes(tensor):
     """

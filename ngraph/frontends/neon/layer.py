@@ -20,7 +20,7 @@ from contextlib import contextmanager
 
 import ngraph as ng
 from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
-from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
+from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes, assert_no_shadow_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
 from ngraph.frontends.neon.utils import get_function_or_class_name
@@ -136,41 +136,30 @@ def infer_axes(nout=None, axes=None):
         )
 
 
-def ensure_no_shadow_axes(axes, variable_name='axes'):
-    if any(is_shadow_axis(axis) for axis in axes):
-        raise ValueError((
-            "Shadow Axes are not allowed in {}. Found {}."
-        ).format(
-            variable_name,
-            [is_shadow_axis(axis) for axis in axes],
-        ))
-
-
 class Linear(Layer):
     """
-    TODO: Document
-    """
-    metadata = {'layer_type': 'linear'}
+    Linear layer that multiplies input tensor with a weight tensor.  This
+    layer provides a simple interface to select the axes that should be created
+    and the axes which should be preserved.
 
+    Args:
+        nout (int or iterable of ints, optional): length or lengths of
+            feature axes the Linear layer should output.  Must not be
+            provided in combination with axes.
+        axes (Axes, optional): axes of feature axes the Linear layer
+            should output.  Must not be provided in combination with nout.
+            Axes should not include recurrent or batch axes.
+        keep_axes (Axes, optional): in_obj axes which should be preserved.
+            Defaults to preserving batch and recurrent axes.
+    """
     def __init__(self, init, nout=None, axes=None, keep_axes=None, **kwargs):
-        """
-        Args:
-            nout (int or iterable of ints, optional): length or lengths of
-                feature axes the Linear layer should output.  Must not be
-                provided in combination with axes.
-            axes (Axes, optional): axes of feature axes the Linear layer
-                should output.  Must not be provided in combination with nout.
-                Axes should not include recurrent or batch axes.
-            keep_axes (Axes, optional): in_obj axes which should be preserved.
-                Defaults to preserving batch and recurrent axes.
-        """
         super(Linear, self).__init__(**kwargs)
 
         # axes should not include recurrent or batch axes
         if axes is not None:
             axes = ng.make_axes(axes)
 
-            ensure_no_shadow_axes(axes, 'axes past to Linear')
+            assert_no_shadow_axes(axes, 'axes passed to Linear')
 
         self.axes = infer_axes(nout, axes)
         self.axes_map = shadow_axes_map(self.axes)
@@ -178,7 +167,7 @@ class Linear(Layer):
         if keep_axes is not None:
             self.keep_axes = ng.make_axes(keep_axes)
 
-            ensure_no_shadow_axes(keep_axes, 'keep_axes past to Linear')
+            assert_no_shadow_axes(keep_axes, 'keep_axes passed to Linear')
 
             common_axes = self.keep_axes & self.axes
             if common_axes:
@@ -419,8 +408,6 @@ class DeconvBase(ConvBase):
         deconv_out_shape (tuple, optional): only applicable if deconv is True. If given,
             specifies shape of output (trims output)
     """
-    metadata = {'layer_type': 'deconvolution'}
-
     def __init__(self, fshape, init, strides, padding, dilation, deconv_out_shape=None, **kwargs):
         super(DeconvBase, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
 
