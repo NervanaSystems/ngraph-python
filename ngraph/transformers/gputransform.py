@@ -38,7 +38,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
+from ngraph.op_graph.comm_nodes import GPUCudaSendOp, GPUCudaRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv, \
@@ -61,7 +61,7 @@ from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, \
-    RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
+    RngFillKernel, CudaSendKernel, CudaRecvKernel, CudaScatterSendKernel, \
     CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
@@ -453,13 +453,13 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(CTCKernel(self.transformer, op))
 
-    @add_kernel.on_type(GPUQueueSendOp)
+    @add_kernel.on_type(GPUCudaSendOp)
     def add_kernel(self, op):
-        self.kernels.append(QueueSendKernel(self.transformer, self.comm, op))
+        self.kernels.append(CudaSendKernel(self.transformer, self.comm, op))
 
-    @add_kernel.on_type(GPUQueueRecvOp)
+    @add_kernel.on_type(GPUCudaRecvOp)
     def add_kernel(self, op):
-        self.kernels.append(QueueRecvKernel(self.transformer, self.comm, op))
+        self.kernels.append(CudaRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaScatterSendOp)
     def add_kernel(self, op):

@@ -246,10 +246,10 @@ class FillKernel(GPUKernel):
         self.tensor.fill(self.value)
 
 
-class QueueSendKernel(GPUKernel):
+class CudaSendKernel(GPUKernel):
 
     def __init__(self, transformer, comm, op):
-        super(QueueSendKernel, self).__init__(transformer)
+        super(CudaSendKernel, self).__init__(transformer)
         self.tensor = op.args[0].tensor_description()
         self.op = op
         self.destination = int(op.dest_id)
@@ -258,7 +258,7 @@ class QueueSendKernel(GPUKernel):
     def bind_buffers(self):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        super(QueueSendKernel, self).bind_buffers()
+        super(CudaSendKernel, self).bind_buffers()
         buf_ipc_hdl = drv.mem_get_ipc_handle(
             self.tensor.tensor.gpudata)
         self.comm.send(buf_ipc_hdl, dest=self.destination, tag=TAG_IPC)
@@ -267,7 +267,7 @@ class QueueSendKernel(GPUKernel):
         self.comm.send(True, dest=self.destination, tag=TAG_DIRECT)
 
 
-class QueueRecvKernel(GPUKernel):
+class CudaRecvKernel(GPUKernel):
     """
     Kernel used to receive a tensor. The tensor's value can be
     a scalar, another tensor, or a numpy array
@@ -282,7 +282,7 @@ class QueueRecvKernel(GPUKernel):
     """
 
     def __init__(self, transformer, comm, op):
-        super(QueueRecvKernel, self).__init__(transformer)
+        super(CudaRecvKernel, self).__init__(transformer)
         self.op = op
         self.source = int(op.source_id)
         self.tensor = op.tensor_description()
@@ -295,7 +295,7 @@ class QueueRecvKernel(GPUKernel):
         """
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        super(QueueRecvKernel, self).bind_buffers()
+        super(CudaRecvKernel, self).bind_buffers()
         buf_ipc_hdl = self.comm.recv(source=self.source, tag=TAG_IPC)
         self.sender_buf = drv.IPCMemoryHandle(buf_ipc_hdl)
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
+from ngraph.op_graph.comm_nodes import GPUCudaSendOp, GPUCudaRecvOp, CPUQueueSendOp, \
     CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
     CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
     CPUQueueBroadcastRecvOp, GPUCudaGatherSendOp, GPUCudaGatherRecvOp, \
@@ -165,8 +165,7 @@ class GPUCommNodeFactory(CommNodeFactory):
     def send_recv_types(self, location):
         types = [
             ('remote', 'mpi'),
-            ('local', 'cuda'),
-            ('local', 'queue')
+            ('local', 'cuda')
         ]
 
         send_recv_types = defaultdict(list)
@@ -177,13 +176,13 @@ class GPUCommNodeFactory(CommNodeFactory):
 
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
-            if comm_type in ['queue', 'cuda']:
-                return GPUQueueSendOp(
+            if comm_type == 'cuda':
+                return GPUCudaSendOp(
                     from_node=from_node,
                     to_node=to_node)
         elif node_type == 'recv':
-            if comm_type in ['queue', 'cuda']:
-                return GPUQueueRecvOp(
+            if comm_type == 'cuda':
+                return GPUCudaRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'scatter_send':

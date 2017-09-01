@@ -17,8 +17,8 @@ from __future__ import division
 from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.comm_nodes import set_parallel_axes
 from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp
-from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, CPUQueueRecvOp, \
-    GPUQueueRecvOp, CPUQueueSendOp, AllReduceOp, BroadcastRecvOp
+from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, \
+    AllReduceOp, BroadcastRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
 
@@ -148,18 +148,11 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             op.metadata['device_id'] = str(clone_id)
 
             if isinstance(op, (ScatterRecvOp, GatherSendOp, AllReduceOp, BroadcastRecvOp)):
-                op._shared_queues = orig_ops[op.uuid]._shared_queues
+                if hasattr(orig_ops[op.uuid], 'shared_queues'):
+                    op._shared_queues = orig_ops[op.uuid].shared_queues
                 op.idx = shared_queues_idx
                 if isinstance(op, (ScatterRecvOp, BroadcastRecvOp)):
                     op._send_node = orig_ops[op.uuid].send_node()
-            elif isinstance(op, (CPUQueueRecvOp, GPUQueueRecvOp)):
-                # Cloning a recv node means we need a broadcast, so simulate one by adding an
-                # additional sender with the same input data as the original sender.
-                send_op = CPUQueueSendOp(orig_ops[op.uuid].send_node().args[0])
-                op._queue = send_op.queue
-                op._send_node = send_op
-                new_send_nodes.add(send_op)
-                replaced_send_nodes.add(orig_ops[op.uuid].send_node())
 
             if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
                 op.reduction_axes = set_parallel_axes(op.reduction_axes, parallel_axis)
