@@ -99,6 +99,25 @@ def clip_gradient_value(grad, clip_value=None):
         return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
+def clip_weight_value(weight, delta, clip_value=None):
+    """
+    Element-wise clip a weight tensor to between ``-clip_value`` and ``+clip_value``.
+
+    Arguments:
+        weight (Tensor): List of gradients for a single layer
+        clip_value (float, optional): Value to element-wise clip
+                                      weights.
+                                      Defaults to None.
+
+    Returns:
+        weight (list): List of clipped weights.
+    """
+    if clip_value is None:
+        return weight + delta
+    else:
+        return ng.minimum(ng.maximum(weight + delta, -abs(clip_value)), abs(clip_value))
+
+
 class Optimizer(SubGraph):
     """TODO."""
     metadata = {'layer_type': 'optimizer'}
@@ -215,12 +234,14 @@ class GradientDescentMomentum(LearningRateOptimizer):
             wdecay=0.0,
             gradient_clip_norm=None,
             gradient_clip_value=None,
+            weight_clip_value=None,
             nesterov=False,
             **kwargs):
         super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
         self.momentum_coef = momentum_coef
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
         self.wdecay = wdecay
         self.nesterov = nesterov
 
@@ -238,7 +259,8 @@ class GradientDescentMomentum(LearningRateOptimizer):
             delta = (self.momentum_coef * velocity + lr)
         else:
             delta = velocity
-        updates.append(ng.assign(variable, variable + delta))
+        updates.append(ng.assign(variable, clip_weight_value(variable, delta,
+                                                             self.weight_clip_value)))
         return ng.sequential(updates)
 
 
@@ -265,6 +287,7 @@ class RMSProp(LearningRateOptimizer):
         epsilon=1e-6,
         gradient_clip_norm=None,
         gradient_clip_value=None,
+        weight_clip_value=None,
         **kwargs
     ):
         """
@@ -288,16 +311,16 @@ class RMSProp(LearningRateOptimizer):
         self.decay_rate = decay_rate
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
 
     def variable_update(self, variable, grad, scale_factor):
         epsilon, decay = (self.epsilon, self.decay_rate)
         grad = clip_gradient_value(grad, self.gradient_clip_value)
         state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
         updates = ng.sequential([
-            ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
-            ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
-                                            / (ng.sqrt(state + epsilon) + epsilon)))
-        ])
+            ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)), 
+            ng.assign(variable, clip_weight_value(variable, - ((scale_factor * grad * self.lrate) / 
+                     (ng.sqrt(state + epsilon) + epsilon)), self.weight_clip_value))])
         return updates
 
 
@@ -318,6 +341,7 @@ class Adam(LearningRateOptimizer):
         epsilon=1e-8,
         gradient_clip_norm=None,
         gradient_clip_value=None,
+        weight_clip_value=None,
         **kwargs
     ):
         """
@@ -339,6 +363,7 @@ class Adam(LearningRateOptimizer):
         self.epsilon = epsilon
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
 
     @SubGraph.scope_op_creation
     def __call__(self, *args, **kwargs):
@@ -359,7 +384,8 @@ class Adam(LearningRateOptimizer):
         updates = ng.sequential([
             ng.assign(m, m * self.beta_1 + (1 - self.beta_1) * grad),
             ng.assign(v, v * self.beta_2 + (1 - self.beta_2) * grad * grad),
-            ng.assign(variable,
-                      variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
+            ng.assign(variable, clip_weight_value(variable, - (scale_factor * self.ell * m) /
+                                                  (ng.sqrt(v) + self.epsilon),
+                                                  self.weight_clip_value))
         ])
         return updates

@@ -181,10 +181,10 @@ class ConvDerivOp(TensorOp):
     Arguments:
         fprop: The original convolution.
     """
+
     def __init__(self, fprop, **kwargs):
         super(ConvDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
-        fprop.has_side_effects = True
 
     @property
     def conv_params(self):
@@ -203,6 +203,7 @@ class update_conv(ConvDerivOp):
         inputs  : input tensor.
         filters : filter/kernel tensor.
     """
+
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         super(update_conv, self).__init__(
             args=(delta, inputs),
@@ -213,6 +214,13 @@ class update_conv(ConvDerivOp):
     def copy_with_new_args(self, args):
         return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)
 
+    def generate_adjoints(self, adjoints, delta, inputs, filters, bias=None):
+        # TODO double check this, may have to be different for conv and deconv,
+        # Add a context based switch
+        update_conv_op = update_conv(inputs, delta, filters, self)
+        update_conv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)
+
 
 class bprop_conv(ConvDerivOp):
     """
@@ -220,6 +228,7 @@ class bprop_conv(ConvDerivOp):
         inputs  : input tensor.
         filters : filter/kernel tensor.
     """
+
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         super(bprop_conv, self).__init__(
             args=(delta, filters),
@@ -230,8 +239,17 @@ class bprop_conv(ConvDerivOp):
     def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
 
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        deconv_deriv_op = DeconvDerivOp(delta, inputs, filters, self)
+        deconv_deriv_op.add_control_dep(self)
+        inputs.generate_add_delta(adjoints, deconv_deriv_op)
+        update_conv_op = update_conv(inputs, delta, filters, self)
+        update_conv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)
+
 
 class DeconvDerivOp(ConvDerivOp):
+
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         """
         Deconv backprop
@@ -248,3 +266,11 @@ class DeconvDerivOp(ConvDerivOp):
 
     def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
+
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        bprop_conv_op = bprop_conv(delta, inputs, filters, self)
+        bprop_conv_op.add_control_dep(self)
+        inputs.generate_add_delta(adjoints, bprop_conv_op)
+        update_conv_op = update_conv(delta, inputs, filters, self)
+        update_conv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)

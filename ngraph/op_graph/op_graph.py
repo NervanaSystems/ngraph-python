@@ -3691,6 +3691,36 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
     return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
+def L2_norm(x, eps=1e-8, out_axes=None, reduction_axes=None):
+    """
+    Args:
+        x (TensorOp): Tensor
+    Returns:
+        TensorOp: The result.
+    """
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sqrt(eps + sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes))
+
+
+def L1_norm(x, out_axes=None, reduction_axes=None):
+    """
+    Args:
+        x (TensorOp): Tensor
+    Returns:
+        TensorOp: The result.
+    """
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(absolute(x), out_axes=out_axes, reduction_axes=reduction_axes)
+
+
 class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, bias=None, **kwargs):
