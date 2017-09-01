@@ -210,12 +210,7 @@ def deconv_output_dim(X, S, padding, strides, dilation=1):
         strides (int): striding
         dilation (int): dilation of filter
     """
-    # S = dilation * (S - 1) + 1
-    # max_size = strides * (X - 1) + S - 2 * padding
-    #
-    # if max_size < 0:
-    #     raise ValueError('output_dim {} can not be < 0'.format(max_size))
-    # return max_size
+
     return ConvParameters(X, S, strides, dilation).get_transpose_size(padding)
 
 
