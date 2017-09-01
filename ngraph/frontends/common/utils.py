@@ -210,12 +210,13 @@ def deconv_output_dim(X, S, padding, strides, dilation=1):
         strides (int): striding
         dilation (int): dilation of filter
     """
-    S = dilation * (S - 1) + 1
-    max_size = S + (X + padding - 1) * strides
-
-    if max_size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(max_size))
-    return max_size
+    # S = dilation * (S - 1) + 1
+    # max_size = strides * (X - 1) + S - 2 * padding
+    #
+    # if max_size < 0:
+    #     raise ValueError('output_dim {} can not be < 0'.format(max_size))
+    # return max_size
+    return ConvParameters(X, S, strides, dilation).get_transpose_size(padding)
 
 
 def make_convparams(nout, filter_shape, strides, padding, dilation):
@@ -336,6 +337,34 @@ class ConvParameters(object):
         output = math.ceil((self.input_size + sum(padding) - k) / self.stride)
         if output < 0:
             raise ValueError("Output after conv will be < 0")
+        return int(output)
+
+    def get_transpose_size(self, padding):
+        """
+        Get the output size following transposed convolution
+
+        Arguments:
+            padding (int, tuple, or str): Desired padding value. int values produce symmetric
+                padding. tuple values are passed through as-is. str values can be one of:
+                - valid: No padding
+                - same: Padding to produce the same output size as ceil(input_size / stride)
+                - causal: Padding to offset the filter so outputs only rely on leftward
+                          values of the input
+                - full: Padding such that the output contains all points with nonzero overlap
+                        between the filters and the input
+
+        Returns:
+            output size (int)
+
+        Raises:
+            ValueError: If padding or output sizes are not valid
+        """
+        padding = self.get_padding_size(padding)
+        k = self.dilation * (self.filter_size - 1)
+
+        output = self.stride * (self.input_size - 1) + k + 1 - sum(padding)
+        if output < 0:
+            raise ValueError("Output after transposed convolution will be < 0")
         return int(output)
 
     def _get_valid_padding(self):
