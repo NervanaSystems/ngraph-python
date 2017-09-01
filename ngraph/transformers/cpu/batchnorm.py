@@ -33,6 +33,9 @@ class BatchnormOp(TensorOp):
             **kwargs)
         self.eps = epsilon
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], args[1], args[2], args[3], args[4], args[5])
+
     def generate_adjoints(self, adjoints, delta, inputs):
         bprop_batchnorm_op = BpropBatchnormOp(delta, inputs, self)
         bprop_batchnorm_op.add_control_dep(self)

@@ -47,7 +47,8 @@ from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
-from ngraph.transformers.passes.expass import SSAConversion, IndexElision, DeadCodeEliminationPass
+from ngraph.transformers.passes.expass import SSAConversion, IndexElision, \
+    CopyElimination, DeadCodeEliminationPass
 from ngraph.transformers.passes.memlayout import MemLayoutPass
 from ngraph.transformers.passes.memoptimize import MemOptimizePass
 from ngraph.transformers.passes.liveness import LivenessPass
@@ -875,11 +876,12 @@ class CPUTransformer(ExecutionGraphTransformer):
 
         self.graph_passes += [
             SSAConversion(),
-            IndexElision(),
             # DCE here eliminates return values. Need to figure out why.
             # DeadCodeEliminationPass(),
             LivenessPass(),
             MemOptimizePass(),
+            CopyElimination(),
+            IndexElision(),
             LivenessPass(),
             MemLayoutPass()
         ]

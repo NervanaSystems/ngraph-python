@@ -1066,6 +1066,9 @@ class Fill(Op):
     def has_side_effects(self):
         return True
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.scalar)
+
 
 def fill(x, scalar):
     return Fill(x, scalar)

@@ -87,12 +87,10 @@ void create_mkldnn_batchnorm_fprop_primitives(
                          mkldnn_nc, engine, &(opkernel->inputs[3]));
   }
 
-  mkldnn_memory_desc_t kernel_src_md =
-        *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
-  create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &kernel_src_md,
-                       engine, &(opkernel->outputs[0]));
-  //create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
-  //                     engine, &(opkernel->outputs[0]));
+    mkldnn_memory_desc_t dst_md =
+        *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &dst_md, engine,
+                                 &(opkernel->outputs[0]));
 
   //-------------------------------------------------------------------------------
   // check if reorder's are required for inputs of batchnorm
@@ -314,28 +312,14 @@ void create_mkldnn_batchnorm_bprop_primitives(
                          mkldnn_nc, engine, &(opkernel->inputs[4]));
   }
 
-  mkldnn_memory_desc_t kernel_src_md =
-        *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
-  create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &kernel_src_md,
-                       engine, &(opkernel->outputs[0]));
-  //create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
-  //                     engine, &(opkernel->outputs[0]));
-
-  // Assume weights and diff_weights are in same layout
-  /*
-  if (input_weights_md) {
-    create_mkldnn_tensor_from_md(weights_dims, batchnorm_weights_sizes, data_type,
-                            input_weights_md, engine, &(opkernel->outputs[1]));
-  } else {
-    create_mkldnn_tensor(weights_dims, batchnorm_weights_sizes, data_type,
-                             mkldnn_nc, engine, &(opkernel->outputs[1]));
-  }*/
+  mkldnn_memory_desc_t dst_md =
+        *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
+  create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &dst_md, engine,
+                                 &(opkernel->outputs[0]));
   mkldnn_memory_desc_t kernel_diff_weights_md =
         *mkldnn_primitive_desc_query_memory_d(kernel_diff_weights_pd);
   create_mkldnn_tensor_from_md(weights_dims, batchnorm_weights_sizes,
                                &kernel_diff_weights_md, engine, &(opkernel->outputs[1]));
-  //  create_mkldnn_tensor(weights_dims, batchnorm_weights_sizes, data_type,
-  //                       mkldnn_nc, engine, &(opkernel->outputs[1]));
 
   opkernel->num_inputs = 5;
   opkernel->num_outputs = 2;

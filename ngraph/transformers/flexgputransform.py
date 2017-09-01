@@ -18,10 +18,11 @@ from __future__ import division
 import numpy as np
 
 from ngraph.transformers.base import UnsupportedTransformerException
+from ngraph.transformers.gpu.flex_lut import FlexLUTBpropKernel
 from ngraph.transformers.passes.flexfusion import FlexFusion
 
 try:
-    from ngraph.flex import GPUFlexManager, GPUFlex
+    from ngraph.flex import GPUFlexManager, GPUFlex, gpuflex16
 except ImportError:
     raise UnsupportedTransformerException("autoflex package not installed")
 
@@ -41,7 +42,7 @@ from ngraph.transformers.gpu.float_ew2 import CudaSourceFile, FlexScaleDescripti
     FlexPtrDescription
 from ngraph.flex.names import flex_gpu_transformer_name
 from ngraph.util.generics import generic_method
-
+from ngraph.op_graph.lookuptable import update_lut
 
 # kernels that do not require flex integration
 # non_flex_kernels: output_flex_ids set to empty list
@@ -76,7 +77,7 @@ class FlexGPUTransformer(GPUTransformer):
     fixed_point_res = GPUFlexManager.fixed_point_resolution()
 
     default_rtol = 1e-02
-    default_atol = 2e-05
+    atol_precision_multiplier = 8
 
     def __init__(self, fixed_point=False, flex_verbose=False, collect_flex_data=False, **kwargs):
 
@@ -93,6 +94,13 @@ class FlexGPUTransformer(GPUTransformer):
         self.flex_manager = GPUFlexManager(fixed_point=fixed_point,
                                            verbose=flex_verbose)
 
+    @classmethod
+    def get_default_tolerance(cls, desired):
+        scale = gpuflex16.get_scale(np.max(abs(desired)))
+        atol = scale * FlexGPUTransformer.atol_precision_multiplier
+        rtol = FlexGPUTransformer.default_rtol
+        return atol, rtol
+
     def set_output_statistics_file(self, statistics_file):
         if self.collect_flex_data:
             self.set_flex_data_file(statistics_file)
@@ -106,6 +114,21 @@ class FlexGPUTransformer(GPUTransformer):
 
     def device_buffer_storage(self, bytes, dtype, name):
         return FlexGPUDeviceBufferStorage(self, bytes, dtype, name="a_" + name)
+
+    def add_flex_id_to_ops(self):
+        for op in self.ops:
+            if op.is_tensor_op:
+                base = op.forwarded.tensor_description().base
+                tensor = self.op_tensors.get(base, None)
+                if hasattr(tensor, 'flex_entry'):
+                    op.metadata['flex_id'] = tensor.flex_entry.flex_id
+                    base.op.metadata['flex_id'] = tensor.flex_entry.flex_id
+
+    def start_transform_allocate(self):
+        super(FlexGPUTransformer, self).start_transform_allocate()
+        self.add_flex_id_to_ops()
+
+        # VizPass(subgraph_attr="flex_id").wrapped_do_pass(ops=self.ops)
 
     def gpu_kernel_group(self, name):
         return FlexGPUKernelGroup(self, name)
@@ -254,6 +277,10 @@ class FlexGPUKernelGroup(GPUKernelGroup):
     def add_kernel(self, op):
         self.kernels.append(FlexFillKernel(self.transformer, op.tensor_description(),
                                            op.reduction_axes.size))
+
+    @add_kernel.on_type(update_lut)
+    def add_kernel(self, op):
+        self.kernels.append(FlexLUTBpropKernel(self.transformer, op))
 
     def compile_all(self):
         """
