@@ -78,15 +78,16 @@ def reorder_spatial_axes(tensor, channel_axis, spatial_axes):
                                     "found {}".format(len(tensor.axes)))
 
     def expand_with_name(tensor, axis, index=0):
-        if axis in tensor.axes:
-            return tensor, axis
-
         if isinstance(axis, Axis):
+            if axis in tensor.axes:
+                return tensor, axis
             if (axis.length is not None) and (axis.length > 1):
                 raise IncompatibleAxesError("Cannot expand tensor to an axis with length > 1: {}"
                                             ", length={}".format(axis.name, axis.length))
             axis.length = 1
         else:
+            if axis in tensor.axes.names:
+                return tensor, tensor.axes.find_by_name(axis)[0]
             axis = ng.make_axis(name=axis, length=1)
         return ng.expand_dims(tensor, axis, index), axis
 
@@ -108,6 +109,7 @@ def reorder_spatial_axes(tensor, channel_axis, spatial_axes):
 
     tensor, channel_axis = expand_with_name(tensor, channel_axis)
 
+    spatial_axes = list(spatial_axes)
     for ii, ax in enumerate(spatial_axes):
         tensor, ax = expand_with_name(tensor, ax)
         spatial_axes[ii] = ax

@@ -279,7 +279,8 @@ class LookupTable(Layer):
 
 class ConvBase(Layer):
     """
-    Convolutional layer that performs 3D convolutions.
+    Convolutional layer that performs 3D convolutions. This is used under-the-hood and should not
+    be called directly.
 
     This layer provides an interface to the core convolution support within ngraph. 1D and 2D 
     convolutions are automatically represented as 3D convolutions, with extra axes 
@@ -407,6 +408,7 @@ class ConvBase(Layer):
         manual_pad.update(extra_pad)
         if any((pad != (0, 0)) for pad in manual_pad.values()):
             in_obj = ng.pad(in_obj, manual_pad.values())
+            spatial_axes = in_obj.axes.get_by_names(*ng.make_axes(spatial_axes).names)
         output_axes = self._output_axes(channel_axes, spatial_axes, in_obj.axes.batch_axis(),
                                         pad_int)
         convparams = utils.make_convparams(self.nout, self.filter_shape,
@@ -475,13 +477,17 @@ class ConvBase(Layer):
         # Remove introduced axes. If their length is > 1, then perhaps they should be kept
         slices = [0 if (ax not in orig_axes) and ax.length == 1 else slice(None)
                   for ax in output.axes]
-        return ng.axes_with_order(ng.tensor_slice(output, slices), output_axis_order)
+        output = ng.tensor_slice(output, slices)
+        # New axes with length > 1 may have been introduced. Add them to the end.
+        output_axis_order = output_axis_order | output.axes
+        return ng.axes_with_order(output, output_axis_order)
 
 
 class DeconvBase(ConvBase):
     """
     Deconvolutional layer that performs 3D deconvolutions (otherwise known as transpose 
-    convolutions or fractionally-strided convolutions). 
+    convolutions or fractionally-strided convolutions).  This is used under-the-hood and should
+    not be called directly.
     
     This layer provides an interface to the core deconvolution support within ngraph. 1D and 2D
     deconvolutions are automatically represented as 3D deconvolutions, with extra axes 
@@ -543,7 +549,7 @@ class DeconvBase(ConvBase):
                                                                        self.dilation[key]))
         return output_axes + batch_axis
 
-    def _conv_op(self, in_obj, channel_axis, spatial_axes):
+    def _conv_op(self, in_obj, channel_axes, spatial_axes):
         """
         Setup for the call to ng.deconvolution.
         """
@@ -553,7 +559,9 @@ class DeconvBase(ConvBase):
         manual_pad.update(extra_pad)
         if any((pad != (0, 0)) for pad in manual_pad.values()):
             in_obj = ng.pad(in_obj, manual_pad.values())
-        output_axes = self._output_axes(channel_axis, spatial_axes, in_obj.axes.batch_axis(),
+            spatial_axes = in_obj.axes.get_by_names(*ng.make_axes(spatial_axes).names)
+
+        output_axes = self._output_axes(channel_axes, spatial_axes, in_obj.axes.batch_axis(),
                                         pad_int)
         convparams = utils.make_convparams(self.nout, self.filter_shape,
                                            self.strides, pad_int, self.dilation)
@@ -572,15 +580,16 @@ def make_conv(filter_shape, init, strides, padding, dilation, deconv=False,
                              "specifying the filter size for 1 to 3 spatial dimensions and the "
                              "number of filters. Provided: {}".format(filter_shape))
         axis_names = {2: "WK", 3: "HWK", 4: "DHWK"}[len(filter_shape)]
-        filter_shape = default_filter_shape.update(zip(axis_names, filter_shape))
+        default_filter_shape.update(zip(axis_names, filter_shape))
+        filter_shape = default_filter_shape
     else:
         axis_names = filter_shape.keys()
     if isinstance(strides, int):
-        strides = {k: strides for k in axis_names}
+        strides = {k: strides for k in axis_names if k != "K"}
     if isinstance(padding, (int, six.string_types, tuple)):
-        padding = {k: padding for k in axis_names}
+        padding = {k: padding for k in axis_names if k != "K"}
     if isinstance(dilation, int):
-        dilation = {k: dilation for k in axis_names}
+        dilation = {k: dilation for k in axis_names if k != "K"}
 
     if deconv:
         return DeconvBase(filter_shape, init, strides, padding, dilation, **kwargs)
@@ -609,7 +618,8 @@ class Activation(Layer):
 
 class PoolBase(Layer):
     """
-    Pooling layer that performs 4D poolings.
+    Pooling layer that performs 4D poolings. This is used under-the-hood and should not be called
+    directly.
 
     This layer provides an interface to the core pooling support within ngraph. Lower dimensional
     pooling operations are automatically represented as 4D poolings, with extra axes temporarily 
@@ -698,7 +708,7 @@ class PoolBase(Layer):
                                                                      self.pool_shape[name],
                                                                      pad_int[name],
                                                                      self.strides[name],
-                                                                     pooling=True)
+                                                                     pooling=True))
         return output_axes + batch_axis
 
     def _pool_op(self, in_obj, channel_axes, spatial_axes):
@@ -710,6 +720,8 @@ class PoolBase(Layer):
         manual_pad.update(extra_pad)
         if any((pad != (0, 0)) for pad in manual_pad.values()):
             in_obj = ng.pad(in_obj, manual_pad.values())
+            channel_axes = in_obj.axes.get_by_names(*ng.make_axes(channel_axes).names)
+            spatial_axes = in_obj.axes.get_by_names(*ng.make_axes(spatial_axes).names)
         output_axes = self._output_axes(channel_axes, spatial_axes, in_obj.axes.batch_axis(),
                                         pad_int)
         poolparams = make_poolparams(self.pool_type,
@@ -722,6 +734,15 @@ class PoolBase(Layer):
 
     @SubGraph.scope_op_creation
     def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+        """
+        Pool over in_obj
+
+        Arguments:
+            in_obj (Op): Input op
+            channel_axes (str): name of the expected channel axis type - defaults to "C"
+            spatial_axes (tuple): names of expected depth, height and width axis types - defaults
+                                  to "D", "H", and "W"
+        """
         if isinstance(spatial_axes, dict):
             spatial_axes = tuple(spatial_axes.get(name, name)
                                  for name in ("D", "H", "W"))
@@ -734,7 +755,7 @@ class PoolBase(Layer):
         orig_axes = in_obj.axes
         in_obj = reorder_spatial_axes(in_obj, channel_axes, spatial_axes)
         channel_axes = in_obj.axes.get_by_names(channel_axes)
-        spatial_axes = in_obj.axes.get_by_names(spatial_axes)
+        spatial_axes = in_obj.axes.get_by_names(*spatial_axes)
 
         output = self._pool_op(in_obj, channel_axes, spatial_axes)
         # Reorder the output to match the input order
@@ -747,7 +768,7 @@ class PoolBase(Layer):
 
 class Pooling(PoolBase):
     """
-    Pooling layer that performs 1D to 4D poolings
+    Pooling layer that performs 1D to 4D pooling
 
     Arguments:
         pool_shape (tuple, dict): Pooling shape expressed as one of (width,), (height, width), 
@@ -777,12 +798,13 @@ class Pooling(PoolBase):
 
         default_pool_shape = {k: 1 for k in "CDHW"}
         if isinstance(pool_shape, (list, tuple)):
-            if (len(pool_shape) < 2) or (len(pool_shape) > 4):
+            if (len(pool_shape) < 1) or (len(pool_shape) > 4):
                 raise ValueError("If pool_shape is a list, its length should be between 2 and 4, "
                                  "specifying the pooling size for the channel axis and 1 to 3 "
                                  "spatial dimensions. Provided: {}".format(pool_shape))
             axis_names = {1: "W", 2: "HW", 3: "DHW", 4: "CDHW"}[len(pool_shape)]
-            pool_shape = default_pool_shape.update(zip(axis_names, pool_shape))
+            default_pool_shape.update(zip(axis_names, pool_shape))
+            pool_shape = default_pool_shape
         else:
             axis_names = pool_shape.keys()
         if isinstance(strides, int):
