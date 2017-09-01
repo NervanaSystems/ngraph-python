@@ -251,7 +251,8 @@ class QueueSendKernel(GPUKernel):
     def __init__(self, transformer, comm, op):
         super(QueueSendKernel, self).__init__(transformer)
         self.tensor = op.args[0].tensor_description()
-        self.send_op = op
+        self.op = op
+        self.destination = int(op.dest_id)
         self.comm = comm
 
     def bind_buffers(self):
@@ -260,10 +261,10 @@ class QueueSendKernel(GPUKernel):
         super(QueueSendKernel, self).bind_buffers()
         buf_ipc_hdl = drv.mem_get_ipc_handle(
             self.tensor.tensor.gpudata)
-        self.comm.send((False, buf_ipc_hdl), dest=int(self.send_op.dest_id), tag=TAG_IPC)
+        self.comm.send(buf_ipc_hdl, dest=self.destination, tag=TAG_IPC)
 
     def execute(self):
-        self.comm.send(True, dest=int(self.send_op.dest_id), tag=TAG_DIRECT)
+        self.comm.send(True, dest=self.destination, tag=TAG_DIRECT)
 
 
 class QueueRecvKernel(GPUKernel):
@@ -282,8 +283,10 @@ class QueueRecvKernel(GPUKernel):
 
     def __init__(self, transformer, comm, op):
         super(QueueRecvKernel, self).__init__(transformer)
-        self.recv_op = op
+        self.op = op
+        self.source = int(op.source_id)
         self.tensor = op.tensor_description()
+        self.buf_item_size = op.dtype.itemsize
         self.comm = comm
 
     def bind_buffers(self):
@@ -293,18 +296,19 @@ class QueueRecvKernel(GPUKernel):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(QueueRecvKernel, self).bind_buffers()
-        self.sender_buf  = setup_ipc_handle(op=self.recv_op, comm=self.comm, cmd='recv')
+        buf_ipc_hdl = self.comm.recv(source=self.source, tag=TAG_IPC)
+        self.sender_buf = drv.IPCMemoryHandle(buf_ipc_hdl)
 
     def execute(self):
         """
         Receive tensor
         """
-        ready = self.comm.recv(source=int(self.recv_op.source_id), tag=TAG_DIRECT)
+        ready = self.comm.recv(source=self.source, tag=TAG_DIRECT)
         if ready:
             drv.memcpy_dtod(
                 self.tensor.tensor.gpudata,
                 self.sender_buf,
-                self.tensor.tensor.size * self.recv_op.dtype.itemsize)
+                self.tensor.tensor.size * self.buf_item_size)
 
 
 class CudaScatterSendKernel(GPUKernel):

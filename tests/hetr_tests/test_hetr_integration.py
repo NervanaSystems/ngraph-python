@@ -80,6 +80,7 @@ def test_scatter_gather_graph(hetr_device):
         ops_to_transform=graph_ops,
         expected_recv_nodes=[x_plus_y])
 
+
 ax_A = ng.make_axis(4)
 ax_B = ng.make_axis(8)
 ax_C = ng.make_axis(12)
@@ -199,30 +200,32 @@ def test_to_and_from_device(hetr_device):
         x_plus_two = x_plus_one * 2
 
     with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
-        computation = transformer.computation(x_plus_two, x)
-        for i in [10, 20, 30]:
-            assert computation(i) == (i + 1) * 2
+        computation = transformer.computation([x_plus_one, x_plus_two], x)
+        assert computation(1) == (2, 4)
 
 
 @pytest.mark.multi_device
 def test_computation_return_list(hetr_device):
-    prepare_environment(hetr_device, 2)
+    prepare_environment(hetr_device, 4)
 
     with ng.metadata(device=hetr_device):
+        x = ng.placeholder(())
+
         with ng.metadata(device_id='1'):
-            x = ng.placeholder(())
-        x_plus_one = x + 1
-        x_plus_two = x + 2
-        x_mul_three = x * 3
+            x_plus_one = x + 1
+        with ng.metadata(device_id='2'):
+            x_plus_two = x_plus_one + 1
+        with ng.metadata(device_id='3'):
+            x_plus_three = x_plus_two + 1
 
     with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
-        computation = transformer.computation([x_plus_one, x_plus_two, x_mul_three], x)
+        computation = transformer.computation([x_plus_one, x_plus_two, x_plus_three], x)
         for i in [10, 20, 30]:
-            assert computation(i) == (i + 1, i + 2, i * 3)
+            assert computation(i) == (i + 1, i + 2, i + 3)
 
 
 @pytest.mark.hetr_gpu_only
-def test_gpu_send_and_recv():
+def test_gpu_send_and_recv(hetr_device):
     pytest.xfail("GitHub issue: #2007, Unknown error - investigation is needed")
     prepare_environment(hetr_device, 1)
     # put x+1 on cpu numpy

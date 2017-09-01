@@ -230,11 +230,10 @@ def test_allreduce_hint(hetr_device, config):
 
         var_minus = (var_A - var_B_mean)
 
-    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-        out_comp = hetr.computation([var_minus])
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as hetr:
+        out_comp = hetr.computation(var_minus)
         result = out_comp()
-
-        np_result = [np.full((axis_A.length), config['expected_result'], np.float32)]
+        np_result = np.full((axis_A.length), config['expected_result'], np.float32)
         np.testing.assert_array_equal(result, np_result)
 
 
