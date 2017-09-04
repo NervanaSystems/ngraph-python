@@ -22,8 +22,7 @@ import ngraph as ng
 from ngraph.frontends.cntk.cntk_importer.importer import CNTKImporter
 
 
-def test_sigmoid_1():
-    cntk_op = C.sigmoid([-2, -1., 0., 1., 2.])
+def assert_cntk_ngraph_isclose(cntk_op):
     cntk_ret = cntk_op.eval()
 
     ng_op, _ = CNTKImporter().import_model(cntk_op)
@@ -32,88 +31,7 @@ def test_sigmoid_1():
     assert np.isclose(cntk_ret, ng_ret).all()
 
 
-def test_sigmoid_2():
-    cntk_op = C.sigmoid([0.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_sigmoid_3():
-    cntk_op = C.exp([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_exp_1():
-    cntk_op = C.exp([-2, -1., 0., 1., 2.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_exp_2():
-    cntk_op = C.exp([0.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_exp_3():
-    cntk_op = C.exp([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_tanh_1():
-    cntk_op = C.tanh([-2, -1., 0., 1., 2.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_tanh_2():
-    cntk_op = C.tanh([0.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_tanh_3():
-    cntk_op = C.tanh([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.isclose(cntk_ret, ng_ret).all()
-
-
-def test_relu_1():
-    cntk_op = C.relu([-2, -1., 0., 1., 2.])
+def assert_cntk_ngraph_array_equal(cntk_op):
     cntk_ret = cntk_op.eval()
 
     ng_op, _ = CNTKImporter().import_model(cntk_op)
@@ -122,146 +40,214 @@ def test_relu_1():
     assert np.array_equal(cntk_ret, ng_ret)
 
 
-def test_relu_2():
-    cntk_op = C.relu([0.])
+def assert_cntk_ngraph_flat_equal(cntk_op):
     cntk_ret = cntk_op.eval()
 
     ng_op, _ = CNTKImporter().import_model(cntk_op)
     ng_ret = ng.transformers.make_transformer().computation(ng_op)()
 
-    assert np.array_equal(cntk_ret, ng_ret)
+    assert np.array_equal(cntk_ret.flatten(), ng_ret.flatten())
 
 
-def test_relu_3():
-    cntk_op = C.relu([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.])
+def assert_cntk_ngraph_flat_isclose(cntk_op):
     cntk_ret = cntk_op.eval()
 
     ng_op, _ = CNTKImporter().import_model(cntk_op)
     ng_ret = ng.transformers.make_transformer().computation(ng_op)()
 
-    assert np.array_equal(cntk_ret, ng_ret)
+    assert np.isclose(cntk_ret.flatten(), ng_ret.flatten()).all()
 
 
-def test_relu_4():
-    cntk_op = C.relu([[1, 2, 3], [4, 5, 6]])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_sigmoid():
+    assert_cntk_ngraph_isclose(C.sigmoid([-2, -1., 0., 1., 2.]))
+    assert_cntk_ngraph_isclose(C.sigmoid([0.]))
+    assert_cntk_ngraph_isclose(C.exp([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.]))
 
 
-def test_relu_5():
-    cntk_op = C.relu([[-3, -2, -1], [1, 2, 3]])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_exp():
+    assert_cntk_ngraph_isclose(C.exp([-2, -1., 0., 1., 2.]))
+    assert_cntk_ngraph_isclose(C.exp([0.]))
+    assert_cntk_ngraph_isclose(C.exp([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.]))
 
 
-def test_reciprocal_1():
-    cntk_op = C.reciprocal([-1 / 3, 1 / 5, -2, 3])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_tanh():
+    assert_cntk_ngraph_isclose(C.tanh([-2, -1., 0., 1., 2.]))
+    assert_cntk_ngraph_isclose(C.tanh([0.]))
+    assert_cntk_ngraph_isclose(C.tanh([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.]))
 
 
-def test_negate_1():
-    cntk_op = C.negate([-1, 1, -2, 3])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_relu():
+    assert_cntk_ngraph_array_equal(C.relu([-2, -1., 0., 1., 2.]))
+    assert_cntk_ngraph_array_equal(C.relu([0.]))
+    assert_cntk_ngraph_array_equal(C.relu([-0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1]))
+    assert_cntk_ngraph_array_equal(C.relu([[1, 2, 3], [4, 5, 6]]))
+    assert_cntk_ngraph_array_equal(C.relu([[-3, -2, -1], [1, 2, 3]]))
 
 
-def test_log_1():
-    cntk_op = C.log([1., 2.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_reciprocal():
+    assert_cntk_ngraph_array_equal(C.reciprocal([-1 / 3, 1 / 5, -2, 3]))
+    assert_cntk_ngraph_array_equal(C.reciprocal([[-1, 0.5], [-3, 4]]))
+    assert_cntk_ngraph_array_equal(C.reciprocal([[[1, 0.5], [-3, 0.33]], [[1, -2], [3, 4]]]))
 
 
-def test_sqrt_1():
-    cntk_op = C.sqrt([0., 4.])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_negate():
+    assert_cntk_ngraph_array_equal(C.negate([-1, 1, -2, 3]))
+    assert_cntk_ngraph_array_equal(C.negate([[-1, 0], [3, -4]]))
+    assert_cntk_ngraph_array_equal(C.negate([[[1, 2], [-3, 4]], [[1, -2], [3, 4]]]))
 
 
-def test_floor_1():
-    cntk_op = C.floor([0.2, 1.3, 4., 5.5, 0.0])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_log():
+    assert_cntk_ngraph_array_equal(C.log([1., 2.]))
+    assert_cntk_ngraph_array_equal(C.log([[1, 2], [3, 4]]))
+    assert_cntk_ngraph_array_equal(C.log([[[1, 2], [3, 4]], [[1, 2], [3, 4]]]))
 
 
-def test_floor_2():
-    cntk_op = C.floor([[0.6, 3.3], [1.9, 5.6]])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_sqrt():
+    assert_cntk_ngraph_array_equal(C.sqrt([0., 4.]))
+    assert_cntk_ngraph_array_equal(C.sqrt([[1, 2], [3, 4]]))
+    assert_cntk_ngraph_array_equal(C.sqrt([[[1, 2], [3, 4]], [[1, 2], [3, 4]]]))
 
 
-def test_floor_3():
-    cntk_op = C.floor([-5.5, -4.2, -3., -0.7, 0])
-    cntk_ret = cntk_op.eval()
-
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
-
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_floor():
+    assert_cntk_ngraph_array_equal(C.floor([0.2, 1.3, 4., 5.5, 0.0]))
+    assert_cntk_ngraph_array_equal(C.floor([[0.6, 3.3], [1.9, 5.6]]))
+    assert_cntk_ngraph_array_equal(C.floor([-5.5, -4.2, -3., -0.7, 0]))
+    assert_cntk_ngraph_array_equal(C.floor([[-0.6, -4.3], [1.9, -3.2]]))
 
 
-def test_floor_4():
-    cntk_op = C.floor([[-0.6, -4.3], [1.9, -3.2]])
-    cntk_ret = cntk_op.eval()
+def test_abs():
+    assert_cntk_ngraph_array_equal(C.abs([-1, 1, -2, 3]))
+    assert_cntk_ngraph_array_equal(C.abs([[1, -2], [3, -4]]))
+    assert_cntk_ngraph_array_equal(C.abs([[[1, 2], [-3, 4]], [[1, -2], [3, 4]]]))
 
-    ng_op, _ = CNTKImporter().import_model(cntk_op)
-    ng_ret = ng.transformers.make_transformer().computation(ng_op)()
 
-    assert np.array_equal(cntk_ret, ng_ret)
+def test_softmax():
+    assert_cntk_ngraph_isclose(C.softmax([[1, 1, 2, 3]]))
+    assert_cntk_ngraph_isclose(C.softmax([1, 1]))
+    assert_cntk_ngraph_isclose(C.softmax([[[1, 1], [3, 5]]], axis=-1))
+    # This test is failing, bug must be fixed:
+    # assert_cntk_ngraph_isclose(C.softmax([[[1, 1], [3, 5]]], axis=1))
+
+
+def test_reduce_max():
+    data = np.array([[[5, 1], [20, 2]], [[30, 1], [40, 2]], [[55, 1], [60, 2]]], dtype=np.float32)
+
+    # This test is failing, bug must be fixed:
+    # assert_cntk_ngraph_flat_equal(C.reduce_max([1, 0]))
+    assert_cntk_ngraph_flat_equal(C.reduce_max([1, 0], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_max([[1., 1.], [3., 5.]], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_max([[1., 1.], [3., 5.]], 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_max([[1., 1.], [3., 5.]], -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, 2))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, (0, 1)))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, (0, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, (1, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_max(data, (-1, -2)))
+
+
+def test_reduce_min():
+    data = np.array([[[5, 1], [20, 2]], [[30, 1], [40, 2]], [[55, 1], [60, 2]]], dtype=np.float32)
+
+    assert_cntk_ngraph_flat_equal(C.reduce_min([1, 0], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_min([[1., 1.], [3., 5.]], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_min([[1., 1.], [3., 5.]], 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_min([[1., 1.], [3., 5.]], -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, 2))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, (0, 1)))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, (0, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, (1, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_min(data, (-1, -2)))
+
+
+def test_reduce_sum():
+    data = np.array([[[5, 1], [20, 2]], [[30, 1], [40, 2]], [[55, 1], [60, 2]]], dtype=np.float32)
+
+    assert_cntk_ngraph_flat_equal(C.reduce_sum([1, 0], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum([[1., 1.], [3., 5.]], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum([[1., 1.], [3., 5.]], 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum([[1., 1.], [3., 5.]], -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, 2))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, (0, 1)))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, (0, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, (1, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_sum(data, (-1, -2)))
+
+
+def test_reduce_mean():
+    data = np.array([[[5, 1], [20, 2]], [[30, 1], [40, 2]], [[55, 1], [60, 2]]], dtype=np.float32)
+
+    assert_cntk_ngraph_flat_equal(C.reduce_mean([1, 0], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean([[1., 1.], [3., 5.]], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean([[1., 1.], [3., 5.]], 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean([[1., 1.], [3., 5.]], -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, 2))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, (0, 1)))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, (0, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, (1, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_mean(data, (-1, -2)))
+
+
+def test_reduce_prod():
+    data = np.array([[[5, 1], [20, 2]], [[30, 1], [40, 2]], [[55, 1], [60, 2]]], dtype=np.float32)
+
+    assert_cntk_ngraph_flat_equal(C.reduce_prod([1, 0], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod([[1., 1.], [3., 5.]], 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod([[1., 1.], [3., 5.]], 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod([[1., 1.], [3., 5.]], -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, 0))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, 1))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, 2))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, -1))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, (0, 1)))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, (0, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, (1, 2)))
+    assert_cntk_ngraph_flat_equal(C.reduce_prod(data, (-1, -2)))
+
+
+def test_reduce_log_sum_exp():
+    data = np.array([[[5, 1], [20, 2]], [[30, 1], [40, 2]], [[55, 1], [60, 2]]], dtype=np.float32)
+
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp([1, 0], 0))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp([[1., 1.], [3., 5.]], 0))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp([[1., 1.], [3., 5.]], 1))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp([[1., 1.], [3., 5.]], -1))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, 0))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, 1))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, 2))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, -1))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, (0, 1)))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, (0, 2)))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, (1, 2)))
+    assert_cntk_ngraph_flat_isclose(C.reduce_log_sum_exp(data, (-1, -2)))
 
 
 if __name__ == "__main__":
-    test_sigmoid_1()
-    test_sigmoid_2()
-    test_sigmoid_3()
-    test_exp_1()
-    test_exp_2()
-    test_exp_3()
-    test_tanh_1()
-    test_tanh_2()
-    test_tanh_3()
-    test_relu_1()
-    test_relu_2()
-    test_relu_3()
-    test_relu_4()
-    test_relu_5()
-    test_reciprocal_1()
-    test_negate_1()
-    test_log_1()
-    test_sqrt_1()
-    test_floor_1()
-    test_floor_2()
-    test_floor_3()
-    test_floor_4()
+    test_sigmoid()
+    test_exp()
+    test_tanh()
+    test_relu()
+    test_reciprocal()
+    test_negate()
+    test_log()
+    test_sqrt()
+    test_floor()
+    test_abs()
+    test_softmax()
+    test_reduce_max()
+    test_reduce_min()
+    test_reduce_mean()
+    test_reduce_sum()
+    test_reduce_prod()
+    test_reduce_log_sum_exp()
