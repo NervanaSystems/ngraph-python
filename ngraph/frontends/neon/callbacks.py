@@ -204,7 +204,11 @@ class LossCallback(Callback):
             self.total_iterations = callback_data['config'].attrs['total_iterations']
             num_intervals = self.total_iterations // self.frequency
             for loss_name in self.interval_loss_comp.output_keys:
-                callback_data.create_dataset("cost/{}".format(loss_name), (num_intervals,))
+                if loss_name == 'results':
+                    callback_data.create_dataset("cost/{}".format('top_1_acc'), (num_intervals,))
+                    callback_data.create_dataset("cost/{}".format('top_5_acc'), (num_intervals,))
+                else:
+                    callback_data.create_dataset("cost/{}".format(loss_name), (num_intervals,))
             callback_data.create_dataset("time/loss", (num_intervals,))
         elif phase == CallbackPhase.train_post:
             losses = loop_eval(self.dataset, self.interval_loss_comp)
@@ -234,8 +238,21 @@ def loop_train(dataset, computation, callbacks):
 def loop_eval(dataset, computation):
     dataset.reset()
     all_results = None
+
+    def top_results(inference_prob, data):
+        if inference_prob is not None:
+            top5_sorted = np.argsort(inference_prob, axis=0)[-5:]
+            data_tr = data[dataset.tgt_key].T  # true labels
+            top1_results = np.any(np.equal(data_tr, top5_sorted[-1:]), axis=0)
+            top5_results = np.any(np.equal(data_tr, top5_sorted), axis=0)
+            return {'top_1_acc': top1_results, 'top_5_acc': top5_results}
+
     for data in dataset:
         results = computation(data)
+        if 'results' in results.keys():
+            inference_prob = results.pop('results')
+            results.update(top_results(inference_prob, data))
+
         if all_results is None:
             all_results = {k: list(rs) for k, rs in results.items()}
         else:

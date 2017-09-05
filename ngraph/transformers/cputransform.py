@@ -47,7 +47,8 @@ from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
 from ngraph.transformers.passes.layout import AddLayoutConversions
-from ngraph.transformers.passes.expass import SSAConversion, IndexElision, DeadCodeEliminationPass
+from ngraph.transformers.passes.expass import SSAConversion, IndexElision, \
+    CopyElimination, DeadCodeEliminationPass
 from ngraph.transformers.passes.memlayout import MemLayoutPass
 from ngraph.transformers.passes.memoptimize import MemOptimizePass
 from ngraph.transformers.passes.liveness import LivenessPass
@@ -582,7 +583,9 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(ContiguousOp)
     def generate_op(self, op, out, x):
-        self.append("{}[()] = {}", out, x)
+        # self.append("{}[()] = {}", out, x)
+        self.append("mkldnn.mkl_contiguous('{}', {}, {})",
+                    op.safe_name, out, x)
 
     @generate_op.on_type(Divide)
     def generate_op(self, op, out, x, y):
@@ -865,18 +868,18 @@ class CPUTransformer(ExecutionGraphTransformer):
 
         add_layout_conversion = AddLayoutConversions(None)
         if self.mkldnn.enabled:
-            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn)),
-            DeadCodeEliminationPass(),
+            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn))
             self.graph_passes.append(MklAddLayoutConversions(mkldnn=self.mkldnn,
-                                                             layoutpass=add_layout_conversion)),
-            DeadCodeEliminationPass()
+                                                             layoutpass=add_layout_conversion))
+
         self.graph_passes += [
             SSAConversion(),
-            IndexElision(),
             # DCE here eliminates return values. Need to figure out why.
             # DeadCodeEliminationPass(),
             LivenessPass(),
             MemOptimizePass(),
+            CopyElimination(),
+            IndexElision(),
             LivenessPass(),
             MemLayoutPass()
         ]

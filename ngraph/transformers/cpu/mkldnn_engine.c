@@ -35,36 +35,97 @@ void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
 
-mkldnn_primitive_desc_t
+mkldnn_memory_desc_t*
 create_mkldnn_layout_descriptor(mkldnn_engine_t engine, int ndims,
                                 const int *dim_sizes, const int *dim_strides,
                                 mkldnn_data_type_t data_type,
                                 mkldnn_memory_format_t fmt) {
   // Create an MKL layout descriptor based on input size and strides
   // Assumes non-blocked layout
-  mkldnn_memory_desc_t md;
-  mkldnn_primitive_desc_t pd;
-  md.primitive_kind = mkldnn_memory;
-  md.ndims = ndims;
-  md.format = fmt;
-  md.data_type = data_type;
+  mkldnn_memory_desc_t* md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
+  md->primitive_kind = mkldnn_memory;
+  md->ndims = ndims;
+  md->format = fmt;
+  md->data_type = data_type;
   switch (fmt) {
   case mkldnn_blocked:
     for (size_t i = 0; i < ndims; i++) {
-      md.layout_desc.blocking.block_dims[i] = 1;
-      md.layout_desc.blocking.strides[1][i] = 1;
-      md.layout_desc.blocking.strides[0][i] = dim_strides[i];
-      md.layout_desc.blocking.padding_dims[i] = dim_sizes[i];
-      md.layout_desc.blocking.offset_padding_to_data[i] = 0;
-      md.dims[i] = dim_sizes[i];
+      md->layout_desc.blocking.block_dims[i] = 1;
+      md->layout_desc.blocking.strides[1][i] = 1;
+      md->layout_desc.blocking.strides[0][i] = dim_strides[i];
+      md->layout_desc.blocking.padding_dims[i] = dim_sizes[i];
+      md->layout_desc.blocking.offset_padding_to_data[i] = 0;
+      md->dims[i] = dim_sizes[i];
     }
-    md.layout_desc.blocking.offset_padding = 0;
+    md->layout_desc.blocking.offset_padding = 0;
     break;
   default:
-    MKL_CHECK(mkldnn_memory_desc_init(&md, ndims, dim_sizes, data_type, fmt));
+    MKL_CHECK(mkldnn_memory_desc_init(md, ndims, dim_sizes, data_type, fmt));
   }
-  MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd, &md, engine));
-  return pd;
+  return md;
+}
+
+/** Return flattened memory descriptor if flattening is feasible
+*   else return NULL
+*   Can only flatten contiguous axes
+*/
+mkldnn_memory_desc_t*
+mkldnn_flatten_axes(mkldnn_memory_desc_t* in_md, int* flatten_map) {
+  // Not done yet
+  return NULL;
+  /** Check if layout is blocked in any dimension.
+  *   Cannot flatten blocked layouts currently
+  */   
+  for (size_t i = 0; i < in_md->ndims; i++) {
+    if ((in_md->layout_desc.blocking.block_dims[i] != 1)
+        || (in_md->layout_desc.blocking.padding_dims[i] != in_md->dims[i])
+        || (in_md->layout_desc.blocking.offset_padding_to_data[i] != 0)
+        )
+        return NULL;
+  }
+
+  mkldnn_memory_desc_t* md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
+  md->primitive_kind = mkldnn_memory;
+  md->format = mkldnn_blocked;
+  md->data_type = in_md->data_type;
+  md->ndims = 0;
+  for (size_t i = 0; i < in_md->ndims; i++) {
+    md->layout_desc.blocking.block_dims[md->ndims] = 1;
+    md->layout_desc.blocking.strides[1][md->ndims] = 1;
+    md->layout_desc.blocking.offset_padding_to_data[md->ndims] = 0;
+    if (flatten_map[i] == 1) {
+        md->layout_desc.blocking.strides[0][md->ndims] = 1;
+        md->layout_desc.blocking.padding_dims[md->ndims] = 1;
+        md->dims[md->ndims] = 1;
+    } else {
+        md->layout_desc.blocking.strides[0][md->ndims] = in_md->layout_desc.blocking.strides[0][i];
+        md->layout_desc.blocking.padding_dims[md->ndims] = in_md->dims[i];
+        md->dims[md->ndims] = in_md->dims[i];
+        md->ndims++;
+    }
+  }
+  md->layout_desc.blocking.offset_padding = 0;
+  return md;
+}
+
+mkldnn_memory_desc_t*
+mkldnn_reorder_axes(mkldnn_memory_desc_t *in_md, int* axis_order) {
+  mkldnn_memory_desc_t* md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
+  md->primitive_kind = mkldnn_memory;
+  md->ndims = in_md->ndims;
+  md->format = mkldnn_blocked;
+  md->data_type = in_md->data_type;
+  for (size_t i = 0; i < md->ndims; i++) {
+      assert(axis_order[i] < md->ndims);
+      md->layout_desc.blocking.block_dims[i] = in_md->layout_desc.blocking.block_dims[axis_order[i]];
+      md->layout_desc.blocking.strides[1][i] = in_md->layout_desc.blocking.strides[1][axis_order[i]];
+      md->layout_desc.blocking.strides[0][i] = in_md->layout_desc.blocking.strides[0][axis_order[i]];
+      md->layout_desc.blocking.padding_dims[i] = in_md->layout_desc.blocking.padding_dims[axis_order[i]];
+      md->layout_desc.blocking.offset_padding_to_data[i] = in_md->layout_desc.blocking.offset_padding_to_data[axis_order[i]];
+      md->dims[i] = in_md->dims[axis_order[i]];
+  }
+  md->layout_desc.blocking.offset_padding = 0;
+  return md;
 }
 
 void create_mkldnn_tensor(int ndims, const int *dim_sizes,
@@ -81,7 +142,7 @@ void create_mkldnn_tensor(int ndims, const int *dim_sizes,
   MKL_CHECK(mkldnn_primitive_create(&(tensor->prim), tensor->desc, NULL, NULL));
 }
 
-void create_mkldnn_tensor_from_pd(int ndims, const int *dim_sizes,
+void create_mkldnn_tensor_from_md(int ndims, const int *dim_sizes,
                                   mkldnn_memory_desc_t *md,
                                   mkldnn_engine_t engine,
                                   mkldnn_tensor *tensor) {
@@ -153,8 +214,8 @@ mkldnn_opkernel_t create_empty_kernel(int id) {
   return op_kernel;
 }
 
-void delete_mkldnn_layout(mkldnn_primitive_desc_t *pd) {
-  MKL_CHECK(mkldnn_primitive_desc_destroy(pd));
+void delete_mkldnn_layout(mkldnn_memory_desc_t *md) {
+  free(md);
 }
 
 void delete_mkldnn_tensor(mkldnn_tensor *tensor) {
@@ -256,51 +317,28 @@ void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel, int verbose) {
   }
 }
 
-mkldnn_primitive_desc_t query_opkernel_layout(mkldnn_opkernel_t opkernel,
+mkldnn_memory_desc_t* query_opkernel_layout(mkldnn_opkernel_t opkernel,
                                               int index) {
   assert(index < opkernel->num_outputs);
-  mkldnn_memory_desc_t md =
-      *mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
-  if (md.format == mkldnn_x || md.format == mkldnn_ihwo ||
-      md.format == mkldnn_chwn) { // Native formats
+  mkldnn_memory_desc_t* md =
+      mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
+  if (md->format == mkldnn_x || md->format == mkldnn_ihwo ||
+      md->format == mkldnn_chwn) { // Native formats
     return NULL;
   } else {
-    return opkernel->outputs[index].desc;
+    return md;
   }
-}
-
-int compare_layouts(mkldnn_primitive_desc_t a, mkldnn_primitive_desc_t b) {
-  if (mkldnn_memory_primitive_desc_equal(a, b))
-    return 1;
-  else
-    return 0;
 }
 
 void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int *dims,
                                   mkldnn_data_type_t data_type,
-                                  mkldnn_memory_format_t format,
-                                  mkldnn_primitive_desc_t input_pd,
-                                  mkldnn_primitive_desc_t output_pd,
+                                  mkldnn_memory_desc_t* input_md,
+                                  mkldnn_memory_desc_t* output_md,
                                   mkldnn_opkernel_t opkernel) {
-  mkldnn_memory_desc_t input_md, output_md;
-  if (input_pd && output_pd) {
-    input_md = *(mkldnn_primitive_desc_query_memory_d(input_pd));
-    output_md = *(mkldnn_primitive_desc_query_memory_d(output_pd));
-  } else if (input_pd) {
-    input_md = *(mkldnn_primitive_desc_query_memory_d(input_pd));
-    MKL_CHECK(
-        mkldnn_memory_desc_init(&output_md, ndims, dims, data_type, format));
-  } else if (output_pd) {
-    output_md = *(mkldnn_primitive_desc_query_memory_d(output_pd));
-    MKL_CHECK(
-        mkldnn_memory_desc_init(&input_md, ndims, dims, data_type, format));
-  } else {
-    assert(0);
-  }
 
-  create_mkldnn_tensor_from_pd(ndims, dims, &input_md, engine,
+  create_mkldnn_tensor_from_md(ndims, dims, input_md, engine,
                                &(opkernel->inputs[0]));
-  create_mkldnn_tensor_from_pd(ndims, dims, &output_md, engine,
+  create_mkldnn_tensor_from_md(ndims, dims, output_md, engine,
                                &(opkernel->outputs[0]));
   MKL_CHECK(mkldnn_reorder_primitive_desc_create(
       &opkernel->op_desc, opkernel->inputs[0].desc, opkernel->outputs[0].desc));

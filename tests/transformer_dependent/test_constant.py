@@ -26,7 +26,7 @@ import pytest
 pytestmark = [pytest.mark.transformer_dependent, pytest.mark.separate_execution]
 
 
-def test_constant_init(transformer_factory):
+def test_constant_init():
     """TODO."""
     a = ng.constant(5)
     with executor(a) as ex:
@@ -43,7 +43,7 @@ def test_constant_init(transformer_factory):
     ng.testing.assert_allclose(result, nparray)
 
 
-def test_constant_add(transformer_factory):
+def test_constant_add():
     """TODO."""
     a = ng.constant(1)
     b = ng.constant(2)
@@ -55,7 +55,7 @@ def test_constant_add(transformer_factory):
     assert result == 3
 
 
-def test_constant_multiply(transformer_factory):
+def test_constant_multiply():
     """TODO."""
     a = ng.constant(4)
     b = ng.constant(2)
@@ -65,7 +65,7 @@ def test_constant_multiply(transformer_factory):
     assert result == 8
 
 
-def test_cputensor_add(transformer_factory):
+def test_cputensor_add():
     """TODO."""
     Y = ng.make_axis(length=2)
     M = ng.make_axis(length=2)
@@ -90,7 +90,7 @@ def test_cputensor_add(transformer_factory):
     assert np.array_equal(result, np_c)
 
 
-def test_cputensor_dot(transformer_factory):
+def test_cputensor_dot():
     Y = ng.make_axis(length=2)
     M = ng.make_axis(length=1)
     N = ng.make_axis(length=3)
@@ -109,7 +109,7 @@ def test_cputensor_dot(transformer_factory):
     assert np.array_equal(result, np_c)
 
 
-def test_cputensor_multiply_constant(transformer_factory):
+def test_cputensor_multiply_constant():
     """TODO."""
     M = ng.make_axis(length=1)
     N = ng.make_axis(length=3)
@@ -127,7 +127,7 @@ def test_cputensor_multiply_constant(transformer_factory):
     assert np.array_equal(result, np_c)
 
 
-def test_cputensor_add_constant(transformer_factory):
+def test_cputensor_add_constant():
     """TODO."""
     M = ng.make_axis(length=1)
     N = ng.make_axis(length=3)
@@ -144,7 +144,7 @@ def test_cputensor_add_constant(transformer_factory):
     assert np.array_equal(result, np_c)
 
 
-def test_cputensor_fusion(transformer_factory):
+def test_cputensor_fusion():
     """TODO."""
     M = ng.make_axis(length=1)
     N = ng.make_axis(length=3)
@@ -164,7 +164,7 @@ def test_cputensor_fusion(transformer_factory):
     assert np.array_equal(result, np_d)
 
 
-def test_cputensor_mlp(transformer_factory):
+def test_cputensor_mlp():
     """TODO."""
     D = ng.make_axis(length=3)
     H = ng.make_axis(length=2)

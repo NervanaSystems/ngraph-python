@@ -21,10 +21,10 @@ Axes
 Introduction
 ============
 
-An ``Axis`` labels a dimension of a tensor. The op-graph uses
-the identity of ``Axis`` objects to pair and specify dimensions in
-symbolic expressions. This system has several advantages over
-using the length and position of the axis as other frameworks do:
+An ``Axis`` (``ngraph.op_graph.axes.Axis``) labels a dimension of a tensor.
+The op-graph uses the identity of ``Axis`` objects to pair and specify
+dimensions in symbolic expressions. This system has several advantages over
+using the length and position of the axis as in other frameworks:
 
 1. **Convenience.** The dimensions of tensors, which may be nested
 deep in a computation graph, can be specified without having to
@@ -73,8 +73,8 @@ We can also delay the specification of the axis length.
 
   ::
 
-    H = ng.make_axis(length=3, name='height')
-    W = ng.make_axis(length=4, name='width')
+    H = ng.make_axis(name='height')
+    W = ng.make_axis(name='width')
     image = ng.placeholder([H, W])
     H.length = 3
     W.length = 4
@@ -181,7 +181,7 @@ Properties
 Axes operations
 ===============
 
-``Axes`` have ``list`` and ``set`` behaviors at the same time. ``Axes`` are
+``Axes`` (``ngraph.op_graph.axes.Axes``) has ``list`` and ``set`` behaviors at the same time. ``Axes`` are
 internally stored and can be used as ``list``, while we also have use cases of
 ``Axes`` as ``set``. Here's a list of supported operations by ``Axes`` and their
 expected behavors.
@@ -199,7 +199,7 @@ expected behavors.
   set operations
 
 
-Elementwise binary ops
+Element-wise binary ops
 ======================
 
 - When axes match, output the same axes. 
@@ -224,6 +224,7 @@ Elementwise binary ops
 
   1. If the set of axes for both operands match exactly, but the order is different, use the order of the left operand.
   2. If one operand's axes are a superset of the other's, use that operand's axis order
+
   3. Otherwise the order is determined by concatenating the left operand's axes with the axes from the right operand that are not present in the left operand (left_axes + (right_axes - left_axes)). 
 
   ::
@@ -309,13 +310,15 @@ Axes reduction
 
 Examples: ::
 
-    from ngraph.frontends.neon.axis import ax
-    x = ng.placeholder([ax.C, ax.H, ax.W])
-    ng.sum(x, reduction_axes=[])            -> [ax.C, ax.H, ax.W]
-    ng.sum(x, reduction_axes=[ax.C])        -> [ax.H, ax.W]
-    ng.sum(x, reduction_axes=[ax.C, ax.W])  -> [ax.H]
-    ng.sum(x, reduction_axes=[ax.W, ax.C])  -> [ax.H]
-    ng.sum(x, reduction_axes=x.axes)        -> []
+    ax_C = ng.make_axis(name="C", docstring="number of input feature maps")
+    ax_H = ng.make_axis(name="H", docstring="input image height")
+    ax_W = ng.make_axis(name="W", docstring="input image width")
+    x = ng.placeholder([ax_C, ax_H, ax_W])
+    ng.sum(x, reduction_axes=[])            #-> [C, H, W]
+    ng.sum(x, reduction_axes=[ax_C])        #-> [H, W]
+    ng.sum(x, reduction_axes=[ax_C, ax_W])  #-> [H]
+    ng.sum(x, reduction_axes=[ax_W, ax_C])  #-> [H]
+    ng.sum(x, reduction_axes=x.axes)        #-> []
 
 
 Axes casting
@@ -343,10 +346,9 @@ Axes broadcasting
 Use ``ng.broadcast`` to broadcast to new axes. The new axes must be a superset
 of the original axes. The order of the new axes can be arbitrary. For example: ::
 
-    from ngraph.frontends.neon.axis import ax
-    x = ng.placeholder([ax.C, ax.H])
-    ng.broadcast(x, [ax.C, ax.H, ax.W])  -> [ax.C, ax.H, ax.W]
-    ng.broadcast(x, [ax.W, ax.H, ax.C])  -> [ax.W, ax.H, ax.C]
+    x = ng.placeholder([ax_C, ax_H])
+    ng.broadcast(x, [ax_C, ax_H, ax_W])  #-> [C, H, W]
+    ng.broadcast(x, [ax_W, ax_H, ax_C])  #-> [W, H, C]
 
 
 .. Axes reordering
