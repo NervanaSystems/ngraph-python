@@ -534,11 +534,21 @@ class OpsCompound:
         return self._block_op_import(cntk_op, inputs, self._batch_norm_op)
 
     def _softmax_op(self, cntk_op, inputs):
+        """
+        Returns softmax of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
         return ng.softmax(inputs[0]).named(cntk_op.uid)
 
     def Softmax(self, cntk_op, inputs):
         """
-        Returns softmax of inputs[0].
+        Import Softmax operation block.
 
         Arguments:
             cntk_op: CNTK operation to be imported.
@@ -553,7 +563,7 @@ class OpsCompound:
 
     def MultiAxisReduce(self, cntk_op, inputs):
         """
-        Returns a reduction operation (max, sum,
+        Import MultiAxisReduce operation block.
 
         Arguments:
             cntk_op: CNTK operation to be imported.
