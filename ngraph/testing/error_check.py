@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-
+# import pytest
 import numpy as np
 import ngraph as ng
 
@@ -21,7 +21,7 @@ def transformer_name():
     return ng.transformers.base.__transformer_factory.name
 
 
-def __overwrite_rtol_atol(rtol, atol):
+def __overwrite_rtol_atol(rtol, atol, desired):
     """
     Overwrite atol, rtol by the transformer's default atol rtol if the default
     is less strict.
@@ -38,6 +38,9 @@ def __overwrite_rtol_atol(rtol, atol):
         name = transformer_name()
         # get transformer class
         tr = ng.transformers.Transformer.transformers[name]
+        # get default atol, rtol according to used transformer
+        tr.default_atol, tr.default_rtol = tr.get_default_tolerance(desired)
+
         # rewrite rtol, atol if default is coarser
         rtol = tr.default_rtol if tr.default_rtol > rtol else rtol
         atol = tr.default_atol if tr.default_atol > atol else atol
@@ -67,32 +70,7 @@ def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
     TODO: handle heter
     """
     if transformer_overwrite:
-        rtol, atol = __overwrite_rtol_atol(rtol, atol)
+        rtol, atol = __overwrite_rtol_atol(rtol, atol, desired)
     np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol,
                                equal_nan=equal_nan, err_msg=err_msg,
                                verbose=verbose)
-
-
-def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False,
-             transformer_overwrite=True):
-    """
-    Pass through for numpy.allclose, with support for rtol and atol overwrite
-    for different transformers.
-
-    Args:
-        a: array_like, actual value
-        b: array_like, desired value
-        rtol: float, relative tolerance
-        atol: float, relative tolerance
-        equal_nan: bool, whether to compare NaNs as equal
-        transofrmer_overwrite: when True, use transformer's atol / rtol if they
-                               are less strict than atol / rtol
-
-    Returns:
-        Returns True if two arrays are element-wise equal within a tolerance.
-
-    TODO: handle heter
-    """
-    if transformer_overwrite:
-        rtol, atol = __overwrite_rtol_atol(rtol, atol)
-    return np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan)

@@ -107,8 +107,6 @@ void create_mkldnn_batchnorm_fprop_primitives(
         *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
     create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &dst_md, engine,
                                  &(opkernel->outputs[0]));
-//  create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
-//                       engine, &(opkernel->outputs[0]));
 
   //-------------------------------------------------------------------------------
   // check if reorder's are required for inputs of batchnorm
@@ -328,8 +326,6 @@ void create_mkldnn_batchnorm_bprop_primitives(
         *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
   create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &dst_md, engine,
                                  &(opkernel->outputs[0]));
-  //create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
-  //                     engine, &(opkernel->outputs[0]));
 
   opkernel->num_inputs = 5;
   opkernel->num_outputs = 1;
