@@ -71,7 +71,7 @@ parser.add_argument("--train_manifest_file", default='train-index-tabbed.csv',
                     help="Name of tab separated Aeon training manifest file")
 parser.add_argument("--valid_manifest_file", default='val-index-tabbed.csv',
                     help="Name of tab separated Aeon validation manifest file")
-parser.set_defaults(batch_size=8, num_iterations=1000000, iter_interval=2000)
+parser.set_defaults(batch_size=8, num_iterations=10000000, iter_interval=2000)
 args = parser.parse_args()
 
 # Number of outputs of last layer.
@@ -93,7 +93,7 @@ image_size = 299
 inception = inception.Inception(mini=args.mini)
 
 # Declare the optimizer
-optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=5., epsilon=1.)
+optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
 
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
