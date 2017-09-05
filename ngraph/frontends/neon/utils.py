@@ -5,6 +5,7 @@ from .axis import ax
 
 from ngraph.frontends.neon.graph import SubGraph
 
+
 def make_convolution_placeholder(shape=None):
     """
     Create a placeholder op for inputs to a convolution layer
@@ -28,6 +29,7 @@ def make_convolution_placeholder(shape=None):
 
     return x
 
+
 def get_function_or_class_name(obj):
 
     if hasattr(obj, "__name__"):
@@ -39,23 +41,22 @@ def get_function_or_class_name(obj):
 
     return name
 
+
 class regularizerOp(SubGraph):
 
     def __init__(self, reg_type, value, **kwargs):
         super(regularizerOp, self).__init__(**kwargs)
-        
         self.value = value
         if reg_type is 'L1':
             self.reg_fun = ng.L1_norm
         elif reg_type is 'L2':
             self.reg_fun = ng.L2_norm
         else:
-            self.reg_fun = ng.L2_norm
-            print("Regularization type not supported, defaulting to L2 norm")
+            self.reg_fun = ng.L2_norm  # fall back to L2
 
     def __call__(self, subgraph):
         for i, variable in enumerate(subgraph.variables.values()):
-            if variable.metadata['label'] is not 'weight': #Only include weight layers
+            if variable.metadata['label'] is not 'weight':  # only include weight layers
                 continue
 
             if i == 0:
@@ -63,7 +64,8 @@ class regularizerOp(SubGraph):
             else:
                 result = result + self.reg_fun(variable)
 
-        return self.value*result
+        return self.value * result
+
 
 def regularize(subgraph, reg_type='L2', value=0.1):
 

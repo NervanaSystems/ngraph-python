@@ -20,13 +20,11 @@ from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import (Sequential, Deconvolution, Convolution,
-                                   Rectlin, Logistic, Tanh, GaussianInit,
-                                   Adam, RMSProp, ArrayIterator, Affine,
+                                   Rectlin, Logistic, Tanh,
+                                   Adam, RMSProp, ArrayIterator,
                                    KaimingInit, make_bound_computation)
-from ngraph.frontends.neon import regularize, ConstantInit
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import MNIST
-import copy
 try:
     import matplotlib
     matplotlib.use('Agg')
@@ -276,10 +274,10 @@ if args.loss_type == "WGAN-GP":
 # TODO: change constant 0.5 to uniform random
 # once ng.uniform is fixed for GPU
 
-#x = ng.variable(initial_value=0.5, axes=[])
-#epsilon = ng.uniform(x)
+# x = ng.variable(initial_value=0.5, axes=[])
+# epsilon = ng.uniform(x)
 epsilon = ng.constant(0.5)  # delete after uniform is fixed
-interpolated = epsilon * image + (1 - epsilon) * generated  # delete after uniform is fixed
+interpolated = epsilon * image + (1 - epsilon) * generated
 D3 = discriminator(interpolated)
 gradient = ng.deriv(ng.sum(D3, out_axes=[]), interpolated)
 grad_norm = ng.L2_norm(gradient)

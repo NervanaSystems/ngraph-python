@@ -20,13 +20,13 @@ adapted from https://github.com/igul222/improved_wgan_training
 """
 from contextlib import closing
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import Adam, Affine, Rectlin, Sequential, Logistic
+from ngraph.frontends.neon import Adam, Affine, Rectlin, Sequential
 from ngraph.frontends.neon import ConstantInit, KaimingInit
 from ngraph.frontends.neon import make_bound_computation, NgraphArgparser
 import ngraph as ng
 import os
 import numpy as np
-from data import *
+from data import DataGenerator, NormalNoise, generate_plot
 
 dim = 512
 batch_size = 256
@@ -68,7 +68,7 @@ def make_discriminator():
                      Affine(nout=1, weight_init=w_init, bias_init=b_init, activation=None)]
 
     return Sequential(discriminator, name="Discriminator")
- 
+
 
 parser = NgraphArgparser()
 parser.add_argument('--plot_interval', type=int, default=200)
@@ -113,11 +113,11 @@ grad_scale = 1  # gradient penalty multiplier
 
 # TODO
 # Original Implementation with epsilon - wait till fixed
-#x = ng.variable(initial_value=0.5, axes=[])
-#eps = ng.uniform(x)
+# x = ng.variable(initial_value=0.5, axes=[])
+# eps = ng.uniform(x)
 
 eps = ng.constant(0.5)  # delete after uniform works
-interpolated = eps * data + (1 - eps) * gen_cast  # delete after uniform works
+interpolated = eps * data + (1 - eps) * gen_cast
 
 D3 = discriminator(interpolated)
 gradient = ng.deriv(ng.sum(D3, out_axes=[]), interpolated)
