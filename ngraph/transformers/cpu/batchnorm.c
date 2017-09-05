@@ -22,10 +22,10 @@ void create_mkldnn_batchnorm_fprop_primitives(
     int mean_dims, int variance_dims, int mean_sizes, int variance_sizes,
     int *batchnorm_src_sizes, int *batchnorm_weights_sizes,
     int *batchnorm_dst_sizes, double epsilon,
-    mkldnn_primitive_desc_t input_src_pd,
-    mkldnn_primitive_desc_t input_weights_pd,
-    mkldnn_primitive_desc_t input_mean_pd,
-    mkldnn_primitive_desc_t input_variance_pd, mkldnn_data_type_t data_type,
+    mkldnn_memory_desc_t* input_src_md,
+    mkldnn_memory_desc_t* input_weights_md,
+    mkldnn_memory_desc_t* input_mean_md,
+    mkldnn_memory_desc_t* input_variance_md, mkldnn_data_type_t data_type,
     mkldnn_opkernel_t opkernel) {
 
   int mkl_mean_sizes[1];
@@ -71,40 +71,32 @@ void create_mkldnn_batchnorm_fprop_primitives(
   //-------------------------------------------------------------------------------
   /* create a  memory descriptor for the input, mean, variance, weights,
    * outputs*/
-  if (input_src_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_src_pd));
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+  if (input_src_md) {
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, input_src_md, engine,
                                  &(opkernel->inputs[0]));
   } else {
     create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
                          engine, &(opkernel->inputs[0]));
   }
 
-  if (input_mean_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_mean_pd));
-    create_mkldnn_tensor_from_pd(mean_dims, mkl_mean_sizes, &md, engine,
+  if (input_mean_md) {
+    create_mkldnn_tensor_from_md(mean_dims, mkl_mean_sizes, input_mean_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
     create_mkldnn_tensor(mean_dims, mkl_mean_sizes, data_type, mkldnn_x, engine,
                          &(opkernel->inputs[1]));
   }
 
-  if (input_variance_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_variance_pd));
-    create_mkldnn_tensor_from_pd(variance_dims, mkl_variance_sizes, &md, engine,
+  if (input_variance_md) {
+    create_mkldnn_tensor_from_md(variance_dims, mkl_variance_sizes, input_variance_md, engine,
                                  &(opkernel->inputs[2]));
   } else {
     create_mkldnn_tensor(variance_dims, mkl_variance_sizes, data_type, mkldnn_x,
                          engine, &(opkernel->inputs[2]));
   }
 
-  if (input_weights_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_weights_pd));
-    create_mkldnn_tensor_from_pd(weights_dims, batchnorm_weights_sizes, &md,
+  if (input_weights_md) {
+    create_mkldnn_tensor_from_md(weights_dims, batchnorm_weights_sizes, input_weights_md,
                                  engine, &(opkernel->inputs[3]));
   } else {
     create_mkldnn_tensor(weights_dims, batchnorm_weights_sizes, data_type,
@@ -120,7 +112,7 @@ void create_mkldnn_batchnorm_fprop_primitives(
                                           kernel_src_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->internal_inputs[0]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
@@ -139,7 +131,7 @@ void create_mkldnn_batchnorm_fprop_primitives(
                                           kernel_dst_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->internal_outputs[0]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd, kernel_dst_pd,
@@ -220,11 +212,11 @@ void create_mkldnn_batchnorm_bprop_primitives(
     int mean_dims, int variance_dims, int *batchnorm_src_sizes,
     int *batchnorm_dst_sizes, int *batchnorm_weights_sizes, int mean_sizes,
     int variance_sizes, double epsilon,
-    mkldnn_primitive_desc_t input_fprop_src_pd,
-    mkldnn_primitive_desc_t input_weights_pd,
-    mkldnn_primitive_desc_t input_mean_pd,
-    mkldnn_primitive_desc_t input_variance_pd,
-    mkldnn_primitive_desc_t input_error_pd, mkldnn_data_type_t data_type,
+    mkldnn_memory_desc_t* input_fprop_src_md,
+    mkldnn_memory_desc_t* input_weights_md,
+    mkldnn_memory_desc_t* input_mean_md,
+    mkldnn_memory_desc_t* input_variance_md,
+    mkldnn_memory_desc_t* input_error_md, mkldnn_data_type_t data_type,
     mkldnn_opkernel_t fprop_kernel, mkldnn_opkernel_t opkernel) {
 
   int mkl_mean_sizes[1];
@@ -288,50 +280,40 @@ void create_mkldnn_batchnorm_bprop_primitives(
   //-------------------------------------------------------------------------------
   /* create a  memory descriptor for the fprop_src_input, mean, variance,
      gradients, weights, outputs*/
-  if (input_fprop_src_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_fprop_src_pd));
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+  if (input_fprop_src_md) {
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, input_fprop_src_md, engine,
                                  &(opkernel->inputs[0]));
   } else {
     create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
                          engine, &(opkernel->inputs[0]));
   }
 
-  if (input_mean_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_mean_pd));
-    create_mkldnn_tensor_from_pd(mean_dims, mkl_mean_sizes, &md, engine,
+  if (input_mean_md) {
+    create_mkldnn_tensor_from_md(mean_dims, mkl_mean_sizes, input_mean_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
     create_mkldnn_tensor(mean_dims, mkl_mean_sizes, data_type, mkldnn_x, engine,
                          &(opkernel->inputs[1]));
   }
 
-  if (input_variance_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_variance_pd));
-    create_mkldnn_tensor_from_pd(variance_dims, mkl_variance_sizes, &md, engine,
+  if (input_variance_md) {
+    create_mkldnn_tensor_from_md(variance_dims, mkl_variance_sizes, input_variance_md, engine,
                                  &(opkernel->inputs[2]));
   } else {
     create_mkldnn_tensor(variance_dims, mkl_variance_sizes, data_type, mkldnn_x,
                          engine, &(opkernel->inputs[2]));
   }
 
-  if (input_error_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_error_pd));
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+  if (input_error_md) {
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, input_error_md, engine,
                                  &(opkernel->inputs[3]));
   } else {
     create_mkldnn_tensor(src_dims, batchnorm_src_sizes, data_type, mkldnn_chwn,
                          engine, &(opkernel->inputs[3]));
   }
 
-  if (input_weights_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)input_weights_pd));
-    create_mkldnn_tensor_from_pd(weights_dims, batchnorm_weights_sizes, &md,
+  if (input_weights_md) {
+    create_mkldnn_tensor_from_md(weights_dims, batchnorm_weights_sizes, input_weights_md,
                                  engine, &(opkernel->inputs[4]));
   } else {
     create_mkldnn_tensor(weights_dims, batchnorm_weights_sizes, data_type,
@@ -356,7 +338,7 @@ void create_mkldnn_batchnorm_bprop_primitives(
                                           kernel_fprop_src_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_fprop_src_pd);
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->internal_inputs[0]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
@@ -372,7 +354,7 @@ void create_mkldnn_batchnorm_bprop_primitives(
                                           kernel_src_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_src_pd);
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->internal_inputs[3]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
@@ -389,7 +371,7 @@ void create_mkldnn_batchnorm_bprop_primitives(
                                           kernel_dst_pd)) {
     mkldnn_memory_desc_t md =
         *mkldnn_primitive_desc_query_memory_d(kernel_dst_pd);
-    create_mkldnn_tensor_from_pd(src_dims, batchnorm_src_sizes, &md, engine,
+    create_mkldnn_tensor_from_md(src_dims, batchnorm_src_sizes, &md, engine,
                                  &(opkernel->internal_outputs[0]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(&reorder_pd, kernel_dst_pd,

@@ -13,51 +13,22 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function, absolute_import
+
 import collections
 import itertools
 from contextlib import contextmanager
+
 import ngraph as ng
+from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
+from ngraph.frontends.neon.utils import get_function_or_class_name
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
 LABELS = {"weight": "weight",
           "bias": "bias"}
-
-
-def output_dim(X, S, padding, strides, pooling=False, dilation=1):
-    """
-    Compute along 1 dimension, with these sizes, what will be the output dimension.
-
-    Arguments:
-        X (int): input data dimension
-        S (int): filter dimension
-        padding (int): padding on each side
-        strides (int): striding
-        pooling (bool): flag for setting pooling layer size
-        dilation (int): dilation of filter
-    """
-
-    S = dilation * (S - 1) + 1
-    size = ((X - S + 2 * padding) // strides) + 1
-
-    if pooling and padding >= S:
-        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
-    if size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(size))
-    return size
-
-
-def output_dim_deconv(X, S, padding, strides, dilation=1):
-    S = dilation * (S - 1) + 1
-    max_size = S + (X + padding - 1) * strides
-
-    if max_size < 0:
-        raise ValueError('output_dim {} can not be < 0'.format(max_size))
-    return max_size
 
 
 class Layer(SubGraph):
@@ -115,6 +86,8 @@ class Preprocess(Layer):
     TODO: Document
     """
     def __init__(self, functor, **kwargs):
+        if ("name" not in kwargs):
+            kwargs["name"] = get_function_or_class_name(functor)
         super(Preprocess, self).__init__(**kwargs)
         self.functor = functor
 
@@ -355,12 +328,12 @@ class ConvBase(Layer):
         cpm = self.convparams.copy()
         out_shape = [
             self.W.axes[-1].length,
-            output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
-                       cpm['dil_d']),
-            output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
-                       cpm['dil_h']),
-            output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
-                       cpm['dil_w'])
+            conv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
+                            cpm['dil_d']),
+            conv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
+                            cpm['dil_h']),
+            conv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
+                            cpm['dil_w'])
         ]
         return out_shape
 
@@ -440,11 +413,11 @@ class DeconvBase(ConvBase):
         cpm = self.convparams.copy()
         # axes for deconv output shape without any trimming
         out_max_shape = [
-            output_dim_deconv(in_axes[1].length, cpm['T'], cpm['pad_d'],
+            deconv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'],
                               cpm['str_d'], cpm['dil_d']),
-            output_dim_deconv(in_axes[2].length, cpm['R'], cpm['pad_h'],
+            deconv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'],
                               cpm['str_h'], cpm['dil_h']),
-            output_dim_deconv(in_axes[3].length, cpm['S'], cpm['pad_w'],
+            deconv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'],
                               cpm['str_w'], cpm['dil_w'])
         ]
         # output slice indices when output shape is specified
@@ -502,6 +475,8 @@ class Activation(Layer):
     TODO: Document. Why should we pass through this instead of just defining functions? Caching?
     """
     def __init__(self, transform, **kwargs):
+        if ("name" not in kwargs) and (transform is not None):
+            kwargs["name"] = get_function_or_class_name(transform)
         super(Activation, self).__init__(**kwargs)
         self.transform = transform
 
@@ -552,10 +527,10 @@ class PoolBase(Layer):
             ])
             # set lengths
             out_shape = [
-                output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
-                output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
-                output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
-                output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
+                conv_output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
+                conv_output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
+                conv_output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
+                conv_output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
             ]
             self.o_axes.set_shape(out_shape)
             self.o_axes |= in_axes.batch_axis()
@@ -604,7 +579,7 @@ class Bias(Layer):
     @SubGraph.scope_op_creation
     def __call__(self, in_obj):
         if not self.initialized:
-            w_axes = in_obj.axes.sample_axes()
+            w_axes = in_obj.axes.feature_axes()
             if self.shared and in_obj.axes.channel_axis() is not None:
                 w_axes = ng.make_axes(in_obj.axes.channel_axis())
             self.W = ng.variable(axes=w_axes, initial_value=self.init,
@@ -703,12 +678,12 @@ class BatchNorm(Layer):
     def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
-        # rho needs to be allocated storage because it will be changed dynamically during tuning
-        self.rho = ng.persistent_tensor(axes=(), initial_value=rho).named('rho')
         self.eps = eps
+        self.init_rho = rho
         self.init_gamma = init_gamma
         self.init_beta = init_beta
 
+        self.rho = None
         self.gamma = None
         self.beta = None
         self.gmean = None
@@ -726,14 +701,15 @@ class BatchNorm(Layer):
         out_axes = in_axes - red_axes
 
         if not self.initialized:
-            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0)
-            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0)
+            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0).named("gvar")
+            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0).named("gmean")
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,
                                      metadata={"label": LABELS["weight"]}).named('gamma')
             self.beta = ng.variable(axes=out_axes,
                                     initial_value=self.init_beta,
                                     metadata={"label": LABELS["bias"]}).named('beta')
+            self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
 
         in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
         xmean = ng.mean(in_obj, out_axes=out_axes)
@@ -750,9 +726,18 @@ class BatchNorm(Layer):
                              ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta)
             ])
 
+    @SubGraph.scope_op_creation
     def set_tuning_iteration(self, batch_index):
-        # Following tuning, one must divide self.gvar by rho in order to debias
-        self.rho.value[()] = float(batch_index) / (batch_index + 1.0)
+        """
+        Notes:
+            Following tuning, one must multiply self.gvar by rho in order to debias
+        """
+
+        if not self.initialized:
+            self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
+
+        new_value = batch_index / (batch_index + 1.0)
+        return ng.sequential([ng.assign(self.rho, new_value), new_value])
 
 
 class Dropout(Layer):
@@ -895,7 +880,7 @@ class Recurrent(Layer):
         # between training and inference
         self.recurrent_axis = in_obj.axes.recurrent_axis()
         if init_state is not None:
-            self.h_init = init_state
+            self.h_init = init_state.named('h_init')
 
         # try to understand the axes from the input
         if not self.initialized:

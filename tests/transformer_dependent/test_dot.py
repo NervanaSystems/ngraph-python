@@ -98,7 +98,7 @@ def ngraph_l2_norm(np_array):
 
 @raise_all_numpy_errors
 @pytest.config.argon_disabled  # TODO triage
-def test_dot_sum_backprop(transformer_factory):
+def test_dot_sum_backprop():
     delta = 1e-3
     rtol = atol = 1e-2
 
@@ -164,7 +164,7 @@ def test_dot_sum_backprop(transformer_factory):
 
 @raise_all_numpy_errors
 @pytest.config.argon_disabled  # TODO triage
-def test_tensor_dot_tensor(transformer_factory):
+def test_tensor_dot_tensor():
     """TODO."""
     C = ng.make_axis().named('C')
     D = ng.make_axis().named('D')
@@ -258,14 +258,10 @@ def test_tensor_dot_tensor(transformer_factory):
             ng.testing.assert_allclose(deriv2_val_num, deriv2_val_sym, rtol=1e-2, atol=1e-2)
 
 
-def test_flat_tensor_dot_tensor(transformer_factory):
+def test_flat_tensor_dot_tensor():
     """
     Ensure that a flattened argument axis is not unflattend in the result.
 
-    Args:
-        transformer_factory:
-
-    Returns:
     """
     H = ng.make_axis(2)
     W = ng.make_axis(7)
@@ -289,7 +285,7 @@ def test_flat_tensor_dot_tensor(transformer_factory):
     ng.testing.assert_allclose(result_val, result_correct)
 
 
-def test_squared_L2(transformer_factory):
+def test_squared_L2():
     H = ng.make_axis(2)
     W = ng.make_axis(3)
     N = ng.make_axis(5, name='N')

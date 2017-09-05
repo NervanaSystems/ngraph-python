@@ -25,6 +25,8 @@ from ngraph.transformers.passes.passes import GraphPass
 class MemLayoutPass(GraphPass):
     def do_pass(self, computation_decl, **kwargs):
         self.exop_block = computation_decl.exop_block
+        self.byte_alignment = computation_decl.execution_graph.execution_state \
+            .transformer.byte_alignment
 
         # this pass may be run multiple times
         # reset all of the allocated buffers to None before starting
@@ -36,10 +38,10 @@ class MemLayoutPass(GraphPass):
 
         # Layout temporary memory
         # self.layout_memory_middle_out()
-        self.layout_memory_best_fit()
+        computation_decl.temporary_max_allocated = self.layout_memory_best_fit()
 
         # Layout persistent memory
-        pmm = MemoryManager()
+        pmm = MemoryManager(self.byte_alignment)
         for exop in self.exop_block:
             for input_decl in exop.input_decls:
                 if input_decl.source_output_decl.tensor_decl.is_persistent and \
@@ -52,10 +54,12 @@ class MemLayoutPass(GraphPass):
                     output_decl.tensor_decl.buffer_pool_offset = \
                         pmm.allocate(output_decl.tensor_decl.size)
 
+        computation_decl.persistent_max_allocated = pmm.max_allocated()
+
         # self.test_memory_overlap()
 
     def layout_memory_best_fit(self):
-        mm = MemoryManager()
+        mm = MemoryManager(self.byte_alignment)
         for i, node in enumerate(self.exop_block):
             for new in node.liveness_new_list:
                 if new.buffer_pool_offset is not None:
@@ -70,9 +74,10 @@ class MemLayoutPass(GraphPass):
                         free.tensor_description_base.name))
                 else:
                     mm.free(free.buffer_pool_offset)
+        return mm.max_allocated()
 
     def layout_memory_first_fit(self):
-        mm = MemoryManager()
+        mm = MemoryManager(self.byte_alignment)
         for i, node in enumerate(self.exop_block):
             for new in node.liveness_new_list:
                 if new.buffer_pool_offset is not None:
@@ -87,9 +92,10 @@ class MemLayoutPass(GraphPass):
                         free.tensor_description_base.name))
                 else:
                     mm.free(free.buffer_pool_offset)
+        return mm.max_allocated()
 
     def layout_memory_middle_out(self):
-        mm = MemoryManager()
+        mm = MemoryManager(self.byte_alignment)
         max_usage = 0
         max_op = None
         for op in self.exop_block:
@@ -98,7 +104,7 @@ class MemLayoutPass(GraphPass):
                 max_usage = usage
                 max_op = op
         # print('max op {}'.format(max_op))
-        mm = MemoryManager()
+        mm = MemoryManager(self.byte_alignment)
         current_live = max_op.liveness_live_list
         for live in current_live:
             live.buffer_pool_offset = mm.allocate(live.size)
@@ -140,6 +146,7 @@ class MemLayoutPass(GraphPass):
                 mm.free(free.buffer_pool_offset)
             # node.validate()
             node = node.next_exop
+        return mm.max_allocated()
 
     def test_memory_overlap(self):
         for i, node in enumerate(self.exop_block):
@@ -179,7 +186,7 @@ class MemoryManager(object):
     All code here translated directly from NervanaSystems:memlayout c++ implementation by rhk
     '''
 
-    def __init__(self, alignment=1):
+    def __init__(self, alignment):
         self.alignment = alignment
         self.node_list = [MemoryNode(six.MAXSIZE)]
         self.max_allocation = 0
@@ -241,12 +248,18 @@ class MemoryManager(object):
 
     def allocate_best_fit(self, size):
         size = MemoryManager.align(size, self.alignment)
-        best_node, best_offset, best_delta = None, None, six.MAXSIZE
+        best_node = None
+        best_offset = None
+        best_delta = six.MAXSIZE
         offset = 0
         for i, node in enumerate(self.node_list):
             delta = node.size - size
-            if node.is_free and delta >= 0 and delta < best_delta:
-                best_i, best_node, best_offset, best_delta = i, node, offset, delta
+            if node.is_free and delta >= 0:
+                if not best_node or delta < best_delta:
+                    best_i = i
+                    best_node = node
+                    best_offset = offset
+                    best_delta = delta
             offset += node.size
 
         if not best_node:

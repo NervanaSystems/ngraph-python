@@ -15,8 +15,10 @@
 import numpy as np
 from ngraph.op_graph.op_graph import TensorValueOp
 from ngraph.factory.comm_node_factory import get_comm_pattern
-from ngraph.op_graph.comm_nodes import calculate_scatter_axes, \
-    CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp
+from ngraph.op_graph.comm_nodes import set_parallel_axes, \
+    CPUQueueBroadcastSendOp, CPUQueueBroadcastRecvOp, \
+    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
+    GPUCudaGatherRecvOp, GPUCudaGatherSendOp, GPUCudaAllReduceOp
 from multiprocessing import Process, Event, Manager
 from ngraph.frontends.neon import UniformInit
 from contextlib import closing
@@ -34,37 +36,17 @@ axes = ng.make_axes([ax_A, ax_B, ax_C])
 
 
 def test_calculate_new_axes_single_device():
-    new_axes = calculate_scatter_axes(axes=axes, scatter_axis=ax_B, num_devices=1)
+    new_axes = set_parallel_axes(axes=axes, parallel_axis=ax_B)
     assert new_axes.full_lengths == axes.full_lengths
-
-
-@pytest.mark.parametrize("axis, num", [(ax_A, 2), (ax_B, 3), (ax_C, 4), (ax_A, 5), (ax_B, 5),
-                                       (ax_C, 5)])
-def test_calculate_new_axes_no_remainder(axis, num):
-    new_axes = calculate_scatter_axes(axes=axes, scatter_axis=axis, num_devices=num)
-    expected_axes = ng.make_axes(
-        [a if a != axis else ng.make_axis(length=axis.length / num, name=a.name) for a in axes])
-    assert new_axes.full_lengths == expected_axes.full_lengths
-
-
-@pytest.mark.parametrize("axis, num", [(ax_B, 2), (ax_A, 3), (ax_B, 4), (ax_B, 6), (ax_C, 7)])
-def tests_calculate_new_axes_has_remainder(axis, num):
-    with pytest.raises(AssertionError):
-        calculate_scatter_axes(axes=axes, scatter_axis=axis, num_devices=num)
-
-
-def test_calculate_new_axes_zero_devices():
-    with pytest.raises(ZeroDivisionError):
-        calculate_scatter_axes(axes=axes, scatter_axis=ax_B, num_devices=0)
 
 
 def test_calculate_new_axes_null_axes():
     with pytest.raises(TypeError):
-        calculate_scatter_axes(axes=None, scatter_axis=ax_B, num_devices=2)
+        set_parallel_axes(axes=None, parallel_axis=ax_B)
 
 
 def test_calculate_new_axes_null_parallel_axis():
-    new_axes = calculate_scatter_axes(axes=axes, scatter_axis=None, num_devices=1)
+    new_axes = set_parallel_axes(axes=axes, parallel_axis=None)
     # Checks null parallel axis. The axes calculated should have the same length as original
     assert new_axes.full_lengths == axes.full_lengths
 
@@ -186,14 +168,15 @@ def test_broadcast_ops(config):
     axes = ng.make_axes([ax_a, ax_b])
 
     with ng.metadata(device='cpu', device_id=sender_id,
-                     transformer='None', host_transformer='None'):
+                     transformer='None', host_transformer='None', parallel=ax_a):
         from_node = ng.constant(axes=axes, const=c['x_input'])
 
     with ng.metadata(device='cpu', device_id=tuple(receiver_ids),
-                     transformer='None', host_transformer='None'):
+                     transformer='None', host_transformer='None', parallel=ax_a):
         to_node = ng.constant(axes=axes, const=0)
 
-    y[c['sender_index']] = CPUQueueBroadcastSendOp(from_node=from_node, to_node=to_node)
+    with ng.metadata(parallel=ax_a):
+        y[c['sender_index']] = CPUQueueBroadcastSendOp(from_node=from_node, to_node=to_node)
     for i in range(len(c['device_ids'])):
         if i != c['sender_index']:
             sc_op = CPUQueueBroadcastRecvOp(to_node=to_node, send_node=y[c['sender_index']])
@@ -241,8 +224,8 @@ def test_broadcast_ops(config):
 ])
 def test_allreduce_hint_cpu(config):
     c = config
-
-    with ng.metadata(device_id=c['device_id'], parallel=None):
+    parallel_axis = ng.make_axis(name='axis_parallel', length=16)
+    with ng.metadata(device_id=c['device_id'], parallel=parallel_axis):
         axis_A = ng.make_axis(length=4, name='axis_A')
         axis_B = ng.make_axis(length=2, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
@@ -297,8 +280,8 @@ def test_allreduce_hint_gpu(config):
     ax_B_length = 16
 
     np_result = [np.full((ax_A_length, ax_B_length), c['expected_result'], np.float32)]
-
-    with ng.metadata(device_id=c['device_id'], parallel=None):
+    parallel_axis = ng.make_axis(name='axis_parallel', length=16)
+    with ng.metadata(device_id=c['device_id'], parallel=parallel_axis):
         axis_A = ng.make_axis(length=ax_A_length, name='axis_A')
         axis_B = ng.make_axis(length=ax_B_length, name='axis_B')
         var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
@@ -337,3 +320,93 @@ def test_multiple_gather_ops(config):
 
         np.testing.assert_array_equal(result_two, c['result_two'])
         np.testing.assert_array_equal(result_one, c['result_one'])
+
+
+@pytest.mark.hetr_gpu_only
+@pytest.mark.parametrize('config', [
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'parallel_axis': ax_A,
+        'expected_layouts': [[[0], [1], [2]],     # GPUCudaScatterSendOp
+                             [[0], [1], [2]],     # GPUCudaScatterRecvOp
+                             [[0], [1], [2]],     # GPUCudaGatherRecvOp
+                             [[0], [1], [2]],     # GPUCudaGatherSendOp
+                             [[0], [1], [2]]],    # GPUCudaAllReduceOp
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'parallel_axis': ax_B,
+        'expected_layouts': [[[1], [0], [2]],     # GPUCudaScatterSendOp
+                             [[1], [0], [2]],     # GPUCudaScatterRecvOp
+                             [[1], [0], [2]],     # GPUCudaGatherRecvOp
+                             [[0], [1], [2]],     # GPUCudaGatherSendOp
+                             [[0], [1], [2]]],    # GPUCudaAllReduceOp
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
+        'parallel_axis': ax_C,
+        'expected_layouts': [[[2], [0], [1]],     # GPUCudaScatterSendOp
+                             [[2], [0], [1]],     # GPUCudaScatterRecvOp
+                             [[2], [0], [1]],     # GPUCudaGatherRecvOp
+                             [[0], [1], [2]],     # GPUCudaGatherSendOp
+                             [[0], [1], [2]]],    # GPUCudaAllReduceOp
+    },
+])
+def test_get_layouts(config):
+    test_transformer = ngt.make_transformer_factory('gpu')()
+
+    t = config
+    with ng.metadata(parallel=t['parallel_axis']):
+        test_ops = [
+            GPUCudaScatterSendOp(
+                TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                              device_id='0', parallel=t['parallel_axis'],
+                              transformer='gpu0', host_transformer=None)),
+                ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                      parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                      host_transformer=None))
+            ),
+            GPUCudaScatterRecvOp(
+                ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                      parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                      host_transformer=None)),
+                GPUCudaScatterSendOp(
+                    TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                                  device_id='0', parallel=t['parallel_axis'],
+                                  transformer='gpu0', host_transformer=None)),
+                    ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                          parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                          host_transformer=None))
+                )
+            ),
+            GPUCudaGatherRecvOp(
+                ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                                    parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                                    host_transformer=None)),
+                ng.Op(metadata=dict(device='gpu', device_id='0', parallel=t['parallel_axis'],
+                      transformer='gpu0', host_transformer=None)),
+                GPUCudaScatterSendOp(
+                    TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                                  device_id='0', parallel=t['parallel_axis'],
+                                  transformer='gpu0', host_transformer=None)),
+                    ng.Op(metadata=dict(device='gpu', device_id=('0', '1'),
+                          parallel=t['parallel_axis'], transformer=['gpu0', 'gpu1'],
+                          host_transformer=None))
+                )
+            ),
+            GPUCudaGatherSendOp(
+                TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                              device_id='0', transformer='gpu0',
+                              host_transformer=None, parallel=t['parallel_axis']))
+            ),
+            GPUCudaAllReduceOp(
+                input_node=TensorValueOp(ng.placeholder(t['axes']), metadata=dict(device='gpu',
+                                         device_id='0', transformer='gpu0', host_transformer=None,
+                                         parallel=t['parallel_axis'])),
+                func='sum'
+            )
+        ]
+    test_layouts = []
+    for op in test_ops:
+        test_layouts.append(test_transformer.get_layouts(op)[0].axes)
+    np.testing.assert_array_equal(test_layouts, t['expected_layouts'])

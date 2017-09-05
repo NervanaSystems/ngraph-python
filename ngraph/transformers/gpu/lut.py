@@ -108,8 +108,11 @@ class LUTBpropKernel(GPUKernel):
         """
         Executes the pooling kernel.
         """
-        self.tensor_view_from_td(self.O).tensor.fill(0)
+        self.clear_tensor()
         self.word_counts.fill(0)
         for k in self.kernels:
             kernel, params = k
             kernel.prepared_async_call(*params)
+
+    def clear_tensor(self):
+        self.tensor_view_from_td(self.O).tensor.fill(0)

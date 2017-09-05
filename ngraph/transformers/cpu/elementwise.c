@@ -20,8 +20,8 @@
 void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
                               int src2_dims, int dst_dims, int* src1_sizes,
                               int* src2_sizes, int* dst_sizes,
-                              mkldnn_primitive_desc_t src1_pd,
-                              mkldnn_primitive_desc_t src2_pd,
+                              mkldnn_memory_desc_t* src1_md,
+                              mkldnn_memory_desc_t* src2_md,
                               int num_matrix_to_add,
                               mkldnn_data_type_t data_type,
                               mkldnn_opkernel_t opkernel) {
@@ -33,27 +33,23 @@ void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
   // create memory primitive descriptor
   mkldnn_memory_desc_t md1;
   mkldnn_primitive_desc_t pd1;
-  if (src1_pd) {
-    md1 = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)src1_pd));
-    pd1 = src1_pd;
+  if (src1_md) {
+    md1 = *src1_md;
   } else {
     MKL_CHECK(mkldnn_memory_desc_init(&md1, src1_dims, src1_sizes, data_type,
                                       mkldnn_x));
-    MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd1, &md1, engine));
   }
+  MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd1, &md1, engine));
 
   mkldnn_memory_desc_t md2;
   mkldnn_primitive_desc_t pd2;
-  if (src2_pd) {
-    md2 = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)src2_pd));
-    pd2 = src2_pd;
+  if (src2_md) {
+    md2 = *src2_md;
   } else {
     MKL_CHECK(mkldnn_memory_desc_init(&md2, src2_dims, src2_sizes, data_type,
                                       mkldnn_x));
-    MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd2, &md2, engine));
   }
+  MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd2, &md2, engine));
 
   const_mkldnn_primitive_desc_t input_pds[] = {pd1, pd2};
 
@@ -63,27 +59,23 @@ void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
       &opkernel->op_desc, NULL, num_matrix_to_add, scale_vector, input_pds));
 
   // create a memory primitive for input and output
-  if (src1_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)src1_pd));
-    create_mkldnn_tensor_from_pd(src1_dims, src1_sizes, &md, engine,
+  if (src1_md) {
+    create_mkldnn_tensor_from_md(src1_dims, src1_sizes, src1_md, engine,
                                  &(opkernel->inputs[0]));
   } else {
     create_mkldnn_tensor(src1_dims, src1_sizes, data_type, mkldnn_x, engine,
                          &(opkernel->inputs[0]));
   }
 
-  if (src2_pd) {
-    mkldnn_memory_desc_t md = *(mkldnn_primitive_desc_query_memory_d(
-        (const_mkldnn_primitive_desc_t)src2_pd));
-    create_mkldnn_tensor_from_pd(src2_dims, src2_sizes, &md, engine,
+  if (src2_md) {
+    create_mkldnn_tensor_from_md(src2_dims, src2_sizes, src2_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
     create_mkldnn_tensor(src2_dims, src2_sizes, data_type, mkldnn_x, engine,
                          &(opkernel->inputs[1]));
   }
   mkldnn_memory_desc_t dst_md = md1;
-  create_mkldnn_tensor_from_pd(dst_dims, dst_sizes, &dst_md, engine,
+  create_mkldnn_tensor_from_md(dst_dims, dst_sizes, &dst_md, engine,
                                &(opkernel->outputs[0]));
   opkernel->num_inputs = 2;
   opkernel->num_outputs = 1;

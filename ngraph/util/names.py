@@ -129,6 +129,13 @@ class ScopedNameableValue(NameableValue):
     def name(self):
         return super(ScopedNameableValue, self).name
 
+    @property
+    def unscoped_name(self):
+        if self.scope:
+            return self.name.rsplit("/", 1)[1]
+        else:
+            return self.name
+
     @name.setter
     def name(self, name):
         if self.scope:

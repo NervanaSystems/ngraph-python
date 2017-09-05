@@ -1,15 +1,28 @@
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+import pytest
 import six
 from six import BytesIO
-from contextlib import closing
-
 from google.protobuf.json_format import Parse
 
 import numpy as np
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.op_graph.serde import ops_pb2
 from ngraph.op_graph.serde import serde_weights
 from ngraph.op_graph.serde import serde
+from ngraph.testing import executor, ExecutorFactory
 
 
 def assign_ops(ops, values):
@@ -50,7 +63,9 @@ def test_serialize_and_deserialize_multi_np():
         assert (de_values[k] == v).all()
 
 
-def test_extract_op(transformer_factory):
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+@pytest.mark.transformer_dependent
+def test_extract_op():
     # set up an op and Assign a value to it so we can read it out
     axes = ng.make_axes([
         ng.make_axis(name='A', length=2),
@@ -60,14 +75,16 @@ def test_extract_op(transformer_factory):
     assign_op = ng.AssignOp(x_op, 1)
 
     # extract values out of it and make sure they match expected results
-    with closing(ngt.make_transformer()) as t:
-        comp_assignment = t.computation(assign_op)
+    with executor(assign_op) as comp_assignment:
+        t = comp_assignment.transformer
         comp_assignment()
         x_out = serde_weights.extract_op(t, x_op)
     assert (x_out == np.ones(axes.lengths)).all()
 
 
-def test_extract_many_ops(transformer_factory):
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+@pytest.mark.transformer_dependent
+def test_extract_many_ops():
     """
     Create NUM_OPS, fill them with 0, 1, 2, ... then check that
     serde_weights.extract_ops is able to extract the correct uuid/value pairs.
@@ -82,9 +99,10 @@ def test_extract_many_ops(transformer_factory):
     variable_ops = [ng.variable(axes) for _ in range(NUM_OPS)]
     assign_sequential = assign_ops(variable_ops, range(NUM_OPS))
 
-    with closing(ngt.make_transformer()) as t:
+    with executor(assign_sequential) as assign_computation:
+        t = assign_computation.transformer
         # Set values manually
-        t.computation(assign_sequential)()
+        assign_computation()
 
         # extract values out of it and make sure they match expected results
         weights = serde_weights.extract_ops(t, variable_ops)
@@ -93,7 +111,9 @@ def test_extract_many_ops(transformer_factory):
         np.testing.assert_allclose(weights[variable_op.uuid.bytes], i)
 
 
-def test_set_op_value(transformer_factory):
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+@pytest.mark.transformer_dependent
+def test_set_op_value():
     """
     set up a variable, then use serde_weights.set_op_value to inject a value
     into the graph.  Then double check that the value was injected.
@@ -104,7 +124,8 @@ def test_set_op_value(transformer_factory):
     ])
     x_op = ng.variable(axes)
 
-    with closing(ngt.make_transformer()) as t:
+    with ExecutorFactory() as ex:
+        t = ex.transformer
         value = np.ones(axes.lengths)
         serde_weights.set_op_value(t, x_op, value)
 
@@ -113,7 +134,9 @@ def test_set_op_value(transformer_factory):
     assert (x_out == value).all()
 
 
-def test_set_op_values(transformer_factory):
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+@pytest.mark.transformer_dependent
+def test_set_op_values():
     NUM_OPS = 3
 
     # set up an op and Assign a value to it so we can read it out
@@ -122,9 +145,9 @@ def test_set_op_values(transformer_factory):
         ng.make_axis(name='B', length=3),
     ])
     variable_ops = [ng.variable(axes) for i in range(NUM_OPS)]
-
     values = [np.ones(axes.lengths) * i for i in range(NUM_OPS)]
-    with closing(ngt.make_transformer()) as t:
+    with ExecutorFactory() as ex:
+        t = ex.transformer
         serde_weights.set_op_values(
             t,
             variable_ops, {
@@ -132,7 +155,6 @@ def test_set_op_values(transformer_factory):
                 for op, value in zip(variable_ops, values)
             }
         )
-
         # extract values out of it and make sure they match expected results
         funcs = [t.computation(op) for op in variable_ops]
         op_values = [func() for func in funcs]
@@ -150,8 +172,7 @@ def test_json_dumps_manifest():
 
     js = serde_weights.json_dumps_manifest({'x': x})
 
-    # now deserialize js formatted manifest and make sure it has the right data
-    # in it
+    # now deserialize js formatted manifest and make sure it has the right data in it
     manifest = ops_pb2.TensorManifest()
     Parse(js, manifest)
 
@@ -162,7 +183,9 @@ def test_json_dumps_manifest():
     assert t.info.shape == [2, 3]
 
 
-def test_round_trip(transformer_factory):
+@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+@pytest.mark.transformer_dependent
+def test_round_trip():
     # set up an op and Assign a value to it so we can read it out
     axes = ng.make_axes([
         ng.make_axis(name='A', length=2),
@@ -172,9 +195,11 @@ def test_round_trip(transformer_factory):
 
     assign_op = ng.AssignOp(x_op, 1)
 
-    with closing(ngt.make_transformer()) as t:
+    with executor(assign_op) as assign_computation:
+        t = assign_computation.transformer
+
         # Set initial value
-        t.computation(assign_op)()
+        assign_computation()
 
         # Test value
         np.testing.assert_allclose(serde_weights.extract_op(t, x_op), 1)

@@ -7,6 +7,7 @@ from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, _ser
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 
+
 _TIMEOUT_SECONDS = 600
 _SLEEP_SECONDS = 1
 

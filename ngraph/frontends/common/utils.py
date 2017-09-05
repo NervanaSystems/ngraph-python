@@ -96,9 +96,9 @@ def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
         return (0, 0, 0, 0)
 
 
-def remove_ones_axes(inputs):
+def squeeze_axes(inputs):
     """
-    Removes axes with length of 1 from list of tensors.
+    Removes axes with length of 1 for each tensor.
 
     Arguments:
         inputs: List of inputs to be sliced.
@@ -174,3 +174,48 @@ class CommonSGDOptimizer(object):
         return ng.doall([ng.assign(variable,
                                    variable - self.compute_lr_op * ng.deriv(cost, variable))
                          for variable in variables])
+
+
+def conv_output_dim(X, S, padding, strides, pooling=False, dilation=1):
+    """
+    Compute convolution output dimension along one dimension with these sizes, what will be
+    the output dimension.
+
+    Arguments:
+        X (int): input data dimension
+        S (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+        pooling (bool): flag for setting pooling layer size
+        dilation (int): dilation of filter
+    """
+
+    S = dilation * (S - 1) + 1
+    size = ((X - S + 2 * padding) // strides) + 1
+
+    if pooling and padding >= S:
+        raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
+
+    if size < 0:
+        raise ValueError('output_dim {} can not be < 0'.format(size))
+    return size
+
+
+def deconv_output_dim(X, S, padding, strides, dilation=1):
+    """
+    Compute deconvolution output dimension along one dimension with these sizes, what will be
+    the output dimension.
+
+    Arguments:
+        X (int): input data dimension
+        S (int): filter dimension
+        padding (int): padding on each side
+        strides (int): striding
+        dilation (int): dilation of filter
+    """
+    S = dilation * (S - 1) + 1
+    max_size = S + (X + padding - 1) * strides
+
+    if max_size < 0:
+        raise ValueError('output_dim {} can not be < 0'.format(max_size))
+    return max_size

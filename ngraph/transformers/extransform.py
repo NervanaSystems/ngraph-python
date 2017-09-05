@@ -26,6 +26,8 @@ from ngraph.transformers.base import Computation as BaseDeviceComputation
 from ngraph.transformers.exop import ExecutionState
 from ngraph.transformers.passes.exopdelegate import ExOpGraphOpAccessor
 
+from ngraph.util.trace_events import TraceEventTracker
+
 
 class DeviceComputation(BaseDeviceComputation):
     """
@@ -33,6 +35,22 @@ class DeviceComputation(BaseDeviceComputation):
     """
     def __init__(self, transformer, computation_op, **kwargs):
         super(DeviceComputation, self).__init__(transformer, computation_op, **kwargs)
+
+    def generate_profile(self, profiler_start, profiler_stop):
+        tracker = TraceEventTracker(self.computation_op.name)
+        start = iter(profiler_start)
+        stop = iter(profiler_stop)
+        for exop in self.computation_decl.exop_block:
+            start_time = next(start) * 1e6
+            duration = (next(stop) * 1e6) - start_time
+            args = {}
+            count = 0
+            for input_decl in exop.input_decls:
+                args["input{}".format(count)] = input_decl.source_output_decl.exop.name
+                count += 1
+            args['name'] = exop.name
+            tracker.add_operation("ExOp", exop.op.short_name, 0, 0, start_time, duration, args)
+        tracker.serialize_to_file()
 
 
 class DeviceBuffer(NameableValue):

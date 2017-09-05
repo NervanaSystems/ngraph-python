@@ -3,7 +3,7 @@ import subprocess
 import time
 
 
-STARTUP_TIME = 1.0
+STARTUP_TIME = 3.0
 
 
 class Launcher(object):

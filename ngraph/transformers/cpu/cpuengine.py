@@ -40,8 +40,8 @@ class Mkldnn(object):
             'chwn': 7,
         }
         self.kernels = dict()        # MKL Op kernels
-        self.op_layouts = dict()     # Layout objects for MKL tensors
-        self.native_layouts = dict()  # Layout objects for Non-MKL tensors
+        self.op_layouts = dict()     # Layout objects owned by MKLDNN
+        self.native_layouts = []     # Layout objects owned by transformer
         try:
             self.mkllib = ct.CDLL(engine_path)
             self.enabled = True
@@ -61,11 +61,21 @@ class Mkldnn(object):
                 self.mkllib.create_empty_kernel
             self.create_empty_kernel.argtypes = [ct.c_int]
             self.create_empty_kernel.restype = ct.c_void_p
-            self.create_layout_pd = \
+            self.create_layout_md = \
                 self.mkllib.create_mkldnn_layout_descriptor
-            self.create_layout_pd.argtypes = \
+            self.create_layout_md.argtypes = \
                 [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_void_p, ct.c_int]
-            self.create_layout_pd.restype = ct.c_void_p
+            self.create_layout_md.restype = ct.c_void_p
+            self.layout_reorder = \
+                self.mkllib.mkldnn_reorder_axes
+            self.layout_reorder.argtypes = \
+                [ct.c_void_p, ct.c_void_p]
+            self.layout_reorder.restype = ct.c_void_p
+            self.flatten_axes = \
+                self.mkllib.mkldnn_flatten_axes
+            self.flatten_axes.argtypes = \
+                [ct.c_void_p, ct.c_void_p]
+            self.flatten_axes.restype = ct.c_void_p
             self.output_layout = self.mkllib.query_opkernel_layout
             self.output_layout.argtypes = [ct.c_void_p, ct.c_int]
             self.output_layout.restype = ct.c_void_p
@@ -114,8 +124,8 @@ class Mkldnn(object):
             self.conv_fprop_kernel = \
                 self.mkllib.create_mkldnn_conv_fprop_kernel
             self.conv_fprop_kernel.argtypes = \
-                [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
-                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
+                [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
+                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
                  ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
             self.conv_bprop_kernel = \
                 self.mkllib.create_mkldnn_conv_bprop_data_kernel
@@ -164,7 +174,7 @@ class Mkldnn(object):
 
             self.reorder_kernel = self.mkllib.create_mkldnn_reorder_kernel
             self.reorder_kernel.argtypes = \
-                [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_int, ct.c_int,
+                [ct.c_void_p, ct.c_int, ct.c_void_p, ct.c_int,
                  ct.c_void_p, ct.c_void_p, ct.c_void_p]
 
     def open(self):
@@ -176,8 +186,8 @@ class Mkldnn(object):
         if (self.mkldnn_engine_initialized):
             for op in self.kernels:
                 self.delete_opkernel(self.kernels[op])
-            for td in self.native_layouts:
-                self.delete_layout(self.native_layouts[td])
+            for layout in self.native_layouts:
+                self.delete_layout(layout)
             self.destroy_mkldnn_engine_fn(self.mkldnn_engine)
             self.mkldnn_engine_initialized = False
 
@@ -222,10 +232,12 @@ class Mkldnn(object):
             dx = gamma_scale * (delta - (xhat * dgamma + dbeta) / m)
             np.copyto(outputs, dx)
 
-    def fprop_conv(self, name, conv_slices, I, F, O):
+    def fprop_conv(self, name, conv_slices, I, F, B, O):
         if (self.enabled and name in self.kernels):
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], F.ctypes.data, 1)
+            if B is not None:
+                self.set_input_tensor(self.kernels[name], B.ctypes.data, 2)
             self.set_output_tensor(self.kernels[name], O.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
@@ -334,7 +346,10 @@ class Mkldnn(object):
             self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
-            np.dot(x, y, out=out)
+            if bias is not None:
+                np.add(np.dot(x, y), bias[:, None], out=out)
+            else:
+                np.dot(x, y, out=out)
 
     def elementwise_add(self, name, I_array1, I_array2, O_array):
         if (self.enabled and name in self.kernels):
@@ -346,27 +361,37 @@ class Mkldnn(object):
             np.add(I_array1, I_array2, out=O_array)
 
     def fprop_relu(self, name, inputs, out, slope):
-        assert(self.enabled)
-        assert(name in self.kernels)
-        self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
-        self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
-        self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        if (self.enabled and name in self.kernels):
+            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 0)
+            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        else:
+            np.add(np.maximum(inputs, 0), slope * np.minimum(0, inputs), out=out)
 
     def bprop_relu(self, name, inputs, out, fpropSrc, slope):
-        assert(self.enabled)
-        assert(name in self.kernels)
-        self.set_input_tensor(self.kernels[name], fpropSrc.ctypes.data, 0)
-        self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 1)
-        self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
-        self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        if (self.enabled and name in self.kernels):
+            self.set_input_tensor(self.kernels[name], fpropSrc.ctypes.data, 0)
+            self.set_input_tensor(self.kernels[name], inputs.ctypes.data, 1)
+            self.set_output_tensor(self.kernels[name], out.ctypes.data, 0)
+            self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        else:
+            np.add(inputs * np.greater(fpropSrc, 0), inputs * slope *
+                   np.less(fpropSrc, 0), out=out)
 
     def mkl_reorder(self, name, output, input):
         assert self.enabled
         assert name in self.kernels
+        self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
+        self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
+        self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+
+    def mkl_contiguous(self, name, output, input):
         if name in self.kernels:
             self.set_input_tensor(self.kernels[name], input.ctypes.data, 0)
             self.set_output_tensor(self.kernels[name], output.ctypes.data, 0)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
+        else:
+            output[()] = input
 
     def update_conv(self, name, conv_slices, I, E, U):
         if (self.enabled and name in self.kernels):

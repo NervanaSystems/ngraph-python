@@ -12,32 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import print_function
+from __future__ import print_function, absolute_import
+import logging
+
 from builtins import object
-import json
+
 import ngraph as ng
 from ngraph.frontends.neon import ax
 
+logger = logging.getLogger(__name__)
 try:
     from aeon import DataLoader
 except ImportError:
-    print(
-        "\n"
-        "Unable to import aeon module.\n"
-        "Please see installation instructions at:\n"
-        "*****************\n"
-        "https://github.com/NervanaSystems/aeon/blob/rc1-master/README.md\n"
-        "*****************\n"
-    )
-    import sys
-    sys.exit(1)
+    msg = "\n".join(["",
+                     "Unable to import aeon module.",
+                     "Please see installation instructions at:",
+                     "*****************",
+                     "https://github.com/NervanaSystems/aeon/blob/rc1-master/README.md",
+                     "*****************",
+                     ""])
+    logger.error(msg)
+    raise ImportError(msg)
 
 
 class AeonDataLoader(object):
 
     def __init__(self, config, *args, **kwargs):
+
+        # TODO: Remove this workaround once tuples are accepted
+        if "etl" in config and isinstance(config["etl"], tuple):
+            config["etl"] = list(config["etl"])
+
         self.config = config
-        self._dataloader = DataLoader(json.dumps(config))
+        self._dataloader = DataLoader(config)
 
     def __next__(self):
         return next(self._dataloader)

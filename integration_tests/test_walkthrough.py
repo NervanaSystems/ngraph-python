@@ -33,7 +33,7 @@ kernel = 'python{}'.format(sys.version_info[0])
 
 
 @pytest.mark.parametrize("notebook", notebooks)
-def test_notebooks(transformer_factory, notebook):
+def test_notebooks(notebook):
     with open(notebook) as f:
         nb = nbformat.read(f, as_version=4)
         ep = ExecutePreprocessor(timeout=600, kernel_name=kernel)

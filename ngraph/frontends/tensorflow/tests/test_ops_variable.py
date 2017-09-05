@@ -54,7 +54,7 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert ng.testing.allclose(tf_result, ng_result)
+        ng.testing.assert_allclose(tf_result, ng_result)
 
     @pytest.mark.xfail(strict=True)
     def test_ref_assign_add(self):
@@ -73,4 +73,4 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert ng.testing.allclose(tf_result, ng_result)
+        ng.testing.assert_allclose(tf_result, ng_result)

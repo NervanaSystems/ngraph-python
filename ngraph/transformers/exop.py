@@ -500,6 +500,9 @@ class ExOp(ExecutionGraphElt):
     def has_side_effects(self):
         return self.op.has_side_effects
 
+    def align(self, size, alignment):
+        return - (-size // alignment) * alignment
+
     def memory_usage(self):
         """
         Get the memory usage of this op which is the sum of the sizes of all
@@ -513,7 +516,7 @@ class ExOp(ExecutionGraphElt):
         """
         size = 0
         for node in self.liveness_live_list:
-            size += node.size
+            size += self.align(node.size)
         return size
 
     def memory_footprint(self):
@@ -530,7 +533,7 @@ class ExOp(ExecutionGraphElt):
         max_mem = 0
         for node in self.liveness_live_list:
             if node.buffer_pool_offset is not None:
-                offset = node.size + node.buffer_pool_offset
+                offset = self.align(node.size) + node.buffer_pool_offset
                 max_mem = max([offset, max_mem])
         return max_mem
 
@@ -606,6 +609,8 @@ class ExOpBlock(ExecutionGraphElt):
         # Doubly linked loop, with self as termination
         self.prev_exop = self
         self.next_exop = self
+        # All ops handled by the block.
+        self.all_ops = set()
 
         self.root_set = OrderedSet()
 
@@ -669,35 +674,38 @@ class ExOpBlock(ExecutionGraphElt):
         """
         if after_exop is None:
             after_exop = self.prev_exop
-        # Get computation graph ops that have already been computed
-        computed_ops = set()
-        exop = after_exop
-        while not exop.is_exop_end_of_list:
-            computed_ops.add(exop.op)
-            computed_ops.update(exop.ref_ops)
-            computed_ops.update(input_decl.exop.op for input_decl in exop.input_decls)
-            for input_decl in exop.input_decls:
-                computed_ops.update(input_decl.source_output_decl.exop.ref_ops)
-            exop = exop.prev_exop
 
+        # Get computation graph ops that are already inserted.
         available = OrderedSet()
         counts = dict()
         parents = defaultdict(OrderedSet)
         ready = OrderedSet()
 
-        available.update(roots)
+        # Some ops in roots may have been replaced by other ops; if so, they
+        # are in the graph already, although maybe not in this block. Get the
+        # op from the exop so we have the current version.
+        for op in roots:
+            exop = self.computation_decl.get_exop(op, None)
+            if exop is not None:
+                op = exop.op
+            available.add(op)
+
         while available:
             op = available.pop()
-
-            if op in counts or op in computed_ops:
+            if op in counts or op in self.all_ops:
                 continue
 
-            children = OrderedSet((child for child in op.all_deps if child not in computed_ops))
-            if children:
-                counts[op] = len(children)
-                for child in children:
+            nchildren = 0
+            for child in op.all_deps:
+                exop = self.computation_decl.get_exop(child, None)
+                if exop is not None:
+                    child = exop.op
+                if child not in self.all_ops:
                     parents[child].add(op)
-                available.update(children)
+                    available.add(child)
+                    nchildren += 1
+            if nchildren > 0:
+                counts[op] = nchildren
             else:
                 ready.add(op)
 
@@ -765,6 +773,8 @@ class ExOpBlock(ExecutionGraphElt):
         before_exop.prev_exop = exop
         exop.next_exop = before_exop
 
+        self.all_ops.add(exop.op)
+
         return exop
 
     def move_exop_to_after_exop(self, exop, after_exop):
@@ -780,6 +790,7 @@ class ExOpBlock(ExecutionGraphElt):
         exop.next_exop.prev_exop = exop.prev_exop
         for input_decl in exop.input_decls:
             input_decl.source_output_decl.user_input_decls.remove(input_decl)
+        self.all_ops.remove(exop.op)
 
     def replace_op(self, old_op, new_op):
         # TODO Replacing an op can remove ops. For example, (x + 2) * 1 -> x + 2
@@ -789,18 +800,17 @@ class ExOpBlock(ExecutionGraphElt):
         # * dropping out means a change to sequencing.
         new_op = as_op(new_op)
         old_exop = self.computation_decl.get_exop(old_op)
+        after_exop = old_exop.prev_exop
+        self.remove_exop(old_exop)
         if old_op is new_op:
             # Hetr bashes some ops. See MutateInsteadOfCopyWithNewArgsMixin, issue #1410
-            after_exop = old_exop.prev_exop
-            self.remove_exop(old_exop)
             self.add_ops([new_op], after_exop=after_exop)
             return
         new_exop = self.computation_decl.get_exop(new_op, None)
         if new_exop is None:
-            self.add_ops([new_op], after_exop=old_exop.prev_exop)
+            self.add_ops([new_op], after_exop=after_exop)
             new_exop = self.computation_decl.get_exop(new_op, None)
         self.replace_users(old_exop, new_exop)
-        self.remove_exop(old_exop)
         if old_exop in self.root_set:
             self.root_set.remove(old_exop)
             self.root_set.add(new_exop)
@@ -827,9 +837,10 @@ class ExOpBlock(ExecutionGraphElt):
         old_output_decl.exop.output_decls[old_output_decl.pos] = new_output_decl
 
     def replace_exop(self, old_exop, new_exop):
-        self.add_exop(new_exop, old_exop.prev_exop)
-        self.replace_users(old_exop, new_exop)
+        prev_exop = old_exop.prev_exop
         self.remove_exop(old_exop)
+        self.add_exop(new_exop, prev_exop)
+        self.replace_users(old_exop, new_exop)
 
     def merge_exop(self, old_exop, new_exop):
         """
@@ -1121,6 +1132,8 @@ class ComputationDecl(ExecutionGraphElt):
 
         self.returns = ExOp(computation_decl=self, op=ReturnOp())
         self.exop_block.add_exop(self.returns, None)
+        self.temporary_max_allocated = None
+        self.persistent_max_allocated = None
 
         # Get the exops we need values for, so that if they are computed at compile-time we still
         # have a view to their value.

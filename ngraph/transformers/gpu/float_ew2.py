@@ -62,7 +62,8 @@ _op_templates = {
     "maximum": r"%(out)s = fmaxf(%(x)s, %(y)s);",
     "onehot": r"%(out)s = (%(index)s == %(x)s);",
     "take": r"%(out)s = %(y)s;",
-    "dot": None
+    "dot": None,
+    "sgn": r"%(out)s = %(x)s > 0 ? 1 : (%(x)s < 0 ? -1 : 0);"
 }
 
 _redop_templates = {

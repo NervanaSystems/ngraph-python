@@ -48,7 +48,6 @@ Assign the above tensors requires defining ``Axis``, which can be done using the
 	:meth:`ngraph.cast_axes` | Cast the axes of a tensor to new axes.
 	:meth:`ngraph.make_axes` | Create an Axes object.
 	:meth:`ngraph.make_axis` | Create an Axis.
-	:meth:`ngraph.make_axis_role` | Create an Axis role.
 
 We also provide several helper function for retrieving information from tensors.
 

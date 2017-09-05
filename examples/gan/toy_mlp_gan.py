@@ -24,14 +24,13 @@ from contextlib import closing
 
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import Layer, Affine, Sequential
+from ngraph.frontends.neon import Affine, Sequential
 from ngraph.frontends.neon import Rectlin, Identity, Tanh, Logistic
 from ngraph.frontends.neon import GaussianInit, ConstantInit
 from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import ArrayIterator
 from ngraph.frontends.neon import make_bound_computation
 from ngraph.frontends.neon import NgraphArgparser
-from toygan import ToyGAN
 
 
 def affine_layer(h_dim, activation, name):
@@ -50,6 +49,49 @@ def make_optimizer(name=None):
     return optimizer
 
 
+class ToyGAN(object):
+    """
+    Data loader class for toy GAN 1-D Gaussian example
+
+    Arguments:
+        N (int): total number of samples to create
+        data_mu (float): mean of actual Gaussian data distribution
+        data_sigma (float): std dev of actual Gaussian data distribution
+        noise_range (float): range in stratified sampling noise input to generator
+    """
+    def __init__(self, batch_size, num_iter, data_mu=4, data_sigma=0.5, noise_range=8):
+        self.batch_size = batch_size
+        self.num_iter = num_iter
+        self.data_mu = data_mu
+        self.data_sigma = data_sigma
+        self.noise_range = noise_range
+
+    def data_samples(self, bsz, num_iter):
+        ds = np.zeros((num_iter, bsz))
+        for i in range(num_iter):
+            samples = np.random.normal(self.data_mu, self.data_sigma, bsz)
+            ds[i] = np.sort(samples)
+        return ds.reshape(-1, 1)
+
+    def noise_samples(self, bsz, num_iter):
+        # stratified sampling
+        ns = np.zeros((num_iter, bsz))
+        for i in range(num_iter):
+            ns[i] = (np.linspace(-self.noise_range, self.noise_range, bsz) +
+                     np.random.random(bsz) * 0.01)
+        return ns.reshape(-1, 1)
+
+    def load_data(self):
+        data_samples = self.data_samples(self.batch_size, self.num_iter)
+        noise_samples = self.noise_samples(self.batch_size, self.num_iter)
+
+        self.train_set = {'data_sample': {'data': data_samples,
+                                          'axes': ('batch', 'sample')},
+                          'noise_sample': {'data': noise_samples,
+                                           'axes': ('batch', 'sample')}}
+        return self.train_set
+
+
 parser = NgraphArgparser(description='MLP GAN example')
 args = parser.parse_args()
 
@@ -61,23 +103,19 @@ batch_size = 12
 num_examples = num_iterations * batch_size
 
 # generator
-g_scope = 'generator'
-with Layer.variable_scope(g_scope):
-    generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
-                        affine_layer(1, Identity(), name='g1')]
-    generator = Sequential(generator_layers)
+generator_layers = [affine_layer(h_dim, Rectlin(), name='g0'),
+                    affine_layer(1, Identity(), name='g1')]
+generator = Sequential(generator_layers)
 
 # discriminator
-d_scope = 'discriminator'
-with Layer.variable_scope(d_scope):
-    discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
-                            affine_layer(2 * h_dim, Tanh(), name='d1')]
-    if minibatch_discrimination:
-        raise NotImplementedError
-    else:
-        discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2'))
-    discriminator_layers.append(affine_layer(1, Logistic(), name='d3'))
-    discriminator = Sequential(discriminator_layers)
+discriminator_layers = [affine_layer(2 * h_dim, Tanh(), name='d0'),
+                        affine_layer(2 * h_dim, Tanh(), name='d1')]
+if minibatch_discrimination:
+    raise NotImplementedError
+else:
+    discriminator_layers.append(affine_layer(2 * h_dim, Tanh(), name='d2'))
+discriminator_layers.append(affine_layer(1, Logistic(), name='d3'))
+discriminator = Sequential(discriminator_layers)
 
 # TODO discriminator pre-training
 
@@ -111,8 +149,8 @@ mean_cost_g = ng.mean(loss_g, out_axes=[])
 
 optimizer_d = make_optimizer(name='discriminator_optimizer')
 optimizer_g = make_optimizer(name='generator_optimizer')
-updates_d = optimizer_d(loss_d, variable_scope=d_scope)
-updates_g = optimizer_g(loss_g, variable_scope=g_scope)
+updates_d = optimizer_d(loss_d, subgraph=discriminator)
+updates_g = optimizer_g(loss_g, subgraph=generator)
 
 discriminator_train_outputs = {'batch_cost': mean_cost_d, 'updates': updates_d}
 generator_train_outputs = {'batch_cost': mean_cost_g, 'updates': updates_g}

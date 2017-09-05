@@ -1,8 +1,22 @@
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+
 import pytest
 import numpy as np
 import ngraph as ng
 from ngraph.testing import executor, assert_allclose
-
 
 np.random.seed(0)
 
@@ -27,15 +41,16 @@ def extra_axes(request):
     return request.param
 
 
-def test_sum(transformer_factory, num_units, sequence_length, batch_size):
+@pytest.config.flex_skip(reason="Strange behaviour of tests for flex, "
+                                "most cases run as first pass others fail")
+@pytest.mark.transformer_dependent
+def test_sum(num_units, sequence_length, batch_size):
     """
     This tests for a non-deterministic error that arose in ng.sum following
     a dot product using the gpu transformer.
     """
-
     shape = (num_units, sequence_length, batch_size)
     np_inp = np.random.uniform(-1, 1, shape)
-
     # Use an identity weight matrix on top of it
     np_w = np.eye(shape[0])
 

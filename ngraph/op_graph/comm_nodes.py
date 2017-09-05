@@ -13,13 +13,12 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-
 import multiprocessing
-
+import collections
 from orderedset import OrderedSet
-
-from ngraph.op_graph.op_graph import TensorOp, make_axes, make_axis, compute_reduction_axes, \
+from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
     MutateInsteadOfCopyWithNewArgsMixin
+from ngraph.op_graph.axes import Axes, make_axes, make_axis
 
 
 def calculate_gather_axes(axes, gather_axis, num_devices):
@@ -29,20 +28,17 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
     return new_axes
 
 
-def calculate_scatter_axes(axes, scatter_axis, num_devices):
-    new_axes = list()
-    for a in axes:
-        if scatter_axis == a and scatter_axis.length == a.length:
-            assert a.length % num_devices == 0, '{} can not be equally paralleled by {}'\
-                .format(scatter_axis, num_devices)
+def set_parallel_axes(axes, parallel_axis):
+    new_axes = []
+    for axis in Axes.as_nested_list(axes):
+        if axis == parallel_axis:
+            axis = parallel_axis
+        elif isinstance(axis, collections.Iterable):
+            # flattened axis
+            axis = [parallel_axis if a == parallel_axis else a for a in axis]
+        new_axes.append(axis)
 
-            new_length = a.length // num_devices
-            new_axis = make_axis(new_length, a.name)
-            new_axes.append(new_axis)
-        else:
-            new_axes.append(a)
-    new_axes = make_axes(new_axes)
-    return new_axes
+    return make_axes(new_axes)
 
 
 def get_slices(axes, parallel_axis, num_devices):
@@ -161,6 +157,9 @@ class ScatterSendOp(SendOp):
         self._slices = get_slices(self.axes,
                                   to_node.metadata['parallel'],
                                   len(self.to_id))
+        assert to_node.metadata.get('parallel', None) is not None, \
+            "to_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = to_node.metadata['parallel']
 
     @property
     def slices(self):
@@ -180,6 +179,9 @@ class ScatterRecvOp(RecvOp):
         super(ScatterRecvOp, self).__init__(to_node, send_node,
                                             fragment_axis=to_node.metadata['parallel'],
                                             fragments=len(to_node.metadata['device_id']))
+        assert to_node.metadata.get('parallel', None) is not None, \
+            "to_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = to_node.metadata['parallel']
 
 
 class GatherSendOp(SendOp):
@@ -192,6 +194,9 @@ class GatherSendOp(SendOp):
 
     def __init__(self, from_node):
         super(GatherSendOp, self).__init__(from_node)
+        assert from_node.metadata.get('parallel', None) is not None, \
+            "from_node must have a specified parallel attribute in metadata"
+        self.metadata['parallel'] = from_node.metadata['parallel']
 
 
 class GatherRecvOp(RecvOp):
@@ -210,6 +215,8 @@ class GatherRecvOp(RecvOp):
                                            fragment_axis=from_node.metadata['parallel'],
                                            fragments=len(from_node.metadata['device_id']))
         self.metadata['marker'] = 'gather'
+        assert from_node.metadata.get('parallel', None) is not None, \
+            "from_node must have a specified parallel attribute in metadata"
         self.metadata['parallel'] = from_node.metadata['parallel']
         self.from_id = from_node.metadata['device_id']
         # use _slices to avoid serialization
