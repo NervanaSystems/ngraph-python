@@ -222,7 +222,7 @@ instance::
                 self.append("np.prod({}, axis=0, out={})", x, out)
 
    In ``ngraph/transformers/gputransform.py``, add the following in the
-   ``ElementWiseKernel`` class for ethe lement-wise CUDA C kernel. Here, ops are
+   ``ElementWiseKernel`` class for the element-wise CUDA C kernel. Here, ops are
    first buffered in a list, and then the kernel is compiled at the end. ::
 
         class ElementWiseKernel(GPUKernel):
