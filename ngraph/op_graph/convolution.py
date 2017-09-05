@@ -137,11 +137,6 @@ class DeconvolutionOp(TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if not inputs.axes[0] == filters.axes[0]:
-            raise ValueError((
-                'the first axis in input {inputs} and filter {filters} are not the same.'
-            ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
-
         expected_keys = ['pad_h', 'pad_w', 'pad_d', 'str_h', 'str_w',
                          'str_d', 'dil_h', 'dil_w', 'dil_d']
         # TODO: maybe we should assume no padding and no dilation when

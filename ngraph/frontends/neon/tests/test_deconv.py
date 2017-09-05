@@ -15,6 +15,7 @@
 import pytest
 import numpy as np
 import ngraph as ng
+from ngraph.frontends.common import utils
 from ngraph.frontends.neon import Deconvolution, ConstantInit
 from ngraph.testing import executor
 
@@ -69,3 +70,22 @@ def test_deconv():
         result3 = filter_val_nz.copy()
         result3[0, 0] = 26
         assert (feature_map[-5:, -5:] == result3).all()
+
+
+@pytest.mark.parametrize("input_size", (10, 25))
+@pytest.mark.parametrize("filter_size", (3, 4))
+@pytest.mark.parametrize("padding", ((0, 0), (3, 4)))
+@pytest.mark.parametrize("stride", (1, 3))
+def test_conv_inverts_deconv(input_size, filter_size, padding, stride):
+    """ Test that conv and deconv are inverse operations given the same parameters"""
+
+    # convolutions whose output size are not an even multiple of stride cannot be exactly inverted
+    a = (input_size + sum(padding) - filter_size) % stride
+    conv_output = utils.conv_output_dim(input_size, filter_size, padding, stride)
+    deconv_output = utils.deconv_output_dim(conv_output, filter_size, padding, stride)
+
+    assert deconv_output == (input_size - a), ("Convolution and Deconvolution do not invert:\n"
+                                               "output ({}) != input ({}) - a ({})\n"
+                                               "filter: {}, padding: {}, stride: {}"
+                                               ).format(deconv_output, input_size, a,
+                                                        filter_size, padding, stride)
