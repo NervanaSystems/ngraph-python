@@ -143,8 +143,8 @@ def get_mkl_layout(mkldnn, op, order, use_formats=True):
 
 def dbg_print_kernel(mkldnn, op, op_id):
     if (mkldnn.mkldnn_verbose):
-        # print
-        # print(op_id, op.name, op.axes)
+        print
+        print(op_id, op.name, op.axes)
         mkldnn.print_kernel(mkldnn.kernels[op.name])
 
 
@@ -306,8 +306,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # dimension contains beta parameter.
         weights_shape = [gamma_shape, bias_shape]
 
-        (inputs_layout, mkl_axes) = get_mkl_layout(
-            self.mkldnn, inputs, mkl_order, True)
+        (inputs_shape, inputs_layout) = self.get_arg_shape_and_layout(op, inputs, mkl_order)
+        # (inputs_layout, mkl_axes) = get_mkl_layout(
+        #    self.mkldnn, inputs, mkl_order, True)
         mean_layout = None
         variance_layout = None
 
@@ -387,6 +388,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if fprop_src.name in self.mkldnn.op_layouts:
             (fprop_src_layout, _) = self.mkldnn.op_layouts.get(fprop_src.name)
 
+        (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [4, 0, 2 ,3])
         mean_layout = None
         # if mean.name in self.mkldnn.kernels:
         #    mean_layout = self.mkldnn.op_layouts[mean.name]
@@ -421,8 +423,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 op.fprop.forwarded.name],
             self.mkldnn.kernels[
                 op.name])
-        mkl_order = get_order_from_axes(unflatten(delta).axes, mkl_axes)
-        out_axes = get_axes_mkl_order(unflatten(op).axes, mkl_order)
+        # mkl_order = get_order_from_axes(unflatten(delta).axes, mkl_axes)
+        out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
@@ -741,7 +743,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(Add)
     def visit(self, op, x, y):
         # Disable for now since we are seeing perf slowdowns
-        return
+        # return
 
         # Sanity check for tensor shapes
         if (op.dtype.type != np.float32):
@@ -749,9 +751,15 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if len(x.shape) != 5 or len(y.shape) != 5:
             return
 
+        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(x))
+        if self.get_exop(x).output_decls[arg_idx].tensor_view_decl.mkl_layout is None:
+	          return
+
+        (_, input_axes) = self.get_exop(x).output_decls[arg_idx].tensor_view_decl.mkl_layout
+        mkl_order = get_order_from_axes(op.axes, input_axes)
         data_type = self.mkldnn.datatype[op.dtype.type]
-        (x_shape, x_layout) = self.get_arg_shape_and_layout(op, x, list(range(len(x.axes))))
-        (y_shape, y_layout) = self.get_arg_shape_and_layout(op, y, list(range(len(y.axes))))
+        (x_shape, x_layout) = self.get_arg_shape_and_layout(op, x, mkl_order)
+        (y_shape, y_layout) = self.get_arg_shape_and_layout(op, y, mkl_order)
         out_shape = op.axes.lengths
 
         op_id = len(self.mkldnn.kernels)
@@ -764,7 +772,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             x_layout, y_layout,
             2,
             data_type, self.mkldnn.kernels[op.name])
-        # Output in ngraph layout. Dont need set_mkl_layout
+        
+        out_axes = get_axes_mkl_order(op.axes, mkl_order)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(ContiguousOp)
