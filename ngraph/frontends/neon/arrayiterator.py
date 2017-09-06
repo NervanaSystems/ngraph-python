@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division, print_function
 import numpy as np
 import ngraph as ng
 from future.utils import viewitems
@@ -23,7 +22,8 @@ import collections
 
 class ArrayIterator(object):
 
-    def __init__(self, data_arrays, batch_size, total_iterations=None):
+    def __init__(self, data_arrays, batch_size,
+                 total_iterations=None, tgt_key='label'):
         """
         During initialization, the input data will be converted to backend tensor objects
         (e.g. CPUTensor or GPUTensor). If the backend uses the GPU, the data is copied over to the
@@ -35,10 +35,12 @@ class ArrayIterator(object):
             batch_size (int): number of examples in each minibatch
             total_iterations (int): number of minibatches to cycle through on this iterator.
                                     If not provided, it will cycle through all of the data once.
+            tgt_key (str): name of the target (labels) key in data_arrays
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
         self.axis_names = None
+        self.tgt_key = tgt_key
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v['data'] for k, v in data_arrays.items()}
             self.axis_names = {k: v['axes'] for k, v in data_arrays.items()}
@@ -122,23 +124,19 @@ class ArrayIterator(object):
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
 
-
-class SequentialArrayIterator(object):
+class SequentialArrayIterator2(object):
     def __init__(self, data_arrays, time_steps, batch_size,
                  total_iterations=None, reverse_target=False, get_prev_target=False,
-                 stride=None, include_iteration=False):
+                 stride=None, include_iteration=False, tgt_key='tgt_txt'):
         """
         Given an input sequence, generates overlapping windows of samples
-
         Input: dictionary of numpy arrays
             data_arrays[key] : Numpy array of shape (S, D).
                                 S is length of sequence
                                 D is input feature dimension
             Assumes each data_arrays[key] has the same length (S)
-
         Output of each iteration: Dictionary of input and output samples
             samples[key] has size (batch_size, time_steps, D)
-
         time_steps: Width of the rolling window (length of each input sequence) 
         batch_size: how many samples to return for each iteration
         total_iterations: number of batches to retrieve from the sequence (roll over if necessary)
@@ -147,14 +145,12 @@ class SequentialArrayIterator(object):
                 If None, defaults to time_steps (no overlap of consecutive samples)
         Example:
             data_arrays['data1'] is a numpy array with shape (S, 1): [a1, a2, ..., aS]
-
             Each generated sample will be an input sequence / output sequence pairs such as:
                 sample['data1'] is nparray of size (batch_size, S, 1): 
                     sample['data1'][0] : [a1, a2, ..., a(time_steps)]
                     sample['data1'][1] : [a(stride +1), a(stride+2), ..., a(stride+time_steps)]
                         ...
             Each iteration will return batch_size number of samples
-
             If stride = 1, the window will shift by one
                 sample['data1'][0] and sample['data1'][1] will have (time_steps - 1) elements that are the same
             If stride = time_steps, they will have no overlapping elements
@@ -165,26 +161,25 @@ class SequentialArrayIterator(object):
         self.reverse_target = reverse_target
         self.batch_size = batch_size
         self.include_iteration = include_iteration
+        self.tgt_key = tgt_key
 
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
-            # These hard-coded names are preserved for backwards compatibility
-            # Example char_rae.py uses reverse_target and get_prev_target
             if self.reverse_target:
-                self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
+                self.data_arrays[self.tgt_key][:] = self.data_arrays[self.tgt_key][::-1]
 
             if self.get_prev_target:
-                self.data_arrays['prev_tgt'] = np.roll(self.data_arrays['tgt_txt'], shift=1, axis=2)
+                self.data_arrays['prev_tgt'] = np.roll(self.data_arrays[self.tgt_key], shift=1)
             
             # Get the size of feature dimension for each array 
-            self.feature_dims = {k: v.shape[1] if (len(v.shape) > 1) else 1 for k, v in viewitems(data_arrays)}
+            self.feature_dims = {k: v.shape[1] if (len(v.shape) > 1) else 1 for k, v in viewitems(self.data_arrays)}
 
             # Preallocate iterator arrays for each batch
             self.samples = {k: np.squeeze(np.zeros((self.batch_size,
                                                     self.seq_len,
                                                     self.feature_dims[k]),
                                                    dtype=v.dtype)) 
-                            for k, v in viewitems(data_arrays)}
+                            for k, v in viewitems(self.data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
 
@@ -230,12 +225,25 @@ class SequentialArrayIterator(object):
     def __iter__(self):
         """
         Returns a new minibatch of data with each call.
-
         Yields:
             dictionary: The next minibatch
                 samples[key]: numpy array with shape (batch_size, seq_len, feature_dim)
         """
+    
         while self.index < self.total_iterations:
+            strt_idx = (self.start + self.index * self.stride)
+            self.index += 1
+            sample_id = 0
+            for batch_idx in range(self.batch_size):
+                seq_start = strt_idx + (batch_idx * self.nbatches * self.seq_len)
+                idcs = np.arange(seq_start, seq_start + self.seq_len) % self.ndata
+                for key in self.data_arrays.keys():
+                    self.samples[key][batch_idx] = self.data_arrays[key][idcs]
+
+            if self.include_iteration is True:
+                self.samples['iteration'] = self.index
+            yield self.samples
+            """
             strt_idx = (self.start + self.index * self.batch_size * self.stride)
             end_idx = strt_idx + self.seq_len
             self.index += 1
@@ -250,3 +258,62 @@ class SequentialArrayIterator(object):
             if self.include_iteration is True:
                 self.samples['iteration'] = self.index
             yield self.samples
+            """
+            
+class SequentialArrayIterator(object):
+
+    def __init__(self, data_arrays, time_steps, batch_size,
+                 total_iterations=None, reverse_target=False,
+                 get_prev_target=False, tgt_key='tgt_txt'):
+        self.get_prev_target = get_prev_target
+        self.reverse_target = reverse_target
+
+        self.batch_size = batch_size
+        self.time_steps = time_steps
+        self.tgt_key = tgt_key
+        self.index = 0
+
+        if isinstance(data_arrays, dict):
+            self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
+        else:
+            raise ValueError("Must provide dict as input")
+
+        # just get an arbitrary element for len
+        self.ndata = len(six.next(six.itervalues(self.data_arrays)))
+        self.ndata = self.ndata // (self.batch_size * self.time_steps) * self.batch_size
+        self.ntokens = self.ndata * self.time_steps
+        self.nbatches = self.ndata // self.batch_size
+
+        if self.ndata < self.batch_size:
+            raise ValueError('Number of examples is smaller than the batch size')
+
+        self.total_iterations = self.nbatches if total_iterations is None else total_iterations
+
+        self.data_arrays = {k: x[:self.ntokens].reshape(
+            self.batch_size,
+            self.nbatches,
+            self.time_steps
+        ) for k, x in viewitems(self.data_arrays)}
+
+        if self.reverse_target:
+            self.data_arrays[self.tgt_key][:] = self.data_arrays[self.tgt_key][:, :, ::-1]
+
+        if self.get_prev_target:
+            self.data_arrays['prev_tgt'] = np.roll(self.data_arrays[self.tgt_key], shift=1, axis=2)
+
+    def make_placeholders(self):
+        ax.N.length = self.batch_size
+        ax.REC.length = self.time_steps
+
+        p_axes = ng.make_axes([ax.N, ax.REC])
+        return {k: ng.placeholder(p_axes) for k in self.data_arrays.keys()}
+
+    def reset(self):
+        self.index = 0
+
+    def __iter__(self):
+        while self.index < self.total_iterations:
+            idx = self.index % self.nbatches
+            self.index += 1
+
+            yield {k: np.squeeze(x[:, idx:(idx + 1), :]) for k, x in viewitems(self.data_arrays)}

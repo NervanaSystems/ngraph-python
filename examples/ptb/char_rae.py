@@ -28,10 +28,11 @@ from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
 from ngraph.frontends.neon import SequentialArrayIterator
+from ngraph.frontends.neon import SequentialArrayIterator2
 import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
-
+import copy
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
 parser.set_defaults(batch_size=128, num_iterations=2000)
@@ -46,22 +47,29 @@ gradient_clip_value = 5
 # set shift_target to be False, since it is going to predict the same sequence
 tree_bank_data = PTB(path=args.data_dir, shift_target=False)
 ptb_data = tree_bank_data.load_data()
-train_set = SequentialArrayIterator(ptb_data['train'],
+import pdb; pdb.set_trace()
+train_set = SequentialArrayIterator(copy.deepcopy(ptb_data['train']),
                                     batch_size=args.batch_size,
                                     time_steps=time_steps,
                                     total_iterations=args.num_iterations,
                                     reverse_target=True,
                                     get_prev_target=True)
-valid_set = SequentialArrayIterator(ptb_data['valid'],
+valid_set = SequentialArrayIterator(copy.deepcopy(ptb_data['valid']),
                                     batch_size=args.batch_size,
                                     time_steps=time_steps,
                                     total_iterations=10,
                                     reverse_target=True,
                                     get_prev_target=True)
+train_set2 = SequentialArrayIterator2(copy.deepcopy(ptb_data['train'].copy()),
+                                    batch_size=args.batch_size,
+                                    time_steps=time_steps,
+                                    total_iterations=args.num_iterations,
+                                    reverse_target=True,
+                                    get_prev_target=True)
+pdb.set_trace()
 
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
-
 
 def generate_samples(inputs, encode, decode, num_time_steps):
     """
