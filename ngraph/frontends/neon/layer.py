@@ -871,15 +871,17 @@ class Affine(Layer):
 
 class Convolution(SubGraph):
     """
-    Compute a 2D convolution over the input.
+    Compute a 1D to 3D convolution over the input.
 
-    A multi-part layer that computes a 2D convolution over its input. Following convolution,
+    A multi-part layer that computes a convolution over its input. Following convolution,
     it adds a bias or performs batch normalization, then passes the output through an activation
     function.
 
     Arguments:
-        filter_shape (tuple, dict): Filter shape expressed as (height, width, output_channels) or
-            {"H": height, "W": width, "K": output_channels}
+        filter_shape (tuple, dict): Filter shape expressed as one of (width, nout), (height,
+            width, nout), or (depth, height, width, nout) for 1D to 3D convolutions,
+            respectively. filter_shape also accepts a dict of the format {"H": height, "W": width,
+            "D": depth, "K": nout}
         filter_init (function): The filter initialization function
         strides (int, dict, optional): Filter strides. If strides is a dictionary, it should be
             formatted as {"H": str_h, "W": str_w}, where str_h and str_w should be integers.
@@ -913,15 +915,23 @@ class Convolution(SubGraph):
             width: The width axis with default name "W".
 
     Examples:
-        # Create a 5x5 convolutional layer with batch normalization and a ReLU activation
-        conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
-                           activation=Rectlin(), batch_norm=True)
-        output = conv(input)
+        .. code-block:: python
+           # Create a 5x5 convolutional layer with batch normalization and a ReLU activation
+           conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
+                              activation=Rectlin(), batch_norm=True)
+           output = conv(input)
 
-        # Convolve along the "time" axis of a spectrogram
-        conv = Convolution((nfrequencies, 11, 16), filter_init=GaussianInit(var=.05),
-                           padding="same", activation=Rectlin(), bias_init=ConstantInit(0))
-        output = conv(input, spatial_axes={"W": "time"})
+        .. code-block:: python
+           # Convolve along the "time" axis of a spectrogram
+           conv = Convolution((nfrequencies, 11, 16), filter_init=GaussianInit(var=.05),
+                              padding="same", activation=Rectlin(), bias_init=ConstantInit(0))
+           output = conv(input, spatial_axes={"W": "time"})
+           
+        .. code-block:: python
+           # Compute a 1-D causal convolution with filter width 2 and dilation 2
+           conv = Convolution((2, 16), filter_init=GaussianInit(var=.05), dilation=2,
+                              padding="causal", activation=Rectlin(), bias_init=ConstantInit(0))
+           output = conv(input)
     """
     def __init__(self, filter_shape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
@@ -959,17 +969,19 @@ class Convolution(SubGraph):
 
 class Deconvolution(Convolution):
     """
-    Compute a 2D deconvolution over the input. This is also commonly known as a transpose
+    Compute a 1D to 3D deconvolution over the input. This is also commonly known as a transpose
     convolution or a fractionally-strided convolution.
 
-    A multi-part layer that computes a 2D deconvolution over its input. Following convolution.
+    A multi-part layer that computes a deconvolution over its input. Following convolution.
     it adds a bias or performs batch normalization, then passes the output through an activation
     function. The specified strides, padding and dilation arguments are
     for the corresponding forward convolution.
 
     Arguments:
-        filter_shape (tuple, dict): Filter shape expressed as (height, width, output_channels) or
-            {"H": height, "W": width, "K": output_channels}
+        filter_shape (tuple, dict): Filter shape expressed as one of (width, nout), (height,
+            width, nout), or (depth, height, width, nout) for 1D to 3D deconvolutions,
+            respectively. filter_shape also accepts a dict of the format {"H": height, "W": width,
+            "D": depth, "K": nout}
         filter_init (function): The filter initialization function
         strides (int, dict, optional): Filter strides. If strides is a dictionary, it should be
             formatted as {"H": str_h, "W": str_w}, where str_h and str_w should be integers.
@@ -987,6 +999,9 @@ class Deconvolution(Convolution):
             default uses the identity function.
         batch_norm (bool, optional): Whether or not to apply batch normalization. Batch
             normalization contains its own bias, so if True, bias_init should not be supplied.
+        deconv_out_shape (tuple, optional): If given, trims the output to the specified
+            shape, given as (depth_size, height_size, width_size). Unused axes can be specified
+            as None.
 
     Attributes:
         conv (Layer): The `DeconvBase` layer that performs the deconvolution
@@ -1003,18 +1018,60 @@ class Deconvolution(Convolution):
             width: The width axis with default name "W".
 
     Examples:
-
+        .. code-block:: python
+           deconv = Deconvolution((1, 1, 16), filter_init=GaussianInit(var=.05), strides=1, 
+                                  padding=0, activation=Rectlin(), batch_norm=True)
+           output = deconv(input)
     """
     def __init__(self, filter_shape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
-                 activation=None, batch_norm=False, **kwargs):
+                 activation=None, batch_norm=False, deconv_out_shape=None, **kwargs):
         super(Deconvolution, self).__init__(filter_shape, filter_init,
                                             strides=strides, padding=padding, dilation=dilation,
                                             bias_init=bias_init, activation=activation,
                                             batch_norm=batch_norm, **kwargs)
+        self.deconv_out_shape = deconv_out_shape
 
     def _make_conv_layer(self, filter_shape, filter_init, strides, padding, dilation, **kwargs):
         self.conv = make_conv(filter_shape, filter_init, strides, padding, dilation,
                               deconv=True, **kwargs)
+
+    def _slice_output(self, output, spatial_axes):
+        """
+        Slice output to desired shape given by deconv_out_shape
+
+        Arguments:
+            output (TensorOp): tensor to slice
+            spatial_axes (tuple): names of spatial axes
+        """
+
+        if self.deconv_out_shape is None:
+            return output
+
+        if isinstance(spatial_axes, dict):
+            spatial_axes = tuple(spatial_axes.get(name, name)
+                                 for name in ("D", "H", "W"))
+        elif isinstance(spatial_axes, tuple):
+            if len(spatial_axes) < 3:
+                raise ValueError("spatial_axes must have length 3 (e.g. ('D', 'H', 'W'))")
+            spatial_axes = tuple(name if name else default
+                                 for name, default in zip(spatial_axes, ("D", "H", "W")))
+
+        slices = [slice(None)] * len(output.axes)
+        for ii, ax_name in enumerate(spatial_axes):
+            if ax_name in output.axes.names:
+                index = output.axes.names.index(ax_name)
+                out_size = output.axes[index].length
+                trim_size = self.deconv_out_shape[ii]
+                if trim_size > out_size:
+                    raise ValueError('specified {} output dimension {} is greater than {}'
+                                     .format(ax_name, trim_size, out_size))
+                elif trim_size < out_size:
+                    extra = out_size - trim_size
+                    start = extra // 2
+                    end = start + trim_size
+                    slices[index] = slice(start, end)
+
+        return ng.tensor_slice(output, slices)
 
     def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
         """
@@ -1027,7 +1084,8 @@ class Deconvolution(Convolution):
                                   to "D", "H", and "W"
         """
 
-        return super(Deconvolution, self).__call__(in_obj, channel_axes, spatial_axes)
+        output = super(Deconvolution, self).__call__(in_obj, channel_axes, spatial_axes)
+        return self._slice_output(output, spatial_axes)
 
 
 class BatchNorm(Layer):
