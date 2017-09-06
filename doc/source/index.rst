@@ -45,7 +45,7 @@
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Frontends
 
    neon.rst

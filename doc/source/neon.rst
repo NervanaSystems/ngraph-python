@@ -13,18 +13,8 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-
-
 neon
 ****
-
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-   :caption: Fundamentals
-
-   neon_axes.rst
 
 The neon frontend to ngraph provides common deep learning primitives, such as activation functions. optimizers, layers, and more. We include in this release several examples to illustrate how to use the neon frontend to construct your models:
 
