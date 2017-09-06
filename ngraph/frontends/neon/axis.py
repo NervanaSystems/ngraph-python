@@ -55,21 +55,21 @@ def is_shadow_axis(axis):
 
 def reorder_spatial_axes(tensor, channel_axis, spatial_axes):
     """
-    Reorders the axes of the input tensor in preparation for a spatial op (i.e. convolution, 
+    Reorders the axes of the input tensor in preparation for a spatial op (i.e. convolution,
     deconvolution, or pooling).
-    
+
     Arguments:
-        tensor (TensorOp): The input tensor whose axes must be a subset of those specified in 
+        tensor (TensorOp): The input tensor whose axes must be a subset of those specified in
             channel_axis, spatial_axes and a batch axis. Missing axes in tensor will be added.
         channel_axis (Axis, str): The axis or axis name to use as the "channel" axis type
-        spatial_axes (tuple of Axis or str): Tuple of axis or axis names to use as the "depth", 
+        spatial_axes (tuple of Axis or str): Tuple of axis or axis names to use as the "depth",
             "height", and "width" axis types, in that order.
-    
+
     Returns:
         tensor with 5 dimensions, ordered as "channel", "depth", "height", "width", "batch"
-        
+
     Raises:
-        IncompatibleAxesError: The tensors' axes are incompatible with spatial ops using the 
+        IncompatibleAxesError: The tensors' axes are incompatible with spatial ops using the
             given axis types.
     """
 

@@ -282,9 +282,9 @@ class ConvBase(Layer):
     Convolutional layer that performs 3D convolutions. This is used under-the-hood and should not
     be called directly.
 
-    This layer provides an interface to the core convolution support within ngraph. 1D and 2D 
-    convolutions are automatically represented as 3D convolutions, with extra axes 
-    temporarily introduced as needed. 
+    This layer provides an interface to the core convolution support within ngraph. 1D and 2D
+    convolutions are automatically represented as 3D convolutions, with extra axes
+    temporarily introduced as needed.
 
     Arguments:
         filter_shape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
@@ -296,7 +296,7 @@ class ConvBase(Layer):
             - (tuple): specifies left and right padding values individually
             - (str): one of "same", "valid", "full" or "causal"
         dilation (dict): dilation specification -- can contain keys 'D', 'H', 'W' - defaults to 1
-        
+
     Attributes:
         W (TensorOp): The convolutional filters. Axes are ordered as:
             C: input channels
@@ -307,7 +307,7 @@ class ConvBase(Layer):
         nout (int): The number of output channels
 
     Required Axis Types:
-        channel: The input channel axis with default name "C". Currently only one channel axis is 
+        channel: The input channel axis with default name "C". Currently only one channel axis is
                  supported.
         spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
             depth: The depth axis with default name "D".
@@ -485,15 +485,15 @@ class ConvBase(Layer):
 
 class DeconvBase(ConvBase):
     """
-    Deconvolutional layer that performs 3D deconvolutions (otherwise known as transpose 
+    Deconvolutional layer that performs 3D deconvolutions (otherwise known as transpose
     convolutions or fractionally-strided convolutions).  This is used under-the-hood and should
     not be called directly.
-    
+
     This layer provides an interface to the core deconvolution support within ngraph. 1D and 2D
-    deconvolutions are automatically represented as 3D deconvolutions, with extra axes 
-    temporarily introduced as needed. The specified strides, padding and dilation arguments are 
+    deconvolutions are automatically represented as 3D deconvolutions, with extra axes
+    temporarily introduced as needed. The specified strides, padding and dilation arguments are
     for the corresponding forward convolution.
-       
+
     Arguments:
         filter_shape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
         init (function): function for later initializing filters
@@ -502,9 +502,9 @@ class DeconvBase(ConvBase):
             padding value can be one of:
             - (int): specifies a symmetric padding value
             - (tuple): specifies left and right padding values individually
-            - (str): one of "same", "valid", "full" or "causal" 
+            - (str): one of "same", "valid", "full" or "causal"
         dilation (dict): dilation specification -- can contain keys 'D', 'H', 'W' - defaults to 1
-        
+
     Attributes:
         W (TensorOp): The deconvolutional filters. Axes are ordered as:
             K: output channels
@@ -515,7 +515,7 @@ class DeconvBase(ConvBase):
         nout (int): The number of output channels
 
     Required Axis Types:
-        channel: The input channel axis with default name "C". Currently only one channel axis is 
+        channel: The input channel axis with default name "C". Currently only one channel axis is
                  supported.
         spatial: The spatial axes over which to deconvolve. Currently must be between 1 and 3.
             depth: The depth axis with default name "D".
@@ -580,7 +580,7 @@ def make_conv(filter_shape, init, strides, padding, dilation, deconv=False,
                              "specifying the filter size for 1 to 3 spatial dimensions and the "
                              "number of filters. Provided: {}".format(filter_shape))
         axis_names = {2: "WK", 3: "HWK", 4: "DHWK"}[len(filter_shape)]
-        default_filter_shape.update(zip(axis_names, filter_shape))
+        default_filter_shape.update(list(zip(axis_names, filter_shape)))
         filter_shape = default_filter_shape
     else:
         axis_names = filter_shape.keys()
@@ -622,7 +622,7 @@ class PoolBase(Layer):
     directly.
 
     This layer provides an interface to the core pooling support within ngraph. Lower dimensional
-    pooling operations are automatically represented as 4D poolings, with extra axes temporarily 
+    pooling operations are automatically represented as 4D poolings, with extra axes temporarily
     introduced as needed.
 
     Arguments:
@@ -636,7 +636,7 @@ class PoolBase(Layer):
         pool_type (str): type of pooling -- can be one of 'max' or 'avg', case-insensitive
 
     Required Axis Types:
-        channel: The input channel axis with default name "C". Currently only one channel axis is 
+        channel: The input channel axis with default name "C". Currently only one channel axis is
                  supported.
         spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
             depth: The depth axis with default name "D".
@@ -771,23 +771,23 @@ class Pooling(PoolBase):
     Pooling layer that performs 1D to 4D pooling
 
     Arguments:
-        pool_shape (tuple, dict): Pooling shape expressed as one of (width,), (height, width), 
-            (depth, height, width), or (channel, depth, height, width) for 1D to 4D pooling, 
-            respectively. pool_shape also accepts a dict of the format {"H": height, "W": width, 
-            "D": depth, "C": channels} 
-        strides (int, dict): Pooling stride value. If strides is a dict, must specify all axes 
+        pool_shape (tuple, dict): Pooling shape expressed as one of (width,), (height, width),
+            (depth, height, width), or (channel, depth, height, width) for 1D to 4D pooling,
+            respectively. pool_shape also accepts a dict of the format {"H": height, "W": width,
+            "D": depth, "C": channels}
+        strides (int, dict): Pooling stride value. If strides is a dict, must specify all axes
             given in pool_shape as e.g. {"W": width}.
         padding (int, tuple, str, dict): Input paddings. A padding value can be one of:
             - (int): specifies a symmetric padding value
             - (tuple): specifies left and right padding values individually
             - (str): one of "same", "valid", "full" or "causal"
-            - (dict): specified as name: value, where name is one of 'C', 'D', 'H', or 'W' and 
-                      value is one of the above.  
+            - (dict): specified as name: value, where name is one of 'C', 'D', 'H', or 'W' and
+                      value is one of the above.
         pool_type (str): Type of pooling to perform. Currently available are 'max' and 'avg',
             case-insensitive
 
     Required Axis Types:
-        channel: The input channel axis with default name "C". Currently only one channel axis is 
+        channel: The input channel axis with default name "C". Currently only one channel axis is
                  supported.
         spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
             depth: The depth axis with default name "D".
@@ -803,7 +803,7 @@ class Pooling(PoolBase):
                                  "specifying the pooling size for the channel axis and 1 to 3 "
                                  "spatial dimensions. Provided: {}".format(pool_shape))
             axis_names = {1: "W", 2: "HW", 3: "DHW", 4: "CDHW"}[len(pool_shape)]
-            default_pool_shape.update(zip(axis_names, pool_shape))
+            default_pool_shape.update(list(zip(axis_names, pool_shape)))
             pool_shape = default_pool_shape
         else:
             axis_names = pool_shape.keys()
@@ -872,11 +872,11 @@ class Affine(Layer):
 class Convolution(SubGraph):
     """
     Compute a 2D convolution over the input.
-    
-    A multi-part layer that computes a 2D convolution over its input. Following convolution, 
-    it adds a bias or performs batch normalization, then passes the output through an activation 
+
+    A multi-part layer that computes a 2D convolution over its input. Following convolution,
+    it adds a bias or performs batch normalization, then passes the output through an activation
     function.
-    
+
     Arguments:
         filter_shape (tuple, dict): Filter shape expressed as (height, width, output_channels) or
             {"H": height, "W": width, "K": output_channels}
@@ -887,8 +887,8 @@ class Convolution(SubGraph):
             - (int): specifies a symmetric padding value
             - (tuple): specifies left and right padding values individually
             - (str): one of "same", "valid", "full" or "causal"
-            - (dict): specified as {"H": pad_h, "W": pad_w} where pad_h and pad_w are one of the 
-                      above. 
+            - (dict): specified as {"H": pad_h, "W": pad_w} where pad_h and pad_w are one of the
+                      above.
         dilation (int, dict, optional): Filter dilations. If dilation is a dictionary, it should be
             formatted as {"H": dil_h, "W": dil_w}, where dil_h and dil_w should be integers.
         bias_init (function, optional): The bias initialization function. If bias_init is None,
@@ -897,21 +897,21 @@ class Convolution(SubGraph):
             default uses the identity function.
         batch_norm (bool, optional): Whether or not to apply batch normalization. Batch
             normalization contains its own bias, so if True, bias_init should not be supplied.
-                
+
     Attributes:
         conv (Layer): The `ConvBase` layer that performs the convolution
         bias (Layer): The `Bias` layer that performs bias addition
         batch_norm (Layer): The `BatchNorm` layer that performs batch normalization
         activation (Layer): The `Activation` layer to transform the output
-    
+
     Required Axis Types:
-        channel: The input channel axis with default name "C". Currently only one channel axis is 
+        channel: The input channel axis with default name "C". Currently only one channel axis is
                  supported.
         spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
             depth: The depth axis with default name "D".
             height: The height axis with default name "H".
             width: The width axis with default name "W".
-             
+
     Examples:
         # Create a 5x5 convolutional layer with batch normalization and a ReLU activation
         conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
@@ -959,12 +959,12 @@ class Convolution(SubGraph):
 
 class Deconvolution(Convolution):
     """
-    Compute a 2D deconvolution over the input. This is also commonly known as a transpose 
+    Compute a 2D deconvolution over the input. This is also commonly known as a transpose
     convolution or a fractionally-strided convolution.
 
-    A multi-part layer that computes a 2D deconvolution over its input. Following convolution, 
-    it adds a bias or performs batch normalization, then passes the output through an activation 
-    function. The specified strides, padding and dilation arguments are 
+    A multi-part layer that computes a 2D deconvolution over its input. Following convolution.
+    it adds a bias or performs batch normalization, then passes the output through an activation
+    function. The specified strides, padding and dilation arguments are
     for the corresponding forward convolution.
 
     Arguments:
@@ -977,8 +977,8 @@ class Deconvolution(Convolution):
             - (int): specifies a symmetric padding value
             - (tuple): specifies left and right padding values individually
             - (str): one of "same", "valid", "full" or "causal"
-            - (dict): specified as {"H": pad_h, "W": pad_w} where pad_h and pad_w are one of the 
-                      above. 
+            - (dict): specified as {"H": pad_h, "W": pad_w} where pad_h and pad_w are one of the
+                      above.
         dilation (int, dict, optional): Filter dilations. If dilation is a dictionary, it should be
             formatted as {"H": dil_h, "W": dil_w}, where dil_h and dil_w should be integers.
         bias_init (function, optional): The bias initialization function. If bias_init is None,
@@ -995,7 +995,7 @@ class Deconvolution(Convolution):
         activation (Layer): The `Activation` layer to transform the output
 
     Required Axis Types:
-        channel: The input channel axis with default name "C". Currently only one channel axis is 
+        channel: The input channel axis with default name "C". Currently only one channel axis is
                  supported.
         spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
             depth: The depth axis with default name "D".

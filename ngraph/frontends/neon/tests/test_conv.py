@@ -49,8 +49,8 @@ def test_causal_convolution(conv1d_placeholder, spatial_onehot, output_size, wid
     conv_layer = Convolution((3, output_size), lambda x: 1, padding="causal")
     output = conv_layer(conv1d_placeholder)
     output_width = output.axes.find_by_name("W")[0].length
-    assert  output_width == width, "Causal convolution output width != " \
-                                   "input width: {} != {}".format(output_width, width)
+    assert output_width == width, "Causal convolution output width != " \
+                                  "input width: {} != {}".format(output_width, width)
     with executor(output, conv1d_placeholder) as comp:
         output_val = comp(spatial_onehot)
         # First 1 is at width // 2, so anything before that should be 0
@@ -63,11 +63,11 @@ def test_same_convolution(conv1d_placeholder, spatial_onehot, output_size, width
     conv_layer = Convolution((3, output_size), lambda x: 1, strides=stride, padding="same")
     output = conv_layer(conv1d_placeholder)
     output_width = output.axes.find_by_name("W")[0].length
-    assert  output_width == np.ceil(width / float(stride)), ("Same convolution output width != " 
-                                                             "ceil(input_width / stride): {} != "
-                                                             "ceil({} / {})").format(output_width,
-                                                                                     width,
-                                                                                     stride)
+    assert output_width == np.ceil(width / float(stride)), ("Same convolution output width != "
+                                                            "ceil(input_width / stride): {} != "
+                                                            "ceil({} / {})").format(output_width,
+                                                                                    width,
+                                                                                    stride)
 
 
 def test_axis_preservation(conv1d_placeholder, output_size):
@@ -106,9 +106,7 @@ def test_alternate_spatial_axes(conv1d_placeholder, output_size, width_axis):
     assert output.axes == conv1d_placeholder.axes
 
 
-
-
-def test_alternate_channel_axes(conv1d_placeholder ,output_size, channel_axis):
+def test_alternate_channel_axes(conv1d_placeholder, output_size, channel_axis):
     """ Test that channel axis names are modifiable"""
     channel_axis.name = "channel"
     assert len(conv1d_placeholder.axes.find_by_name("channel")) == 1

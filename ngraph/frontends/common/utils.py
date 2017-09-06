@@ -96,8 +96,6 @@ def common_conv2d_pool_padding(input_NHWC, filter_HWIO, stride_NHWC, padding):
         return (0, 0, 0, 0)
 
 
-
-
 def squeeze_axes(inputs):
     """
     Removes axes with length of 1 for each tensor.
@@ -217,10 +215,10 @@ def deconv_output_dim(X, S, padding, strides, dilation=1):
 def make_convparams(nout, filter_shape, strides, padding, dilation):
     """
     Make the convparams dictionary to be used by core ngraph
-    
+
     Arguments:
-        nout (int): Number of output filters 
-        filter_shape (dict): int filter shape with keys of "D", "H", and "W" 
+        nout (int): Number of output filters
+        filter_shape (dict): int filter shape with keys of "D", "H", and "W"
         strides (dict): int strides with keys of "D", "H", and "W"
         padding: int padding with keys of "D", "H", and "W"
         dilation: int dilation with keys of "D", "H", and "W"
@@ -248,7 +246,7 @@ def make_poolparams(op, pool_shape, strides, padding):
 
     Arguments:
         op (str): One of the supported pooling op types. Currently ["avg", "max"].
-        pool_shape (dict): int filter shape with keys of "C", "D", "H", and "W" 
+        pool_shape (dict): int filter shape with keys of "C", "D", "H", and "W"
         strides (dict): int strides with keys of "C", "D", "H", and "W"
         padding: int padding with keys of "C", "D", "H", and "W"
 
@@ -270,16 +268,16 @@ def make_poolparams(op, pool_shape, strides, padding):
 
 class ConvParameters(object):
     """
-    Helper class to compute the output size and required padding for convolution and pooling 
+    Helper class to compute the output size and required padding for convolution and pooling
     operations.
-    
+
     Arguments:
         input_size (int): Length of the input
         filter_size (int): Length of the filter
         stride (int, optional): Filter stride
         dilation (int, optional): Filter dilation for dilated / atrous convolutions
         pooling (bool, optional): Whether the computation is for a pooling op.
-        
+
     Raises:
         ValueError: If the parameters produce invalid output or padding values
     """
@@ -297,18 +295,18 @@ class ConvParameters(object):
         Get the padding size
 
         Arguments:
-            padding (int, tuple, or str): Desired padding value. int values produce symmetric 
+            padding (int, tuple, or str): Desired padding value. int values produce symmetric
                 padding. tuple values are passed through as-is. str values can be one of:
                 - valid: No padding
                 - same: Padding to produce the same output size as ceil(input_size / stride)
-                - causal: Padding to offset the filter so outputs only rely on leftward 
+                - causal: Padding to offset the filter so outputs only rely on leftward
                           values of the input
-                - full: Padding such that the output contains all points with nonzero overlap 
+                - full: Padding such that the output contains all points with nonzero overlap
                         between the filters and the input
 
         Returns:
             Tuple of padding integers
-        
+
         Raises:
             ValueError: If padding is a str and not in the support str values
         """
@@ -335,18 +333,18 @@ class ConvParameters(object):
         Get the output size following convolution or pooling
 
         Arguments:
-            padding (int, tuple, or str): Desired padding value. int values produce symmetric 
+            padding (int, tuple, or str): Desired padding value. int values produce symmetric
                 padding. tuple values are passed through as-is. str values can be one of:
                 - valid: No padding
                 - same: Padding to produce the same output size as ceil(input_size / stride)
-                - causal: Padding to offset the filter so outputs only rely on leftward 
+                - causal: Padding to offset the filter so outputs only rely on leftward
                           values of the input
-                - full: Padding such that the output contains all points with nonzero overlap 
+                - full: Padding such that the output contains all points with nonzero overlap
                         between the filters and the input
 
         Returns:
             output size (int)
-        
+
         Raises:
             ValueError: If padding or output sizes are not valid
         """
@@ -390,7 +388,7 @@ class ConvParameters(object):
 
     def _get_valid_padding(self):
         """
-        'Valid' returns only outputs only when the input and filter overlap completely, so padding 
+        'Valid' returns only outputs only when the input and filter overlap completely, so padding
         is 0.
         """
         return (0, 0)
@@ -398,9 +396,9 @@ class ConvParameters(object):
     def _get_same_padding(self):
         """
         'Same' returns outputs
-        
+
         Notes:
-            See https://www.tensorflow.org/api_guides/python/nn#Notes_on_SAME_Convolution_Padding 
+            See https://www.tensorflow.org/api_guides/python/nn#Notes_on_SAME_Convolution_Padding
             for a good reference
         """
 
@@ -424,7 +422,3 @@ class ConvParameters(object):
 
     def _get_caffe_full_padding(self):
         raise NotImplementedError()
-
-
-
-

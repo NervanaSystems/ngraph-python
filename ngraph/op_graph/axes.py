@@ -440,11 +440,11 @@ class Axes(object):
         Get multiple axis objects by their names
 
         Arguments:
-            *names: One name for each axis to return   
+            *names: One name for each axis to return
 
         Returns:
             Axis or tuple: Returns the requested axis. If multiple are requested, returns a tuple.
-            
+
         Raises:
             KeyError: If a name is not found.
         """
