@@ -926,7 +926,7 @@ class Convolution(SubGraph):
            conv = Convolution((nfrequencies, 11, 16), filter_init=GaussianInit(var=.05),
                               padding="same", activation=Rectlin(), bias_init=ConstantInit(0))
            output = conv(input, spatial_axes={"W": "time"})
-           
+
         .. code-block:: python
            # Compute a 1-D causal convolution with filter width 2 and dilation 2
            conv = Convolution((2, 16), filter_init=GaussianInit(var=.05), dilation=2,
@@ -1019,7 +1019,7 @@ class Deconvolution(Convolution):
 
     Examples:
         .. code-block:: python
-           deconv = Deconvolution((1, 1, 16), filter_init=GaussianInit(var=.05), strides=1, 
+           deconv = Deconvolution((1, 1, 16), filter_init=GaussianInit(var=.05), strides=1,
                                   padding=0, activation=Rectlin(), batch_norm=True)
            output = deconv(input)
     """
