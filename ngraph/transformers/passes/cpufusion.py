@@ -365,7 +365,6 @@ class CPUFusion(GraphRewritePass):
 
         dx1 = Add(dxmu1, dxmu2_div_plus_dxmu2)
         dxmu1_mul = Multiply(Sum(ng.negative(dxmu1)), mean_1)
-        # dxmu1_div = Divide(dxmu1_mul, Sum(input_tensor))
         dxmu1_div = Divide(dxmu1_mul, Sum(flatten_tensor))
         dxmu1_div_w_broadcast = ng.PatternSkipOp(dxmu1_div,
                                                  (lambda op: isinstance(op, BroadcastOp)))
@@ -413,7 +412,6 @@ class CPUFusion(GraphRewritePass):
         mean_bcast = ng.PatternSkipOp(mean, lambda op: isinstance(op, BroadcastOp))
         # (in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))
         mul_op_1 = ng.multiply(ng.subtract(flatten_tensor, mean_bcast), reciprocal_op_w_braodcast)
-        # mul_op_1 = ng.multiply(ng.subtract(in_obj, mean), reciprocal_op_w_braodcast)
         # "self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps)))
         MultiplyGamma = ng.multiply(mul_op_1, gamma)
         # self.gamma * ((in_obj - xmean) * ng.reciprocal(ng.sqrt(xvar + self.eps))) + self.beta

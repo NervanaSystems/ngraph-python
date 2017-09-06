@@ -40,7 +40,6 @@ class Mkldnn(object):
             'chwn': 7,
         }
         self.kernels = dict()        # MKL Op kernels
-        self.op_layouts = dict()     # Layout objects owned by MKLDNN
         self.native_layouts = []     # Layout objects owned by transformer
         try:
             self.mkllib = ct.CDLL(engine_path)
