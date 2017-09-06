@@ -45,9 +45,9 @@ image_size = 224
 X_train = np.random.uniform(-1, 1, (args.batch_size, 3, image_size, image_size))
 y_train = np.ones(shape=(args.batch_size), dtype=np.int32)
 train_data = {'image': {'data': X_train,
-                        'axes': ('batch', 'C', 'height', 'width')},
+                        'axes': ('N', 'C', 'H', 'W')},
               'label': {'data': y_train,
-                        'axes': ('batch',)}}
+                        'axes': ('N',)}}
 train_set = ArrayIterator(train_data,
                           batch_size=args.batch_size,
                           total_iterations=args.num_iterations)

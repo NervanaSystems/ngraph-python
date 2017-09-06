@@ -55,7 +55,7 @@ class Layer(SubGraph):
     def __init__(self, name=None, **kwargs):
         super(Layer, self).__init__(name=name, **kwargs)
 
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         raise NotImplementedError()
 
     @property
@@ -184,7 +184,7 @@ class Linear(Layer):
         self.W = None
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, reuse=True):
+    def __call__(self, in_obj, reuse=True, **kwargs):
 
         if not self.initialized:
             self.W = ng.variable(axes=(ng.make_axes(self.axes_map.keys()) +
@@ -239,7 +239,7 @@ class LookupTable(Layer):
         return init_w
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         """
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
@@ -419,7 +419,7 @@ class ConvBase(Layer):
                               axes=output_axes)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
         """
         Arguments:
             in_obj (Op): Input op
@@ -608,7 +608,7 @@ class Activation(Layer):
         self.transform = transform
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         # An activation layer with no transform defaults to identity
         if self.transform:
             return self.transform(in_obj)
@@ -733,7 +733,7 @@ class PoolBase(Layer):
                           axes=output_axes)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
         """
         Pool over in_obj
 
@@ -833,7 +833,7 @@ class Bias(Layer):
         self.shared = shared
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         if not self.initialized:
             w_axes = in_obj.axes.feature_axes()
             if self.shared and in_obj.axes.channel_axis() is not None:
@@ -861,7 +861,7 @@ class Affine(Layer):
         self.activation_layer = Activation(transform=self.activation)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         l_out = self.linear(in_obj)
         # TODO: This is a bit convoluted. Need to clean it up.
         b_out = self.bias(l_out) if not self.batch_norm else l_out
@@ -949,7 +949,7 @@ class Convolution(SubGraph):
                               deconv=False, **kwargs)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
         """
         Compute a convolution over in_obj
 
@@ -1073,7 +1073,7 @@ class Deconvolution(Convolution):
 
         return ng.tensor_slice(output, slices)
 
-    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W")):
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
         """
         Compute a deconvolution over in_obj
 
@@ -1124,7 +1124,7 @@ class BatchNorm(Layer):
         self.gvar = None
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
 
         in_axes = in_obj.axes
         if in_axes.channel_axis() is None:
@@ -1187,7 +1187,7 @@ class Dropout(Layer):
         self.mask = None
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         if Layer.inference_mode:
             return self.keep * in_obj
         else:
@@ -1296,7 +1296,7 @@ class Recurrent(Layer):
         return self.activation(h_rec + h_ff + self.b)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, init_state=None):
+    def __call__(self, in_obj, init_state=None, **kwargs):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -1418,7 +1418,7 @@ class BiRNN(Layer):
                                  return_sequence=return_sequence, backward=True)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, init_state=None):
+    def __call__(self, in_obj, init_state=None, **kwargs):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -1541,7 +1541,7 @@ class LSTM(Recurrent):
         return [h, c]
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, init_state=None, return_cell_state=False):
+    def __call__(self, in_obj, init_state=None, return_cell_state=False, **kwargs):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -1757,7 +1757,7 @@ class BaseRNNCell(Layer):
         super(BaseRNNCell, self).__init__(**kwargs)
         self.cell_type = cell_type
 
-    def __call__(self, inputs, states):
+    def __call__(self, inputs, states, **kwargs):
         """
         Update the RNN cell for one time step. By definition,
         an RNN cell consumes a pair of inputs and states at a
@@ -1872,7 +1872,7 @@ class RNNCell(BaseRNNCell):
         return ('',)
 
     @SubGraph.scope_op_creation
-    def __call__(self, inputs, states, reset_cells=True):
+    def __call__(self, inputs, states, reset_cells=True, **kwargs):
         if states is None:
             batch_axis = inputs.axes.batch_axis()
             states = self.initialize_states(batch_axis,

@@ -165,13 +165,14 @@ if __name__ == "__main__":
                                         wdecay=0.0001,
                                         iteration=inputs['iteration'])
     label_indices = inputs['label']
-    train_loss = ng.cross_entropy_multi(resnet(inputs['image']),
+    train_loss = ng.cross_entropy_multi(resnet(inputs['image'],
+                                               spatial_axes={"H": "height", "W": "width"}),
                                         ng.one_hot(label_indices, axis=ax.Y))
     batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
     train_computation = ng.computation(batch_cost, "all")
 
     with Layer.inference_mode_on():
-        inference_prob = resnet(inputs['image'])
+        inference_prob = resnet(inputs['image'], spatial_axes={"H": "height", "W": "width"})
         errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
         eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(label_indices, axis=ax.Y))
         eval_loss_names = ['cross_ent_loss', 'misclass']
