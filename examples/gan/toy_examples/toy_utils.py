@@ -131,7 +131,7 @@ def generate_plot(plot_dir, iteration, data_in, output_g, output_d, train_data, 
     for key in train_data.keys():
         data = np.array(train_data[key]).T
         plt.plot(data[0], data[1])
-        plt.title(key + ' for ' + args.loss)
+        plt.title(key + ' for ' + args.loss_type)
         plt.xlabel('Iterations')
         plt.ylabel(key)
         plt.savefig(plot_dir + '/' + key + '.png')

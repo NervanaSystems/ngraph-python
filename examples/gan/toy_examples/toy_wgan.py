@@ -17,27 +17,44 @@
 WGAN and Gradient Penalty toy example
 Neon implementation of improved_wgan_training
 adapted from https://github.com/igul222/improved_wgan_training
+
+usage: python toy_wgan.py -b gpu -t 100000
 """
 from contextlib import closing
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import Adam, Affine, Rectlin, Sequential
 from ngraph.frontends.neon import ConstantInit, KaimingInit
 from ngraph.frontends.neon import make_bound_computation, NgraphArgparser
+from ngraph.frontends.neon.logging import ProgressBar
 import ngraph as ng
 import os
 import numpy as np
-from data import DataGenerator, NormalNoise, generate_plot
+from toy_utils import DataGenerator, NormalNoise, generate_plot
 
-dim = 512
-batch_size = 256
-num_iter = 1e5
-num_critic = 5
 
-plot_directory = "WGAN_Toy_Example_Plots"
-if not os.path.isdir(plot_directory):
-    os.makedirs(plot_directory)
+parser = NgraphArgparser()
+parser.add_argument('--plot_interval', type=int, default=200,
+                    help='Plot results every this many iterations')
+parser.add_argument('--loss_type', type=str, default="WGAN-GP", # WGAN, WGAN-GP
+                    help='Choose Wasserstein Loss (WGAN) or W-loss + Gradient Penalty (WGAN-GP)')
+parser.add_argument('--gp_scale', type=int, default=1,
+                    help='Scale of the gradient penalty')
+parser.add_argument('--w_clip', type=int, default=0.01,
+                    help='Weight clipping value for WGAN')
+parser.add_argument('--data_type', type=str, default="Roll", # Rectangular, Circular, Roll
+                    help='Choose ground truth distribution: Rectangular, Circular, Roll')
+parser.add_argument('--dim', type=int, default=512,
+                    help='Hidden layer dimension for the model')
+parser.add_argument('--num_critic', type=int, default=5,
+                    help='Number of discriminator iterations per generator iteration' )
+parser.add_argument('--plot_dir', type=str, default="WGAN_Toy_Plots",
+                    help='Directory name to save the results')
 
-data_type = "Roll"  # "Rectangular", "Circular", "Roll"
+args = parser.parse_args()
+np.random.seed(args.rng_seed)
+
+if not os.path.isdir(args.plot_dir):
+    os.makedirs(args.plot_dir)
 
 w_init = KaimingInit()
 b_init = ConstantInit()
@@ -49,67 +66,43 @@ def make_optimizer(name=None, weight_clip_value=None):
 
     return optimizer
 
+def make_generator(out_axis):
 
-def make_generator():
-
-    generator = [Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                 Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                 Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                 Affine(nout=2, weight_init=w_init, bias_init=b_init, activation=None)]
+    generator = [Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                 Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                 Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                 Affine(axes=out_axis, weight_init=w_init, bias_init=b_init, activation=None)]
 
     return Sequential(generator, name="Generator")
 
 
 def make_discriminator():
 
-    discriminator = [Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                     Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                     Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+    discriminator = [Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                     Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                     Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
                      Affine(nout=1, weight_init=w_init, bias_init=b_init, activation=None)]
 
     return Sequential(discriminator, name="Discriminator")
 
-
-parser = NgraphArgparser()
-parser.add_argument('--plot_interval', type=int, default=200)
-parser.add_argument('--seed', type=int, default=0)
-parser.add_argument('--loss', type=str, default="WGAN-GP")  # WGAN, WGAN-GP
-args = parser.parse_args()
-args.rng_seed = 0
-np.random.seed(args.rng_seed)
-args.batch_size = batch_size
+noise_dim = 2
+data_dim = 2
+N = ng.make_axis(name='N', length=args.batch_size)
+W = ng.make_axis(name='W', length=data_dim)
+z_ax = ng.make_axes([ng.make_axis(name='H', length=noise_dim),N])
+d_ax = ng.make_axes([W,N])
 
 # make placeholders
-N = ng.make_axis(name='N', length=args.batch_size)
-ax_names = 'CDHW'
-
-# noise placeholder
-noise_dim = (1, 1, 1, 2)
-noise_axes = ng.make_axes([ng.make_axis(name=nm, length=l)
-                           for nm, l in zip(ax_names, noise_dim)])
-
-z_ax = noise_axes + ng.make_axis(name='N', length=args.batch_size)
 z = ng.placeholder(axes=z_ax)
-
-# data placeholder
-data_dim = (1, 1, 1, 2)
-data_axes = ng.make_axes([ng.make_axis(name=nm, length=l)
-                          for nm, l in zip(ax_names, data_dim)])
-d_ax = data_axes + N
 data = ng.placeholder(axes=d_ax)
 
-generator = make_generator()
+generator = make_generator(out_axis=W)
 discriminator = make_discriminator()
 
 generated = generator(z)
 D1 = discriminator(data)
+D2 = discriminator(generated)
 
-# match the axes of the generated data to input data
-gen_cast = ng.cast_axes(generated, data.axes[3:])
-D2 = discriminator(gen_cast)
-
-
-grad_scale = 1  # gradient penalty multiplier
 
 # TODO
 # Original Implementation with epsilon - wait till fixed
@@ -117,20 +110,20 @@ grad_scale = 1  # gradient penalty multiplier
 # eps = ng.uniform(x)
 
 eps = ng.constant(0.5)  # delete after uniform works
-interpolated = eps * data + (1 - eps) * gen_cast
+interpolated = eps * data + (1 - eps) * generated
 
 D3 = discriminator(interpolated)
 gradient = ng.deriv(ng.sum(D3, out_axes=[]), interpolated)
 grad_norm = ng.L2_norm(gradient)
 gradient_penalty = ng.square(grad_norm - 1)
 
-if args.loss == "WGAN-GP":
-    gp = grad_scale * gradient_penalty
+if args.loss_type == "WGAN-GP":
+    gp = args.gp_scale * gradient_penalty
     weight_clipping = None
 
-elif args.loss == "WGAN":  # standard WGAN with no gradient penalty
+elif args.loss_type == "WGAN":  # standard WGAN with no gradient penalty
     gp = None
-    weight_clipping = 0.01
+    weight_clipping = args.w_clip
 
 if gp:
     loss_d = D1 - D2 + gp
@@ -150,8 +143,8 @@ updates_d = optimizer_d(loss_d, subgraph=discriminator)
 updates_g = optimizer_g(loss_g, subgraph=generator)
 
 # noise and data generators
-train_set = DataGenerator((1, 1, 1, 2, args.batch_size), 0, data_type=data_type)
-noise_gen = NormalNoise((1, 1, 1, 2, args.batch_size), 0)
+train_set = DataGenerator((data_dim, args.batch_size), 0, data_type=args.data_type)
+noise_gen = NormalNoise((noise_dim, args.batch_size), 0)
 
 # input and output dictionaries
 gen_train_inputs = {'noise': z}
@@ -178,13 +171,15 @@ with closing(ngt.make_transformer()) as transformer:
                   'Generator Cost': [],
                   'Log Gradient Norm': []}
 
-    for iteration in range(int(num_iter)):
+    progress_bar = ProgressBar(unit="iterations", ncols=100, total=args.num_iterations)
+    #TODO add logger as well 
+    for iteration in progress_bar(range(int(args.num_iterations))):
 
         for iter_g in range(1):
             noise_in = noise_gen.next()
             output_g = train_computation_g({'noise': noise_in})
 
-        for iter_d in range(num_critic):
+        for iter_d in range(args.num_critic):
             noise_in = noise_gen.next()
             data_in = train_set.next()
             output_d = train_computation_d({'noise': noise_in, 'data': data_in})
@@ -196,12 +191,11 @@ with closing(ngt.make_transformer()) as transformer:
             train_data['Log Gradient Norm'].append([iteration, np.log10(output_d['grad_norm'])])
 
         # report loss every 100 iterations
-        if iteration % 100 == 0:
-            msg = ("Iteration {} complete. \n"
-                   "Dis avg loss: {}, Gen avg loss: {}, Grad Norm:{}")
-            print(msg.format(iteration, float(output_d['batch_cost']),
-                             float(output_g['batch_cost']), float(output_d['grad_norm'])))
+        #if iteration % args.plot_interval == 0:
+        msg = ("Disc. loss: {:.2f}, Gen. loss: {:.2f}, Grad Norm: {:.2f}")
+        progress_bar.set_description(msg.format(float(output_d['batch_cost']),
+                                     float(output_g['batch_cost']), 
+                                     float(output_d['grad_norm'])))
 
-        if (iteration % 500) == 0:
-            print("Generating Plot")
-            generate_plot(plot_directory, iteration, data_in, output_g, output_d, train_data, args)
+        if (iteration % args.plot_interval) == 0:
+            generate_plot(args.plot_dir, iteration, data_in, output_g, output_d, train_data, args)
