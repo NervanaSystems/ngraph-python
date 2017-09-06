@@ -35,7 +35,7 @@ from ngraph.frontends.neon import (Layer, Sequential, Preprocess, BiRNN, Recurre
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import SequentialArrayIterator, SequentialArrayIterator2
+from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
@@ -58,13 +58,12 @@ hidden_size = 500
 # download penn treebank
 tree_bank_data = PTB(path=args.data_dir)
 ptb_data = tree_bank_data.load_data()
-train_set = SequentialArrayIterator2(ptb_data['train'], batch_size=args.batch_size,
+train_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_size,
                                     time_steps=time_steps, total_iterations=args.num_iterations)
 
-valid_set = SequentialArrayIterator2(ptb_data['valid'], batch_size=args.batch_size,
+valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_size,
                                     time_steps=time_steps)
 
-#import pdb; pdb.set_trace()
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
 
@@ -103,15 +102,10 @@ train_outputs = dict(batch_cost=batch_cost)
 with Layer.inference_mode_on():
     inference_prob = seq1(inputs['inp_txt'])
 
-errors = ng.not_equal(ng.argmax(inference_prob, reduction_axes=[ax.Y]), inputs['tgt_txt'])
-errors_last_char = ng.slice_along_axis(errors, ax.REC, time_steps - 1)
-
 eval_loss = ng.cross_entropy_multi(inference_prob,
                                    ng.one_hot(inputs['tgt_txt'], axis=ax.Y),
                                    usebits=True)
-eval_outputs = dict(cross_ent_loss=eval_loss,
-                    misclass_pct=errors,
-                    misclass_last_pct=errors_last_char)
+eval_outputs = dict(cross_ent_loss=eval_loss, results=inference_prob)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:
