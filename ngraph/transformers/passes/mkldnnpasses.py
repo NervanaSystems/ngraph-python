@@ -293,7 +293,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         mkl_order = [4, 0, 2, 3]
         data_type = self.mkldnn.datatype[op.dtype.type]
-        inputs_shape = get_size_mkl_order(inputs.axes, mkl_order)
         mean_size = mean.axes.lengths[0]
         mean_dims = 1
         gamma_shape = gamma.axes.lengths[0]
@@ -307,10 +306,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         weights_shape = [gamma_shape, bias_shape]
 
         (inputs_shape, inputs_layout) = self.get_arg_shape_and_layout(op, inputs, mkl_order)
-        # (inputs_layout, mkl_axes) = get_mkl_layout(
-        #    self.mkldnn, inputs, mkl_order, True)
-        mean_layout = None
-        variance_layout = None
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
@@ -330,8 +325,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             op.eps,
             inputs_layout,
             None,
-            mean_layout,
-            variance_layout,
             data_type,
             self.mkldnn.kernels[
                 op.name])
