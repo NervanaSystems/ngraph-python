@@ -180,6 +180,135 @@ class SequentialArrayIterator(object):
             yield {k: np.squeeze(x[:, idx:(idx + 1), :]) for k, x in viewitems(self.data_arrays)}
 
 
+class SequentialArrayIterator2(object):
+    def __init__(self, data_arrays, time_steps, batch_size,
+                 total_iterations=None, reverse_target=False, get_prev_target=False,
+                 stride=None, include_iteration=False):
+        """
+        Given an input sequence, generates overlapping windows of samples
+
+        Input: dictionary of numpy arrays
+            data_arrays[key] : Numpy array of shape (S, D).
+                                S is length of sequence
+                                D is input feature dimension
+            Assumes each data_arrays[key] has the same length (S)
+
+        Output of each iteration: Dictionary of input and output samples
+            samples[key] has size (batch_size, time_steps, D)
+
+        time_steps: Width of the rolling window (length of each input sequence) 
+        batch_size: how many samples to return for each iteration
+        total_iterations: number of batches to retrieve from the sequence (roll over if necessary)
+                         If set to None, will rotate through the whole sequence only once
+        stride: Shift of steps between two consecutive samples
+                If None, defaults to time_steps (no overlap of consecutive samples)
+        Example:
+            data_arrays['data1'] is a numpy array with shape (S, 1): [a1, a2, ..., aS]
+
+            Each generated sample will be an input sequence / output sequence pairs such as:
+                sample['data1'] is nparray of size (batch_size, S, 1): 
+                    sample['data1'][0] : [a1, a2, ..., a(time_steps)]
+                    sample['data1'][1] : [a(stride +1), a(stride+2), ..., a(stride+time_steps)]
+                        ...
+            Each iteration will return batch_size number of samples
+
+            If stride = 1, the window will shift by one
+                sample['data1'][0] and sample['data1'][1] will have (time_steps - 1) elements that are the same
+            If stride = time_steps, they will have no overlapping elements
+        """
+        self.data_array = data_arrays
+        self.seq_len = time_steps 
+        self.get_prev_target = get_prev_target
+        self.reverse_target = reverse_target
+        self.batch_size = batch_size
+        self.include_iteration = include_iteration
+
+        if isinstance(data_arrays, dict):
+            self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
+            # These hard-coded names are preserved for backwards compatibility
+            # Example char_rae.py uses reverse_target and get_prev_target
+            if self.reverse_target:
+                self.data_arrays['tgt_txt'][:] = self.data_arrays['tgt_txt'][:, :, ::-1]
+
+            if self.get_prev_target:
+                self.data_arrays['prev_tgt'] = np.roll(self.data_arrays['tgt_txt'], shift=1, axis=2)
+            
+            # Get the size of feature dimension for each array 
+            self.feature_dims = {k: v.shape[1] if (len(v.shape) > 1) else 1 for k, v in viewitems(data_arrays)}
+
+            # Preallocate iterator arrays for each batch
+            self.samples = {k: np.squeeze(np.zeros((self.batch_size,
+                                                    self.seq_len,
+                                                    self.feature_dims[k]),
+                                                   dtype=v.dtype)) 
+                            for k, v in viewitems(data_arrays)}
+        else:
+            raise ValueError("Must provide dict as input")
+
+        if (stride is None):
+            self.stride = time_steps
+        else:
+            self.stride = stride
+
+        self.start = 0
+        self.index = 0
+        # Get the total length of the sequence
+        # Assumes each value in data_arrays has the same length
+        self.ndata = len(six.next(six.itervalues(self.data_arrays)))
+
+        if self.nbatches < self.batch_size:
+            raise ValueError('Number of examples is smaller than the batch size')
+
+        self.total_iterations = self.nbatches if total_iterations is None else total_iterations
+
+    @property
+    def nbatches(self):
+        """
+        Return the number of minibatches in this dataset.
+        """
+        return ((self.ndata - self.start) // self.batch_size // self.stride)
+    
+    def make_placeholders(self):
+        ax.N.length = self.batch_size
+        ax.REC.length = self.seq_len
+
+        p_axes = ng.make_axes([ax.N, ax.REC])
+        return {k: ng.placeholder(p_axes) for k in self.data_arrays.keys()}
+
+    def reset(self):
+        """
+        Resets the starting index of this dataset to zero. Useful for calling
+        repeated evaluations on the dataset without having to wrap around
+        the last uneven minibatch. Not necessary when data is divisible by batch size
+        """
+        self.start = 0
+        self.index = 0
+
+    def __iter__(self):
+        """
+        Returns a new minibatch of data with each call.
+
+        Yields:
+            dictionary: The next minibatch
+                samples[key]: numpy array with shape (batch_size, seq_len, feature_dim)
+        """
+        while self.index < self.total_iterations:
+            strt_idx = (self.start + self.index * self.batch_size * self.stride)
+            end_idx = strt_idx + self.seq_len
+            self.index += 1
+            sample_id = 0
+            for batch_idx in range(self.batch_size):
+                idcs = np.arange(strt_idx + (batch_idx * self.stride),
+                                 end_idx + (batch_idx * self.stride)) % self.ndata
+                for key in self.data_arrays.keys():
+                    self.samples[key][sample_id] = self.data_arrays[key][idcs]
+
+                sample_id += 1
+            if self.include_iteration is True:
+                self.samples['iteration'] = self.index
+            yield self.samples
+
+
 class RollingWindowIterator(object):
 
     def __init__(self, data_array, batch_size, seq_len,

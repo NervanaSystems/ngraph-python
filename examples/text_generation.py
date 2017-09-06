@@ -25,13 +25,14 @@ Parameters:
 --seq_len : Length of each string input to the LSTM (number of chars, default 32)
 --predict_seq : If given in command line, the output of the LSTM will be a sequence
                 If not, only the next character is predicted
---use_embedding : If given in command line, first layer of the network is Embedding Layer
-                  If not, one hot encoding of characters is used
     Example:
         predict_seq True:
             Input ['My name is Georg'], Ground Truth Output: ['y name is George']
         predict_seq False:
             Input ['My name is Georg'], Ground Truth Output: ['e']
+
+--use_embedding : If given in command line, first layer of the network is Embedding Layer
+                  If not, one hot encoding of characters is used
 """
 from __future__ import division, print_function
 from builtins import range

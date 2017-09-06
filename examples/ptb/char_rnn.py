@@ -35,7 +35,7 @@ from ngraph.frontends.neon import (Layer, Sequential, Preprocess, BiRNN, Recurre
 from ngraph.frontends.neon import UniformInit, RMSProp
 from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import SequentialArrayIterator
+from ngraph.frontends.neon import SequentialArrayIterator, SequentialArrayIterator2
 import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
@@ -58,12 +58,13 @@ hidden_size = 500
 # download penn treebank
 tree_bank_data = PTB(path=args.data_dir)
 ptb_data = tree_bank_data.load_data()
-train_set = SequentialArrayIterator(ptb_data['train'], batch_size=args.batch_size,
+train_set = SequentialArrayIterator2(ptb_data['train'], batch_size=args.batch_size,
                                     time_steps=time_steps, total_iterations=args.num_iterations)
 
-valid_set = SequentialArrayIterator(ptb_data['valid'], batch_size=args.batch_size,
+valid_set = SequentialArrayIterator2(ptb_data['valid'], batch_size=args.batch_size,
                                     time_steps=time_steps)
 
+#import pdb; pdb.set_trace()
 inputs = train_set.make_placeholders()
 ax.Y.length = len(tree_bank_data.vocab)
 
