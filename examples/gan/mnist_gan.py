@@ -15,6 +15,13 @@
 """
 MNIST DCGAN, WGAN, WGAN with Gradient Penalty
 """
+# TODO 
+# change constant 0.5 to uniform random
+# once ng.uniform is fixed for GPU
+# https://github.com/NervanaSystems/private-ngraph/issues/2011
+# add affine before conv once that is corrected
+# https://github.com/NervanaSystems/private-ngraph/issues/2054
+
 import numpy as np
 from contextlib import closing
 import ngraph as ng
@@ -152,10 +159,7 @@ filter_init = KaimingInit()
 relu = Rectlin(slope=0)
 lrelu = Rectlin(slope=0.2)
 
-# TODO implement it using linear at the begining once fixed
 # generator network
-
-
 def make_generator(bn=True):
     deconv_layers = [Deconvolution((1, 1, 16), filter_init, strides=1, padding=0,
                                    activation=relu, batch_norm=bn),
@@ -175,8 +179,6 @@ def make_generator(bn=True):
     return Sequential(deconv_layers, name="Generator")
 
 # discriminator network
-
-
 def make_discriminator(bn=True, disc_activation=None):
     conv_layers = [Convolution((3, 3, 96), filter_init, strides=1, padding=1,
                                activation=lrelu, batch_norm=bn),
@@ -271,8 +273,6 @@ if args.loss_type == "WGAN-GP":
     args.plot_interval = 200
 
 # calculate gradient for all losses
-# TODO: change constant 0.5 to uniform random
-# once ng.uniform is fixed for GPU
 
 # x = ng.variable(initial_value=0.5, axes=[])
 # epsilon = ng.uniform(x)
@@ -285,8 +285,6 @@ gradient_penalty = ng.square(grad_norm - 1)
 
 # add gradient penalty
 if gp_scale:
-    # TODO: Simply having 0*gradient_penalty does not work
-    # This may be a problem in graph optimization
     loss_d = loss_d + gp_scale * gradient_penalty
 
 mean_cost_d = ng.mean(loss_d, out_axes=[])

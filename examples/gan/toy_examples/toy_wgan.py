@@ -20,6 +20,9 @@ adapted from https://github.com/igul222/improved_wgan_training
 
 usage: python toy_wgan.py -b gpu -t 100000
 """
+#TODO
+# Original Implementation with epsilon - wait till fixed
+# https://github.com/NervanaSystems/private-ngraph/issues/2011
 from contextlib import closing
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import Adam, Affine, Rectlin, Sequential
@@ -59,7 +62,6 @@ if not os.path.isdir(args.plot_dir):
 w_init = KaimingInit()
 b_init = ConstantInit()
 
-
 def make_optimizer(name=None, weight_clip_value=None):
     optimizer = Adam(learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
                      epsilon=1e-8, weight_clip_value=weight_clip_value)
@@ -74,7 +76,6 @@ def make_generator(out_axis):
                  Affine(axes=out_axis, weight_init=w_init, bias_init=b_init, activation=None)]
 
     return Sequential(generator, name="Generator")
-
 
 def make_discriminator():
 
@@ -104,8 +105,6 @@ D1 = discriminator(data)
 D2 = discriminator(generated)
 
 
-# TODO
-# Original Implementation with epsilon - wait till fixed
 # x = ng.variable(initial_value=0.5, axes=[])
 # eps = ng.uniform(x)
 
@@ -156,7 +155,6 @@ dis_train_outputs = {'batch_cost': mean_cost_d, 'updates': updates_d,
                      'grad_norm': mean_grad_norm}
 
 # training
-
 with closing(ngt.make_transformer()) as transformer:
 
     train_computation_g = make_bound_computation(transformer,
@@ -172,7 +170,7 @@ with closing(ngt.make_transformer()) as transformer:
                   'Log Gradient Norm': []}
 
     progress_bar = ProgressBar(unit="iterations", ncols=100, total=args.num_iterations)
-    #TODO add logger as well 
+
     for iteration in progress_bar(range(int(args.num_iterations))):
 
         for iter_g in range(1):
@@ -191,7 +189,6 @@ with closing(ngt.make_transformer()) as transformer:
             train_data['Log Gradient Norm'].append([iteration, np.log10(output_d['grad_norm'])])
 
         # report loss every 100 iterations
-        #if iteration % args.plot_interval == 0:
         msg = ("Disc. loss: {:.2f}, Gen. loss: {:.2f}, Grad Norm: {:.2f}")
         progress_bar.set_description(msg.format(float(output_d['batch_cost']),
                                      float(output_g['batch_cost']), 
