@@ -29,7 +29,6 @@ import numpy as np
 import collections
 from operator import itemgetter
 from orderedset import OrderedSet
-import re
 
 
 class MklReorderOp(TensorOp):
@@ -96,7 +95,7 @@ def get_strides_mkl_order(td, order):
         return [td.strides[index] for index in order]
 
 
-def get_native_layout(mkldnn, td, order, use_formats=False):
+def get_native_layout(mkldnn, td, order, use_formats=True):
     '''
     Create an MKL layout object in transformer-visible layout
     :param td: tensor description of the op. Currently owns tensor layout info in graph
@@ -135,7 +134,7 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     return (native_layout, mkl_axes)
 
 
-def get_mkl_layout(mkldnn, op, order, use_formats=False):
+def get_mkl_layout(mkldnn, op, order, use_formats=True):
     if op.name in mkldnn.op_layouts:
         return mkldnn.op_layouts[op.name]
     else:
@@ -167,7 +166,7 @@ def get_rotated_layout(mkldnn, in_layout, from_axes, to_axes):
     return new_layout
 
 
-def get_mkl_op_shape_and_layout(mkldnn, op, mkl_order, use_formats=False):
+def get_mkl_op_shape_and_layout(mkldnn, op, mkl_order, use_formats=True):
     op_axes_mkl = [op.axes[idx] for idx in mkl_order]
     mkl_shape = [a.length for a in op_axes_mkl]
     if op.name in mkldnn.op_layouts:
@@ -779,9 +778,17 @@ class MklAddLayoutConversions(PeepholeGraphPass):
     def init_mkldnn_reorder(self, op):
         (mkl_layout, mkl_axes) = op.in_layout
         check_flatten = False
-        # for axis_indx, each_axis in enumerate(op.axes):
-        #    if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened):
-        #        check_flatten = True
+        mkl_flattend_axis = False
+        # check if any one of axis in mkl_axes is Flattend
+        for axis in mkl_axes:
+            if isinstance(axis, FlattenedAxis):
+                mkl_flattend_axis = True
+
+        for axis_indx, each_axis in enumerate(op.axes):
+            if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened) \
+                    and not(mkl_flattend_axis):
+                check_flatten = True
+
         if check_flatten:
             mkl_axes_order = get_order_from_axes(unflatten(op).axes, mkl_axes)
         else:
@@ -819,16 +826,6 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         if op.name in self.mkldnn.kernels or op.name in self.mkldnn.op_layouts:
             # MKL Op or an MKL layout pass-through op
             return
-        # This checks if the Op is Flatten Op and belongs to neon_layer, if so
-        # then we don't need to insert MKL reorder Op, since flatten Op inserts
-        # Contigous Op in its contructor and coverts the op.args to framework
-        # layout.
-        # ex: ConvolutionOp -> MKL_reorder_Op ->Flatten -> bn_op can be reduced to
-        # ConvolutionOp -> Flatten -> bn_op
-        if 'neon_layer' in op.metadata.keys() and isinstance(op, Flatten):
-            metadata = op.metadata["neon_layer"].split("/")
-            if re.search("BatchNorm(_\d+)", metadata[-1]):
-                return
         replace = False
         new_args = []
         for arg in args:

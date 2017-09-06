@@ -217,7 +217,7 @@ def test_recvop_axes_using_dot():
         computation = ex.executor(result, x, w)
         val_ng = computation(x_value, w_value)
         val_np = np.dot(x_value, w_value)
-        assert ng.testing.allclose(val_ng, val_np)
+        ng.testing.assert_allclose(val_ng, val_np)
 
 
 def test_recvop_tensorupdate():

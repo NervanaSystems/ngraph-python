@@ -54,7 +54,6 @@ def test_exit_condition():
         np.testing.assert_allclose(val1, val2, atol=0, rtol=0)
 
 
-@pytest.config.flex_skip(reason="Fail for flex, but randomly passing, due to random input -> SKIP")
 def test_4d_elementwise(input_axes):
     x_val = np.absolute(np.random.randn(*input_axes.lengths))
     y_val = np.absolute(np.random.randn(*input_axes.lengths))
