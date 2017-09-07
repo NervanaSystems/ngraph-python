@@ -46,7 +46,7 @@ instance ::
    the functionalities. We need to implement the ``__init__()``, and if we want
    to define the derivative of the op, we need to implement the
    ``generate_adjoints()``. For other advanced functionalities, please refer to
-   the the source of ``ngraph.op_graph.op_graph.Op``.
+   the source of ``ngraph.op_graph.op_graph.Op``.
 
    There are several helper functions (namely ``create_binary_elementwise``,
    ``create_twod_reduction_op``, ``create_oned_reduction_op`` and
