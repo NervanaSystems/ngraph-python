@@ -41,9 +41,6 @@ class BatchnormOp(TensorOp):
         bprop_batchnorm_op.add_control_dep(self)
         inputs.generate_add_delta(adjoints, bprop_batchnorm_op)
 
-    def copy_with_new_args(self, args):
-        return type(self)(args[0], args[1], args[2], args[3], args[4], args[5])
-
 
 class BpropBatchnormOp(TensorOp):
     """

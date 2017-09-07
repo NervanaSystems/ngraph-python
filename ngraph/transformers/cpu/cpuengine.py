@@ -199,7 +199,19 @@ class Mkldnn(object):
         self.set_output_tensor(self.kernels[name], variance.ctypes.data, 2)
         self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
 
-    def bprop_batchnorm(self, name, outputs, delta, inputs, dgamma, dbeta, gamma, bias, mean, variance, epsilon):
+    def bprop_batchnorm(
+            self,
+            name,
+            outputs,
+            delta,
+            inputs,
+            dgamma,
+            dbeta,
+            gamma,
+            bias,
+            mean,
+            variance,
+            epsilon):
         assert self.enabled and name in self.kernels
         weights = np.stack([gamma[:, 0], bias[:, 0]])
         diff_weights = np.stack((dgamma, dbeta))

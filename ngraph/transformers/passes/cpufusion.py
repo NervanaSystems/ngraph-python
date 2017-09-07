@@ -251,24 +251,33 @@ class CPUFusion(GraphRewritePass):
             inputs = label_map[self.batchnorm_bprop_input_tensor].args[0]
             delta = label_map[self.batchnorm_bprop_delta]
 
-            if len(inputs.axes) != 5 or inputs.axes[1].length != 1 or inputs.axes[0].length % 8 != 0:
+            if len(inputs.axes) != 5 or inputs.axes[
+                    1].length != 1 or inputs.axes[0].length % 8 != 0:
                 return
             if op.dtype.name != 'float32':
                 return
 
             if inputs in self.op_replacement_dict:
-                delta_exop  = self.op_accessor.computation_decl.get_exop(delta)
+                delta_exop = self.op_accessor.computation_decl.get_exop(delta)
                 dgamma = None
                 dbeta = None
                 for delta_child_decl in delta_exop.output_decls[0].user_input_decls:
                     if isinstance(delta_child_decl.exop.op, Sum):
                         dbeta = delta_child_decl.exop.op
                     elif isinstance(delta_child_decl.exop.op, Multiply):
-                        for mul_child_decl in delta_child_decl.exop.output_decls[0].user_input_decls:
+                        for mul_child_decl in delta_child_decl.exop.output_decls[
+                                0].user_input_decls:
                             if isinstance(mul_child_decl.exop.op, Sum):
                                 dgamma = mul_child_decl.exop.op
                 batchnorm_fprop = self.op_replacement_dict[inputs]
-                self.replace_op(op, BpropBatchnormOp(delta.args[0], inputs, dgamma, dbeta, batchnorm_fprop))
+                self.replace_op(
+                    op,
+                    BpropBatchnormOp(
+                        delta.args[0],
+                        inputs,
+                        dgamma,
+                        dbeta,
+                        batchnorm_fprop))
             else:
                 warnings.warn("No matching fprop BatchnormOp for the input_tensor \
                        {}".format(inputs))
@@ -389,7 +398,7 @@ class CPUFusion(GraphRewritePass):
         in_obj = PatternLabelOp(self.batchnorm_fprop_input_tensor_label,
                                 (lambda op: isinstance(op, ContiguousOp)))
         flatten_tensor = PatternSkipOp(in_obj,
-                             (lambda op: isinstance(op, Flatten)))
+                                       (lambda op: isinstance(op, Flatten)))
         gamma = PatternLabelOp(self.batchnorm_fprop_gamma_label,
                                (lambda op: isinstance(op, BroadcastOp)))
         beta = PatternLabelOp(self.batchnorm_fprop_beta_label,
@@ -399,7 +408,7 @@ class CPUFusion(GraphRewritePass):
         epsilon = PatternLabelOp(self.batchnorm_fprop_epsilon_label,
                                  (lambda op: isinstance(op, BroadcastOp)))
         mean = PatternLabelOp(self.batchnorm_fprop_mean_label,
-                             (lambda op: isinstance(op, Divide)))
+                              (lambda op: isinstance(op, Divide)))
 
         # construct the fprop batchnorm pattern matching the computation graph
         # ng.sqrt(xvar + self.eps)
@@ -431,7 +440,8 @@ class CPUFusion(GraphRewritePass):
             mean = label_map[self.batchnorm_fprop_mean_label]
             epsilon = self.op_arg(label_map[self.batchnorm_fprop_epsilon_label], 0).tensor.const
 
-            if len(inputs.axes) != 5 or inputs.axes[1].length != 1 or inputs.axes[0].length % 8 != 0:
+            if len(inputs.axes) != 5 or inputs.axes[
+                    1].length != 1 or inputs.axes[0].length % 8 != 0:
                 return
             if op.dtype.name != 'float32':
                 return
