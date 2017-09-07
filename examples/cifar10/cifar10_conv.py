@@ -79,13 +79,13 @@ seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
                    Affine(axes=ax.Y, weight_init=init_uni, activation=Softmax())])
 
 optimizer = GradientDescentMomentum(0.01, 0.9)
-train_prob = seq1(inputs['image'], spatial_axes={"H": "height", "W": "width"})
+train_prob = seq1(inputs['image'])
 train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_outputs = dict(batch_cost=batch_cost)
 
 with Layer.inference_mode_on():
-    inference_prob = seq1(inputs['image'], spatial_axes={"H": "height", "W": "width"})
+    inference_prob = seq1(inputs['image'])
 errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), inputs['label'])
 eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors, results=inference_prob)
