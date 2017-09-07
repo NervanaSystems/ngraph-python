@@ -32,7 +32,7 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import Layer
-from ngraph.frontends.neon import ax, RMSProp
+from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum
 from data import make_aeon_loaders
 import inception
 
@@ -94,6 +94,7 @@ inception = inception.Inception(mini=args.mini)
 
 # Declare the optimizer
 optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
+optimizer = GradientDescentMomentum(learning_rate=.01, momentum_coef=0.9, gradient_clip_value=5.)
 
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
