@@ -220,19 +220,19 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                     self.move_child_exops(child_exop, child_exop)
 
 
-    def replace_exop(self, new_op, old_op):
+    def replace_exop(self, new_op, old_op, index=0):
         """
         1) Replace old_op's output decl with a new output_decl from new_op
         2) Adjust the position of old_op's children
         3) Delete old_op's exop
         """
-        new_exop = self.op_accessor.computation_decl.get_exop(new_op)
-        old_exop = self.op_accessor.computation_decl.get_exop(old_op)
-        old_td = old_op.tensor_description()
-        old_tensor_decl = self.op_accessor.computation_decl.get_tensor_decl(old_op)
+        new_exop = self.get_exop(new_op)
+        old_exop = self.get_exop(old_op)
+        old_td = old_exop.output_decls[index].tensor_description
+        old_tensor_decl = old_exop.output_decls[index].tensor_decl
         new_output_decl = new_exop.add_output_decl(old_tensor_decl, old_td)
         self.move_child_exops(old_exop, new_exop)
-        self.op_accessor.exop_block.replace_output_decl(old_exop.output_decls[0], new_output_decl)
+        self.op_accessor.exop_block.replace_output_decl(old_exop.output_decls[index], new_output_decl)
         self.op_accessor.exop_block.remove_exop(old_exop)
 
     @generic_method(dispatch_base_type=Op)
