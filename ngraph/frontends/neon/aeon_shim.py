@@ -14,11 +14,8 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function, absolute_import
 import logging
-
 from builtins import object
-
 import ngraph as ng
-from ngraph.frontends.neon import ax
 
 logger = logging.getLogger(__name__)
 try:
