@@ -201,6 +201,9 @@ class Axis(object):
     def __eq__(self, other):
         return isinstance(other, Axis) and self.name == other.name
 
+    def __ne__(self, other):
+        return not self == other
+
     def __len__(self):
         return self.length
 
