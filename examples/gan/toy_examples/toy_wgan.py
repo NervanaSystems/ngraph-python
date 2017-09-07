@@ -20,7 +20,7 @@ adapted from https://github.com/igul222/improved_wgan_training
 
 usage: python toy_wgan.py -b gpu -t 100000
 """
-#TODO
+# TODO
 # Original Implementation with epsilon - wait till fixed
 # https://github.com/NervanaSystems/private-ngraph/issues/2011
 from contextlib import closing
@@ -38,23 +38,24 @@ from toy_utils import DataGenerator, NormalNoise, generate_plot
 parser = NgraphArgparser()
 parser.add_argument('--plot_interval', type=int, default=200,
                     help='Plot results every this many iterations')
-parser.add_argument('--loss_type', type=str, default="WGAN-GP", # WGAN, WGAN-GP
+parser.add_argument('--loss_type', type=str, default="WGAN-GP",  # WGAN, WGAN-GP
                     help='Choose Wasserstein Loss (WGAN) or W-loss + Gradient Penalty (WGAN-GP)')
 parser.add_argument('--gp_scale', type=int, default=1,
                     help='Scale of the gradient penalty')
 parser.add_argument('--w_clip', type=int, default=0.01,
                     help='Weight clipping value for WGAN')
-parser.add_argument('--data_type', type=str, default="Roll", # Rectangular, Circular, Roll
+parser.add_argument('--data_type', type=str, default="Roll",  # Rectangular, Circular, Roll
                     help='Choose ground truth distribution: Rectangular, Circular, Roll')
 parser.add_argument('--dim', type=int, default=512,
                     help='Hidden layer dimension for the model')
 parser.add_argument('--num_critic', type=int, default=5,
-                    help='Number of discriminator iterations per generator iteration' )
+                    help='Number of discriminator iterations per generator iteration')
 parser.add_argument('--plot_dir', type=str, default="WGAN_Toy_Plots",
                     help='Directory name to save the results')
 
 args = parser.parse_args()
 np.random.seed(args.rng_seed)
+dim = args.dim
 
 if not os.path.isdir(args.plot_dir):
     os.makedirs(args.plot_dir)
@@ -62,36 +63,40 @@ if not os.path.isdir(args.plot_dir):
 w_init = KaimingInit()
 b_init = ConstantInit()
 
+
 def make_optimizer(name=None, weight_clip_value=None):
     optimizer = Adam(learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
                      epsilon=1e-8, weight_clip_value=weight_clip_value)
 
     return optimizer
 
+
 def make_generator(out_axis):
 
-    generator = [Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                 Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                 Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+    generator = [Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                 Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                 Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
                  Affine(axes=out_axis, weight_init=w_init, bias_init=b_init, activation=None)]
 
     return Sequential(generator, name="Generator")
 
+
 def make_discriminator():
 
-    discriminator = [Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                     Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
-                     Affine(nout=args.dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+    discriminator = [Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                     Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
+                     Affine(nout=dim, weight_init=w_init, bias_init=b_init, activation=Rectlin()),
                      Affine(nout=1, weight_init=w_init, bias_init=b_init, activation=None)]
 
     return Sequential(discriminator, name="Discriminator")
+
 
 noise_dim = 2
 data_dim = 2
 N = ng.make_axis(name='N', length=args.batch_size)
 W = ng.make_axis(name='W', length=data_dim)
-z_ax = ng.make_axes([ng.make_axis(name='H', length=noise_dim),N])
-d_ax = ng.make_axes([W,N])
+z_ax = ng.make_axes([ng.make_axis(name='H', length=noise_dim), N])
+d_ax = ng.make_axes([W, N])
 
 # make placeholders
 z = ng.placeholder(axes=z_ax)
@@ -191,8 +196,8 @@ with closing(ngt.make_transformer()) as transformer:
         # report loss every 100 iterations
         msg = ("Disc. loss: {:.2f}, Gen. loss: {:.2f}, Grad Norm: {:.2f}")
         progress_bar.set_description(msg.format(float(output_d['batch_cost']),
-                                     float(output_g['batch_cost']), 
-                                     float(output_d['grad_norm'])))
+                                                float(output_g['batch_cost']),
+                                                float(output_d['grad_norm'])))
 
         if (iteration % args.plot_interval) == 0:
             generate_plot(args.plot_dir, iteration, data_in, output_g, output_d, train_data, args)

@@ -99,23 +99,22 @@ def clip_gradient_value(grad, clip_value=None):
         return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
-def clip_weight_value(weight, delta, clip_value=None):
+def clip_weight_value(weight, clip_value=None):
     """
     Element-wise clip a weight tensor to between ``-clip_value`` and ``+clip_value``.
 
     Arguments:
         weight (Tensor): List of gradients for a single layer
-        clip_value (float, optional): Value to element-wise clip
-                                      weights.
+        clip_value (float, optional): Value to element-wise clip weights.
                                       Defaults to None.
 
     Returns:
         weight (list): List of clipped weights.
     """
     if clip_value is None:
-        return weight + delta
+        return weight
     else:
-        return ng.minimum(ng.maximum(weight + delta, -abs(clip_value)), abs(clip_value))
+        return ng.minimum(ng.maximum(weight, -abs(clip_value)), abs(clip_value))
 
 
 class Optimizer(SubGraph):
@@ -183,7 +182,9 @@ class LearningRateOptimizer(Optimizer):
             all_updates.append(updates)
         updates = ng.doall(all_updates)
         grads = ng.doall(grads)
-        return ng.sequential([grads, updates, 0])
+        clips = ng.doall([ng.assign(variable, clip_weight_value(variable, self.weight_clip_value))
+                          for variable in variables])
+        return ng.sequential([grads, updates, clips, 0])
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
@@ -259,8 +260,7 @@ class GradientDescentMomentum(LearningRateOptimizer):
             delta = (self.momentum_coef * velocity + lr)
         else:
             delta = velocity
-        updates.append(ng.assign(variable, clip_weight_value(variable, delta,
-                                                             self.weight_clip_value)))
+        updates.append(ng.assign(variable, variable + delta))
         return ng.sequential(updates)
 
 
@@ -319,10 +319,9 @@ class RMSProp(LearningRateOptimizer):
         state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
         updates = ng.sequential([
             ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
-            ng.assign(variable,
-                      clip_weight_value(variable, - ((scale_factor * grad * self.lrate) /
-                                                     (ng.sqrt(state + epsilon) + epsilon)),
-                                        self.weight_clip_value))])
+            ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
+                                            / (ng.sqrt(state + epsilon) + epsilon)))
+        ])
         return updates
 
 
@@ -386,8 +385,7 @@ class Adam(LearningRateOptimizer):
         updates = ng.sequential([
             ng.assign(m, m * self.beta_1 + (1 - self.beta_1) * grad),
             ng.assign(v, v * self.beta_2 + (1 - self.beta_2) * grad * grad),
-            ng.assign(variable, clip_weight_value(variable, - (scale_factor * self.ell * m) /
-                                                  (ng.sqrt(v) + self.epsilon),
-                                                  self.weight_clip_value))
+            ng.assign(variable,
+                      variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
         ])
         return updates

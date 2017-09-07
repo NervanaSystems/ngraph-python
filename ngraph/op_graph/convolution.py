@@ -215,11 +215,8 @@ class update_conv(ConvDerivOp):
         return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters, bias=None):
-        # TODO double check this, may have to be different for conv and deconv,
-        # Add a context based switch
-        update_conv_op = update_conv(inputs, delta, filters, self)
-        update_conv_op.add_control_dep(self)
-        filters.generate_add_delta(adjoints, update_conv_op)
+        import warnings
+        warnings.warn("Adjoint for update_conv not implemented")
 
 
 class bprop_conv(ConvDerivOp):
@@ -240,6 +237,7 @@ class bprop_conv(ConvDerivOp):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
+        # bprop of conv is deconv, so use DeconvDerivOp here
         deconv_deriv_op = DeconvDerivOp(delta, inputs, filters, self)
         deconv_deriv_op.add_control_dep(self)
         inputs.generate_add_delta(adjoints, deconv_deriv_op)
@@ -268,6 +266,7 @@ class DeconvDerivOp(ConvDerivOp):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters):
+        # bprop of deconv is conv, so use bprop_conv here
         bprop_conv_op = bprop_conv(delta, inputs, filters, self)
         bprop_conv_op.add_control_dep(self)
         inputs.generate_add_delta(adjoints, bprop_conv_op)
