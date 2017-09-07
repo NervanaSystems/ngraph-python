@@ -237,31 +237,33 @@ def test_allreduce_hint(hetr_device, config):
         np.testing.assert_array_equal(result, np_result)
 
 
+@pytest.mark.multi_device
 @pytest.mark.parametrize('config', [
     {
         'input': 1,
-        'device_id': (1, 2),
+        'device_id': (0, 1),
         'result_two': [[4.0, 4.0, 4.0, 4.0],
                        [4.0, 4.0, 4.0, 4.0]],
         'result_one': [[2.0, 2.0, 2.0, 2.0],
                        [2.0, 2.0, 2.0, 2.0]],
     },
 ])
-def test_multiple_gather_ops(config):
-    c = config
+def test_multiple_gather_ops(config, hetr_device):
+    input = config['input']
+    device_id = config['device_id']
 
     H = ng.make_axis(length=2, name='height')
     W = ng.make_axis(length=4, name='width')
     x = ng.placeholder(axes=[H, W])
-    with ng.metadata(device_id=c['device_id'], parallel=W):
+    with ng.metadata(device_id=device_id, parallel=W):
         x_plus_one = x + 1
         x_plus_two = x_plus_one + 2
-    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as hetr:
         plus = hetr.computation([x_plus_two, x_plus_one], x)
-        result_two, result_one = plus(c['input'])
+        result_two, result_one = plus(input)
 
-        np.testing.assert_array_equal(result_two, c['result_two'])
-        np.testing.assert_array_equal(result_one, c['result_one'])
+        np.testing.assert_array_equal(result_two, config['result_two'])
+        np.testing.assert_array_equal(result_one, config['result_one'])
 
 
 @pytest.mark.hetr_gpu_only
