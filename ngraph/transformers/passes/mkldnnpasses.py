@@ -57,20 +57,7 @@ def get_order_from_axes(axes, sub_axes):
 
 
 def get_axes_mkl_order(axes, order):
-    axes_list = []
-    flattend_axis_flag = False
-    for axis in axes:
-        if(axis.is_flattened and len(order) > 2):
-            unflattend_axis = unflatten(axis).axes
-            for indx in range(len(unflattend_axis)):
-                axes_list.append(unflattend_axis[indx])
-                flattend_axis_flag = True
-        else:
-            axes_list.append(axis)
-    if flattend_axis_flag:
-        return [axes_list[index] for index in order]
-    else:
-        return [axes[index] for index in order]
+    return [axes[index] for index in order]
 
 
 def get_size_mkl_order(axes, order):
@@ -78,29 +65,14 @@ def get_size_mkl_order(axes, order):
 
 
 def get_strides_mkl_order(td, order):
-    strides_list = []
-    flattend_axis_flag = False
-    for axis in td.axes:
-        if (axis.is_flattened and len(order) > 2):
-            flattend_axis_flag = True
-    if flattend_axis_flag:
-        for each_stride in td.full_strides:
-            if isinstance(each_stride, tuple):
-                for stride_val in each_stride:
-                    strides_list.append(stride_val)
-            else:
-                strides_list.append(each_stride)
-        return [strides_list[index] for index in order]
-    else:
-        return [td.strides[index] for index in order]
+    return [td.strides[index] for index in order]
 
 
-def get_native_layout(mkldnn, td, order, use_formats=True):
+def get_native_layout(mkldnn, td, order):
     '''
     Create an MKL layout object in transformer-visible layout
     :param td: tensor description of the op. Currently owns tensor layout info in graph
     :param order: order in which axes need to be specified to MKL
-    :param use_formats: Optimization to identify canned MKL formats
     :return: MKL layout object
     '''
     op_axes = td.axes
@@ -111,20 +83,20 @@ def get_native_layout(mkldnn, td, order, use_formats=True):
     # TODO(jbobba) - Handle views for tensors that are not fully materialized
     mkl_axes = [axis for axis in get_axes_mkl_order(op_axes, order)]
     memory_format = mkldnn.memory_format['blocked']
-    if use_formats:
-        # Look for canned formats
-        if len(mkl_strides) == 4:
-            [N, C, H, W] = mkl_strides
-            stride_order = sorted([N, C, H, W], reverse=True)
-            if (stride_order == [C, H, W, N]):
-                memory_format = mkldnn.memory_format['chwn']
-            elif (stride_order == [N, C, H, W]):
-                memory_format = mkldnn.memory_format['nchw']
-        elif len(mkl_strides) == 2:
-            [N, C] = mkl_strides
-            stride_order = sorted([N, C], reverse=True)
-            if stride_order == [N, C]:
-                memory_format = mkldnn.memory_format['nc']
+
+    # Look for canned formats
+    if len(mkl_strides) == 4:
+        [N, C, H, W] = mkl_strides
+        stride_order = sorted([N, C, H, W], reverse=True)
+        if (stride_order == [C, H, W, N]):
+            memory_format = mkldnn.memory_format['chwn']
+        elif (stride_order == [N, C, H, W]):
+            memory_format = mkldnn.memory_format['nchw']
+    elif len(mkl_strides) == 2:
+        [N, C] = mkl_strides
+        stride_order = sorted([N, C], reverse=True)
+        if stride_order == [N, C]:
+            memory_format = mkldnn.memory_format['nc']
 
     native_layout = mkldnn.create_layout_md(
         mkldnn.mkldnn_engine,
@@ -229,7 +201,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 mkl_layout = in_layout
         else:
             # TODO(jbobba): Need to change this to use tensor_decl
-            mkl_layout = get_native_layout(self.mkldnn, exop.output_decls[index].tensor_description, mkl_order, True)[0]
+            mkl_layout = get_native_layout(self.mkldnn, exop.output_decls[index].tensor_description, mkl_order)[0]
 
         return mkl_shape, mkl_layout
 
@@ -794,30 +766,12 @@ class MklAddLayoutConversions(PeepholeGraphPass):
 
     def init_mkldnn_reorder(self, op):
         (mkl_layout, mkl_axes) = op.in_layout
-        check_flatten = False
-        mkl_flattend_axis = False
-        # check if any one of axis in mkl_axes is Flattend
-        for axis in mkl_axes:
-            if isinstance(axis, FlattenedAxis):
-                mkl_flattend_axis = True
-
-        for axis_indx, each_axis in enumerate(op.axes):
-            if isinstance(each_axis, FlattenedAxis) and not(mkl_axes[axis_indx].is_flattened) \
-                    and not(mkl_flattend_axis):
-                check_flatten = True
-
-        if check_flatten:
-            mkl_axes_order = get_order_from_axes(unflatten(op).axes, mkl_axes)
-        else:
-            mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
+        mkl_axes_order = get_order_from_axes(op.axes, mkl_axes)
         # exop is not available at this point. so we get tensor_description from op.
         # TODO(jbobba): Need to change this to use tensor_decl
-        (out_layout, _) = get_native_layout(self.mkldnn, op.tensor_description(), mkl_axes_order, True)
+        (out_layout, _) = get_native_layout(self.mkldnn, op.tensor_description(), mkl_axes_order)
         ndims = len(mkl_axes)
-        if check_flatten:
-            dims = get_size_mkl_order(unflatten(op).axes, mkl_axes_order)
-        else:
-            dims = get_size_mkl_order(op.axes, mkl_axes_order)
+        dims = get_size_mkl_order(op.axes, mkl_axes_order)
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
         self.mkldnn.reorder_kernel(
