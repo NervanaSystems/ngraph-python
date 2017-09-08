@@ -31,7 +31,7 @@ from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
-
+np.random.seed(1)
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
 parser.set_defaults(batch_size=128, num_iterations=2000)

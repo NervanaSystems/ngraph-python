@@ -42,7 +42,9 @@ from ngraph.frontends.neon import SequentialArrayIterator
 import ngraph.transformers as ngt
 
 from ngraph.frontends.neon import PTB
+import numpy as np
 
+np.random.seed(1)
 # parse the command line arguments
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--layer_type', default='lstm', choices=['lstm'],
