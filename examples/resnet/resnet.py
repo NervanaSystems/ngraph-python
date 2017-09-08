@@ -59,7 +59,7 @@ def mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
     axes=[x.axes.channel_axis()],
     initial_value=np.array([127.0, 119.0, 104.0]))
-    return (x - bgr_mean)/255.0
+    return (x - bgr_mean)
 
 #Returns dict of convolution layer parameters
 def conv_params(fil_size, num_fils,rho=rho_val,strides=1,batch_norm=True,relu=True):
