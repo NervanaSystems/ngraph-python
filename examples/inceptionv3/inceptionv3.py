@@ -95,7 +95,7 @@ inception = inception.Inception(mini=args.mini)
 # Declare the optimizer
 optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
 optimizer = GradientDescentMomentum(learning_rate=.01, momentum_coef=0.75,
-                                    gradient_clip_value=3.)
+                                    gradient_clip_value=1.)
 
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
