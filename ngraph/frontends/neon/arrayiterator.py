@@ -124,6 +124,7 @@ class ArrayIterator(object):
 
         self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
 
+
 class SequentialArrayIterator(object):
     def __init__(self, data_arrays, time_steps, batch_size,
                  total_iterations=None, reverse_target=False, get_prev_target=False,
@@ -138,7 +139,7 @@ class SequentialArrayIterator(object):
             Assumes each data_arrays[key] has the same length (S)
         Output of each iteration: Dictionary of input and output samples
             samples[key] has size (batch_size, time_steps, D)
-        time_steps: Width of the rolling window (length of each input sequence) 
+        time_steps: Width of the rolling window (length of each input sequence)
         batch_size: how many samples to return for each iteration
         total_iterations: number of batches to retrieve from the sequence (roll over if necessary)
                          If set to None, will rotate through the whole sequence only once
@@ -147,17 +148,18 @@ class SequentialArrayIterator(object):
         Example:
             data_arrays['data1'] is a numpy array with shape (S, 1): [a1, a2, ..., aS]
             Each generated sample will be an input sequence / output sequence pairs such as:
-                sample['data1'] is nparray of size (batch_size, S, 1): 
+                sample['data1'] is nparray of size (batch_size, S, 1):
                     sample['data1'][0] : [a1, a2, ..., a(time_steps)]
                     sample['data1'][1] : [a(stride +1), a(stride+2), ..., a(stride+time_steps)]
                         ...
             Each iteration will return batch_size number of samples
             If stride = 1, the window will shift by one
-                sample['data1'][0] and sample['data1'][1] will have (time_steps - 1) elements that are the same
+                sample['data1'][0] and sample['data1'][1] will have
+                (time_steps - 1) elements that are the same
             If stride = time_steps, they will have no overlapping elements
         """
         self.data_array = data_arrays
-        self.seq_len = time_steps 
+        self.seq_len = time_steps
         self.get_prev_target = get_prev_target
         self.reverse_target = reverse_target
         self.batch_size = batch_size
@@ -168,18 +170,19 @@ class SequentialArrayIterator(object):
 
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
-        
+
             if self.get_prev_target:
                 self.data_arrays['prev_tgt'] = np.copy(self.data_arrays[self.tgt_key])
-    
-            # Get the size of feature dimension for each array 
-            self.feature_dims = {k: v.shape[1] if (len(v.shape) > 1) else 1 for k, v in viewitems(self.data_arrays)}
+
+            # Get the size of feature dimension for each array
+            self.feature_dims = {k: v.shape[1] if (len(v.shape) > 1) else 1
+                                 for k, v in viewitems(self.data_arrays)}
 
             # Preallocate iterator arrays for each batch
             self.samples = {k: np.squeeze(np.zeros((self.batch_size,
                                                     self.seq_len,
                                                     self.feature_dims[k]),
-                                                   dtype=v.dtype)) 
+                                                   dtype=v.dtype))
                             for k, v in viewitems(self.data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
@@ -196,7 +199,7 @@ class SequentialArrayIterator(object):
         self.ndata = len(six.next(six.itervalues(self.data_arrays)))
 
         if self.nbatches < 1:
-            raise ValueError('Number of examples is smaller than the batch size') 
+            raise ValueError('Number of examples is smaller than the batch size')
 
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
 
@@ -206,7 +209,7 @@ class SequentialArrayIterator(object):
         Return the number of minibatches in this dataset.
         """
         return ((self.ndata - self.start) // self.stride // self.batch_size)
-    
+
     def make_placeholders(self):
         ax.N.length = self.batch_size
         ax.REC.length = self.seq_len
@@ -230,7 +233,7 @@ class SequentialArrayIterator(object):
             dictionary: The next minibatch
                 samples[key]: numpy array with shape (batch_size, seq_len, feature_dim)
         """
-    
+
         while self.current_iter < self.total_iterations:
             for batch_idx in range(self.batch_size):
                 if (self.shuffle is True):
@@ -245,12 +248,12 @@ class SequentialArrayIterator(object):
                     self.samples[key][batch_idx] = self.data_arrays[key][idcs]
 
             self.current_iter += 1
-            
+
             if self.reverse_target:
                 self.samples[self.tgt_key][:] = self.samples[self.tgt_key][:, ::-1]
 
             if self.get_prev_target:
-                self.samples['prev_tgt'] = np.roll(self.samples[self.tgt_key], shift=1,axis=1)
+                self.samples['prev_tgt'] = np.roll(self.samples[self.tgt_key], shift=1, axis=1)
 
             if self.include_iteration is True:
                 self.samples['iteration'] = self.index

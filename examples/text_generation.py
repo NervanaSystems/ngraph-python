@@ -36,7 +36,7 @@ from ngraph.frontends.neon import UniformInit, Tanh, Logistic, RMSProp
 from ngraph.frontends.neon import NgraphArgparser
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import Shakespeare, SequentialArrayIterator
-import pdb
+
 
 def eval_loop(inputs, eval_set, eval_function):
     """
@@ -79,7 +79,6 @@ def train_loop(inputs, train_set, train_function, eval_set,
             # Store the cost of this interval, to keep track of model evolution
             train_cost_hist.append(interval_cost)
 
-            print("Training for interval %d done" % iter_val)
             # Iterate over the evaluation set and get evaluation cost
             eval_cost = eval_loop(inputs, eval_set, eval_function)
             print('****\nIteration: %d, Train Cost: %1.2e, Eval Cost: %1.2e\n****'
@@ -179,7 +178,7 @@ seq_len = args.seq_len
 num_iterations = args.num_iterations
 
 # Ratio of the text to use for training
-train_ratio = 0.5
+train_ratio = 0.95
 # Define initialization method of neurons in the network
 init_uni = UniformInit(-0.1, 0.1)
 
@@ -191,14 +190,14 @@ shakes = Shakespeare(train_split=train_ratio)
 # if stride is set to seq_len, windows are non-overlapping
 stride = seq_len // 8
 shakes_data_train = {'X': np.copy(shakes.train), 'y': np.roll(np.copy(shakes.train), shift=-1)}
-#shakes_data_test = {'X': np.copy(shakes.train), 'y': np.roll(np.copy(shakes.train), shift=-1)}
 shakes_data_test = {'X': np.copy(shakes.test), 'y': np.roll(np.copy(shakes.test), shift=-1)}
-shakes_train = SequentialArrayIterator(data_arrays=shakes_data_train, total_iterations=num_iterations,
-                                     time_steps=seq_len, batch_size=batch_size, stride=stride,
-                                     include_iteration=True, tgt_key='y', shuffle=False)
+shakes_train = SequentialArrayIterator(data_arrays=shakes_data_train,
+                                       total_iterations=num_iterations,
+                                       time_steps=seq_len, batch_size=batch_size, stride=stride,
+                                       include_iteration=True, tgt_key='y', shuffle=False)
 shakes_test = SequentialArrayIterator(data_arrays=shakes_data_test,
-                                     time_steps=seq_len, batch_size=batch_size, stride=stride,
-                                     include_iteration=True, tgt_key='y', shuffle=False)
+                                      time_steps=seq_len, batch_size=batch_size, stride=stride,
+                                      include_iteration=True, tgt_key='y', shuffle=False)
 # Our input is of size (batch_size, seq_len)
 # batch_axis must be named N
 batch_axis = ng.make_axis(length=batch_size, name="N")
@@ -280,7 +279,7 @@ with closing(ngt.make_transformer()) as transformer:
     generate_function = transformer.add_computation(gen_computation)
 
     # Determine printout interval of the validation set loss during training
-    iter_interval = min(100, num_iterations // 20)
+    iter_interval = min(1000, num_iterations // 20)
 
     # Training Loop
     train_cost = train_loop(inputs, shakes_train, train_function, shakes_test,
