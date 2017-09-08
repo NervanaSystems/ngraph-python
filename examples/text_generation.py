@@ -203,7 +203,9 @@ shakes = Shakespeare(train_split=train_ratio)
 # Stride is by how many characters the window moves in each step
 # if stride is set to seq_len, windows are non-overlapping
 stride = seq_len // 8
-shakes_train = RollingWindowIterator(data_array=shakes.train, total_iterations=num_iterations,
+shakes_data_train = {'train': shakes.train}
+shakes_data_test = {'test': shakes.test}
+shakes_train = RollingWindowIterator(data_arrays=shakes_data, total_iterations=num_iterations,
                                      seq_len=seq_len, batch_size=batch_size, stride=stride,
                                      return_sequences=predict_seq)
 shakes_test = RollingWindowIterator(data_array=shakes.test,
