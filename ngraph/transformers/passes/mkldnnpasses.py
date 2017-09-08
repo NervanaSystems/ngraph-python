@@ -233,6 +233,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         self.move_child_exops(old_exop, new_exop)
         self.op_accessor.exop_block.replace_output_decl(
             old_exop.output_decls[index], new_output_decl)
+        if old_exop in self.op_accessor.exop_block.root_set:
+            self.op_accessor.exop_block.root_set.remove(old_exop)
+            self.op_accessor.exop_block.root_set.add(new_exop)
         self.op_accessor.exop_block.remove_exop(old_exop)
 
     @generic_method(dispatch_base_type=Op)
