@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 """
 Usage:
-python text_generation.py -z 128 -b gpu -t 100000 --predict_seq
+python text_generation.py -z 128 -b gpu -t 100000
 
 Uses Shakespeare text sample to train an LSTM based model to predict the next character
 Uses the trained model to generate own text
@@ -23,14 +23,6 @@ Uses the trained model to generate own text
 Parameters:
 --recurrent_units : Number of cells in the LSTM (default 128)
 --seq_len : Length of each string input to the LSTM (number of chars, default 32)
---predict_seq : If given in command line, the output of the LSTM will be a sequence
-                If not, only the next character is predicted
-    Example:
-        predict_seq True:
-            Input ['My name is Georg'], Ground Truth Output: ['y name is George']
-        predict_seq False:
-            Input ['My name is Georg'], Ground Truth Output: ['e']
-
 --use_embedding : If given in command line, first layer of the network is Embedding Layer
                   If not, one hot encoding of characters is used
 """
@@ -43,19 +35,19 @@ from ngraph.frontends.neon import Layer, Sequential, LSTM, Affine, Softmax, Prep
 from ngraph.frontends.neon import UniformInit, Tanh, Logistic, RMSProp
 from ngraph.frontends.neon import NgraphArgparser
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import Shakespeare, RollingWindowIterator
-
+from ngraph.frontends.neon import Shakespeare, SequentialArrayIterator
+import pdb
 
 def eval_loop(inputs, eval_set, eval_function):
     """
     Evaluates the trained model on the evaluation text sample
     """
-    shakes_test.reset()
-    eval_cost = 0
+    eval_set.reset()
+    eval_cost = 0.
     for eval_iter, eval_sample in enumerate(eval_set):
         feed_dict = {inputs[k]: eval_sample[k] for k in inputs.keys()}
         [batch_eval_cost, batch_eval_outs] = eval_function(feed_dict=feed_dict)
-        eval_cost += np.mean(batch_eval_cost)
+        eval_cost += batch_eval_cost
 
     eval_cost = eval_cost / (eval_iter + 1)
     return eval_cost
@@ -78,7 +70,6 @@ def train_loop(inputs, train_set, train_function, eval_set,
         [batch_train_cost, batch_train_outs] = train_function(feed_dict=feed_dict)
         # Keep a record of the mean cost of this batch
         interval_cost += batch_train_cost
-
         # At regular intervals, evaluate the model on the eval_set
         # Also generate text based on the model
         if ((iter_val + 1) % iter_interval == 0):
@@ -88,6 +79,7 @@ def train_loop(inputs, train_set, train_function, eval_set,
             # Store the cost of this interval, to keep track of model evolution
             train_cost_hist.append(interval_cost)
 
+            print("Training for interval %d done" % iter_val)
             # Iterate over the evaluation set and get evaluation cost
             eval_cost = eval_loop(inputs, eval_set, eval_function)
             print('****\nIteration: %d, Train Cost: %1.2e, Eval Cost: %1.2e\n****'
@@ -138,10 +130,8 @@ def generate_text(inputs, generation_function, seed_txt, index_to_token,
         gen_chars = generation_function(feed_dict=feed_dict)
 
         # Get the probability for each character for the first sample
-        if(predict_seq is False):
-            gen_chars = gen_chars[:, 0]
-        else:
-            gen_chars = gen_chars[:, -1, 0]
+        gen_chars = gen_chars[:, -1, 0]
+
         # Due to rounding errors, sum of softmax output could be very slightly above 1
         # This throws an error in np.random.multinomial
         # Scale softmax outputs so they sum up to 1
@@ -173,8 +163,6 @@ def expand_onehot(x):
 parser = NgraphArgparser(__doc__)
 parser.add_argument('--use_embedding', default=False, dest='use_embedding', action='store_true',
                     help='If given, embedding layer is used as the first layer')
-parser.add_argument('--predict_seq', default=False, dest='predict_seq', action='store_true',
-                    help='If given, seq_len future timepoints are predicted')
 parser.add_argument('--seq_len', type=int,
                     help="Number of time points in each input sequence",
                     default=32)
@@ -185,14 +173,13 @@ parser.set_defaults(num_iterations=40000)
 args = parser.parse_args()
 
 use_embedding = args.use_embedding
-predict_seq = args.predict_seq
 recurrent_units = args.recurrent_units
 batch_size = args.batch_size
 seq_len = args.seq_len
 num_iterations = args.num_iterations
 
 # Ratio of the text to use for training
-train_ratio = 0.95
+train_ratio = 0.5
 # Define initialization method of neurons in the network
 init_uni = UniformInit(-0.1, 0.1)
 
@@ -203,15 +190,15 @@ shakes = Shakespeare(train_split=train_ratio)
 # Stride is by how many characters the window moves in each step
 # if stride is set to seq_len, windows are non-overlapping
 stride = seq_len // 8
-shakes_data_train = {'train': shakes.train}
-shakes_data_test = {'test': shakes.test}
-shakes_train = RollingWindowIterator(data_arrays=shakes_data, total_iterations=num_iterations,
-                                     seq_len=seq_len, batch_size=batch_size, stride=stride,
-                                     return_sequences=predict_seq)
-shakes_test = RollingWindowIterator(data_array=shakes.test,
-                                    seq_len=seq_len, batch_size=batch_size, stride=stride,
-                                    return_sequences=predict_seq)
-
+shakes_data_train = {'X': np.copy(shakes.train), 'y': np.roll(np.copy(shakes.train), shift=-1)}
+#shakes_data_test = {'X': np.copy(shakes.train), 'y': np.roll(np.copy(shakes.train), shift=-1)}
+shakes_data_test = {'X': np.copy(shakes.test), 'y': np.roll(np.copy(shakes.test), shift=-1)}
+shakes_train = SequentialArrayIterator(data_arrays=shakes_data_train, total_iterations=num_iterations,
+                                     time_steps=seq_len, batch_size=batch_size, stride=stride,
+                                     include_iteration=True, tgt_key='y', shuffle=False)
+shakes_test = SequentialArrayIterator(data_arrays=shakes_data_test,
+                                     time_steps=seq_len, batch_size=batch_size, stride=stride,
+                                     include_iteration=True, tgt_key='y', shuffle=False)
 # Our input is of size (batch_size, seq_len)
 # batch_axis must be named N
 batch_axis = ng.make_axis(length=batch_size, name="N")
@@ -222,13 +209,7 @@ time_axis = ng.make_axis(length=seq_len, name="REC")
 # +1 is for unknown token
 out_axis = ng.make_axis(length=len(shakes.vocab) + 1, name="out_feature_axis")
 in_axes = ng.make_axes([batch_axis, time_axis])
-
-# RollingWindowIterator gives an output of (batch_size, 1) for each iteration
-# We will later convert this output to onehot
-if(predict_seq is True):
-    out_axes = ng.make_axes([batch_axis, time_axis])
-else:
-    out_axes = ng.make_axes([batch_axis])
+out_axes = ng.make_axes([batch_axis, time_axis])
 
 # Build placeholders for the created axes
 inputs = {'X': ng.placeholder(in_axes), 'y': ng.placeholder(out_axes),
@@ -239,7 +220,7 @@ if(use_embedding is False):
     seq1 = Sequential([Preprocess(functor=expand_onehot),
                        LSTM(nout=recurrent_units, init=init_uni, backward=False, reset_cells=True,
                             activation=Logistic(), gate_activation=Tanh(),
-                            return_sequence=predict_seq),
+                            return_sequence=True),
                        Affine(weight_init=init_uni, bias_init=init_uni,
                               activation=Softmax(), axes=out_axis)])
 else:
@@ -247,7 +228,7 @@ else:
     seq1 = Sequential([LookupTable(len(shakes.vocab) + 1, embedding_dim, init_uni, update=True),
                        LSTM(nout=recurrent_units, init=init_uni, backward=False, reset_cells=True,
                             activation=Logistic(), gate_activation=Tanh(),
-                            return_sequence=predict_seq),
+                            return_sequence=True),
                        Affine(weight_init=init_uni, bias_init=init_uni,
                               activation=Softmax(), axes=out_axis)])
 
@@ -285,7 +266,7 @@ with Layer.inference_mode_on():
 eval_loss = ng.cross_entropy_multi(inference_prop,
                                    ng.one_hot(inputs['y'], axis=out_axis),
                                    usebits=True)
-eval_computation = ng.computation([eval_loss, inference_prop], "all")
+eval_computation = ng.computation([ng.mean(eval_loss, out_axes=()), inference_prop], "all")
 eval_outputs = dict(x_ent_loss=eval_loss)
 
 # Computation for text generation - this is pure inference (fwd prop)
@@ -299,7 +280,7 @@ with closing(ngt.make_transformer()) as transformer:
     generate_function = transformer.add_computation(gen_computation)
 
     # Determine printout interval of the validation set loss during training
-    iter_interval = min(4000, num_iterations // 20)
+    iter_interval = min(100, num_iterations // 20)
 
     # Training Loop
     train_cost = train_loop(inputs, shakes_train, train_function, shakes_test,

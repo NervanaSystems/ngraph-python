@@ -127,7 +127,8 @@ class ArrayIterator(object):
 class SequentialArrayIterator(object):
     def __init__(self, data_arrays, time_steps, batch_size,
                  total_iterations=None, reverse_target=False, get_prev_target=False,
-                 stride=None, include_iteration=False, tgt_key='tgt_txt'):
+                 stride=None, include_iteration=False, tgt_key='tgt_txt',
+                 shuffle=True):
         """
         Given an input sequence, generates overlapping windows of samples
         Input: dictionary of numpy arrays
@@ -162,6 +163,8 @@ class SequentialArrayIterator(object):
         self.batch_size = batch_size
         self.include_iteration = include_iteration
         self.tgt_key = tgt_key
+        self.shuffle = shuffle
+        self.current_iter = 0
 
         if isinstance(data_arrays, dict):
             self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
@@ -192,8 +195,8 @@ class SequentialArrayIterator(object):
         # Assumes each value in data_arrays has the same length
         self.ndata = len(six.next(six.itervalues(self.data_arrays)))
 
-        if self.nbatches < self.batch_size:
-            raise ValueError('Number of examples is smaller than the batch size')
+        if self.nbatches < 1:
+            raise ValueError('Number of examples is smaller than the batch size') 
 
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
 
@@ -202,7 +205,7 @@ class SequentialArrayIterator(object):
         """
         Return the number of minibatches in this dataset.
         """
-        return ((self.ndata - self.start) // self.batch_size // self.stride)
+        return ((self.ndata - self.start) // self.stride // self.batch_size)
     
     def make_placeholders(self):
         ax.N.length = self.batch_size
@@ -218,7 +221,7 @@ class SequentialArrayIterator(object):
         the last uneven minibatch. Not necessary when data is divisible by batch size
         """
         self.start = 0
-        self.index = 0
+        self.current_iter = 0
 
     def __iter__(self):
         """
@@ -228,15 +231,20 @@ class SequentialArrayIterator(object):
                 samples[key]: numpy array with shape (batch_size, seq_len, feature_dim)
         """
     
-        while self.index < self.total_iterations:
-            strt_idx = (self.start + self.index * self.stride)
-            self.index += 1
-            sample_id = 0
+        while self.current_iter < self.total_iterations:
             for batch_idx in range(self.batch_size):
-                seq_start = strt_idx + (batch_idx * self.nbatches * self.seq_len)
+                if (self.shuffle is True):
+                    strt_idx = (self.start + self.current_iter * self.stride)
+                    seq_start = strt_idx + (batch_idx * self.nbatches * self.seq_len)
+                else:
+                    strt_idx = (self.start + self.current_iter * self.batch_size * self.stride)
+                    seq_start = strt_idx + (batch_idx * self.stride)
+
                 idcs = np.arange(seq_start, seq_start + self.seq_len) % self.ndata
                 for key in self.data_arrays.keys():
                     self.samples[key][batch_idx] = self.data_arrays[key][idcs]
+
+            self.current_iter += 1
             
             if self.reverse_target:
                 self.samples[self.tgt_key][:] = self.samples[self.tgt_key][:, ::-1]
