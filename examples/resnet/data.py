@@ -35,8 +35,6 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
 
     datasets = CIFAR10(out_dir).load_data()
 
-    pad_size = (padded_size - 32) // 2 if padded_size > 32 else 0
-    pad_width = ((0, 0), (pad_size, pad_size), (pad_size, pad_size))
 
     # Now write out image files and manifests
     for setn, manifest, data in zip(set_names, manifest_files, datasets):
@@ -46,8 +44,7 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
             os.makedirs(img_path)
 
         for idx, (img, lbl) in enumerate(tqdm(zip(data['image']['data'], data['label']['data']))):
-            im = np.pad(img.reshape((3, 32, 32)), pad_width, mode='mean')
-            im = Image.fromarray(np.uint8(np.transpose(im, axes=[1, 2, 0]).copy()))
+            im = Image.fromarray(np.uint8(np.transpose(img, axes=[1, 2, 0]).copy()))            
             fname = os.path.join(img_path, '{}_{:05d}.png'.format(lbl, idx))
             im.save(fname, format='PNG')
             records.append((os.path.relpath(fname, out_dir), lbl))
@@ -56,71 +53,36 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset="cifar10"):
-    if(dataset=="cifar10"):
-        train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
-    elif(dataset=="i1k"):
-        path="/nfs/site/home/ckothapa/nervana/data/i1k/"
-        train_manifest,valid_manifest=path+"train-index.csv",path+"val-index.csv"
-    else:
-        print("Choose dataset cifar10 or i1k")
-        exit()
+def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset=None):
+    train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
 
-    def common_config(manifest_file, batch_size,dataset=dataset,valid_set=False):
-        if(dataset=="cifar10"):
-            cache_root = get_data_cache_or_nothing('cifar10-cache/')
+    def common_config(manifest_file, batch_size,valid_set=False):
+        cache_root = get_data_cache_or_nothing('cifar10-cache/')
 
-            image_config = {"type": "image",
-                            "height": 32,
-                            "width": 32}
-            label_config = {"type": "label",
-                            "binary": False}
-            augmentation = {"type": "image",
-                            "padding":2,
-                            "crop_enable": False,
-                            "flip_enable": True}
-            if(valid_set):
-                return {'manifest_filename': manifest_file,
-                        'manifest_root': os.path.dirname(manifest_file),
-                        'batch_size': batch_size,
-                        'block_size': 5000,
-                        'cache_directory': cache_root,
-                        'etl': [image_config, label_config]}
-            #Training Set
+        image_config = {"type": "image",
+                        "height": 32,
+                        "width": 32}
+        label_config = {"type": "label",
+                        "binary": False}
+        augmentation = {"type": "image",
+                        "padding":4,
+                        "crop_enable":False,
+                        "flip_enable": True}
+        if(valid_set):
             return {'manifest_filename': manifest_file,
-                        'manifest_root': os.path.dirname(manifest_file),
-                        'batch_size': batch_size,
-                        'block_size': 5000,
-                        'cache_directory': cache_root,
-                        'etl': [image_config, label_config],
-                        'augmentation': [augmentation]}
-            
-        elif(dataset=="i1k"):
-            cache_root=get_data_cache_or_nothing("i1k-cache/")
+                	'manifest_root': os.path.dirname(manifest_file),
+                	'batch_size': batch_size,
+                	'block_size': 5000,
+                	'cache_directory': cache_root,
+                	'etl': [image_config, label_config]}
 
-            image_config ={"type": "image",
-                            "height": 224,
-                            "width": 224}
-
-            label_config={"type": "label",
-                          "binary": False}
-
-            augmentation = {"type": "image",
-                            "padding":4,
-                            "crop_enable": False,
-                            "flip_enable": True}
-
-            return {'manifest_filename': manifest_file,
-                    'manifest_root': "/dataset/aeon/I1K/i1k-extracted/",
-                    'batch_size': batch_size,
-                    'block_size': 5000,
-                    'cache_directory': cache_root,
-                    'etl': [image_config, label_config],
-                    'augmentation': [augmentation]}
-            print("Imagenet")
-        else:
-            print("Choose dataset cifar10 or i1k")
-            exit()
+        return {'manifest_filename': manifest_file,
+                'manifest_root': os.path.dirname(manifest_file),
+                'batch_size': batch_size,
+                'block_size': 5000,
+                'cache_directory': cache_root,
+                'etl': [image_config, label_config],
+                'augmentation': [augmentation]}
 
     train_config = common_config(train_manifest, batch_size)
     train_config['iteration_mode'] = "COUNT"
@@ -131,8 +93,6 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
 
     valid_config = common_config(valid_manifest, batch_size,valid_set=True)
     valid_config['iteration_mode'] = "ONCE"
-    valid_config['shuffle_manifest'] = True
-    valid_config['shuffle_enable'] = True
 
     train_loader = AeonDataLoader(train_config)
     valid_loader = AeonDataLoader(valid_config)

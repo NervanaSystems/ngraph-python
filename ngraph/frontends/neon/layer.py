@@ -617,13 +617,13 @@ class Convolution(Layer):
     """
     TODO: Document, bias should not be used when batch norm is
     """
-    def __init__(self, fshape,rho,bz,filter_init, strides=1, padding=0, dilation=1, bias_init=None,
+    def __init__(self, fshape,rho,filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
         super(Convolution, self).__init__(**kwargs)
 
         self.make_conv_layer(fshape, filter_init, strides, padding, dilation, **kwargs)
         self.bias = Bias(init=bias_init)
-        self.batch_norm = BatchNorm(rho=rho,bz=bz) if batch_norm else None
+        self.batch_norm = BatchNorm(rho=rho) if batch_norm else None
         self.activation = Activation(transform=activation)
 
     def make_conv_layer(self, fshape, filter_init, strides, padding, dilation, **kwargs):
@@ -675,7 +675,7 @@ class BatchNorm(Layer):
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
     .. [Laurent2016] https://arxiv.org/abs/1510.01378
     """
-    def __init__(self, rho=0.9,bz=128, eps=1e-3, init_gamma=1.0, init_beta=0.0,
+    def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
         self.eps = eps
@@ -688,7 +688,6 @@ class BatchNorm(Layer):
         self.beta = None
         self.gmean = None
         self.gvar = None
-        self.debiaser=bz/(bz-1.0)
 
 
     @SubGraph.scope_op_creation
@@ -717,7 +716,6 @@ class BatchNorm(Layer):
         xvar = ng.variance(in_obj, out_axes=out_axes)
 
         if Layer.inference_mode:
-            ng.assign(self.gvar,self.gvar*self.debiaser),
             return ng.unflatten(self.gamma * ((in_obj - self.gmean) *
                                 ng.reciprocal(ng.sqrt(self.gvar + self.eps))) + self.beta)
         else:

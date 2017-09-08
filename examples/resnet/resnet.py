@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import division, print_function
-from builtins import range
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Sequential, Dropout, XavierInit
@@ -36,128 +34,102 @@ import matplotlib.pyplot as plt
 #Optimizer
 base_lr=0.1
 gamma=0.1
-#learning_schedule=[78200, 94200]
 momentum_coef=0.9
 wdecay=0.0001
 #BatchNorm
-rho=0.3
-#initializer
+rho_val=0.3
+#Initializer
 weight_init=KaimingInit()
 
 print("HyperParameters")
 print("Learning Rate:     "+str(base_lr))
 print("Momentum:          "+str(momentum_coef))
 print("Weight Decay:      "+str(wdecay))
-print("Rho:               "+str(rho))
+print("Rho:               "+str(rho_val))
 
 #Helpers
 #TODO: Fix mean_subtract for imagenet
 def mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
     axes=[x.axes.channel_axis()],
-    initial_value=np.array([104., 119., 127.]))
-    return (x - bgr_mean) / 255.
+    initial_value=np.array([127.0, 119.0, 104.0]))
+    return (x - bgr_mean)/255.0
 
 #Returns dict of convolution layer parameters
-def conv_params(fil_size, num_fils,rho,batch_size,strides=1,batch_norm=True,relu=True):
+def conv_params(fil_size, num_fils,rho=rho_val,strides=1,batch_norm=True,relu=True):
     return dict(fshape=(fil_size,fil_size,num_fils),
                 rho=rho,
-                bz=batch_size,
                 strides=strides,
                 padding=(1 if fil_size > 1 else 0),
                 batch_norm=batch_norm,
                 activation=(Rectlin() if relu else None),
                 filter_init=weight_init)
+
 #Class for Residual Module
 class ResidualModule(object):
-    def __init__(self,num_fils,rho,batch_size,first=False,strides=1):
-        self.side_path =None
-        #Trunk represents the operation after addition
-        self.trunk =None
+    def __init__(self,num_fils,direct=True,strides=1):
+        self.direct=direct
+        #This is for i1k Resnet50 and above
         if en_bottleneck:
             print("Oops you should not be here until i1k is done");
             exit()
+        #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
         else:
-            #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
-            main_path=([Convolution(**conv_params(3,num_fils,rho,batch_size,strides=strides)),
-                        Convolution(**conv_params(3,num_fils,rho,batch_size,relu=False))])
-            #Add a 1x1 Conv with strides 2 for dimension reduction to allow proper addition
-            if strides == 2:
-                self.side_path=Convolution(**conv_params(1,num_fils,rho,batch_size,strides=strides,relu=False))
-            #Relu after addition (Change to control relu location)
-            if not first:
-                self.trunk=Sequential([Activation(Rectlin())])
-            self.main_path=Sequential(main_path)
+            #Main path always does two 3x3 convs with second one not doing activation
+            self.main_path=Sequential([
+                Convolution(**conv_params(3,num_fils,strides=strides)),
+                Convolution(**conv_params(3,num_fils,relu=False))])
+            
+            #Side path will either have a 1x1 Conv to match shape or direct connection
+            if(direct):
+                self.side_path=None
+            else:
+                self.side_path=Convolution(**conv_params(1,num_fils,strides=strides,relu=False))
 
     def __call__(self,in_obj):
-        if en_bottleneck:
-            print("Comeback when i1k is implemented")
-            exit()
-        else:
-            #Process through trunk if it exists
-            trunk_val=self.trunk(in_obj) if self.trunk else in_obj
-            #Divide input half for size matching
-            identity_conn=self.side_path(trunk_val) if self.side_path else trunk_val
-            #Calculate outputs of convolution
-            convs=self.main_path(trunk_val)
-            #Do the addition
-            summed_opt=ng.add(identity_conn,convs)
-        return summed_opt
+        #Computes the output for main path. Parallel path 1
+        mp=self.main_path(in_obj)
+        #Computes the output for side path. Parallel path 2
+        sp=in_obj if self.direct else self.side_path(in_obj)
+        #Sum both the paths        
+        return mp+sp
 
 #Class for constructing the network
 class BuildResnet(Sequential):
-    def __init__(self,net_type,batch_size):
-        num_fils=[16,32,64]
+    def __init__(self,net_type):
+        #For CIFAR10 dataset
         if net_type=='cifar10':
+            #Number of Filters
+            num_fils=[16,32,64]
+            #Network Layers
             layers=[#Subtracting mean as suggested in paper
                     Preprocess(functor=mean_subtract),
                     #First Conv with 3x3 and stride=1
-                    Convolution(**conv_params(3,16,rho,batch_size))]
-            first=True
-            #Lay out residual layers. Hardcoding 3 as there are only 3 sets of filters
+                    Convolution(**conv_params(3,16))]
+
+            first_resmod=True #Indicates the first residual module
+
+            #Loop 3 times for each filter.
             for fil in range(3):
+                #Lay out n residual modules so that we have 2n layers.
                 for resmods in range(num_resnet_mods):
                     if(resmods==0):
-                        if(first):
-                            layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1,first=first))
-                            first=False
+                        if(first_resmod):
+                            #Strides=1 and convolution side path
+                            layers.append(ResidualModule(num_fils[fil],direct=False)) 
+                            layers.append(Activation(Rectlin()))
+                            first_resmod=False
                         else:
-                            layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=2))
+                            #Strides=2 and Convolution side path
+                            layers.append(ResidualModule(num_fils[fil],strides=2,direct=False))
+                            layers.append(Activation(Rectlin()))
                     else:
-                        layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1))
-            layers.append(Activation(Rectlin()))
+                        #Strides=1 and direction connection
+                        layers.append(ResidualModule(num_fils[fil]))
+                        layers.append(Activation(Rectlin()))
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
             layers.append(Affine(axes=ax.Y,weight_init=weight_init))
-            layers.append(BatchNorm(rho=rho,bz=batch_size))
-            layers.append(Activation(Softmax()))
-        elif net_type=='i1k':
-            if(en_bottleneck):
-                print("Still bottlenecking Resnet50")
-                exit()
-            else:
-                num_fils=[64,128,256,512]
-                layers=[#Subtract mean
-                        Preprocess(functor=mean_subtract),
-                        #First Conv Layer and Max pool
-                        Convolution(**conv_params(7,64,rho,batch_size)),
-                        Pool2D(3,strides=2,op="max")]
-                first=True
-                for fil in range(4):
-                    for resmods in range(num_resnet_mods):
-                            if(resmods==0):
-                                if(first):
-                                    layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1,first=first))
-                                    first=False
-                                else:
-                                    layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=2))
-                            else:
-                                layers.append(ResidualModule(num_fils[fil],rho,batch_size,strides=1))
-            layers.append(Activation(Rectlin()))
-            #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
-            layers.append(Pool2D(7,op='avg'))
-            layers.append(Affine(axes=ax.Y,weight_init=weight_init))
-            #layers.append(BatchNorm(rho=rho,bz=batch_size))
             layers.append(Activation(Softmax()))
         else:
             print("Unknown dataset")
@@ -191,9 +163,8 @@ if __name__ == "__main__":
     parser.add_argument('-tb',type=int,default=0,help="1- Enables tensorboard")
     parser.add_argument('-name',type=str,help="Name of experiment for graph")
     args=parser.parse_args()
-    #rho=args.batch_size/(args.batch_size+1.0)
     args.iter_interval=50000//args.batch_size 
-    learning_schedule=[82*args.iter_interval, 124*args.iter_interval]
+    learning_schedule=[84*args.iter_interval,120 *args.iter_interval]
     print("Learning Schedule: "+str(learning_schedule))
 
     #Command line args
@@ -246,7 +217,7 @@ if __name__ == "__main__":
         exit()
 
 #Build the network
-resnet = BuildResnet(resnet_dataset,args.batch_size)
+resnet = BuildResnet(resnet_dataset)
 #Optimizer
 learning_rate_policy = {'name': 'schedule',
                         'schedule': learning_schedule,
@@ -256,13 +227,13 @@ learning_rate_policy = {'name': 'schedule',
 optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
                                   momentum_coef=momentum_coef,
                                   wdecay=wdecay,
-                                  nestrov=True,
+                                  #nesterov=True,
                                   iteration=input_ph['iteration'])
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
 #Tensorboard
 if(args.tb):
-    seq1=BuildResnet(resnet_dataset,args.batch_size)
+    seq1=BuildResnet(resnet_dataset)
     train=seq1(input_ph['image'])
     tb=TensorBoard("./")
     tb.add_graph(train)
@@ -292,6 +263,7 @@ interval_cost = 0.0
 train_result=[]
 test_result=[]
 err_result=[]
+diff_result=[]
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
@@ -302,21 +274,29 @@ for step, data in enumerate(train_set):
     if (step + 1) % args.iter_interval == 0 and step > 0:
         eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
         tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                   "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
+                   "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost} Diff:{diff}".format(
                        interval=step // args.iter_interval,
                        iteration=step,
-                       cost=interval_cost / args.iter_interval,tcost=eval_losses))
+                       cost=interval_cost / args.iter_interval,tcost=eval_losses,diff=abs(eval_losses['cross_ent_loss']-(interval_cost/args.iter_interval))))
         #For graph plotting
         train_result.append(interval_cost/args.iter_interval)
         test_result.append(eval_losses['cross_ent_loss'])
         err_result.append(eval_losses['misclass'])
+	diff_result.append(abs(eval_losses['cross_ent_loss']-(interval_cost/args.iter_interval)))
         interval_cost = 0.0
-        #tqdm.write("VALID Avg losses: {}".format(eval_losses))
-print("Plotting and Saving the plot")
-plt.plot(train_result,'g--',label="Training Cost")
-plt.plot(test_result,'r-o',label="Test Cost")
+
+print("\nPlotting and Saving the plot")
+plt.figure(1)
+plt.subplot(211)
+plt.plot(train_result,label="Training Cost")
+plt.plot(test_result,label="Test Cost")
+plt.legend()
+plt.subplot(212)
 plt.plot(err_result,label="Error")
 plt.legend()
 plt.savefig(args.name+"_graph.png")
+plt.figure(2)
+plt.plot(diff_result)
+plt.savefig(args.name+"_diffgraph.png")
 print("Training complete.")
 
