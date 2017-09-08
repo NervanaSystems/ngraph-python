@@ -25,9 +25,15 @@ import ngraph.transformers as ngt
 from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
 from ngraph.op_graph.tensorboard.graph_def import ngraph_to_tf_graph_def
 from data import make_aeon_loaders
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+except ImportError:
+    matplotlib_available = False
+    print("matplotlib is not available disabling plotting")
+else:
+    matplotlib_available = True
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
 
 #Hyperparameters
@@ -161,7 +167,8 @@ if __name__ == "__main__":
     parser.add_argument('-dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
     parser.add_argument('-size', type=int, default=56, help="Enter size of resnet")
     parser.add_argument('-tb',type=int,default=0,help="1- Enables tensorboard")
-    parser.add_argument('-name',type=str,help="Name of experiment for graph")
+    if matplotlib_available:
+        parser.add_argument('-name',type=str,help="Name of experiment for graph", required=True)
     args=parser.parse_args()
     args.iter_interval=50000//args.batch_size 
     learning_schedule=[84*args.iter_interval,120 *args.iter_interval]
@@ -284,19 +291,19 @@ for step, data in enumerate(train_set):
         err_result.append(eval_losses['misclass'])
 	diff_result.append(abs(eval_losses['cross_ent_loss']-(interval_cost/args.iter_interval)))
         interval_cost = 0.0
-
-print("\nPlotting and Saving the plot")
-plt.figure(1)
-plt.subplot(211)
-plt.plot(train_result,label="Training Cost")
-plt.plot(test_result,label="Test Cost")
-plt.legend()
-plt.subplot(212)
-plt.plot(err_result,label="Error")
-plt.legend()
-plt.savefig(args.name+"_graph.png")
-plt.figure(2)
-plt.plot(diff_result)
-plt.savefig(args.name+"_diffgraph.png")
-print("Training complete.")
+        #tqdm.write("VALID Avg losses: {}".format(eval_losses))
+if matplotlib_available:
+    plt.figure(1)
+    plt.subplot(211)
+    plt.plot(train_result,label="Training Cost")
+    plt.plot(test_result,label="Test Cost")
+    plt.legend()
+    plt.subplot(212)
+    plt.plot(err_result,label="Error")
+    plt.legend()
+    plt.savefig(args.name+"_graph.png")
+    plt.figure(2)
+    plt.plot(diff_result)
+    plt.savefig(args.name+"_diffgraph.png")
+    print("Training complete.")
 

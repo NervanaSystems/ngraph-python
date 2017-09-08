@@ -80,7 +80,7 @@ def test_linear_ones(input_size, input_placeholder, output_size):
         comp = ex.executor([out, layer.W], input_placeholder)
         output_values, w = comp(x)
 
-    assert ng.testing.allclose(
+    ng.testing.assert_allclose(
         np.ones(out.axes.lengths) * input_size,
         output_values,
         atol=0.0, rtol=0.0
