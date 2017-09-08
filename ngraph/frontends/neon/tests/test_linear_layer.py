@@ -171,7 +171,7 @@ def test_linear_keep_axes_ones(batch_axis, input_size, input_placeholder, output
         comp = ex.executor([out, layer.W], input_placeholder)
         output_values, w = comp(x)
 
-    assert ng.testing.allclose(
+    assert np.allclose(
         np.ones(out.axes.lengths) * input_size * batch_axis.length,
         output_values,
         atol=0.0, rtol=0.0
@@ -201,7 +201,7 @@ def test_linear_keep_batch_axes_ones(batch_axis, input_size, input_placeholder, 
         comp = ex.executor([out, layer.W], input_placeholder)
         output_values, w = comp(x)
 
-    assert ng.testing.allclose(
+    assert np.allclose(
         np.ones(out.axes.lengths) * input_size,
         output_values,
         atol=0.0, rtol=0.0
