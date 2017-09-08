@@ -43,7 +43,7 @@ gamma=0.1
 momentum_coef=0.9
 wdecay=0.0001
 #BatchNorm
-rho_val=0.3
+rho_val=0.2
 #Initializer
 weight_init=KaimingInit()
 
@@ -234,7 +234,7 @@ learning_rate_policy = {'name': 'schedule',
 optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
                                   momentum_coef=momentum_coef,
                                   wdecay=wdecay,
-                                  #nesterov=True,
+                                  nesterov=True,
                                   iteration=input_ph['iteration'])
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
