@@ -190,9 +190,6 @@ def conv_output_dim(X, S, padding, strides, pooling=False, dilation=1):
         dilation (int): dilation of filter
     """
 
-    # if pooling and padding >= S:
-    #     raise ValueError("Padding dim %d incompatible with filter size %d" % (padding, S))
-
     return ConvParameters(X, S, strides, dilation).get_output_size(padding)
 
 
@@ -229,8 +226,8 @@ def make_convparams(nout, filter_shape, strides, padding, dilation):
     convparams = dict()
     convparams["K"] = nout
 
-    for name, value in zip("TRS", [filter_shape[nm] for nm in "DHW"]):
-        convparams[name] = value
+    for ng_name, filter_name in zip('TRS', 'DHW'):
+        convparams[ng_name] = filter_shape[filter_name]
 
     for name in "DHW":
         for prefix, prop in zip(("str", "pad", "dil"),
