@@ -363,11 +363,10 @@ def test_learning_policy_schedule(drop_factor):
 
 
 @pytest.mark.parametrize("w_clip", [0.001, 0.01, 0.1, 1])
+@pytest.mark.parametrize("optimizer", [RMSProp(0.1, weight_clip_value=w_clip), Adam(0.1), GradientDescentMomentum(0.1)])
 def test_weight_clipping(w_clip):
-    opt0 = RMSProp(0.1, weight_clip_value=w_clip)
-    opt1 = Adam(0.1, weight_clip_value=w_clip)
-    opt2 = GradientDescentMomentum(0.1, weight_clip_value=w_clip)
-
+    opt_ng  = optimizer(0.1, weight_clip_value=w_clip)
+    import ipdb; ipdb.set_trace()
     # Set up data placeholders
     C = ng.make_axis(20)
     N = ng.make_axis(32, name='N')
@@ -387,21 +386,19 @@ def test_weight_clipping(w_clip):
     # Set up op graph
     cost = ng.sum(target - ng.dot(W, data), out_axis=())
 
-    for opt_ng in [opt0, opt1, opt2]:
+    updated_weights = ng.sequential([opt_ng(cost), W])
 
-        updated_weights = ng.sequential([opt_ng(cost), W])
+    epsilon = 1e-8
+    # Set up the computation and run the "train" loop
+    with ExecutorFactory() as ex:
+        opt_ng_comp = ex.transformer.computation(updated_weights, data, target)
+        mock_dataset = data_generator(20, C.length, N.length)
 
-        epsilon = 1e-8
-        # Set up the computation and run the "train" loop
-        with ExecutorFactory() as ex:
-            opt_ng_comp = ex.transformer.computation(updated_weights, data, target)
-            mock_dataset = data_generator(20, C.length, N.length)
+        for x, y in mock_dataset:
+            ng_W = opt_ng_comp(x, y)  # updated weights for ngraph optimizer
 
-            for x, y in mock_dataset:
-                ng_W = opt_ng_comp(x, y)  # updated weights for ngraph optimizer
-
-                assert np.max(ng_W) < w_clip + epsilon
-                assert np.min(ng_W) > -w_clip - epsilon
+            assert np.max(ng_W) < w_clip + epsilon
+            assert np.min(ng_W) > -w_clip - epsilon
 
 
 if __name__ == '__main__':

@@ -38,19 +38,20 @@ from toy_utils import DataGenerator, NormalNoise, generate_plot
 parser = NgraphArgparser()
 parser.add_argument('--plot_interval', type=int, default=200,
                     help='Plot results every this many iterations')
-parser.add_argument('--loss_type', type=str, default="WGAN-GP",  # WGAN, WGAN-GP
-                    help='Choose Wasserstein Loss (WGAN) or W-loss + Gradient Penalty (WGAN-GP)')
+parser.add_argument('--loss_type', type=str, default='WGAN-GP',
+                    help='Choose loss type', choices=['WGAN-GP', 'WGAN'])
 parser.add_argument('--gp_scale', type=int, default=1,
                     help='Scale of the gradient penalty')
 parser.add_argument('--w_clip', type=int, default=0.01,
                     help='Weight clipping value for WGAN')
-parser.add_argument('--data_type', type=str, default="Roll",  # Rectangular, Circular, Roll
-                    help='Choose ground truth distribution: Rectangular, Circular, Roll')
+parser.add_argument('--data_type', type=str, default='Roll',
+                    help='Choose ground truth distribution', 
+                    choices=['Rectangular', 'Circular', 'Roll'])
 parser.add_argument('--dim', type=int, default=512,
                     help='Hidden layer dimension for the model')
 parser.add_argument('--num_critic', type=int, default=5,
                     help='Number of discriminator iterations per generator iteration')
-parser.add_argument('--plot_dir', type=str, default="WGAN_Toy_Plots",
+parser.add_argument('--plot_dir', type=str, default='WGAN_Toy_Plots',
                     help='Directory name to save the results')
 
 args = parser.parse_args()

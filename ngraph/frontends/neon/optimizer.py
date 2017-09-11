@@ -99,7 +99,7 @@ def clip_gradient_value(grad, clip_value=None):
         return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
-def clip_weight_value(weight, clip_value=None):
+def clip_weight_value(weight, clip_value=None, min_value=None):
     """
     Element-wise clip a weight tensor to between ``-clip_value`` and ``+clip_value``.
 
@@ -107,14 +107,18 @@ def clip_weight_value(weight, clip_value=None):
         weight (Tensor): List of gradients for a single layer
         clip_value (float, optional): Value to element-wise clip weights.
                                       Defaults to None.
+        min_value (float, optional): Value to minimum value to element-wise clip
+                                     weights. Defaults to -abs(clip_value)
 
     Returns:
         weight (list): List of clipped weights.
     """
     if clip_value is None:
         return weight
+    if min_value is None:
+        min_value = -abs(clip_value)
     else:
-        return ng.minimum(ng.maximum(weight, -abs(clip_value)), abs(clip_value))
+        return ng.minimum(ng.maximum(weight, min_value), abs(clip_value))
 
 
 class Optimizer(SubGraph):

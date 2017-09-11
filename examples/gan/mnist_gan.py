@@ -42,13 +42,13 @@ from utils import save_plots, get_image, train_schedule, Noise
 parser = NgraphArgparser()
 parser.add_argument('--plot_interval', type=int, default=200,
                     help='Save generated images with a period of this many iterations')
-parser.add_argument('--loss_type', default="WGAN-GP",
-                    help='Loss Function: DCGAN, WGAN, WGAN-GP')
+parser.add_argument('--loss_type', default='WGAN-GP',
+                    help='Loss Function', choices=['DCGAN', 'WGAN', 'WGAN-GP'])
 parser.add_argument('--gp_scale', type=int, default=10,
                     help='Scale of the gradient penalty')
 parser.add_argument('--w_clip', type=int, default=0.01,
                     help='Weight clipping value for WGAN')
-parser.add_argument('--plot_dir', type=str, default="MNIST_Plots",
+parser.add_argument('--plot_dir', type=str, default='MNIST_Plots',
                     help='Directory name to save the results')
 args = parser.parse_args()
 

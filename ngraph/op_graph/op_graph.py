@@ -3698,9 +3698,10 @@ def L2_norm(x, eps=1e-8, out_axes=None, reduction_axes=None):
     Args:
         x (TensorOp): Tensor
         eps (Scalar): Small non-negative number to prevent divide by
-                      zero in the derivative of squareroot
+                      zero in the derivative of squareroot. Default is 
+                      1e-8.
         reduction_axes: if supplied, return the norm on these axes
-                        instead
+                        instead. Default is sample axes.
     Returns:
         TensorOp: The result.
     """
@@ -3718,8 +3719,9 @@ def L1_norm(x, out_axes=None, reduction_axes=None):
 
     Args:
         x (TensorOp): Tensor
+        out_axes: 
         reduction_axes: if supplied, return the norm on these axes
-                        instead
+                        instead. Default is sample axes.
     Returns:
         TensorOp: The result.
     """
