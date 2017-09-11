@@ -65,7 +65,7 @@ def test_serialize_and_deserialize_multi_np():
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
-def test_extract_op(transformer_factory):
+def test_extract_op():
     # set up an op and Assign a value to it so we can read it out
     axes = ng.make_axes([
         ng.make_axis(name='A', length=2),
@@ -84,7 +84,7 @@ def test_extract_op(transformer_factory):
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
-def test_extract_many_ops(transformer_factory):
+def test_extract_many_ops():
     """
     Create NUM_OPS, fill them with 0, 1, 2, ... then check that
     serde_weights.extract_ops is able to extract the correct uuid/value pairs.
@@ -113,7 +113,7 @@ def test_extract_many_ops(transformer_factory):
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
-def test_set_op_value(transformer_factory):
+def test_set_op_value():
     """
     set up a variable, then use serde_weights.set_op_value to inject a value
     into the graph.  Then double check that the value was injected.
@@ -136,7 +136,7 @@ def test_set_op_value(transformer_factory):
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
-def test_set_op_values(transformer_factory):
+def test_set_op_values():
     NUM_OPS = 3
 
     # set up an op and Assign a value to it so we can read it out
@@ -185,7 +185,7 @@ def test_json_dumps_manifest():
 
 @pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 @pytest.mark.transformer_dependent
-def test_round_trip(transformer_factory):
+def test_round_trip():
     # set up an op and Assign a value to it so we can read it out
     axes = ng.make_axes([
         ng.make_axis(name='A', length=2),

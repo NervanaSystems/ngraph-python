@@ -50,8 +50,6 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
         # TODO when more than one block, we would iterate over each block
         self.exop_block = computation_decl.exop_block
 
-        self.begin_pass(**kwargs)
-
         # TODO Add other types when they are in use
         assert isinstance(self.exop_block, ExOpBlock)
         self.did_something = True
@@ -59,8 +57,7 @@ class SequentialExOpPass(with_metaclass(abc.ABCMeta, GraphPass)):
             self.did_something = False
             for exop in self.exop_block:
                 self.visit_exop(exop, *exop.input_decls)
-
-        return self.end_pass(**kwargs)
+        return
 
     @abc.abstractmethod
     def visit_exop(self, exop, *exop_args):
@@ -197,3 +194,42 @@ class IndexElision(SequentialExOpPass):
         exop.output_decls[0].tensor_decl = output_decl.tensor_decl
         output_decl.exop.take_output_decl(exop.output_decls[0])
         self.exop_block.remove_exop(exop)
+
+
+class CopyElimination(SequentialExOpPass):
+    @exop_method(dispatch_base_type=Op)
+    def visit_exop(self, exop, *args):
+        pass
+
+    @visit_exop.on_type(WriteOp)
+    def visit_exop(self, exop, *args):
+        if len(args) == 1:
+            source_output_decl = exop.input_decls[0].source_output_decl
+            source_exop = source_output_decl.exop
+            if source_exop.write_args and source_exop.input_decls:
+                # Check if the persistent tensor written to is live
+                # at the point where the temporary write is created
+                # and skip this copy
+                nexop = source_exop.next_exop
+                in_use = False
+                while (nexop is not exop) and (not nexop.is_exop_end_of_list):
+                    for input_decl in nexop.input_decls:
+                        if exop.write_args[0].tensor_decl is input_decl.tensor_decl:
+                            in_use = True
+                    nexop = nexop.next_exop
+                if in_use:
+                    return
+
+                update_tensor_description = source_exop.write_args[1].tensor_description
+                del source_exop.write_args[:]
+                if source_exop.input_decls[0].tensor_decl is exop.write_args[0].tensor_decl:
+                    source_exop.add_write_arg(exop.write_args[0].source_output_decl,
+                                              update_tensor_description)
+                    source_exop.input_decls.pop(0)
+                else:
+                    source_exop.add_write_arg(exop.write_args[0].source_output_decl)
+                    source_exop.add_write_arg(exop.write_args[0].source_output_decl,
+                                              update_tensor_description)
+                self.exop_block.replace_output_decl(source_exop.output_decls[0],
+                                                    exop.write_args[0].source_output_decl)
+                self.exop_block.remove_exop(exop)

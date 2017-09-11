@@ -52,12 +52,14 @@ def ngraph_to_tf_graph_def(graph):
                 dim = shape.dim.add()
                 dim.name = str(axis.name)
                 dim.size = int(axis.length)
+        hetr_meta_key = ['host_transformer', 'transformer']
+        hetr_metadata = {k: '' for k in hetr_meta_key}
         for key, value in op.attrs.items():
             if key.startswith("_ngraph_metadata_"):
                 key = key.replace("_ngraph_metadata_", "")
                 value_type = value.scalar.WhichOneof("value")
                 if value_type == "string_val":
-                    node_def.attr[key].s = str(value.scalar.string_val)
+                    node_def.attr[key].s = value.scalar.string_val.encode()
                 elif value_type == "bool_val":
                     node_def.attr[key].b = value.scalar.bool_val
                 elif value_type == "double_val":
@@ -67,6 +69,13 @@ def ngraph_to_tf_graph_def(graph):
                 else:
                     # TODO: Could also capture slice and dtype
                     pass
+                if key in hetr_meta_key:
+                    hetr_metadata[key] = value.scalar.string_val
+
+        if hetr_metadata['host_transformer'] is not '' and hetr_metadata['transformer'] is not '':
+            node_def.device = ('/host:{}/transformer:{}'.format(
+                hetr_metadata['host_transformer'],
+                hetr_metadata['transformer'])).encode()
 
         if op.name in op_names:
             raise ValueError("Op with name {} exists in duplicate".format(op.name))

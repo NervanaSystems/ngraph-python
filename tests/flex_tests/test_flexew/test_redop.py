@@ -141,10 +141,10 @@ test_data_double_operand = (
 
 
 @pytest.mark.parametrize("operation, operands, test_name", test_data_single_operand, ids=id_func)
-def test_single_operand(transformer_factory, operation, operands, test_name):
+def test_single_operand(operation, operands, test_name):
     template_one_placeholder(operands, operation)
 
 
 @pytest.mark.parametrize("operation, operands, test_name", test_data_double_operand, ids=id_func)
-def test_double_operand(transformer_factory, operation, operands, test_name):
+def test_double_operand(operation, operands, test_name):
     template_two_placeholders(operands, operation)

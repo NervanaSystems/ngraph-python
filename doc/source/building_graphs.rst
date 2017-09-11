@@ -44,20 +44,6 @@ For example,
 
 ``mysum`` then refers to an instance of the class ``Add`` which is a subclass of ``Op``. ``mysum.args`` is a list containing the ``Ops`` pointed to by the python variables ``x`` and ``y``.
 
-Initializers
-------------
-In addition to ``args``, there are two other types of edges in Nervana Graphs. Each op has an attribute ``initializers`` which contains a (possibly empty) set of ops needed to execute before any computations occur. To use our running example:
-
-.. code-block:: python
-
-    >>> mysum.initializers
-    set()
-
-    >>> x.initializers
-    {<InitTensorOp(InitTensorOp_1):4500973392>}
-
-We see here that ``mysum`` doesn't have any initializers because its value is only known at runtime. ``x`` on the other hand is a constant and can and must be initialized before any computations occur. Initializer subgraphs (the ops in ``initializers`` and all upstream ops) themselves contain ``SetItem``, ``Fill``, ``Flatten``, ``ConstantOp`` and other ops to manipulate a tensor to get it ready for computation.
-
 Non-data Control Dependencies
 -----------------------------
 Finally, consider the following graph construction:
@@ -74,7 +60,7 @@ Here we create a scalar placeholder ``x``, an assignment of 5 to the placeholder
 
   >>> x = ng.placeholder((), initial_value=0)
   >>> z = ng.sequential([
-            ng_assign(x, 5),
+            ng.assign(x, 5),
             x + 1
           ])
 
@@ -83,10 +69,9 @@ Now ``z`` performs the assignment and then returns the value of ``x + 1``.
 General properties of ops
 =========================
 
-All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.NameableValue` and :py:class:`ngraph.op_graph.nodes.DebugInfo`. The former provides ``Ops`` with automatically generated unique names and the latter provides debug info as to the line number and filename where this node was constructed.
+All operational graph ops are instances of the class :py:class:`ngraph.op_graph.op_graph.Op`, which extends :py:class:`ngraph.op_graph.names.ScopedNameableValue`. This provides ``Ops`` with automatically generated unique names.
 
-In addition to the three graph properties explained above (``args`` and
-``initializers``), all ops have the additional attributes:
+In addition to the graph properties explained above (``args``) all ops have the additional attributes:
 
 `axes`
     The axes of the result of the computation. This only needs to be specified
@@ -103,16 +88,6 @@ In addition to the three graph properties explained above (``args`` and
     ops when manipulating them. For example, ``stochastic=dropout`` may be used
     to indicate groups of trainable variables in conjunction with drop-out.
 
-Some useful properties of ops are:
-
-`filename`
-    The file that created the op.
-
-`lineno`
-    The line number in the file where the op was created.
-
-`file_info`
-    The file and line number formatted for debuggers that support clicking on a file location to edit that location.
 
 Op Hierarchy
 ============
@@ -132,9 +107,12 @@ During computation (covered in more detail in :doc:`transformer_usage`), the inp
 .. code-block:: python
 
     import ngraph as ng
-    from ngraph.frontends.neon as ax
+    ax_C = ng.make_axis(length=4, name='C')
+    ax_W = ng.make_axis(length=2, name='W')
+    ax_H = ng.make_axis(length=2, name='H')
+    ax_N = ng.make_axis(length=128, name='N')
 
-    x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
+    x = ng.placeholder((ax_C, ax_W, ax_H, ax_N))
 
 This ``placeholder`` will create an ``AssignableTensorOp`` to trigger the necessary storage to be allocated on the host device and trigger values to be transferred between the device and host. When the op is used in a graph computation, the op serves as a Python handle for the tensor stored on the device.
 
@@ -146,13 +124,8 @@ It is important to remember that ``x`` is a Python variable that holds an op.  T
 
 does not directly double the value of the tensor in the ``placeholder``. Instead, the ``__add__`` method is called with
 both arguments pointing to the same ``placeholder`` object. This returns a new ``Op`` that is now stored as the python variable ``x``.
-On the other hand, to directly modify the value of the ``placeholder``, use:
 
-.. code-block:: python
-
-    ng.SetItem(x, x + x)
-
-Constructing the graph consists mostly of manipulating expressions, so ``SetItem`` should rarely be used directly, except for updating variables at the end of a minibatch. Consider:
+Consider:
 
 .. code-block:: python
 
@@ -171,13 +144,18 @@ function:
 .. code-block:: python
 
     import ngraph as ng
-    from ngraph.frontends.neon import ax
 
-    x = ng.placeholder((ax.C, ax.W, ax.H, ax.N))
-    y0 = ng.placeholder((ax.Y, ax.N))
-    w = ng.variable((ax.C, ax.W, ax.H, ax.Y)))
-    b = ng.variable((ax.Y,))
-    y = ng.tanh(dot(w, x) + b)
+    ax_C = ng.make_axis(length=4, name='C')
+    ax_Y = ng.make_axis(length=4, name='Y')
+    ax_W = ng.make_axis(length=2, name='W')
+    ax_H = ng.make_axis(length=2, name='H')
+    ax_N = ng.make_axis(length=128, name='N')
+
+    x = ng.placeholder((ax_C, ax_W, ax_H, ax_N))
+    y0 = ng.placeholder((ax_Y, ax_N))
+    w = ng.variable((ax_C, ax_W, ax_H, ax_Y))
+    b = ng.variable((ax_Y,))
+    y = ng.tanh(ng.dot(w, x) + b)
     c = ng.squared_L2(y - y0)
     d = ng.deriv(c, w)
 

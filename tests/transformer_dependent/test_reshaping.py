@@ -27,7 +27,7 @@ rtol = atol = 1e-2
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_expand_dims(transformer_factory):
+def test_expand_dims():
     """TODO."""
     C = ng.make_axis()
     D = ng.make_axis()
@@ -96,7 +96,7 @@ def test_expand_dims(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_slice(transformer_factory):
+def test_slice():
     """TODO."""
 
     C = ng.make_axis()
@@ -170,7 +170,7 @@ def test_slice(transformer_factory):
             )
 
 
-def test_reverse_slice(transformer_factory):
+def test_reverse_slice():
     """TODO."""
 
     C = ng.make_axis(length=10)
@@ -186,7 +186,7 @@ def test_reverse_slice(transformer_factory):
 
 @pytest.config.argon_disabled  # TODO triage
 @pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
-def test_multiple_slices(transformer_factory):
+def test_multiple_slices():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
 
@@ -228,7 +228,7 @@ def test_multiple_slices(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_padding(transformer_factory):
+def test_padding():
     """TODO."""
     C = ng.make_axis()
     D = ng.make_axis()
@@ -294,7 +294,7 @@ def test_padding(transformer_factory):
 
 
 @pytest.config.argon_disabled  # TODO triage
-def test_cast_axes(transformer_factory):
+def test_cast_axes():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
 
@@ -324,7 +324,7 @@ def test_cast_axes(transformer_factory):
         ng.testing.assert_allclose(deriv_num, deriv_sym, rtol=rtol, atol=atol)
 
 
-def test_shuffled_deriv(transformer_factory):
+def test_shuffled_deriv():
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated
     C = ng.make_axis(length=3)
@@ -345,7 +345,7 @@ def test_shuffled_deriv(transformer_factory):
         d_fun()
 
 
-def test_slice_tensor_description(transformer_factory):
+def test_slice_tensor_description():
     C = ng.make_axis(2)
 
     td = TensorDescription(ng.make_axes(C))
@@ -356,7 +356,7 @@ def test_slice_tensor_description(transformer_factory):
         )
 
 
-def test_tensor_description_init(transformer_factory):
+def test_tensor_description_init():
     with pytest.raises(ValueError):
         # TensorDescription axes require lengths
         TensorDescription(ng.make_axes(ng.make_axis()))
