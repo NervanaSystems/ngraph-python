@@ -53,7 +53,7 @@ class CPUTensorLayout(PeepholeGraphPass):
             self.replace_op(op, ConvolutionOp(op.conv_params, inputs, filters, bias, axes=op.axes))
 
     @visit.on_type(update_conv)
-    def visit(self, op, delta, inputs):
+    def visit(self, op, delta, inputs, dbias=None):
         replace = False
 
         # If we have updated op.fprop in this pass, replace this op
@@ -73,7 +73,7 @@ class CPUTensorLayout(PeepholeGraphPass):
         #    replace = True
 
         if replace:
-            self.replace_op(op, update_conv(delta, inputs, self.op_arg(fprop, 1), fprop))
+            self.replace_op(op, update_conv(delta, inputs, self.op_arg(fprop, 1), fprop, op.dbias))
 
     @visit.on_type(bprop_conv)
     def visit(self, op, delta, filters):

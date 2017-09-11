@@ -99,14 +99,30 @@ class CPUFusion(GraphRewritePass):
         """
         """
         for (label_map, op) in label_map_op_list:
+            update_conv_exop = self.op_accessor.computation_decl.get_exop(op)
+            delta_exop = update_conv_exop.input_decls[0].source_output_decl.exop
+            if isinstance(delta_exop.op, MapRolesOp):
+                delta_exop = delta_exop.input_decls[0].source_output_decl.exop
+            dbias_exop = None
+
+            for delta_child in delta_exop.output_decls[0].user_input_decls:
+                if isinstance(delta_child.exop.op, Sum)\
+                    and not delta_child.exop.op in self.op_replacement_dict:
+                        dbias_exop = delta_child.exop
+            if dbias_exop == None:
+                if op.dbias is not None:
+                    dbias_exop = self.op_accessor.computation_decl.get_exop(op.dbias)
+            dbias_op = dbias_exop.op if dbias_exop else None
             update_conv_new_op = update_conv(op.args[0],
                                              op.args[1],
                                              op.fprop.args[1],
-                                             op.fprop)
+                                             op.fprop,
+                                             dbias_op)
             try:
                 new_conv_fprop_op = self.op_replacement_dict[op.fprop]
                 update_conv_new_op.fprop = new_conv_fprop_op
                 self.replace_op(op, update_conv_new_op)
+                self.op_replacement_dict[dbias_op] = update_conv_new_op
             except KeyError:
                 return
 
@@ -256,8 +272,11 @@ class CPUFusion(GraphRewritePass):
                 return
             if op.dtype.name != 'float32':
                 return
-
+            
             if inputs in self.op_replacement_dict:
+                # Look for ops computing diff w.r.t gamma and beta in the graph.
+                # BpropBatchnormOp will take over the tensor_decls of dgamma and
+                # compute dgamma and dbeta as well. 
                 delta_exop = self.op_accessor.computation_decl.get_exop(delta)
                 dgamma = None
                 dbeta = None
