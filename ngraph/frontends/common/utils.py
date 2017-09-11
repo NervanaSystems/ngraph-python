@@ -295,7 +295,7 @@ class ConvParameters(object):
             padding (int, tuple, or str): Desired padding value. int values produce symmetric
                 padding. tuple values are passed through as-is. str values can be one of:
                 - valid: No padding
-                - same: Padding to produce the same output size as ceil(input_size / stride)
+                - same: Padding to produce the same output size as the strided input
                 - causal: Padding to offset the filter so outputs only rely on leftward
                           values of the input
                 - full: Padding such that the output contains all points with nonzero overlap
@@ -333,7 +333,7 @@ class ConvParameters(object):
             padding (int, tuple, or str): Desired padding value. int values produce symmetric
                 padding. tuple values are passed through as-is. str values can be one of:
                 - valid: No padding
-                - same: Padding to produce the same output size as ceil(input_size / stride)
+                - same: Padding to produce the same output size as the strided input
                 - causal: Padding to offset the filter so outputs only rely on leftward
                           values of the input
                 - full: Padding such that the output contains all points with nonzero overlap
@@ -346,13 +346,13 @@ class ConvParameters(object):
             ValueError: If padding or output sizes are not valid
         """
         padding = self.get_padding_size(padding)
-        k = self.dilation * (self.filter_size - 1)
-        if self.pooling and (max(padding) > k):
+        k = self.dilation * (self.filter_size - 1) + 1
+        if self.pooling and (max(padding) >= k):
             raise ValueError("Padding dim {} incompatible with filter size {}".format(padding, k))
 
-        output = math.ceil((self.input_size + sum(padding) - k) / self.stride)
+        output = (self.input_size + sum(padding) - k) // self.stride + 1
         if output < 0:
-            raise ValueError("Output after conv will be < 0")
+            raise ValueError("Invalid convolution specifications, size of output would be <0")
         return int(output)
 
     def get_transpose_size(self, padding):
@@ -363,7 +363,7 @@ class ConvParameters(object):
             padding (int, tuple, or str): Desired padding value. int values produce symmetric
                 padding. tuple values are passed through as-is. str values can be one of:
                 - valid: No padding
-                - same: Padding to produce the same output size as ceil(input_size / stride)
+                - same: Padding to produce the same output size as the strided input
                 - causal: Padding to offset the filter so outputs only rely on leftward
                           values of the input
                 - full: Padding such that the output contains all points with nonzero overlap
@@ -380,7 +380,8 @@ class ConvParameters(object):
 
         output = self.stride * (self.input_size - 1) + k + 1 - sum(padding)
         if output < 0:
-            raise ValueError("Output after transposed convolution will be < 0")
+            raise ValueError("Invalid transposed convolution specifications, size of output would "
+                             "be <0")
         return int(output)
 
     def _get_valid_padding(self):
@@ -392,7 +393,7 @@ class ConvParameters(object):
 
     def _get_same_padding(self):
         """
-        'Same' returns outputs
+        'Same' returns outputs  with the same size as the strided input
 
         Notes:
             See https://www.tensorflow.org/api_guides/python/nn#Notes_on_SAME_Convolution_Padding
