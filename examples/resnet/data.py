@@ -21,7 +21,7 @@ from ngraph.util.persist import get_data_cache_or_nothing
 from ngraph.frontends.neon import CIFAR10
 
 
-def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
+def ingest_cifar10(root_dir, overwrite=False):
     '''
     Save CIFAR-10 dataset as PNG files
     '''
@@ -53,36 +53,82 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset=None):
-    train_manifest, valid_manifest = ingest_cifar10(work_dir, padded_size=40)
-
+def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset="cifar10"):
+    #Generating manifests for different datasets
+    if(dataset=="cifar10"):
+        train_manifest, valid_manifest = ingest_cifar10(work_dir)
+    elif(dataset=="i1k"):
+        path="/nfs/site/home/ckothapa/nervana/data/i1k_manifests/"
+        train_manifest, valid_manifest = path+"train-index.csv",path+"val-index.csv"
+    else:
+        print("Unkown dataset.Choose either cifar10 or i1k dataset")
+        exit()
+    
     def common_config(manifest_file, batch_size,valid_set=False):
-        cache_root = get_data_cache_or_nothing('cifar10-cache/')
-
-        image_config = {"type": "image",
-                        "height": 32,
-                        "width": 32}
-        label_config = {"type": "label",
-                        "binary": False}
-        augmentation = {"type": "image",
-                        "padding":4,
-                        "crop_enable":False,
-                        "flip_enable": True}
-        if(valid_set):
+        if(dataset=="cifar10"):
+            #Define Cache
+            cache_root = get_data_cache_or_nothing('cifar10-cache/')
+            #Define image properties
+            image_config = {"type": "image",
+                            "height": 32,
+                            "width": 32}
+            #Define label properties
+            label_config = {"type": "label",
+                            "binary": False}
+            #Define Augmentations
+            augmentation = {"type": "image",
+                            "padding":4,
+                            "crop_enable":False,
+                            "flip_enable": True}
+            #Don't enable augmentations if it is test set
+            if(valid_set):
+                return {'manifest_filename': manifest_file,
+                        'manifest_root': os.path.dirname(manifest_file),
+                        'batch_size': batch_size,
+                        'block_size': 5000,
+                        'cache_directory': cache_root,
+                        'etl': [image_config, label_config]}
             return {'manifest_filename': manifest_file,
-                	'manifest_root': os.path.dirname(manifest_file),
-                	'batch_size': batch_size,
-                	'block_size': 5000,
-                	'cache_directory': cache_root,
-                	'etl': [image_config, label_config]}
-
-        return {'manifest_filename': manifest_file,
-                'manifest_root': os.path.dirname(manifest_file),
-                'batch_size': batch_size,
-                'block_size': 5000,
-                'cache_directory': cache_root,
-                'etl': [image_config, label_config],
-                'augmentation': [augmentation]}
+                    'manifest_root': os.path.dirname(manifest_file),
+                    'batch_size': batch_size,
+                    'block_size': 5000,
+                    'cache_directory': cache_root,
+                    'etl': [image_config, label_config],
+                    'augmentation': [augmentation]}
+        elif(dataset=="i1k"):
+            #Define cache
+            cache_root=get_data_cache_or_nothing("i1k-cache/")
+            #Define image properties
+            image_config={"type":"image",
+                          "height":224,
+                          "width":224}
+            #Define label properties
+            label_config={"type":"label",
+                          "binary":False}
+            #Define Augmentations
+            augmentation={"type":"image",
+                          "scale":(1,1),
+                          "do_area_scale":True,
+                          "center":False}
+            #Dont do augemtations on test set
+            if(valid_set):
+                return{'manifest_filename': manifest_file,
+                       'manifest_root':"/dataset/aeon/I1K/i1k-extracted/",
+                       'batch_size':batch_size,
+                       'block_size':5000,
+                       'cache_directory':cache_root,
+                       'etl':[image_config,label_config]}
+            #Do augmentations on training set
+            return{'manifest_filename': manifest_file,
+                       'manifest_root':"/dataset/aeon/I1K/i1k-extracted/",
+                       'batch_size':batch_size,
+                       'block_size':5000,
+                       'cache_directory':cache_root,
+                       'etl':[image_config,label_config],
+                       'augmentation':[augmentation]}
+        else:
+            print("Unkown dataset.Choose either cifar10 or i1k dataset")
+            exit()
 
     train_config = common_config(train_manifest, batch_size)
     train_config['iteration_mode'] = "COUNT"

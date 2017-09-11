@@ -34,7 +34,8 @@ else:
     matplotlib_available = True
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-
+#TODO
+#Have to change learning schedule
 
 #Hyperparameters
 #Optimizer
@@ -54,12 +55,33 @@ print("Weight Decay:      "+str(wdecay))
 print("Rho:               "+str(rho_val))
 
 #Helpers
-#TODO: Fix mean_subtract for imagenet
-def mean_subtract(x):
+def cifar10_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
     axes=[x.axes.channel_axis()],
     initial_value=np.array([127.0, 119.0, 104.0]))
     return (x - bgr_mean)
+
+def i1k_mean_subtract(x):
+    bgr_mean = ng.persistent_tensor(
+    axes=[x.axes.channel_axis()],
+    initial_value=np.array([127.0, 119.0, 104.0]))
+    return (x - bgr_mean)
+
+#Number of residual modules at each node(need a better name than node)
+def num_resmods(size):
+    #Num Residual modules 
+    if(size==18):
+        num_mods=[2,2,2,2]
+    elif(size==34) or (args.size==50):
+        num_mods=[3,4,6,3]
+    elif(size==101):
+        num_mods=[3,4,23,3]
+    elif(size==152):
+        num_mods=[3,8,36,3]
+    else:
+        print("Wrong i1k sizes")
+        exit()
+    return num_mods
 
 #Returns dict of convolution layer parameters
 def conv_params(fil_size, num_fils,rho=rho_val,strides=1,batch_norm=True,relu=True):
@@ -77,8 +99,18 @@ class ResidualModule(object):
         self.direct=direct
         #This is for i1k Resnet50 and above
         if en_bottleneck:
-            print("Oops you should not be here until i1k is done");
-            exit()
+            #Main path for bottleneck configuration
+            self.main_path=Sequential([
+                Convolution(**conv_params(1,num_fils,strides=strides)),
+                Convolution(**conv_params(3,num_fils)),
+                Convolution(**conv_params(1,num_fils*4,relu=False))])
+            
+            #Side path will either have a 1x1 Conv to match shape or direct connection
+            if(direct):
+                self.side_path=None
+            else:
+                self.side_path=Convolution(**conv_params(1,num_fils*4,strides=strides,relu=False))
+            
         #This is for CIFAR10 and Resnet18 and Resnet34 for i1K
         else:
             #Main path always does two 3x3 convs with second one not doing activation
@@ -109,7 +141,7 @@ class BuildResnet(Sequential):
             num_fils=[16,32,64]
             #Network Layers
             layers=[#Subtracting mean as suggested in paper
-                    Preprocess(functor=mean_subtract),
+                    Preprocess(functor=cifar10_mean_subtract),
                     #First Conv with 3x3 and stride=1
                     Convolution(**conv_params(3,16))]
 
@@ -137,6 +169,43 @@ class BuildResnet(Sequential):
             layers.append(Pool2D(8,op='avg'))
             layers.append(Affine(axes=ax.Y,weight_init=weight_init,bias_init=weight_init))
             layers.append(Activation(Softmax()))
+        #For I1K dataset
+        elif net_type=="i1k":
+            #Number of Filters
+            num_fils=[64,128,256,512]
+            #Number of residual modules we need to instantiate at each level
+            num_mods=num_resmods(args.size)
+            #Network layers
+            layers=[
+                #Subtracting mean
+                Preprocess(functor=i1k_mean_subtract),
+                #First Conv layer
+                Convolution((7,7,64),rho=rho_val,strides=2,padding=3,batch_norm=True,activation=Rectlin(),filter_init=weight_init),
+                #Max Pooling
+                Pool2D(3,strides=2,op='max',padding=1)]
+            first_resmod=True #Indicates the first residual module for which strides are 1
+            #Loop 4 times for each filter
+            for fil in range(4):
+                #Lay out residual modules as in num_mods list
+                for resmods in range(num_mods[fil]):
+                    if(resmods==0):
+                        if(first_resmod):
+                            #Strides=1 and Convolution Side path
+                            layers.append(ResidualModule(num_fils[fil],direct=False))
+                            layers.append(Activation(Rectlin()))
+                            first_resmod=False
+                        else:
+                            #Strides=2 and Convolution side path
+                            layers.append(ResidualModule(num_fils[fil],strides=2,direct=False))
+                            layers.append(Activation(Rectlin()))
+                    else:
+                        #Strides=1 and direction connection
+                        layers.append(ResidualModule(num_fils[fil]))
+                        layers.append(Activation(Rectlin()))
+            #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
+            layers.append(Pool2D(7,op='avg'))
+            layers.append(Affine(axes=ax.Y,weight_init=weight_init,bias_init=weight_init))
+            layers.append(Activation(Softmax()))         
         else:
             print("Unknown dataset")
             exit()
@@ -234,7 +303,7 @@ learning_rate_policy = {'name': 'schedule',
 optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
                                   momentum_coef=momentum_coef,
                                   wdecay=wdecay,
-                                  #nesterov=True,
+                                  nesterov=False,
                                   iteration=input_ph['iteration'])
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
@@ -291,7 +360,6 @@ for step, data in enumerate(train_set):
         err_result.append(eval_losses['misclass'])
 	diff_result.append(abs(eval_losses['cross_ent_loss']-(interval_cost/args.iter_interval)))
         interval_cost = 0.0
-        #tqdm.write("VALID Avg losses: {}".format(eval_losses))
 if matplotlib_available:
     plt.figure(1)
     plt.subplot(211)
