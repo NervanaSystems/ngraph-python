@@ -93,9 +93,17 @@ image_size = 299
 inception = inception.Inception(mini=args.mini)
 
 # Declare the optimizer
+learning_rate_policy = {'name': 'schedule',
+                        'schedule': list(10000*np.arange(3,20,3)),
+                        'gamma': 0.7,
+                        'base_lr': 0.05}
+
+optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
+                                    momentum_coef=0.95,
+                                    gradient_clip_value=3.,
+                                    wdecay=0.0001,
+                                    iteration=inputs['iteration'])
 optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
-optimizer = GradientDescentMomentum(learning_rate=.01, momentum_coef=0.75,
-                                    gradient_clip_value=1.)
 
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
