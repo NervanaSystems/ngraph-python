@@ -35,7 +35,6 @@ def ingest_cifar10(root_dir, overwrite=False):
 
     datasets = CIFAR10(out_dir).load_data()
 
-
     # Now write out image files and manifests
     for setn, manifest, data in zip(set_names, manifest_files, datasets):
         records = [('@FILE', 'STRING')]
@@ -44,7 +43,7 @@ def ingest_cifar10(root_dir, overwrite=False):
             os.makedirs(img_path)
 
         for idx, (img, lbl) in enumerate(tqdm(zip(data['image']['data'], data['label']['data']))):
-            im = Image.fromarray(np.uint8(np.transpose(img, axes=[1, 2, 0]).copy()))            
+            im = Image.fromarray(np.uint8(np.transpose(img, axes=[1, 2, 0]).copy()))
             fname = os.path.join(img_path, '{}_{:05d}.png'.format(lbl, idx))
             im.save(fname, format='PNG')
             records.append((os.path.relpath(fname, out_dir), lbl))
@@ -53,34 +52,34 @@ def ingest_cifar10(root_dir, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,dataset="cifar10"):
-    #Generating manifests for different datasets
-    if(dataset=="cifar10"):
+def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dataset="cifar10"):
+    # Generating manifests for different datasets
+    if(dataset == "cifar10"):
         train_manifest, valid_manifest = ingest_cifar10(work_dir)
-    elif(dataset=="i1k"):
-        path="/nfs/site/home/ckothapa/nervana/data/i1k_manifests/"
-        train_manifest, valid_manifest = path+"train-index.csv",path+"val-index.csv"
+    elif(dataset == "i1k"):
+        path = "/nfs/site/home/ckothapa/nervana/data/i1k_manifests/"
+        train_manifest, valid_manifest = path + "train-index.csv", path + "val-index.csv"
     else:
         print("Unkown dataset.Choose either cifar10 or i1k dataset")
         exit()
-    
-    def common_config(manifest_file, batch_size,valid_set=False):
-        if(dataset=="cifar10"):
-            #Define Cache
+
+    def common_config(manifest_file, batch_size, valid_set=False):
+        if(dataset == "cifar10"):
+            # Define Cache
             cache_root = get_data_cache_or_nothing('cifar10-cache/')
-            #Define image properties
+            # Define image properties
             image_config = {"type": "image",
                             "height": 32,
                             "width": 32}
-            #Define label properties
+            # Define label properties
             label_config = {"type": "label",
                             "binary": False}
-            #Define Augmentations
+            # Define Augmentations
             augmentation = {"type": "image",
-                            "padding":4,
-                            "crop_enable":False,
+                            "padding": 4,
+                            "crop_enable": False,
                             "flip_enable": True}
-            #Don't enable augmentations if it is test set
+            # Don't enable augmentations if it is test set
             if(valid_set):
                 return {'manifest_filename': manifest_file,
                         'manifest_root': os.path.dirname(manifest_file),
@@ -95,37 +94,37 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
                     'cache_directory': cache_root,
                     'etl': [image_config, label_config],
                     'augmentation': [augmentation]}
-        elif(dataset=="i1k"):
-            #Define cache
-            cache_root=get_data_cache_or_nothing("i1k-cache/")
-            #Define image properties
-            image_config={"type":"image",
-                          "height":224,
-                          "width":224}
-            #Define label properties
-            label_config={"type":"label",
-                          "binary":False}
-            #Define Augmentations
-            augmentation={"type":"image",
-                          "scale":(1,1),
-                          "do_area_scale":True,
-                          "center":False}
-            #Dont do augemtations on test set
+        elif(dataset == "i1k"):
+            # Define cache
+            cache_root = get_data_cache_or_nothing("i1k-cache/")
+            # Define image properties
+            image_config = {"type": "image",
+                            "height": 224,
+                            "width": 224}
+            # Define label properties
+            label_config = {"type": "label",
+                            "binary": False}
+            # Define Augmentations
+            augmentation = {"type": "image",
+                            "scale": (1, 1),
+                            "do_area_scale": True,
+                            "center": False}
+            # Dont do augemtations on test set
             if(valid_set):
                 return{'manifest_filename': manifest_file,
-                       'manifest_root':"/dataset/aeon/I1K/i1k-extracted/",
-                       'batch_size':batch_size,
-                       'block_size':5000,
-                       'cache_directory':cache_root,
-                       'etl':[image_config,label_config]}
-            #Do augmentations on training set
+                       'manifest_root': "/dataset/aeon/I1K/i1k-extracted/",
+                       'batch_size': batch_size,
+                       'block_size': 5000,
+                       'cache_directory': cache_root,
+                       'etl': [image_config, label_config]}
+            # Do augmentations on training set
             return{'manifest_filename': manifest_file,
-                       'manifest_root':"/dataset/aeon/I1K/i1k-extracted/",
-                       'batch_size':batch_size,
-                       'block_size':5000,
-                       'cache_directory':cache_root,
-                       'etl':[image_config,label_config],
-                       'augmentation':[augmentation]}
+                   'manifest_root': "/dataset/aeon/I1K/i1k-extracted/",
+                   'batch_size': batch_size,
+                   'block_size': 5000,
+                   'cache_directory': cache_root,
+                   'etl': [image_config, label_config],
+                   'augmentation': [augmentation]}
         else:
             print("Unkown dataset.Choose either cifar10 or i1k dataset")
             exit()
@@ -137,7 +136,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0,data
     train_config['shuffle_enable'] = True
     train_config['random_seed'] = random_seed
 
-    valid_config = common_config(valid_manifest, batch_size,valid_set=True)
+    valid_config = common_config(valid_manifest, batch_size, valid_set=True)
     valid_config['iteration_mode'] = "ONCE"
 
     train_loader = AeonDataLoader(train_config)
