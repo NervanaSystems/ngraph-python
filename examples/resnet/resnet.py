@@ -135,7 +135,7 @@ class BuildResnet(Sequential):
                         layers.append(Activation(Rectlin()))
             #Do average pooling --> fully connected--> softmax.8 since final layer output size is 8
             layers.append(Pool2D(8,op='avg'))
-            layers.append(Affine(axes=ax.Y,weight_init=weight_init))
+            layers.append(Affine(axes=ax.Y,weight_init=weight_init,bias_init=weight_init))
             layers.append(Activation(Softmax()))
         else:
             print("Unknown dataset")
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         parser.add_argument('-name',type=str,help="Name of experiment for graph", required=True)
     args=parser.parse_args()
     args.iter_interval=50000//args.batch_size 
-    learning_schedule=[84*args.iter_interval,120 *args.iter_interval]
+    learning_schedule=[84*args.iter_interval,124 *args.iter_interval]
     print("Learning Schedule: "+str(learning_schedule))
 
     #Command line args
@@ -234,7 +234,7 @@ learning_rate_policy = {'name': 'schedule',
 optimizer=GradientDescentMomentum(learning_rate=learning_rate_policy,
                                   momentum_coef=momentum_coef,
                                   wdecay=wdecay,
-                                  nesterov=True,
+                                  #nesterov=True,
                                   iteration=input_ph['iteration'])
 label_indices=input_ph['label']
 label_indices=ng.cast_role(ng.flatten(label_indices),label_indices.axes.batch_axis())
