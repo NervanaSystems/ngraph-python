@@ -354,7 +354,8 @@ class RMSProp(LearningRateOptimizer):
         updates = ng.sequential([
             ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
             ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
-                                            / (ng.sqrt(state + epsilon) + epsilon)))
+      #                                      / (ng.sqrt(state + epsilon) + epsilon)))
+                                            / (ng.sqrt(state + epsilon))))
         ])
         return updates
 

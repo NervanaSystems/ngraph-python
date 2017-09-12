@@ -71,6 +71,8 @@ parser.add_argument("--train_manifest_file", default='train-index-tabbed.csv',
                     help="Name of tab separated Aeon training manifest file")
 parser.add_argument("--valid_manifest_file", default='val-index-tabbed.csv',
                     help="Name of tab separated Aeon validation manifest file")
+parser.add_argument("--optimizer_name", default='rmsprop',
+                    help="Name of optimizer (rmsprop or sgd)")
 parser.set_defaults(batch_size=8, num_iterations=10000000, iter_interval=2000)
 args = parser.parse_args()
 
@@ -93,18 +95,29 @@ image_size = 299
 inception = inception.Inception(mini=args.mini)
 
 # Declare the optimizer
-learning_rate_policy = {'name': 'schedule',
-                        'schedule': list(10000*np.arange(3,20,3)),
-                        'gamma': 0.7,
-                        'base_lr': 0.05}
+if args.optimizer_name == 'sgd':
+    learning_rate_policy = {'name': 'schedule',
+                            'schedule': list(9000*np.arange(1,10,1)),
+                            'gamma': 0.7,
+                            'base_lr': 0.05}
 
-optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                    momentum_coef=0.95,
-                                    gradient_clip_value=3.,
-                                    wdecay=0.0001,
-                                    iteration=inputs['iteration'])
-optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
-
+    optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
+                                        momentum_coef=0.95,
+                                        gradient_clip_value=3.,
+                                        wdecay=0.0001,
+                                        iteration=inputs['iteration'])
+elif args.optimizer_name == 'rmsprop': 
+    learning_rate_policy = {'name': 'schedule',
+                            'schedule': list(9000*np.arange(1,11,1)),
+                            'gamma': 0.85,
+                            'base_lr': 0.03}
+    optimizer = RMSProp(learning_rate=learning_rate_policy, decay_rate=0.9,
+                        gradient_clip_value=3., epsilon=1.,
+                        iteration=inputs['iteration'])
+    optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
+else:
+    print("Unrecognized optimizer")
+    quit()
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))
@@ -167,7 +180,7 @@ with closing(ngt.make_transformer()) as transformer:
             saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
             saved_losses['eval_misclass'].append(eval_losses['misclass'])
             saved_losses['iteration'].append(step)
-            pickle.dump(saved_losses, open("losses_%s.pkl" % args.backend, "wb"))
+            pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0
 
 print('\n')
