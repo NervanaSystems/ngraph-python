@@ -25,7 +25,7 @@ try:
     from aeon import DataLoader
 except ImportError:
     msg = "\n".join(["",
-                     "Unable to import aeon module.",
+                     "Unable to import Aeon module.",
                      "Please see installation instructions at:",
                      "*****************",
                      "https://github.com/NervanaSystems/aeon/blob/rc1-master/README.md",
@@ -38,19 +38,18 @@ except ImportError:
 class AeonDataLoader(object):
 
     def __init__(self, config, *args, **kwargs):
-
-        # TODO: Remove this workaround once tuples are accepted
-        if "etl" in config and isinstance(config["etl"], tuple):
-            config["etl"] = list(config["etl"])
-
         self.config = config
         self._dataloader = DataLoader(config)
+        self.ndata = self._dataloader.ndata
+        if self.ndata < self._dataloader.batch_size:
+            raise ValueError('Number of examples is smaller than the batch size')
 
     def __next__(self):
         bufs = next(self._dataloader)
-        if 'label' in bufs:
-            bufs['label'] = bufs['label'].flatten()
-        return bufs
+        bufs_dict = dict((key, val) for key, val in bufs)
+        if 'label' in bufs_dict:
+            bufs_dict['label'] = bufs_dict['label'].flatten()
+        return bufs_dict
 
     def __iter__(self):
         return self
@@ -58,13 +57,16 @@ class AeonDataLoader(object):
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
         ax.N.length = self._dataloader.batch_size
-        for placeholder_name, axis_info in self._dataloader.axes_info.items():
+        for placeholder_name, axis_info in self._dataloader.axes_info:
             p_axes = ng.make_axes([ax.N])
-            for nm, sz in axis_info.items():
+            for nm, sz in axis_info:
                 if placeholder_name == 'label': continue
                 nm = "C" if nm == "channels" else nm
                 p_axes += ng.make_axis(name=nm, length=sz)
             placeholders[placeholder_name] = ng.placeholder(p_axes)
         if include_iteration:
-            placeholders['iteration'] = ng.placeholder(axes=())
+            placeholders['iteration'] = ng.placeholder(axes=ng.Axes())
         return placeholders
+
+    def reset(self):
+        self._dataloader.reset()
