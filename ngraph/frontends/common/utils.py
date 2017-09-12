@@ -401,7 +401,7 @@ class ConvParameters(object):
         """
 
         # This could be reduced, if desired.
-        total_pad = int(self.stride * (math.ceil(self.input_size / self.stride) - 1) +
+        total_pad = int(self.stride * (np.ceil(self.input_size / self.stride) - 1) +
                         1 - self.input_size + self.dilation * (self.filter_size - 1))
 
         return (total_pad // 2, int(math.ceil(total_pad / 2)))
