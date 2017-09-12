@@ -405,6 +405,6 @@ class Adagrad(LearningRateOptimizer):
             ng.assign(state, state + ng.square(grad)),
             ng.assign(variable,
                       variable - (scale_factor * self.lrate * grad)
-                      / (ng.sqrt(state) + self.epsilon))
+                      / (ng.sqrt(state + self.epsilon)))
         ])
         return updates

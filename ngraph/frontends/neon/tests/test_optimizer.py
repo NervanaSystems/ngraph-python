@@ -147,8 +147,7 @@ class AdagradReference(object):
         self.state[:] = self.state + np.square(gradient)
 
         weights[:] = weights \
-            - gradient * self.learning_rate / (np.sqrt(self.state + self.epsilon)
-                                               + self.epsilon)
+            - gradient * self.learning_rate / (np.sqrt(self.state + self.epsilon))
 
         return weights
 
