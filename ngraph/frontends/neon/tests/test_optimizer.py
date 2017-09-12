@@ -363,10 +363,10 @@ def test_learning_policy_schedule(drop_factor):
 
 
 @pytest.mark.parametrize("w_clip", [0.001, 0.01, 0.1, 1])
-@pytest.mark.parametrize("optimizer", [RMSProp(0.1, weight_clip_value=w_clip), Adam(0.1), GradientDescentMomentum(0.1)])
-def test_weight_clipping(w_clip):
+@pytest.mark.parametrize("optimizer", [RMSProp, Adam, GradientDescentMomentum])
+def test_weight_clipping(w_clip, optimizer):
     opt_ng  = optimizer(0.1, weight_clip_value=w_clip)
-    import ipdb; ipdb.set_trace()
+
     # Set up data placeholders
     C = ng.make_axis(20)
     N = ng.make_axis(32, name='N')
