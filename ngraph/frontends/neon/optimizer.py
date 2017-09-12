@@ -363,3 +363,48 @@ class Adam(LearningRateOptimizer):
                       variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
         ])
         return updates
+
+
+class Adagrad(LearningRateOptimizer):
+    """
+    Adagrad optimizer
+
+    TODO docstring
+
+    """
+    metadata = {'layer_type': 'adagrad_optimizer'}
+
+    def __init__(
+        self,
+        learning_rate=1e-3,
+        epsilon=1e-8,
+        gradient_clip_norm=None,
+        gradient_clip_value=None,
+        **kwargs
+    ):
+        """
+        Class constructor.
+        Arguments:
+            learning_rate (float): the multiplication coefficient of updates
+            epsilon (float): numerical stability factor
+            gradient_clip_norm (float, optional): Target gradient norm.
+                                                  Defaults to None.
+            gradient_clip_value (float, optional): Value to element-wise clip
+                                                   gradients.
+                                                   Defaults to None.
+        """
+        super(Adagrad, self).__init__(learning_rate, **kwargs)
+        self.epsilon = epsilon
+        self.gradient_clip_norm = gradient_clip_norm
+        self.gradient_clip_value = gradient_clip_value
+
+    def variable_update(self, variable, grad, scale_factor):
+        grad = clip_gradient_value(grad, self.gradient_clip_value)
+        state = ng.persistent_tensor(axes=grad.axes, initial_value=0.)
+        updates = ng.sequential([
+            ng.assign(state, state + ng.square(grad)),
+            ng.assign(variable,
+                      variable - (scale_factor * self.lrate * grad)
+                      / (ng.sqrt(state) + self.epsilon))
+        ])
+        return updates
