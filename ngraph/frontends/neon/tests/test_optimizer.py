@@ -19,7 +19,8 @@ Test of the optimizers
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import GradientDescentMomentum, RMSProp, Adam, LearningRateOptimizer
+from ngraph.frontends.neon import GradientDescentMomentum, RMSProp, Adam
+from ngraph.frontends.neon import LearningRateOptimizer, Adagrad
 from ngraph.testing.execution import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
@@ -120,6 +121,33 @@ class AdamReference(object):
         m_hat = self.m / (1 - self.beta_1 ** self.t)
         v_hat = self.v / (1 - self.beta_2 ** self.t)
         weights = weights - self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+        return weights
+
+
+class AdagradReference(object):
+    '''
+    Simple numpy reference for Adagrad
+    '''
+    def __init__(self, learning_rate, epsilon):
+        self.learning_rate = learning_rate
+        self.epsilon = epsilon
+        self.state = None
+
+    def __call__(self, input_data, weights):
+        '''
+        input_data in this case is a numpy array with batch_size on axis 1
+        and weights is a matrix with 1 column
+        '''
+        if self.state is None:
+            self.state = np.zeros_like(weights)
+
+        gradient = - input_data.mean(axis=1)
+
+        self.state[:] = self.state + np.square(gradient)
+
+        weights[:] = weights \
+            - gradient * self.learning_rate / (np.sqrt(self.state + self.epsilon))
 
         return weights
 
@@ -279,6 +307,22 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, selec
         compare_optimizer(adam, adam_reference)
 
 
+@pytest.mark.parametrize("epsilon", [1e-6])
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_adagrad(random_learning_rate, epsilon, select_variables):
+    adagrad_args = {'learning_rate': random_learning_rate,
+                    'epsilon': epsilon}
+
+    adagrad_ref = AdagradReference(**adagrad_args)
+    adagrad = Adagrad(**adagrad_args)
+
+    # test baseline against reference
+    if select_variables:
+        compare_optimizer_variable_select(adagrad, adagrad_ref)
+    else:
+        compare_optimizer(adagrad, adagrad_ref)
+
+
 @pytest.config.argon_disabled  # TODO triage
 @pytest.config.flex_disabled(reason="Unknown problem yet")
 def test_learning_policy_step():
@@ -366,3 +410,4 @@ if __name__ == '__main__':
     test_rmsprop(0.1, 0.95, 1e-6)
     test_gdm(0.1, 0.1, 0.1, False)
     test_adam(0.1, 0.5, 0.9, 1e-6, None)
+    test_adagrad(0.1, 1e-6)
