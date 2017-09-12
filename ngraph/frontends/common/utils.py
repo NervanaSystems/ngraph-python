@@ -16,7 +16,6 @@
 from __future__ import division
 import ngraph as ng
 import numbers
-import math
 from ngraph.frontends.common import learning_rate_policies as lrp
 import numpy as np
 
@@ -54,11 +53,11 @@ def common_conv2d_pool_output_shape(input_NHWC, filter_HWIO, stride_NHWC, paddin
 
     # get output shape
     if 'SAME' == padding:
-        out_height = math.ceil(float(H) / float(stride_NHWC[1]))
-        out_width = math.ceil(float(W) / float(stride_NHWC[2]))
+        out_height = np.ceil(float(H) / float(stride_NHWC[1]))
+        out_width = np.ceil(float(W) / float(stride_NHWC[2]))
     elif 'VALID' == padding:
-        out_height = math.ceil(float(H - R + 1) / float(stride_NHWC[1]))
-        out_width = math.ceil(float(W - S + 1) / float(stride_NHWC[2]))
+        out_height = np.ceil(float(H - R + 1) / float(stride_NHWC[1]))
+        out_width = np.ceil(float(W - S + 1) / float(stride_NHWC[2]))
 
     return tuple([int(i) for i in [N, out_height, out_width, K]])
 
@@ -404,7 +403,7 @@ class ConvParameters(object):
         total_pad = int(self.stride * (np.ceil(self.input_size / self.stride) - 1) +
                         1 - self.input_size + self.dilation * (self.filter_size - 1))
 
-        return (total_pad // 2, int(math.ceil(total_pad / 2)))
+        return (total_pad // 2, int(np.ceil(total_pad / 2)))
 
     def _get_causal_padding(self):
         """
