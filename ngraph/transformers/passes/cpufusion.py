@@ -47,7 +47,7 @@ class CPUFusion(GraphRewritePass):
             if isinstance(map_roles.args[0], ConvolutionOp):
                 conv_new_op = ConvolutionOp(conv_op.conv_params, conv_op.args[0],
                                             conv_op.args[1], bias, axes=conv_op.axes)
-                self.op_replacement_dict[conv_op.args[0]] = conv_new_op
+                self.op_replacement_dict[conv_op] = conv_new_op
                 map_roles_op = MapRolesOp(conv_new_op, map_roles.axes_map)
                 self.replace_op(op, map_roles_op)
 
@@ -75,7 +75,7 @@ class CPUFusion(GraphRewritePass):
                                            op.args[1],
                                            op.fprop)
             try:
-                new_conv_fprop_op = self.op_replacement_dict[op.fprop.args[0]]
+                new_conv_fprop_op = self.op_replacement_dict[op.fprop]
                 bprop_conv_new_op.fprop = new_conv_fprop_op
                 self.replace_op(op, bprop_conv_new_op)
             except KeyError:
@@ -119,7 +119,7 @@ class CPUFusion(GraphRewritePass):
                                              op.fprop,
                                              dbias_op)
             try:
-                new_conv_fprop_op = self.op_replacement_dict[op.fprop.args[0]]
+                new_conv_fprop_op = self.op_replacement_dict[op.fprop]
                 update_conv_new_op.fprop = new_conv_fprop_op
                 self.replace_op(op, update_conv_new_op)
                 self.op_replacement_dict[dbias_op] = update_conv_new_op
