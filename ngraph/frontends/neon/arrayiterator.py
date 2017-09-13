@@ -126,6 +126,7 @@ class ArrayIterator(object):
 
 
 class SequentialArrayIterator(object):
+
     def __init__(self, data_arrays, time_steps, batch_size,
                  total_iterations=None, reverse_target=False, get_prev_target=False,
                  stride=None, include_iteration=False, tgt_key='tgt_txt',
@@ -152,7 +153,7 @@ class SequentialArrayIterator(object):
         tgt_ket: key for the target sequence in data_arrays
         include_iteration: iWhen set to True, returned dictionary includes the iteration number
         shuffle: If set to True, batches in data_arrays are shuffled.
-                 If False, they are taken sequentially 
+                 If False, they are taken sequentially
         get_prev_target: returns the target of the previous iteration as well as the current one
 
         Example:
@@ -192,7 +193,7 @@ class SequentialArrayIterator(object):
             self.samples = {k: np.squeeze(np.zeros((self.batch_size,
                                                     self.seq_len,
                                                     self.feature_dims[k]),
-                                                    dtype=v.dtype))
+                                                   dtype=v.dtype))
                             for k, v in viewitems(self.data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
