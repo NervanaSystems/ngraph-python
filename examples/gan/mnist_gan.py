@@ -14,7 +14,9 @@
 # ----------------------------------------------------------------------------
 """
 MNIST Example with different losses: DCGAN, WGAN, WGAN with Gradient Penalty
-usage: python mnist_gan.py -b gpu -z 64 -t 30000
+usage(DCGAN): python mnist_gan.py -b gpu -z 64 -t 15000 --loss_type 'DCGAN'
+usage(WGAN): python mnist_gan.py -b gpu -z 64 -t 30000 --loss_type 'WGAN'
+usage(WGAN-GP): python mnist_gan.py -b gpu -z 64 -t 15000 --loss_type 'WGAN-GP'
 """
 
 import numpy as np
