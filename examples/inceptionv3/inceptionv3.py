@@ -37,6 +37,20 @@ from ngraph.util.names import name_scope
 from data import make_aeon_loaders
 import inception
 
+def scale_set(image_set):
+    """
+    Scales a batch of images to between 0 and 1
+    image_set: (batch_size, C, H, W)
+    returns: scaled image_set (batch_size, C, H, W)
+
+    Each image in the set is scaled among its own min and max
+    """
+    # Find maximum of each image
+    maxes = np.amax(image_set, axis=(1,2,3))
+    mins = np.amin(image_set, axis=(1,2,3))
+   
+    scale_factor = (maxes-mins).reshape((image_set.shape[0], 1, 1, 1))
+    return image_set / scale_factor
 
 def eval_loop(dataset, computation, metric_names):
     """
@@ -48,7 +62,7 @@ def eval_loop(dataset, computation, metric_names):
     dataset._dataloader.reset()
     all_results = None
     for data in dataset:
-        data['image'] = data['image'] / 255.
+        data['image'] = scale_set(data['image'])
         feed_dict = {inputs[k]: data[k] for k in data.keys()}
         results = computation(feed_dict=feed_dict)
         if all_results is None:
@@ -98,18 +112,18 @@ inception = inception.Inception(mini=args.mini)
 # Declare the optimizer
 if args.optimizer_name == 'sgd':
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(10000*np.arange(1,4,1)),
-                            'gamma': 0.5,
+                            'schedule': list(5000*np.arange(1, 20, 1)),
+                            'gamma': 0.8,
                             'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                         momentum_coef=0.85,
                                         gradient_clip_value=1.,
-                                        wdecay=0.0001,
+                                        wdecay=4e-5,
                                         iteration=inputs['iteration'])
 elif args.optimizer_name == 'rmsprop': 
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(80000*np.arange(1,10,1)),
+                            'schedule': list(80000*np.arange(1, 10, 1)),
                             'gamma': 0.94,
                             'base_lr': 0.01}
     optimizer = RMSProp(learning_rate=learning_rate_policy, 
@@ -164,7 +178,7 @@ with closing(ngt.make_transformer()) as transformer:
     for step, data in enumerate(train_set):
         data['iteration'] = step
         # Scale the image to [0., .1]
-        data['image'] = data['image'] / 255.
+        data['image'] = scale_set(data['image'])
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output, grads = train_function(feed_dict=feed_dict)
         # Mean grads over channel and batch axis
