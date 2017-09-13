@@ -45,7 +45,9 @@ def make_aeon_loaders(train_manifest, valid_manifest,
 
             augmentation = {"type": "image",
                             "padding": 4,
-                            "flip_enable": True}
+                            "flip_enable": True,
+                            "scale": [0.5, 0.75],
+                            "angle": [-20., 20.]}
 
             return {'manifest_filename': manifest_file,
                     'manifest_root': datadir,
@@ -57,8 +59,7 @@ def make_aeon_loaders(train_manifest, valid_manifest,
                     'augmentation': [augmentation]}
             print("Imagenet")
         else:
-            print("Only Imagenet 1K is supported")
-            exit()
+            raise NotImplementedError("Only Imagenet 1K is supported")
 
     train_config = common_config(train_manifest, batch_size)
     train_config['iteration_mode'] = "COUNT"

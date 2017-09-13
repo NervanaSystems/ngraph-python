@@ -33,6 +33,7 @@ import ngraph.transformers as ngt
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import Layer
 from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum
+from ngraph.util.names import name_scope
 from data import make_aeon_loaders
 import inception
 
@@ -97,27 +98,27 @@ inception = inception.Inception(mini=args.mini)
 # Declare the optimizer
 if args.optimizer_name == 'sgd':
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(9000*np.arange(1,10,1)),
-                            'gamma': 0.7,
-                            'base_lr': 0.05}
+                            'schedule': list(10000*np.arange(1,4,1)),
+                            'gamma': 0.5,
+                            'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                        momentum_coef=0.95,
-                                        gradient_clip_value=3.,
+                                        momentum_coef=0.85,
+                                        gradient_clip_value=1.,
                                         wdecay=0.0001,
                                         iteration=inputs['iteration'])
 elif args.optimizer_name == 'rmsprop': 
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(9000*np.arange(1,11,1)),
-                            'gamma': 0.85,
-                            'base_lr': 0.03}
-    optimizer = RMSProp(learning_rate=learning_rate_policy, decay_rate=0.9,
-                        gradient_clip_value=3., epsilon=1.,
-                        iteration=inputs['iteration'])
-    optimizer = RMSProp(learning_rate=.01, decay_rate=0.9, gradient_clip_value=3., epsilon=1.)
+                            'schedule': list(80000*np.arange(1,10,1)),
+                            'gamma': 0.94,
+                            'base_lr': 0.01}
+    optimizer = RMSProp(learning_rate=learning_rate_policy, 
+                        wdecay=4e-5, decay_rate=0.9,
+                        gradient_clip_value=3., epsilon=1.)
+
 else:
-    print("Unrecognized optimizer")
-    quit()
+    raise NotImplementedError("Unrecognized Optimizer")
+
 # Build the main and auxiliary loss functions
 y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))
@@ -128,11 +129,15 @@ train_prob_aux = inception.seq_aux(inception.seq1(inputs['image']))
 train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot)
 
+# Compute the gradient of output to input
+with name_scope(name="GradientPenalty"):
+    gradient = ng.deriv(ng.sum(train_prob_main, out_axes=[]), inputs['image'])
+
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
-train_computation = ng.computation(batch_cost, 'all')
-
+train_computation = ng.computation([batch_cost, gradient], 'all')
 label_indices = inputs['label'][:, 0]
+
 # Build the computations for inference (evaluation)
 with Layer.inference_mode_on():
     inference_prob = ng.cast_role(inception.seq2(inception.seq1(inputs['image']))[:, 0, 0, 0, :],
@@ -142,6 +147,7 @@ with Layer.inference_mode_on():
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
     eval_computation = ng.computation([eval_loss, errors, inference_prob], "all")
 
+grads_array = [1e9]*2*args.iter_interval
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
     eval_function = transformer.add_computation(eval_computation)
@@ -154,33 +160,45 @@ with closing(ngt.make_transformer()) as transformer:
     tpbar = tqdm(unit="batches", ncols=ncols, total=args.num_iterations)
     interval_cost = 0.0
     saved_losses = {'train_loss': [], 'eval_loss': [],
-                    'eval_misclass': [], 'iteration': []}
+                    'eval_misclass': [], 'iteration': [], 'grads': []}
     for step, data in enumerate(train_set):
         data['iteration'] = step
         # Scale the image to [0., .1]
         data['image'] = data['image'] / 255.
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
-        output = train_function(feed_dict=feed_dict)
-
+        output, grads = train_function(feed_dict=feed_dict)
+        # Mean grads over channel and batch axis
+        grads = np.mean(grads, axis=0)
+        grads = np.mean(grads, axis=0)
+        grads_array.pop(2*args.iter_interval-1)
+        grads_array.insert(0, grads)
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output[()]))
         interval_cost += output[()]
         if (step + 1) % args.iter_interval == 0 and step > 0:
+            interval_cost = interval_cost / args.iter_interval
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
                        "Avg Train Cost {cost:0.4f}".format(
                            interval=step // args.iter_interval,
                            iteration=step,
-                           cost=interval_cost / args.iter_interval))
+                           cost=interval_cost))
             # Calculate inference on the evaluation set
-            all_results, eval_losses = eval_loop(valid_set, eval_function, eval_loss_names)
-            predictions = all_results['predictions']
+            # all_results, eval_losses = eval_loop(valid_set, eval_function, eval_loss_names)
+            # predictions = all_results['predictions']
+            # saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
+            # saved_losses['eval_misclass'].append(eval_losses['misclass'])
 
             # Save the training progression
-            saved_losses['train_loss'].append(interval_cost / args.iter_interval)
-            saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
-            saved_losses['eval_misclass'].append(eval_losses['misclass'])
+            saved_losses['train_loss'].append(interval_cost)
             saved_losses['iteration'].append(step)
+            saved_losses['grads'] = grads_array
             pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0
 
+            # If training loss wildly increases in two past iterations, stop training
+            if(step > (2*args.iter_interval) ):
+                if ((saved_losses['train_loss'][-1] - .1) > saved_losses['train_loss'][-2]):
+                    print('Train Loss increased significantly!')
+                    import pdb; pdb.set_trace()  
+            
 print('\n')
