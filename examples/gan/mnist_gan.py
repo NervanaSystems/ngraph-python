@@ -16,12 +16,6 @@
 MNIST Example with different losses: DCGAN, WGAN, WGAN with Gradient Penalty
 usage: python mnist_gan.py -b gpu -z 32 -t 15000
 """
-# TODO
-# change constant 0.5 to uniform random
-# once ng.uniform is fixed for GPU
-# https://github.com/NervanaSystems/private-ngraph/issues/2011
-# add affine before conv once that is corrected
-# https://github.com/NervanaSystems/private-ngraph/issues/2054
 
 import numpy as np
 from contextlib import closing
@@ -66,23 +60,18 @@ lrelu = Rectlin(slope=0.2)
 
 # helper function
 def make_optimizer(name=None, weight_clip_value=None):
-    if args.loss_type == "DCGAN":
-        optimizer = Adam(learning_rate=3e-4, beta_1=0.5, beta_2=0.999,
-                         epsilon=1e-8, weight_clip_value=weight_clip_value)
 
-    if args.loss_type == "WGAN":
-        optimizer = RMSProp(learning_rate=5e-5, decay_rate=0.99,
-                            weight_clip_value=weight_clip_value)
-
-    if args.loss_type == "WGAN-GP":
-        optimizer = Adam(learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
-                         epsilon=1e-8, weight_clip_value=weight_clip_value)
+    optimizer = Adam(learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
+                     epsilon=1e-8, weight_clip_value=weight_clip_value)
 
     return optimizer
 
 
 # generator network
 def make_generator(bn=True):
+    # TODO
+    # add affine before conv once that is corrected
+    # https://github.com/NervanaSystems/private-ngraph/issues/2054
     deconv_layers = [Deconvolution((1, 1, 16), filter_init, strides=1, padding=0,
                                    activation=relu, batch_norm=bn),
                      Deconvolution((3, 3, 192), filter_init, strides=1, padding=0,
@@ -157,7 +146,7 @@ if args.loss_type == "DCGAN":
 elif args.loss_type == "WGAN":
 
     generator = make_generator(bn=True)
-    discriminator = make_discriminator(bn=False, disc_activation=None)
+    discriminator = make_discriminator(bn=True, disc_activation=None)
 
     # build network graph
     generated = generator(z)
@@ -189,6 +178,10 @@ elif args.loss_type == "WGAN-GP":
 
 # calculate gradient for all losses
 
+#TODO
+# change constant 0.5 to uniform random
+# once ng.uniform is fixed for GPU
+# https://github.com/NervanaSystems/private-ngraph/issues/2011
 # x = ng.variable(initial_value=0.5, axes=[])
 # epsilon = ng.uniform(x)
 epsilon = ng.constant(0.5)  # delete after uniform is fixed
@@ -283,7 +276,7 @@ with closing(ngt.make_transformer()) as transformer:
         if mb_idx % args.plot_interval == 0:
             output_g = train_computation_g({'noise': z_samp})
             generated = output_g['generated']
-            pltname = 'dcgan-mnist-iter-{}.png'.format(mb_idx)
+            pltname = '{}-mnist-iter-{}.png'.format(args.loss_type, mb_idx)
             title = 'iteration {} disc_cost{:.2E} gen_cost{:.2E}'.format(
                 mb_idx, float(output_d['batch_cost']), float(output_g['batch_cost']))
             save_plots(generated, pltname, train_data, args, title=title)

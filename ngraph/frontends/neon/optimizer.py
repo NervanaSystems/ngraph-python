@@ -101,7 +101,7 @@ def clip_gradient_value(grad, clip_value=None):
 
 def clip_weight_value(weight, clip_value=None, min_value=None):
     """
-    Element-wise clip a weight tensor to between ``-clip_value`` and ``+clip_value``.
+    Element-wise clip a weight tensor to between ``min_value`` and ``clip_value``.
 
     Arguments:
         weight (Tensor): List of gradients for a single layer

@@ -3,8 +3,6 @@ from __future__ import absolute_import
 import ngraph as ng
 from .axis import ax
 
-from ngraph.frontends.neon.graph import SubGraph
-
 
 def make_convolution_placeholder(shape=None):
     """

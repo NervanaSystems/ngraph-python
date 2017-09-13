@@ -20,9 +20,6 @@ adapted from https://github.com/igul222/improved_wgan_training
 
 usage: python toy_wgan.py -b gpu -t 100000
 """
-# TODO
-# Original Implementation with epsilon - wait till fixed
-# https://github.com/NervanaSystems/private-ngraph/issues/2011
 from contextlib import closing
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import Adam, Affine, Rectlin, Sequential
@@ -110,7 +107,9 @@ generated = generator(z)
 D1 = discriminator(data)
 D2 = discriminator(generated)
 
-
+# TODO
+# Original Implementation with epsilon - wait till fixed
+# https://github.com/NervanaSystems/private-ngraph/issues/2011
 # x = ng.variable(initial_value=0.5, axes=[])
 # eps = ng.uniform(x)
 

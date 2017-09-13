@@ -14,7 +14,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-Helper classes and functions for gan_toy.py
+Helper classes and functions for toy_wgan.py
 """
 import numpy as np
 import matplotlib.pyplot as plt
