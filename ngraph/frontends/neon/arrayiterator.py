@@ -139,12 +139,22 @@ class SequentialArrayIterator(object):
             Assumes each data_arrays[key] has the same length (S)
         Output of each iteration: Dictionary of input and output samples
             samples[key] has size (batch_size, time_steps, D)
+
+        Arguments:
+        data_arrays
         time_steps: Width of the rolling window (length of each input sequence)
         batch_size: how many samples to return for each iteration
         total_iterations: number of batches to retrieve from the sequence (roll over if necessary)
                          If set to None, will rotate through the whole sequence only once
         stride: Shift of steps between two consecutive samples
                 If None, defaults to time_steps (no overlap of consecutive samples)
+        reverse_target: reverses the direction of target key
+        tgt_ket: key for the target sequence in data_arrays
+        include_iteration: iWhen set to True, returned dictionary includes the iteration number
+        shuffle: If set to True, batches in data_arrays are shuffled.
+                 If False, they are taken sequentially 
+        get_prev_target: returns the target of the previous iteration as well as the current one
+
         Example:
             data_arrays['data1'] is a numpy array with shape (S, 1): [a1, a2, ..., aS]
             Each generated sample will be an input sequence / output sequence pairs such as:
@@ -182,15 +192,12 @@ class SequentialArrayIterator(object):
             self.samples = {k: np.squeeze(np.zeros((self.batch_size,
                                                     self.seq_len,
                                                     self.feature_dims[k]),
-                                                   dtype=v.dtype))
+                                                    dtype=v.dtype))
                             for k, v in viewitems(self.data_arrays)}
         else:
             raise ValueError("Must provide dict as input")
 
-        if (stride is None):
-            self.stride = time_steps
-        else:
-            self.stride = stride
+        self.stride = time_steps if stride is None else stride
 
         self.start = 0
         self.index = 0
@@ -236,11 +243,11 @@ class SequentialArrayIterator(object):
 
         while self.current_iter < self.total_iterations:
             for batch_idx in range(self.batch_size):
-                if (self.shuffle is True):
-                    strt_idx = (self.start + self.current_iter * self.stride)
+                if self.shuffle:
+                    strt_idx = self.start + (self.current_iter * self.stride)
                     seq_start = strt_idx + (batch_idx * self.nbatches * self.seq_len)
                 else:
-                    strt_idx = (self.start + self.current_iter * self.batch_size * self.stride)
+                    strt_idx = self.start + (self.current_iter * self.batch_size * self.stride)
                     seq_start = strt_idx + (batch_idx * self.stride)
 
                 idcs = np.arange(seq_start, seq_start + self.seq_len) % self.ndata
