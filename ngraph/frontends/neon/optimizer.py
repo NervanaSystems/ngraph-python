@@ -116,7 +116,7 @@ def clip_weight_value(weight, clip_value=None, min_value=None):
     if clip_value is None:
         return weight
     else:
-        if min_value is None: 
+        if min_value is None:
             min_value = -abs(clip_value)
         return ng.minimum(ng.maximum(weight, min_value), abs(clip_value))
 

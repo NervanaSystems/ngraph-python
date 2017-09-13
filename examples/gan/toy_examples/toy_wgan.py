@@ -42,7 +42,7 @@ parser.add_argument('--gp_scale', type=int, default=1,
 parser.add_argument('--w_clip', type=int, default=0.01,
                     help='Weight clipping value for WGAN')
 parser.add_argument('--data_type', type=str, default='Roll',
-                    help='Choose ground truth distribution', 
+                    help='Choose ground truth distribution',
                     choices=['Rectangular', 'Circular', 'Roll'])
 parser.add_argument('--dim', type=int, default=512,
                     help='Hidden layer dimension for the model')

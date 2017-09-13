@@ -64,6 +64,7 @@ class RMSPropReference(object):
     '''
     Simple numpy reference for RMSprop
     '''
+
     def __init__(self, decay_rate, learning_rate, epsilon):
         self.learning_rate = learning_rate
         self.epsilon = epsilon
@@ -95,6 +96,7 @@ class AdamReference(object):
     Simple numpy reference for computing variations of gradient descent for a
     loss = sum(target - weight x input) function
     '''
+
     def __init__(self, learning_rate, beta_1, beta_2, epsilon):
         self.learning_rate = learning_rate
         self.beta_1 = beta_1
@@ -365,7 +367,7 @@ def test_learning_policy_schedule(drop_factor):
 @pytest.mark.parametrize("w_clip", [0.001, 0.01, 0.1, 1])
 @pytest.mark.parametrize("optimizer", [RMSProp, Adam, GradientDescentMomentum])
 def test_weight_clipping(w_clip, optimizer):
-    opt_ng  = optimizer(0.1, weight_clip_value=w_clip)
+    opt_ng = optimizer(0.1, weight_clip_value=w_clip)
 
     # Set up data placeholders
     C = ng.make_axis(20)

@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 """
 MNIST Example with different losses: DCGAN, WGAN, WGAN with Gradient Penalty
-usage: python mnist_gan.py -b gpu -z 32 -t 15000
+usage: python mnist_gan.py -b gpu -z 64 -t 30000
 """
 
 import numpy as np
@@ -24,7 +24,7 @@ import os
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import (Sequential, Deconvolution, Convolution,
                                    Rectlin, Logistic, Tanh,
-                                   Adam, RMSProp, ArrayIterator,
+                                   Adam, ArrayIterator,
                                    KaimingInit, make_bound_computation)
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import MNIST
@@ -178,7 +178,7 @@ elif args.loss_type == "WGAN-GP":
 
 # calculate gradient for all losses
 
-#TODO
+# TODO
 # change constant 0.5 to uniform random
 # once ng.uniform is fixed for GPU
 # https://github.com/NervanaSystems/private-ngraph/issues/2011
