@@ -313,7 +313,13 @@ if(args.tb):
     tb.add_graph(train)
     exit()
 # Optimizer
-learning_rate_policy = {'name': 'schedule',
+# The ng.prod is not supported by argon
+# we used the fixed rate as a work around
+if args.backend == 'argon':
+    learning_rate_policy = {'name': 'fixed',
+                         'base_lr': base_lr}
+else:
+    learning_rate_policy = {'name': 'schedule',
                         'schedule': learning_schedule,
                         'gamma': gamma,
                         'base_lr': base_lr}
