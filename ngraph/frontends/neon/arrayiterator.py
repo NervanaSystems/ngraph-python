@@ -244,6 +244,7 @@ class SequentialArrayIterator(object):
                     seq_start = strt_idx + (batch_idx * self.stride)
 
                 idcs = np.arange(seq_start, seq_start + self.seq_len) % self.ndata
+                print(idcs)
                 for key in self.data_arrays.keys():
                     self.samples[key][batch_idx] = self.data_arrays[key][idcs]
 
