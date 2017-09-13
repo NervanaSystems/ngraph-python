@@ -182,8 +182,7 @@ with closing(ngt.make_transformer()) as transformer:
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output, grads = train_function(feed_dict=feed_dict)
         # Mean grads over channel and batch axis
-        grads = np.mean(grads, axis=0)
-        grads = np.mean(grads, axis=0)
+        grads = np.mean(grads, axis=(0,1))
         grads_array.pop(2*args.iter_interval-1)
         grads_array.insert(0, grads)
         tpbar.update(1)
