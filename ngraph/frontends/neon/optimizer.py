@@ -367,10 +367,35 @@ class Adam(LearningRateOptimizer):
 
 class Adagrad(LearningRateOptimizer):
     """
-    Adagrad optimizer
+    Adagrad optimization algorithm.
 
-    TODO docstring
+    Adagrad is an algorithm that adapts the learning rate individually for each parameter
+    by dividing by the :math:`L_2`-norm of all previous gradients. Given the parameters
+    :math:`\\theta`, gradient :math:`\\nabla J`, accumulating norm :math:`G`, and smoothing
+    factor :math:`\\epsilon`, we use the update equations:
 
+    .. math::
+
+        G' = G + (\\nabla J)^2
+
+    .. math::
+
+        \\theta' = \\theta - \\frac{\\alpha}{\sqrt{G' + \\epsilon}} \\nabla J
+
+    where the smoothing factor :math:`\\epsilon` prevents from dividing by zero.
+    By adjusting the learning rate individually for each parameter, Adagrad adapts
+    to the geometry of the error surface. Differently scaled weights have appropriately scaled
+    update steps.
+
+    Example usage:
+
+    .. code-block:: python
+
+        import ngraph as ng
+        from ngraph.frontends.neon.optimizers import Adagrad
+
+        # use Adagrad with a learning rate of 1e-3
+        optimizer = Adagrad(learning_rate=1e-3, epsilon=1e-8)
     """
     metadata = {'layer_type': 'adagrad_optimizer'}
 
