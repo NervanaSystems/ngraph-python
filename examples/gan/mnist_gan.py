@@ -196,6 +196,11 @@ with name_scope(name="GradientPenalty"):
     gradient_penalty = ng.square(grad_norm - 1)
 
 # add gradient penalty
+# TODO
+# when gp_scale is set to 0 the behavior is not as expected
+# loss_d = loss_d + 0 * gp is not loss_d = loss_d + 0
+# we can get rid of if statement once this is fixed
+# https://github.com/NervanaSystems/private-ngraph/issues/2145
 if gp_scale:
     loss_d = loss_d + gp_scale * gradient_penalty
 
