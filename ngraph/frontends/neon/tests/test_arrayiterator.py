@@ -6,7 +6,7 @@ from ngraph.frontends.neon import SequentialArrayIterator
 @pytest.fixture(scope='module',
                 params=[
                     np.arange(10000),
-                    np.arange(20000).reshape(10000,2),
+                    np.arange(20000).reshape(10000, 2),
                     np.arange(10001)],
                 ids=[
                     'even_seq',
@@ -26,6 +26,7 @@ def batch_size(request):
                 params=[16, 32])
 def seq_len(request):
     return request.param
+
 
 @pytest.mark.parametrize("shuffle", [True, False])
 def test_nowindow(input_seq, batch_size, seq_len, shuffle):
@@ -48,7 +49,7 @@ def test_nowindow(input_seq, batch_size, seq_len, shuffle):
         # expected_x will have contigous non-overlapping samples
         expected_x = data_array['X'][idcs].reshape(reshape_dims)
         expected_y = data_array['y'][idcs].reshape(reshape_dims)
-        
+
         if not shuffle:
             # If we are not shuffling, we need to check consecutive samples are contiguous
             # They will also be non-overlapping
@@ -58,7 +59,7 @@ def test_nowindow(input_seq, batch_size, seq_len, shuffle):
             # If we are shuffling, make sure the consecutive samples are not contiguous
             assert not np.array_equal(expected_x, iter_val['X'])
             assert not np.array_equal(expected_y, iter_val['y'])
-            
+
 
 @pytest.mark.parametrize("strides", [3, 8])
 def test_rolling_window(input_seq, batch_size, seq_len, strides):
