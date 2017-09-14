@@ -99,7 +99,6 @@ def test_4d_chained(input_axes):
     ng.testing.assert_allclose(graph_val, np_val, rtol=1e-4)
 
 
-@pytest.config.flex_disabled(reason='Results mismatch')
 def test_kernel_cache():
     X = ng.make_axis(32)
     Y = ng.make_axis(32)
