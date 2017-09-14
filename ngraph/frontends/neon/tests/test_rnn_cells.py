@@ -126,12 +126,6 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size, return_
 
     assert batch_size == 1, "the recurrent reference implementation only support batch size 1"
 
-    if (backward, extra_axes, init_state, return_sequence) == (True, 0, True, True) \
-            or (backward, extra_axes, init_state, return_sequence) == (True, 2, True, True) \
-            or (backward, extra_axes, init_state, return_sequence) == (False, 0, True, True) \
-            or (backward, extra_axes, init_state, return_sequence) == (False, 2, True, True):
-        pytest.config.flex_skip_now("Results mismatch by 3%")
-
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size,
                                                       extra_axes=extra_axes)
@@ -177,7 +171,6 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size, return_
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-@pytest.config.flex_disabled(reason="RNN is not yet supported with Flex")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
