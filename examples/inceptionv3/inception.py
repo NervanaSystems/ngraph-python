@@ -15,10 +15,10 @@
 # ----------------------------------------------------------------------------
 from ngraph.frontends.neon import XavierInit, UniformInit
 from ngraph.frontends.neon import Convolution, Pool2D, Sequential, Parallel
-from ngraph.frontends.neon import Rectlin, Softmax, Dropout
+from ngraph.frontends.neon import Rectlin, Softmax, Dropout, Explin
 
 
-def conv_params(filt_params, strides=1, batch_norm=True, activation=Rectlin(),
+def conv_params(filt_params, strides=1, batch_norm=True, activation=Explin(),
                 bias_init=UniformInit(low=-0.08, high=0.08),
                 filter_init=XavierInit(), padding=0):
     return dict(fshape=filt_params,

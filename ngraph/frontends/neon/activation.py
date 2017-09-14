@@ -86,6 +86,34 @@ class Identity(object):
         return x
 
 
+class LRectlin(object):
+    """
+    Leaky Rectified Linear activation function, :math:`f(x) = \max(x, 0) + \\alpha \min(x, 0)`
+    """
+
+    def __init__(self, alpha=0.1):
+        """
+        Class constructor.
+
+        Arguments:
+            alpha (float): weight of leak factor for negative values (default: 0.1).
+            name (string, optional): Name (default: None)
+        """
+        self.alpha = alpha
+
+    def __call__(self, x):
+        """
+        Returns the Leaky Rectified Linear activation
+
+        Arguments:
+            x (Tensor or optree): input value
+
+        Returns:
+            Tensor or optree: output activation
+        """
+        return ng.maximum(x, 0) + self.alpha * ng.minimum(x, 0)
+
+
 class Explin(object):
     """
     Exponential Linear activation function, :math:`f(x) = \max(x, 0) + \\alpha (e^{\min(x, 0)}-1)`
