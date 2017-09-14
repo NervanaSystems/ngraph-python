@@ -185,6 +185,8 @@ class ConvDerivOp(TensorOp):
     def __init__(self, fprop, **kwargs):
         super(ConvDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
+        fprop.has_side_effects = True
+        self.__has_side_effects = False
 
     @property
     def conv_params(self):
@@ -195,6 +197,14 @@ class ConvDerivOp(TensorOp):
 
         """
         return self.fprop.forwarded.conv_params
+
+    @property
+    def has_side_effects(self):
+        return self.__has_side_effects
+
+    @has_side_effects.setter
+    def has_side_effects(self, value):
+        self.__has_side_effects = value
 
 
 class update_conv(ConvDerivOp):
