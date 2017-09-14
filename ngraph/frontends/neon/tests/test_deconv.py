@@ -19,8 +19,7 @@ from ngraph.frontends.common import utils
 from ngraph.frontends.neon import Deconvolution, ConstantInit
 from ngraph.testing import executor
 
-pytestmark = [pytest.mark.transformer_dependent,
-              pytest.config.flex_disabled(reason="#1841, deconv is not yet supported by flex")]
+pytestmark = [pytest.mark.transformer_dependent]
 
 
 # TODO: add other configurations?
