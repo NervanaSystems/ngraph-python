@@ -54,7 +54,8 @@ def scale_set(image_set):
     sub_factor = np.repeat(sub_factor, image_set.shape[2], axis=2) 
     sub_factor = np.repeat(sub_factor, image_set.shape[3], axis=3) 
     scale_factor = (maxes - mins + 1e-6).reshape((image_set.shape[0], 1, 1, 1))
-    return (image_set - sub_factor)/ scale_factor
+    scaled_image = (image_set - sub_factor)/ scale_factor
+    return 2*scaled_image-1
 
 def eval_loop(dataset, computation, metric_names):
     """
