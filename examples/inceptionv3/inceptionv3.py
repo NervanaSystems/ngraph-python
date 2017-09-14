@@ -48,9 +48,13 @@ def scale_set(image_set):
     # Find maximum of each image
     maxes = np.amax(image_set, axis=(1,2,3))
     mins = np.amin(image_set, axis=(1,2,3))
-   
+  
+    sub_factor = mins.reshape(image_set.shape[0],1,1,1)
+    sub_factor = np.repeat(sub_factor, image_set.shape[1], axis=1) 
+    sub_factor = np.repeat(sub_factor, image_set.shape[2], axis=2) 
+    sub_factor = np.repeat(sub_factor, image_set.shape[3], axis=3) 
     scale_factor = (maxes - mins + 1e-6).reshape((image_set.shape[0], 1, 1, 1))
-    return image_set / scale_factor
+    return (image_set - sub_factor)/ scale_factor
 
 def eval_loop(dataset, computation, metric_names):
     """
