@@ -171,7 +171,6 @@ def test_rnn_fprop(sequence_length, input_size, hidden_size, batch_size, return_
         ng.testing.assert_allclose(fprop_neon, h_ref_list, rtol=fprop_rtol, atol=fprop_atol)
 
 
-@pytest.config.flex_disabled(reason="RNN is not yet supported with Flex")
 @pytest.config.argon_disabled  # TODO triage
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
