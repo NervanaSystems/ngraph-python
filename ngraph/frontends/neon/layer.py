@@ -1127,7 +1127,7 @@ class BatchNorm(Layer):
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
     .. [Laurent2016] https://arxiv.org/abs/1510.01378
     """
-    def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
+    def __init__(self, rho=0.999, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
         self.eps = eps
@@ -1152,7 +1152,7 @@ class BatchNorm(Layer):
         out_axes = in_axes - red_axes
 
         if not self.initialized:
-            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0).named("gvar")
+            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=0.1).named("gvar")
             self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0).named("gmean")
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,

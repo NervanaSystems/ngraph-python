@@ -93,6 +93,7 @@ parser.add_argument("--valid_manifest_file", default='val-index-tabbed.csv',
                     help="Name of tab separated Aeon validation manifest file")
 parser.add_argument("--optimizer_name", default='rmsprop',
                     help="Name of optimizer (rmsprop or sgd)")
+parser.add_argument('--grad_clip', type=float, default=1e9, help="Gradient Clip Value")
 parser.set_defaults(batch_size=8, num_iterations=10000000, iter_interval=2000)
 args = parser.parse_args()
 
@@ -117,14 +118,14 @@ inception = inception.Inception(mini=args.mini)
 # Declare the optimizer
 if args.optimizer_name == 'sgd':
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(5000*np.arange(1, 20, 1)),
+                            'schedule': list(7000*np.arange(1, 20, 1)),
                             'gamma': 0.8,
                             'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                        momentum_coef=0.85,
-                                        gradient_clip_value=1.,
-                                        wdecay=4e-5,
+                                        momentum_coef=0.9,
+                                        gradient_clip_value=args.grad_clip,
+                                        wdecay=1e-3,
                                         iteration=inputs['iteration'])
 elif args.optimizer_name == 'rmsprop': 
     learning_rate_policy = {'name': 'schedule',
@@ -133,7 +134,7 @@ elif args.optimizer_name == 'rmsprop':
                             'base_lr': 0.01}
     optimizer = RMSProp(learning_rate=learning_rate_policy, 
                         wdecay=4e-5, decay_rate=0.9,
-                        gradient_clip_value=3., epsilon=1.)
+                        gradient_clip_value=args.grad_clip, epsilon=1.)
 
 else:
     raise NotImplementedError("Unrecognized Optimizer")
@@ -187,7 +188,7 @@ with closing(ngt.make_transformer()) as transformer:
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output, grads = train_function(feed_dict=feed_dict)
         # Mean grads over channel and batch axis
-        grads = np.mean(grads, axis=(0,1))
+        grads = np.mean(grads, axis=(0,1)).astype(np.float16)
         grads_array.pop(2*args.iter_interval-1)
         grads_array.insert(0, grads)
         tpbar.update(1)
@@ -209,7 +210,7 @@ with closing(ngt.make_transformer()) as transformer:
             # Save the training progression
             saved_losses['train_loss'].append(interval_cost)
             saved_losses['iteration'].append(step)
-            saved_losses['grads'] = grads_array
+            #saved_losses['grads'] = grads_array
             pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0
 
@@ -217,6 +218,5 @@ with closing(ngt.make_transformer()) as transformer:
             if(step > (2*args.iter_interval) ):
                 if ((saved_losses['train_loss'][-1] - .1) > saved_losses['train_loss'][-2]):
                     print('Train Loss increased significantly!')
-                    import pdb; pdb.set_trace()  
-            
+
 print('\n')
