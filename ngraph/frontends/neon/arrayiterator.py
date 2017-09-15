@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
 import numpy as np
 import ngraph as ng
 from future.utils import viewitems
@@ -178,10 +179,17 @@ class SequentialArrayIterator(object):
         self.tgt_key = tgt_key
         self.shuffle = shuffle
         self.current_iter = 0
+        self.start = 0
+        self.index = 0
+        self.stride = time_steps if stride is None else stride
 
         if isinstance(data_arrays, dict):
-            self.data_arrays = {k: v for k, v in viewitems(data_arrays)}
+            # Get the total length of the sequence
+            # Assumes each value in data_arrays has the same length
+            self.ndata = len(six.next(six.itervalues(data_arrays)))
 
+            self.data_arrays = {k: v[:self.used_samples] for k, v in viewitems(data_arrays)}
+            # Throw away samples in data arrays that cannot form a batch
             if self.get_prev_target:
                 self.data_arrays['prev_tgt'] = np.copy(self.data_arrays[self.tgt_key])
 
@@ -198,18 +206,19 @@ class SequentialArrayIterator(object):
         else:
             raise ValueError("Must provide dict as input")
 
-        self.stride = time_steps if stride is None else stride
-
-        self.start = 0
-        self.index = 0
-        # Get the total length of the sequence
-        # Assumes each value in data_arrays has the same length
-        self.ndata = len(six.next(six.itervalues(self.data_arrays)))
-
         if self.nbatches < 1:
             raise ValueError('Number of examples is smaller than the batch size')
 
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
+
+    @property
+    def used_samples(self):
+        """
+        Return the number of minibatches in this dataset.
+        """
+        self.ndata = (self.ndata // (self.stride * self.batch_size)) * \
+            self.stride * self.batch_size
+        return self.ndata
 
     @property
     def nbatches(self):
