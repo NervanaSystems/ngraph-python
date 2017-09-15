@@ -173,7 +173,8 @@ void create_mkldnn_batchnorm_bprop_primitives(
       w.r.to data, gamma, beta during bprop */
   mkldnn_batch_normalization_desc_t batch_norm_desc;
   MKL_CHECK(mkldnn_batch_normalization_backward_desc_init(
-      &batch_norm_desc, mkldnn_backward, input_error_md, input_fprop_src_md, epsilon,
+      //&batch_norm_desc, mkldnn_backward, input_error_md, input_fprop_src_md, epsilon,
+      &batch_norm_desc, mkldnn_backward, input_fprop_src_md, input_fprop_src_md, epsilon,
       mkldnn_use_scaleshift));
 
   MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &batch_norm_desc,
