@@ -19,8 +19,8 @@ from ngraph.frontends.neon import Rectlin, Softmax, Dropout, Explin
 
 
 def conv_params(filt_params, strides=1, batch_norm=True, activation=Explin(),
-                bias_init=UniformInit(low=-0.08, high=0.08),
-                filter_init=XavierInit(), padding=0):
+                bias_init=UniformInit(low=-0.3, high=0.3),
+                filter_init=UniformInit(low=-0.3, high=0.3), padding=0):
     return dict(fshape=filt_params,
                 strides=strides,
                 padding=padding,
@@ -244,8 +244,8 @@ class Inception(object):
             This is the mini model with reduced number of filters in each layer
             """
             # Root branch of the tree
-            seq1 = Sequential([#Convolution(**conv_params(filt_params=(3, 3, 32),
-                                Convolution(**conv_params(filt_params=(3, 3, 16), 
+            seq1 = Sequential([Convolution(**conv_params(filt_params=(3, 3, 32),
+                                #Convolution(**conv_params(filt_params=(3, 3, 16), 
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
                                Convolution(**conv_params(filt_params=(3, 3, 16), padding=0)),
@@ -255,12 +255,12 @@ class Inception(object):
                                Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3
                                Convolution(**conv_params(filt_params=(1, 1, 16))),
                                # conv2d_3b_1x1
-                               #Convolution(**conv_params(filt_params=(3, 3, 32), padding=1)),
-                               Convolution(**conv_params(filt_params=(3, 3, 16), padding=1)),
+                               Convolution(**conv_params(filt_params=(3, 3, 32), padding=1)),
+                               #Convolution(**conv_params(filt_params=(3, 3, 16), padding=1)),
                                # conv2d_4a_3x3
                                Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
-                               #Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5b
-                               Inceptionv3_b1([(16,), (16, 16), (16, 16, 16), (16, )]),  # mixed_5b
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5b
+                               #Inceptionv3_b1([(16,), (16, 16), (16, 16, 16), (16, )]),  # mixed_5b
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5c
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5d
                                Inceptionv3_b2([(32,), (32, 32, 32)]),  # mixed_6a

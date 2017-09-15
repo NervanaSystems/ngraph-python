@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# ----------------------------------------------------------------------------
+
 # Copyright 2015-2016 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ def scale_set(image_set):
     sub_factor = np.repeat(sub_factor, image_set.shape[3], axis=3) 
     scale_factor = (maxes - mins + 1e-6).reshape((image_set.shape[0], 1, 1, 1))
     scaled_image = (image_set - sub_factor)/ scale_factor
-    return 2*scaled_image-1
+    return scaled_image
 
 def eval_loop(dataset, computation, metric_names):
     """
@@ -155,6 +155,7 @@ with name_scope(name="GradientPenalty"):
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
+#train_computation = ng.computation([batch_cost, gradient], 'all')
 train_computation = ng.computation([batch_cost, gradient], 'all')
 label_indices = inputs['label'][:, 0]
 
@@ -167,7 +168,7 @@ with Layer.inference_mode_on():
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
     eval_computation = ng.computation([eval_loss, errors, inference_prob], "all")
 
-grads_array = [1e9]*2*args.iter_interval
+#grads_array = [1e9]*2*args.iter_interval
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
     eval_function = transformer.add_computation(eval_computation)
@@ -186,11 +187,14 @@ with closing(ngt.make_transformer()) as transformer:
         # Scale the image to [0., .1]
         data['image'] = scale_set(data['image'])
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
-        output, grads = train_function(feed_dict=feed_dict)
+        #output, grads = train_function(feed_dict=feed_dict)
+        output = train_function(feed_dict=feed_dict)
+        """
         # Mean grads over channel and batch axis
         grads = np.mean(grads, axis=(0,1)).astype(np.float16)
         grads_array.pop(2*args.iter_interval-1)
         grads_array.insert(0, grads)
+        """
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output[()]))
         interval_cost += output[()]
