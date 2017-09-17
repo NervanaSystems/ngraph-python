@@ -50,7 +50,7 @@ def __overwrite_rtol_atol(rtol, atol, desired):
     return rtol, atol
 
 
-def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
+def assert_allclose(actual, desired, rtol=1e-07, atol=0, atol_multiplier=1, equal_nan=False,
                     err_msg='', verbose=True, transformer_overwrite=True):
     """
     Pass through for numpy.testing.assert_allclose, with support for rtol and
@@ -60,7 +60,8 @@ def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
         actual: array_like, actual value
         desired: array_like, desired value
         rtol: float, relative tolerance
-        atol: float, relative tolerance
+        atol: float, absolute tolerance
+        atol_multiplier: multiplier of absolute tolerance
         equal_nan: bool, whether to compare NaNs as equal
         err_msg: str, error message to be printed in case of failure.
         verbose: bool, if True, the conflicting values are appended to the error message
@@ -71,6 +72,7 @@ def assert_allclose(actual, desired, rtol=1e-07, atol=0, equal_nan=False,
     """
     if transformer_overwrite:
         rtol, atol = __overwrite_rtol_atol(rtol, atol, desired)
-    np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol,
+
+    np.testing.assert_allclose(actual, desired, rtol=rtol, atol=atol * atol_multiplier,
                                equal_nan=equal_nan, err_msg=err_msg,
                                verbose=verbose)
