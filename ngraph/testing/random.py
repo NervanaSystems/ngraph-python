@@ -129,3 +129,26 @@ class RandomTensorGenerator(object):
                 scale,
                 ng.make_axes(axes).lengths),
             dtype=dtype)
+
+    def randn_abs_clip(self, axes, clip_min=0, clip_max=0, dtype=None):
+        """
+        Returns a tensor initialized with a absolute value of normal distribution
+        with mean 0 and std 1 clipped to given range
+
+        Arguments:
+            axes: The axes of the tensor.
+            clip_min: If supplied number below this value are clipped to this value
+            clip_max: If supplied number above this value are clipped to this value
+            dtype: If supplied, the type of the values.
+
+        Returns:
+            The initialized tensor.
+
+        """
+        if dtype is None:
+            dtype = self.dtype
+
+        if clip_max == 0:
+            clip_max = np.finfo(dtype).max
+
+        return np.clip(np.absolute(np.random.randn(*axes.lengths)), clip_min, clip_max)

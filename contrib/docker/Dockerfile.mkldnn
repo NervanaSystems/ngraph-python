@@ -16,12 +16,9 @@ RUN make install
 
 # set environment to build mkldnn_engine.so and run with mkldnn_engine
 # setup with `pip install -e .`
-ENV MKLDNN_ROOT=/usr/local
-ENV LD_LIBRARY_PATH=$MKLDNN_ROOT/lib:$LD_LIBRARY_PATH
+ENV MKLDNN_ROOT /usr/local
+ENV LD_LIBRARY_PATH $MKLDNN_ROOT/lib:$LD_LIBRARY_PATH
 WORKDIR /root/ngraph-test
 ADD . /root/ngraph-test
 RUN make install
 RUN make test_prepare 
-
-# save the library so a temporary location so it doesn't get overwritten by docker volume
-RUN cp ./mkldnn_engine.so /tmp/mkldnn_engine.so

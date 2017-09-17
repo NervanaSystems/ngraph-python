@@ -172,6 +172,7 @@ void create_mkldnn_batchnorm_bprop_primitives(
       flags: mkldnn_use_scaleshift, prop_kind: mkldnn_backward computes gradient
       w.r.to data, gamma, beta during bprop */
   mkldnn_batch_normalization_desc_t batch_norm_desc;
+  // MKLDNN seems to prefer the same layout for inputs and delta
   MKL_CHECK(mkldnn_batch_normalization_backward_desc_init(
       &batch_norm_desc, mkldnn_backward, input_fprop_src_md, input_fprop_src_md, epsilon,
       mkldnn_use_scaleshift));
