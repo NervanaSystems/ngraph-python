@@ -44,14 +44,11 @@ def make_aeon_loaders(train_manifest, valid_manifest,
                             "binary": False}
 
             augmentation = {"type": "image",
-                            "padding": 4,
-                            "flip_enable": True,
-                            "scale": [0.5, 0.75],
-                            "angle": [-20., 20.]}
+                            #"padding": 4,
+                            "flip_enable": True}
 
             return {'manifest_filename': manifest_file,
                     'manifest_root': datadir,
-                    # 'manifest_root': "/dataset/aeon/I1K/i1k-extracted/",
                     'batch_size': batch_size,
                     'block_size': 5000,
                     'cache_directory': cache_root,

@@ -60,14 +60,13 @@ class AeonDataLoader(object):
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
-        batch_axis = ng.make_axis(self._dataloader.batch_size, name="N")
+        ax.N.length = self._dataloader.batch_size
+        # for placeholder_name, axis_info in self._dataloader.axes_info.items():
         for placeholder_name, axis_info in self._dataloader.axes_info:
-            p_axes = ng.make_axes([batch_axis])
+            p_axes = ng.make_axes([ax.N])
             for nm, sz in axis_info:
-                if placeholder_name == 'label':
-                    continue
-                if nm in NAME_MAP:
-                    nm = NAME_MAP[nm]
+            # for nm, sz in axis_info.items():
+                nm = "C" if nm == "channels" else nm
                 p_axes += ng.make_axis(name=nm, length=sz)
             placeholders[placeholder_name] = ng.placeholder(p_axes)
         if include_iteration:

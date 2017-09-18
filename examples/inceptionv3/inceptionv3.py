@@ -16,7 +16,7 @@
 
 """
 Usage:
-export CUDA_VISIBLE_DEVICES=3; python ./inceptionv3.py -b gpu --mini -z 8
+export CUDA_VISIBLE_DEVICES=3; python ./inceptionv3.py -b gpu --mini -z 8 --optimizer_name rmsprop --grad_clip 100.
 
 Inception v3 network based on:
 https://github.com/tensorflow/models/blob/master/slim/nets/inception_v3.py
@@ -118,14 +118,14 @@ inception = inception.Inception(mini=args.mini)
 # Declare the optimizer
 if args.optimizer_name == 'sgd':
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(7000*np.arange(1, 20, 1)),
+                            'schedule': list(7000*np.arange(1, 10, 1)),
                             'gamma': 0.8,
                             'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                         momentum_coef=0.9,
                                         gradient_clip_value=args.grad_clip,
-                                        wdecay=1e-3,
+                                        wdecay=4e-5,
                                         iteration=inputs['iteration'])
 elif args.optimizer_name == 'rmsprop': 
     learning_rate_policy = {'name': 'schedule',
@@ -150,13 +150,13 @@ train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot)
 
 # Compute the gradient of output to input
-with name_scope(name="GradientPenalty"):
-    gradient = ng.deriv(ng.sum(train_prob_main, out_axes=[]), inputs['image'])
+#with name_scope(name="GradientPenalty"):
+#    gradient = ng.deriv(ng.sum(train_prob_main, out_axes=[]), inputs['image'])
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
 #train_computation = ng.computation([batch_cost, gradient], 'all')
-train_computation = ng.computation([batch_cost, gradient], 'all')
+train_computation = ng.computation([batch_cost], 'all')
 label_indices = inputs['label'][:, 0]
 
 # Build the computations for inference (evaluation)
@@ -182,13 +182,15 @@ with closing(ngt.make_transformer()) as transformer:
     interval_cost = 0.0
     saved_losses = {'train_loss': [], 'eval_loss': [],
                     'eval_misclass': [], 'iteration': [], 'grads': []}
-    for step, data in enumerate(train_set):
-        data['iteration'] = step
+    for iter_no, data in enumerate(train_set):
+        data = dict(data)
+        data['iteration'] = iter_no
         # Scale the image to [0., .1]
         data['image'] = scale_set(data['image'])
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         #output, grads = train_function(feed_dict=feed_dict)
         output = train_function(feed_dict=feed_dict)
+        output = float(output[0])
         """
         # Mean grads over channel and batch axis
         grads = np.mean(grads, axis=(0,1)).astype(np.float16)
@@ -196,14 +198,14 @@ with closing(ngt.make_transformer()) as transformer:
         grads_array.insert(0, grads)
         """
         tpbar.update(1)
-        tpbar.set_description("Training {:0.4f}".format(output[()]))
-        interval_cost += output[()]
-        if (step + 1) % args.iter_interval == 0 and step > 0:
+        tpbar.set_description("Training {:0.4f}".format(output))
+        interval_cost += output
+        if (iter_no + 1) % args.iter_interval == 0 and iter_no > 0:
             interval_cost = interval_cost / args.iter_interval
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
                        "Avg Train Cost {cost:0.4f}".format(
-                           interval=step // args.iter_interval,
-                           iteration=step,
+                           interval=iter_no // args.iter_interval,
+                           iteration=iter_no,
                            cost=interval_cost))
             # Calculate inference on the evaluation set
             # all_results, eval_losses = eval_loop(valid_set, eval_function, eval_loss_names)
@@ -213,13 +215,13 @@ with closing(ngt.make_transformer()) as transformer:
 
             # Save the training progression
             saved_losses['train_loss'].append(interval_cost)
-            saved_losses['iteration'].append(step)
+            saved_losses['iteration'].append(iter_no)
             #saved_losses['grads'] = grads_array
             pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0
 
             # If training loss wildly increases in two past iterations, stop training
-            if(step > (2*args.iter_interval) ):
+            if(iter_no > (2*args.iter_interval) ):
                 if ((saved_losses['train_loss'][-1] - .1) > saved_losses['train_loss'][-2]):
                     print('Train Loss increased significantly!')
 
