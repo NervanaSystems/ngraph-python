@@ -64,14 +64,16 @@ print("Learning Rate:     " + str(base_lr))
 print("Momentum:          " + str(momentum_coef))
 print("Weight Decay:      " + str(wdecay))
 print("Rho:               " + str(rho_val))
+print("Nesterov           " + str(nesterov))
 
 
 # Helpers
 def cifar10_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
         axes=[x.axes.channel_axis()],
-        initial_value=np.array([127.0, 119.0, 104.0]))
+        initial_value=np.array([125.3, 123.0, 113.9]))
     return (x - bgr_mean)
+
 
 def i1k_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
