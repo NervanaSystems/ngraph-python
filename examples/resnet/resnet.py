@@ -41,6 +41,18 @@ base_lr = 0.1
 gamma = 0.1
 momentum_coef = 0.9
 wdecay = 0.0001
+# BatchNorm
+rho_val = 0.2
+# Initializer
+weight_init = KaimingInit()
+
+# Have to change learning schedule
+# Hyperparameters
+# Optimizer
+base_lr = 0.1
+gamma = 0.1
+momentum_coef = 0.9
+wdecay = 0.0001
 nesterov = False
 # BatchNorm
 rho_val = 0.2
@@ -52,7 +64,7 @@ print("Learning Rate:     " + str(base_lr))
 print("Momentum:          " + str(momentum_coef))
 print("Weight Decay:      " + str(wdecay))
 print("Rho:               " + str(rho_val))
-print("Nesterov:          " + str(nesterov)) 
+
 
 # Helpers
 def cifar10_mean_subtract(x):
@@ -61,7 +73,6 @@ def cifar10_mean_subtract(x):
         initial_value=np.array([127.0, 119.0, 104.0]))
     return (x - bgr_mean)
 
-# Fix my values
 def i1k_mean_subtract(x):
     bgr_mean = ng.persistent_tensor(
         axes=[x.axes.channel_axis()],
@@ -168,9 +179,9 @@ class BuildResnet(Sequential):
                         # Strides=1 and direction connection
                         layers.append(ResidualModule(num_fils[fil]))
                         layers.append(Activation(Rectlin()))
-	    # Do average pooling --> fully connected--> softmax.
+            # Do average pooling --> fully connected--> softmax.
             layers.append(Pool2D(8, op='avg'))
-            layers.append(Affine(axes=ax.Y, weight_init=weight_init, bias_init=bias_weight_init))
+            layers.append(Affine(axes=ax.Y, weight_init=weight_init, bias_init=weight_init))
             layers.append(Activation(Softmax()))
         # For I1K dataset
         elif net_type == "i1k":
@@ -246,7 +257,9 @@ if __name__ == "__main__":
         parser.add_argument('-name', type=str, help="Name of experiment for graph", required=True)
     args = parser.parse_args()
     args.iter_interval = 50000 // args.batch_size
-    
+    learning_schedule = [84 * args.iter_interval, 124 * args.iter_interval]
+    print("Learning Schedule: " + str(learning_schedule))
+
     # Command line args
     cifar_sizes = [20, 32, 44, 56, 200]
     i1k_sizes = [18, 34, 50, 101, 152]
@@ -269,36 +282,31 @@ if __name__ == "__main__":
             np.random.seed(args.rng_seed)
             # Make placeholders
             input_ph = train_set.make_placeholders(include_iteration=True)
-	        # Setting iteration interval to print
-            args.iter_interval = 50000 // args.batch_size 
-            # Set learning rate schedule
-            learning_schedule = [84 * args.iter_interval, 124 * args.iter_interval]
-            print("Learning Schedule: " + str(learning_schedule)) 
         else:
             print("Invalid cifar10 size.Select from " + str(cifar_sizes))
             exit()
     elif resnet_dataset == 'i1k':
-        if resnet_size in [18, 34]:
-            en_bottleneck = False
+        if resnet_size in i1k_sizes:
+            # Enable or disable bottleneck depending on resnet size
+            if(resnet_size in [18, 34]):
+                en_bottleneck = False
+                num_resnet_mods = (args.size - 2) // 6
+            else:
+                en_bottleneck = True
+                num_resnet_mods = (args.size - 2) // 9
+            # Creating training and validation set objects
+            train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
+                                                     args.num_iterations, dataset=resnet_dataset)
+            # of Classes
+            ax.Y.length = 1000
+            print("Completed loading Imagenet dataset")
+            # Randomize seed
+            np.random.seed(args.rng_seed)
+            # Make placeholders
+            input_ph = train_set.make_placeholders(include_iteration=True)
         else:
-            en_bottleneck = True
-        # Creating training and validation set objects
-        train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
-                                                   args.num_iterations, dataset=resnet_dataset)
-        # of Classes
-        ax.Y.length = 1000
-        print("Completed loading Imagenet dataset")
-        # Randomize seed
-        np.random.seed(args.rng_seed)
-        # Make placeholders
-        input_ph = train_set.make_placeholders(include_iteration=True)
-        # Setting iteration interval to orint
-        iters_per_epoch = 1281216 // args.batch_size
-        # Set learning schedule 
-        learning_schedule = [10 * iters_per_epoch, 20 * iters_per_epoch]
-        print("Learning Schedule: " + str(learning_schedule))
-        args.iter_interval=200
-
+            print("Invalid i1k size. Select from " + str(i1k_sizes))
+            exit()
     else:
         print("Invalid Dataset. Dataset should be either cifar10 or i1k")
         exit()
@@ -313,13 +321,7 @@ if(args.tb):
     tb.add_graph(train)
     exit()
 # Optimizer
-# The ng.prod is not supported by argon
-# we used the fixed rate as a work around
-if args.backend == 'argon':
-    learning_rate_policy = {'name': 'fixed',
-                         'base_lr': base_lr}
-else:
-    learning_rate_policy = {'name': 'schedule',
+learning_rate_policy = {'name': 'schedule',
                         'schedule': learning_schedule,
                         'gamma': gamma,
                         'base_lr': base_lr}
@@ -327,7 +329,7 @@ else:
 optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                     momentum_coef=momentum_coef,
                                     wdecay=wdecay,
-                                    nesterov=nesterov,
+                                    nesterov=False,
                                     iteration=input_ph['iteration'])
 label_indices = input_ph['label']
 label_indices = ng.cast_role(ng.flatten(label_indices), label_indices.axes.batch_axis())
