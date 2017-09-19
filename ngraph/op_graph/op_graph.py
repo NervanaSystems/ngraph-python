@@ -2771,6 +2771,9 @@ class RngOp(TensorOp):
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
 
+    def copy_with_new_args(self, args):
+        return type(self)(self.distribution, self.params, *args)
+
 
 def uniform(x, low=0.0, high=1.0):
     """
