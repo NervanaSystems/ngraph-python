@@ -39,21 +39,27 @@ import inception
 
 def scale_set(image_set):
     """
-    Scales a batch of images to between 0 and 1
+    Given a batch of images, normalizes each image by subtracting the mean
+    And dividing by the standard deviation
+    Mean/Std is calculated for each image separately, among its pixels
+    Mean/Std is calculated for each channel separately
     image_set: (batch_size, C, H, W)
     returns: scaled image_set (batch_size, C, H, W)
-
-    Each image in the set is scaled among its own min and max
     """
-    # Find maximum of each image
-    maxes = np.amax(image_set, axis=(1,2,3))
-    mins = np.amin(image_set, axis=(1,2,3))
-  
-    sub_factor = mins.reshape(image_set.shape[0],1,1,1)
-    sub_factor = np.repeat(sub_factor, image_set.shape[1], axis=1) 
+    means = np.mean(image_set, axis=(2,3))
+    stds = np.std(image_set, axis=(2,3))
+ 
+    # Matrix that contains per channel means 
+    sub_factor = means.reshape(image_set.shape[0],image_set.shape[1],1,1)
     sub_factor = np.repeat(sub_factor, image_set.shape[2], axis=2) 
     sub_factor = np.repeat(sub_factor, image_set.shape[3], axis=3) 
-    scale_factor = (maxes - mins + 1e-6).reshape((image_set.shape[0], 1, 1, 1))
+
+    # Matrix that contains per channel stds
+    scale_factor = stds.reshape(image_set.shape[0],image_set.shape[1],1,1)
+    scale_factor = np.repeat(scale_factor, image_set.shape[2], axis=2) 
+    scale_factor = np.repeat(scale_factor, image_set.shape[3], axis=3) 
+    scale_factor = (3*scale_factor + 1e-5)
+
     scaled_image = (image_set - sub_factor)/ scale_factor
     return scaled_image
 
