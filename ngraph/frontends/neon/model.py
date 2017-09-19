@@ -87,3 +87,17 @@ class BoundComputation(object):
 
 def make_bound_computation(transformer, named_outputs, named_inputs):
     return BoundComputation(transformer, named_outputs, named_inputs)
+
+# Class for Residual Module
+class ResidualModule(object):
+    def __init__(self, main_path, side_path):
+        self.main_path = main_path
+        self.side_path = side_path
+
+    def __call__(self, in_obj):
+        # Computes the output of main path. Parallel path 1
+        mp = self.main_path(in_obj)
+        # Computes the output of side path. Parallel path 2
+        sp = in_obj if (self.side_path == None) else self.side_path(in_obj)
+        #Sum both and return
+        return mp + sp

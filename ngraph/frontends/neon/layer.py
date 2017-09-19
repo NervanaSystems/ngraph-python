@@ -617,12 +617,12 @@ class Convolution(Layer):
     """
     TODO: Document, bias should not be used when batch norm is
     """
-    def __init__(self, fshape, filter_init, rho=0.9, strides=1, padding=0, dilation=1,
+    def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1,
                  bias_init=None, activation=None, batch_norm=False, **kwargs):
         super(Convolution, self).__init__(**kwargs)
         self.make_conv_layer(fshape, filter_init, strides, padding, dilation, **kwargs)
         self.bias = Bias(init=bias_init)
-        self.batch_norm = BatchNorm(rho=rho) if batch_norm else None
+        self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
     def make_conv_layer(self, fshape, filter_init, strides, padding, dilation, **kwargs):
