@@ -1944,6 +1944,9 @@ class BroadcastOp(IndexOp):
             x, axes=axes, **kwargs
         )
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
     def transform_tensor_description(self, tensor_description):
         return tensor_description.broadcast(self.axes)
 
