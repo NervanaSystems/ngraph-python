@@ -204,7 +204,7 @@ class update_conv(ConvDerivOp):
         filters : filter/kernel tensor.
     """
     def __init__(self, delta, inputs, filters, fprop, dbias=None, **kwargs):
-        if dbias==None:
+        if dbias is None:
             super(update_conv, self).__init__(
                 args=(delta, inputs),
                 fprop=fprop,

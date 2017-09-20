@@ -606,7 +606,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if (len(op.axes.lengths) != 5):
             return
 
-        if not op.fprop.forwarded.name in self.mkldnn.kernels:
+        if op.fprop.forwarded.name not in self.mkldnn.kernels:
             return
 
         data_type = self.mkldnn.datatype[op.dtype.type]

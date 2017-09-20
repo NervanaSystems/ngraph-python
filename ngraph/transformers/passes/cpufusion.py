@@ -1,14 +1,13 @@
 import warnings
 
 import ngraph as ng
-from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.op_graph import Add, Multiply, Greater, Less
 from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
 from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorValueOp, ContiguousOp
-from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
+from ngraph.op_graph.convolution import ConvolutionOp, update_conv
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import GraphRewritePass
@@ -74,8 +73,8 @@ class CPUFusion(GraphRewritePass):
                 # Bias grad op is a sum op on non-channel axis
                 # It should also not claimed by a different convolution
                 if isinstance(delta_child.exop.op, Sum)\
-                    and not delta_child.exop.op in self.op_replacement_dict:
-                        dbias_exop = delta_child.exop
+                        and delta_child.exop.op not in self.op_replacement_dict:
+                    dbias_exop = delta_child.exop
 
             if dbias_exop is None:
                 continue
@@ -240,11 +239,11 @@ class CPUFusion(GraphRewritePass):
                 return
             if op.dtype.name != 'float32':
                 return
-            
+
             if inputs in self.op_fprop_dict:
                 # Look for ops computing diff w.r.t gamma and beta in the graph.
                 # BpropBatchnormOp will take over the tensor_decls of dgamma and
-                # compute dgamma and dbeta as well. 
+                # compute dgamma and dbeta as well.
                 delta_exop = self.op_accessor.computation_decl.get_exop(delta)
                 dgamma = None
                 dbeta = None
@@ -252,7 +251,8 @@ class CPUFusion(GraphRewritePass):
                     if isinstance(delta_child_decl.exop.op, Sum):
                         check_op = delta_child_decl.exop.op
                         # Check if reduction is along the non-channel dimension
-                        if len(check_op.axes) == 1 and check_op.axes[0] == self.op_arg(check_op, 0).axes[0]:
+                        if len(check_op.axes) == 1 and\
+                                check_op.axes[0] == self.op_arg(check_op, 0).axes[0]:
                             dbeta = check_op
                     elif isinstance(delta_child_decl.exop.op, Multiply):
                         for mul_child_decl in delta_child_decl.exop.output_decls[
@@ -260,7 +260,8 @@ class CPUFusion(GraphRewritePass):
                             if isinstance(mul_child_decl.exop.op, Sum):
                                 check_op = mul_child_decl.exop.op
                                 # Check if reduction is along the non-channel dimension
-                                if len(check_op.axes) == 1 and check_op.axes[0] == self.op_arg(check_op, 0).axes[0]:
+                                if len(check_op.axes) == 1 and\
+                                        check_op.axes[0] == self.op_arg(check_op, 0).axes[0]:
                                     dgamma = check_op
                 batchnorm_fprop = self.op_fprop_dict[inputs]
                 self.replace_op(
@@ -449,7 +450,7 @@ class CPUFusion(GraphRewritePass):
         # Map from ops to their replacements
         self.op_replacement_dict = dict()
         # Dictionary to keep track of fprop/bprop pairs
-        # Maps input_op-->fprop_op. Assumes input_op is an arg to bprop_op too 
+        # Maps input_op-->fprop_op. Assumes input_op is an arg to bprop_op too
         self.op_fprop_dict = dict()
 
         # Register Relu fprop pattern
