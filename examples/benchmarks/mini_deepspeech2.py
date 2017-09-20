@@ -26,7 +26,7 @@ def get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands,
     model = Deepspeech(nfilters, filter_width, str_w, nbands, depth,
                        hidden_size, batch_norm=batch_norm, to_ctc=True)
     with ng.metadata(device_id=device_id, parallel=ax.N):
-        model_out = model(inputs["audio"])
+        model_out = model(inputs["audio"], spatial_axes={"H": "frequency", "W": "time"})
     return model_out
 
 

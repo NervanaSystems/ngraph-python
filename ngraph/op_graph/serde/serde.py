@@ -463,6 +463,21 @@ def protobuf_to_op(pb_op):
     return py_op
 
 
+def _deserialize_graph_ops_edges(pb_ops, pb_edges):
+    """
+    Given a set of serialized ops and edges, this will deserialize them and return the
+    list of all ops in that graph.
+    """
+    graph_def = ops_pb.GraphDef()
+    for edge in pb_edges:
+        temp = graph_def.edges.add()
+        temp.CopyFrom(edge)
+    for op in pb_ops:
+        temp = graph_def.ops.add()
+        temp.CopyFrom(op)
+    return _deserialize_graph(graph_def)
+
+
 def _deserialize_graph(graph_pb):
     """
     Will deserialize a graph and return the list of all ops in that graph. Does not bother

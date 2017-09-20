@@ -74,8 +74,10 @@ def test_pad_mixed():
 
     pad = ng.pad(x, [0, 1])
 
-    assert pad.axes[0] == x.axes[0]
-    assert pad.axes[1] != x.axes[1]
+    assert pad.axes[0].name == x.axes[0].name
+    assert pad.axes[1].name == x.axes[1].name
+    assert pad.axes[0].length == x.axes[0].length
+    assert pad.axes[1].length != x.axes[1].length
 
 
 def test_slice_nop():
