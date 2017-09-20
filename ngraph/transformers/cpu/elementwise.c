@@ -82,18 +82,47 @@ void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
 
   // No reorders required
   opkernel->reorder_i[0] = NULL;
-  opkernel->reorder_i[1] = NULL;
   opkernel->reorder_o[0] = NULL;
 
+  if (!mkldnn_memory_primitive_desc_equal(opkernel->inputs[1].desc,
+                                          opkernel->inputs[0].desc)) {
+    mkldnn_memory_desc_t md =
+        *mkldnn_primitive_desc_query_memory_d(opkernel->inputs[0].desc);
+    create_mkldnn_tensor_from_md(src2_dims, src2_sizes, &md, engine,
+                                 &(opkernel->internal_inputs[1]));
+    mkldnn_primitive_desc_t reorder_pd;
+    MKL_CHECK(mkldnn_reorder_primitive_desc_create(
+        &reorder_pd, opkernel->inputs[1].desc, opkernel->inputs[1].desc));
+    mkldnn_primitive_at_t inputs[] = {
+        mkldnn_primitive_at(opkernel->inputs[1].prim, 0)};
+    const_mkldnn_primitive_t outputs[] = {opkernel->internal_inputs[1].prim};
+    MKL_CHECK(mkldnn_primitive_create(&(opkernel->reorder_i[1]), reorder_pd,
+                                      inputs, outputs));
+  } else {
+    opkernel->reorder_i[1] = NULL;
+  }
+
+  if (opkernel->reorder_i[1]) {
+    void* tmp_buf;
+    alloc_aligned_memory(&tmp_buf, product(src2_sizes, src2_dims), data_type, 64);
+    opkernel->internal_inputs[1].buffer = tmp_buf;
+    MKL_CHECK(mkldnn_memory_set_data_handle(opkernel->internal_inputs[1].prim,
+                                            tmp_buf));
+  }
+  mkldnn_primitive_t mkldnn_memory_prim_src2 =
+      opkernel->reorder_i[1] ? opkernel->internal_inputs[1].prim
+                             : opkernel->inputs[1].prim;
   // create sum primitive
   const_mkldnn_primitive_t add_prim_dsts[] = {opkernel->outputs[0].prim};
   mkldnn_primitive_at_t add_prim_srcs[] = {
       mkldnn_primitive_at(opkernel->inputs[0].prim, 0),
-      mkldnn_primitive_at(opkernel->inputs[1].prim, 0),
+      mkldnn_primitive_at(mkldnn_memory_prim_src2, 0),
   };
 
   MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc,
                                     add_prim_srcs, add_prim_dsts));
 
+  if (opkernel->reorder_i[1])
+    opkernel->net[opkernel->net_size++] = opkernel->reorder_i[1];
   opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }

@@ -4,7 +4,7 @@ import "ngraph/op_graph/serde/ops.proto";
 
 service Hetr {
     rpc BuildTransformer (BuildRequest) returns (BuildReply) {}
-    rpc Computation (ComputationRequest) returns (ComputationReply) {}
+    rpc Computation (stream ComputationRequest) returns (ComputationReply) {}
     rpc FeedInput (FeedInputRequest) returns (FeedInputReply) {}
     rpc GetResults (GetResultsRequest) returns (GetResultsReply) {}
 }
@@ -25,9 +25,10 @@ message BuildReply {
 }
 
 message ComputationRequest {
-    GraphDef subgraph = 1;
-    repeated Op returns = 2;
-    repeated Op placeholders = 3;
+    repeated Op ops = 1;
+    repeated Edge edges = 2;
+    repeated Op returns = 3;
+    repeated Op placeholders = 4;
 }
 
 message ComputationReply {

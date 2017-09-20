@@ -81,25 +81,6 @@ The ``@visit.on_type(Add)`` line indicates that this method will be called when 
 
 Passes present a major opportunity for performance optimization that we plan to exploit in the future. This will likely include device-specific fusion of operations that will allow generation of kernels to execute multiple ops at once, as well as buffer sharing that will allow nonoverlapping operations to share device memory. These passes would improve execution time and memory usage, respectively. We currently have machinery for doing fusion and buffer sharing in ``ngraph.analysis``, but it is not working in the prerelease and has been disabled until we can refactor it to utilize passses.
 
-Intialization computation
--------------------------
-
-A special initialization computation is created in ``Transformer._transform_computations`` which is responsible for executing any initializers attached to graph ops. Initializers are discovered and enumerated in ``Transformer.ordered_initializers`` by tranversing the graph and checking for the ``Op.initializers`` member. This set of initializers is used to construct the initialization computation.
-
-.. code-block:: python
-
-        # Collect up all ops from the graph and obtain the init graph
-        all_ops = OrderedSet(Op.ordered_ops(self.all_results))
-        init_op = doall(self.ordered_initializers(all_ops))
-
-        ...
-
-        # create computation which initializes values (called once per session)
-        init_op.update_forwards()
-        self.init_computation = self.computation(init_op, name="init")
-
-This computation is then transformed in the same manner as other computations and run later in ``Transformer.initialize``.
-
 Tensor description initialization
 ---------------------------------
 

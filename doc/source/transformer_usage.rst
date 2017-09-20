@@ -75,13 +75,10 @@ This example creates a simple graph to evaluate the function ``e = ((a * b) + c)
 
 After all computations are created, the ``Transformer.initialize`` method must be called to finalize transformation and allocate all device memory for tensors (this is called automatically if a computation is called before manually calling ``initialize``). 
 
-.. Note::
-    New computations cannot be created with a transformer after ``initialize`` has been called. For more information on this initialization process, refer to the :ref:`Transformer implementation <transformer_implementation>` documentation file.
-
-Computation execution
+Computation Execution
 ---------------------
 
-This computation object can be executed with its ``__call__`` method by specifying the input ``c``.
+This computation object can be executed with its ``__call__`` method by specifying the inputs ``b`` and ``c``.
 
 .. code-block:: python
 

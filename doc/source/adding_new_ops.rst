@@ -43,38 +43,26 @@ instance::
    # [  2.  12.]
 
 1. First, we need to register the new op in ``op_graph``. In general, an op is
-   a subclass of ``ngraph.op_graph.op_graph.Op``. To add a new op, we could
-   inherit and implement the functionalities from the class ``Op`` or one of its descendant classes. We need to implement the ``__init__()``, and if we want
-   to define the derivative of the op, we need to implement the
-   ``generate_adjoints()``. For other advanced functionalities, refer to
-   the source of ``ngraph.op_graph.op_graph.Op``.
+   a sub-class of ``ngraph.op_graph.op_graph.Op``. To add a new op, we could
+   inherit from the class ``Op`` or one of its descendant classes and implement
+   required methods. We need to implement ``__init__()``, and if we
+   want to define the derivative of the op, we need to implement
+   ``generate_adjoints()``. For other advanced functionalities, please refer to
+   the the source of ``ngraph.op_graph.op_graph.Op``.
 
-   There are several helper functions (namely, ``create_binary_elementwise``,
-   ``create_twod_reduction_op``, ``create_oned_reduction_op`` and
-   ``create_reduction_op``) to accelerate the op registration process.
-   In this case, since ``Prod`` is a reduction op, we can use the
-   ``create_reduction_op`` helper function. So in
-   ``ngraph/op_graph/op_graph.py``, we add the following::
-
-        Prod, ProdTwoDim, ProdOneDim, prod = create_reduction_op(
-              'Prod', 'ProdTwoDim', 'ProdOneDim', 'prod', prod_adjoints
-        )
-
-   Now let's look at ``DotOp`` for an example where we use subclassing ``Op``
-   instead of using helper functions. In this example, ``DotOp`` inherits
+   Let's look at ``DotOp`` for an example. ``DotOp`` inherits
    ``TensorOp`` which is a descendant of ``Op``. In the ``__init__()`` function,
    we do input arguments checking and set up the output axes in ``DotOp.axes``.::
 
         class DotOp(TensorOp):
 
               def __init__(self, x, y, **kwargs):
-                 self.x_reduction_axes = x.axes & y.axes
-                 self.y_reduction_axes = self.x_reduction_axes
-                 assert self.x_reduction_axes == self.y_reduction_axes
-                 self.x_out_axes = x.axes - self.x_reduction_axes
-                 self.y_out_axes = y.axes - self.y_reduction_axes
+                 self.reduction_axes = x.axes & y.axes
+                 self.x_out_axes = x.axes - self.reduction_axes
+                 self.y_out_axes = y.axes - self.reduction_axes
+                 self.bias = bias
 
-                 axes = self.x_out_axes | self.y_out_axes
+                 axes = self.x_out_axes + self.y_out_axes
 
                  super(DotOp, self).__init__(
                      args=(x, y), axes=axes, **kwargs
@@ -168,39 +156,19 @@ instance::
    Some optimization passes are optional, while other passes could be required to ensure correctness. The two default passes we
    currently have are ``SimplePrune`` and ``CPUTensorShaping``. Refer to the :ref:`transformer passes <transformer_passes>` doc for more details.
 
-   For ``Prod``, one of the optimization we can do is that, if the tensor is
-   filled with the identical value, we could replace ``Prod`` with the ``Power`` op.
+   For ``Prod``, one of the optimizations we can do is that, if the tensor is
+   filled with a constant value, we can replace ``Prod`` with the ``Power`` op.
    Therefore, in ``ngraph/transformers/passes/passes.py``, we add ::
-
-        class CPUTensorShaping(PeepholeGraphPass):
-            ...
-
-            @visit.on_type(Prod)
-            def visit(self, op):
-                """
-                When Prod op is visited by transformer passes, replace it with
-                other ops depending on the input operand to optimize performance
-                and reduce to 2D to meet GPU device constrains.
-                """
-                x = op.args[0]
-                if x.is_scalar:
-                    val = broadcast(power(cast_axes(x, ()), op.reduction_axes.size), op.axes)
-                    self.replace_op(op, val)
-                    return
-                # call-next-method
-                if op.must_reduce:
-                    self.replace_op(op, op.reduce_to_twod())
 
         class SimplePrune(PeepholeGraphPass):
             ...
 
             @visit.on_type(Prod)
-            def visit(self, op):
+            def visit(self, op, x):
                 """
                 If x is filled with the same value, then replace the prod op
                 with `power`.
                 """
-                x, = op.args
                 if x.is_scalar and x.is_constant:
                     val = power(x.const, op.reduction_axes.size)
                     self.replace_op(op, constant(val))
@@ -230,7 +198,7 @@ instance::
 
             @add_op.on_type(Prod)
             def add_op(self, op, out, x):
-                self._buffer_op("prod", x=x, axis=0, out=out)
+                self.add_reduction_op("prod", op, out, x)
 
    Finally in ``/ngraph/transformers/gpu/float_ew2.py`` add the following for
    the reduction op generation template. These are string templates for the
