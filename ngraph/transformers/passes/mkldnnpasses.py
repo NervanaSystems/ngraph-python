@@ -606,6 +606,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if (len(op.axes.lengths) != 5):
             return
 
+        if not op.fprop.forwarded.name in self.mkldnn.kernels:
+            return
+
         data_type = self.mkldnn.datatype[op.dtype.type]
         # Assumes (C, D, H, W, N) for pooling axes
         (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
