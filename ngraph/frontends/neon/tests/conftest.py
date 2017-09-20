@@ -39,8 +39,8 @@ def output_axis(output_size):
 
 @pytest.fixture
 def spatial_axes(height, width):
-    H = ng.make_axis(length=height, name="height")
-    W = ng.make_axis(length=width, name="width")
+    H = ng.make_axis(length=height, name="H")
+    W = ng.make_axis(length=width, name="W")
     return ng.make_axes([H, W])
 
 
