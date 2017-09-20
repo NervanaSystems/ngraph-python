@@ -1125,8 +1125,7 @@ class TensorDescription(NameableValue):
         self.__is_input = is_input
         self.__is_placeholder = is_placeholder
         self.op = op
-        if not isinstance(self.name, str):
-            raise ValueError()
+        self.name = str(self.name)
         for axis in axes:
             if axis.length is None:
                 raise ValueError((
