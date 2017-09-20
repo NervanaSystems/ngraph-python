@@ -48,7 +48,9 @@ class CPUFusion(GraphRewritePass):
                 conv_new_op = ConvolutionOp(conv_op.conv_params, self.op_arg(conv_op, 0),
                                             self.op_arg(conv_op, 1), bias, axes=conv_op.axes)
                 map_roles_op = MapRolesOp(conv_new_op, map_roles.axes_map)
+                # replace conv_op explicitly so we update the forwarded pointer correctly
                 self.replace_op(op, map_roles_op)
+                self.replace_op(conv_op, conv_new_op)
 
     def construct_conv_and_bias_pattern_update_conv(self):
         self.conv_update_label = "B"
