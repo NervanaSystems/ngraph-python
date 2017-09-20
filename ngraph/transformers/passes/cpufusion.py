@@ -81,7 +81,7 @@ class CPUFusion(GraphRewritePass):
                 continue
 
             dbias_op = dbias_exop.op if dbias_exop else None
-            if (dbias_op.axes & self.op_arg(dbias_op, 0).axes) != Axes(dbias_op.axes[0]):
+            if len(dbias_op.axes) != 1 or dbias_op.axes[0] != self.op_arg(dbias_op, 0).axes[0]:
                 # Assumes C, D, H, W, N for delta input
                 # Bias grad is a reduction along D, H, W, N
                 # Bail out otherwise
@@ -236,8 +236,7 @@ class CPUFusion(GraphRewritePass):
             inputs = self.op_arg(label_map[self.batchnorm_bprop_input_tensor], 0)
             delta = label_map[self.batchnorm_bprop_delta]
 
-            if len(inputs.axes) != 5 or inputs.axes[
-                    1].length != 1 or inputs.axes[0].length % 8 != 0:
+            if len(inputs.axes) != 5 or inputs.axes[1].length != 1:
                 return
             if op.dtype.name != 'float32':
                 return
@@ -251,12 +250,18 @@ class CPUFusion(GraphRewritePass):
                 dbeta = None
                 for delta_child_decl in delta_exop.output_decls[0].user_input_decls:
                     if isinstance(delta_child_decl.exop.op, Sum):
-                        dbeta = delta_child_decl.exop.op
+                        check_op = delta_child_decl.exop.op
+                        # Check if reduction is along the non-channel dimension
+                        if len(check_op.axes) == 1 and check_op.axes[0] == self.op_arg(check_op, 0).axes[0]:
+                            dbeta = check_op
                     elif isinstance(delta_child_decl.exop.op, Multiply):
                         for mul_child_decl in delta_child_decl.exop.output_decls[
                                 0].user_input_decls:
                             if isinstance(mul_child_decl.exop.op, Sum):
-                                dgamma = mul_child_decl.exop.op
+                                check_op = mul_child_decl.exop.op
+                                # Check if reduction is along the non-channel dimension
+                                if len(check_op.axes) == 1 and check_op.axes[0] == self.op_arg(check_op, 0).axes[0]:
+                                    dgamma = check_op
                 batchnorm_fprop = self.op_fprop_dict[inputs]
                 self.replace_op(
                     op,
@@ -471,10 +476,6 @@ class CPUFusion(GraphRewritePass):
         pattern_conv_bias_update = self.construct_conv_and_bias_pattern_update_conv()
         self.register_pattern(pattern_conv_bias_update,
                               self.fuse_conv_and_bias_callback_update_conv)
-
-        # Register bprop_op pattern
-        # pattern_conv_bias_bprop = self.construct_conv_and_bias_pattern_bprop()
-        # self.register_pattern(pattern_conv_bias_bprop, self.fuse_conv_and_bias_callback_bprop)
 
         # Register Inner + Bias  pattern
         pattern_inner_bias = self.construct_innerproduct_and_bias_pattern()
