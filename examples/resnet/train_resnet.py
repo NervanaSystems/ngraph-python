@@ -17,12 +17,13 @@ import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import ax, NgraphArgparser
-from ngraph.frontends.neon import make_bound_computation, make_default_callbacks, loop_train
 from tqdm import tqdm
 from data import make_aeon_loaders
 from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import Layer
 from resnet import BuildResnet
+from contextlib import closing
+
 
 # Hyperparameters
 # Optimizer
@@ -56,16 +57,18 @@ def loop_eval(dataset, computation, metric_names):
     reduced_results = {k: np.mean(v[:ndata]) for k, v in all_results.items()}
     return reduced_results
 
+
 if __name__ == "__main__":
     # Command Line Parser
     parser = NgraphArgparser(description="Resnet for Imagenet and Cifar10")
     parser.add_argument('--dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
     parser.add_argument('--size', type=int, default=56, help="Enter size of resnet")
-    parser.add_argument('--tb', type=int, default=0, help="1- Enables tensorboard")
+    parser.add_argument('--tb', action="store_true", help="1- Enables tensorboard")
+    parser.add_argument('--name', type=str, default=None, help="Name of debug file")
     args = parser.parse_args()
 
     # Checking Command line args are proper
-    cifar_sizes = [20, 32, 44, 56, 110]
+    cifar_sizes = [8, 20, 32, 44, 56, 110]
     i1k_sizes = [18, 34, 50, 101, 152]
     if args.dataset == 'cifar10':
         dataset_sizes = cifar_sizes
@@ -96,19 +99,19 @@ if __name__ == "__main__":
             learning_schedule = [84 * args.iter_interval, 124 * args.iter_interval]
             # of Classes
             ax.Y.length = 1000
-            #Num of resnet mldules
+            # Num of resnet mldules
             num_resnet_mods = (args.size - 2) // 9
             print("Completed loading Imagenet dataset")
         else:
-            raise ValueError("Invalid i1k size. Select from "+str(dataset_sizes))
+            raise ValueError("Invalid i1k size. Select from " + str(dataset_sizes))
     else:
         raise NameError("Invalid Dataset. Dataset should be either cifar10 or i1k")
 
 # Create training and validation set objects
 train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
-                                                     args.num_iterations, dataset=args.dataset)
+                                         args.num_iterations, dataset=args.dataset)
 # Randomize seed
-np.random.seed(args.rng_seed)                                                     
+np.random.seed(args.rng_seed)
 # Make placeholders
 input_ph = train_set.make_placeholders(include_iteration=True)
 # Build the network
@@ -148,17 +151,18 @@ with Layer.inference_mode_on():
     eval_computation = ng.computation([eval_loss, errors], "all")
 
 # Training the network by calling transformer
-transformer = ngt.make_transformer()
-# Trainer
-train_function = transformer.add_computation(train_computation)
-# Inference
-eval_function = transformer.add_computation(eval_computation)
+with closing(ngt.make_transformer()) as transformer:
+    # Trainer
+    train_function = transformer.add_computation(train_computation)
+    # Inference
+    eval_function = transformer.add_computation(eval_computation)
 # Progress bar
 tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
 interval_cost = 0.0
-train_result = []
-test_result = []
-err_result = []
+if(args.name is not None):
+    train_result = []
+    test_result = []
+    err_result = []
 for step, data in enumerate(train_set):
     data['iteration'] = step
     feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
@@ -173,8 +177,18 @@ for step, data in enumerate(train_set):
                        interval=step // args.iter_interval,
                        iteration=step,
                        cost=interval_cost / args.iter_interval, tcost=eval_losses))
-        # For graph plotting
-        train_result.append(interval_cost / args.iter_interval)
-        test_result.append(eval_losses['cross_ent_loss'])
-        err_result.append(eval_losses['misclass'])
         interval_cost = 0.0
+        if(args.name is not None):
+            # For storing to csv
+            train_result.append(interval_cost / args.iter_interval)
+            test_result.append(eval_losses['cross_ent_loss'])
+            err_result.append(eval_losses['misclass'])
+if(args.name is not None):
+    print("\nSaving results to csv file")
+    import csv
+    with open(args.name + ".csv", 'wb') as train_test_file:
+        wr = csv.writer(train_test_file, quoting=csv.QUOTE_ALL)
+        wr.writerow(train_result)
+        wr.writerow(test_result)
+        wr.writerow(err_result)
+print("\nTraining Completed")

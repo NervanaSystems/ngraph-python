@@ -60,7 +60,8 @@ class AeonDataLoader(object):
         for placeholder_name, axis_info in self._dataloader.axes_info:
             p_axes = ng.make_axes([ax.N])
             for nm, sz in axis_info:
-                if placeholder_name == 'label': continue
+                if placeholder_name == 'label':
+                    continue
                 nm = "C" if nm == "channels" else nm
                 p_axes += ng.make_axis(name=nm, length=sz)
             placeholders[placeholder_name] = ng.placeholder(p_axes)
