@@ -64,6 +64,8 @@ class AeonDataLoader(object):
         for placeholder_name, axis_info in self._dataloader.axes_info:
             p_axes = ng.make_axes([batch_axis])
             for nm, sz in axis_info:
+                if placeholder_name == 'label':
+                    continue
                 if nm in NAME_MAP:
                     nm = NAME_MAP[nm]
                 p_axes += ng.make_axis(name=nm, length=sz)

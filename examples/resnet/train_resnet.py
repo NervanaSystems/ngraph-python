@@ -137,7 +137,6 @@ optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                     nesterov=False,
                                     iteration=input_ph['iteration'])
 label_indices = input_ph['label']
-label_indices = ng.cast_role(ng.flatten(label_indices), label_indices.axes.batch_axis())
 prediction = resnet(input_ph['image'])
 train_loss = ng.cross_entropy_multi(prediction, ng.one_hot(label_indices, axis=ax.Y))
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
