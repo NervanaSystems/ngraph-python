@@ -31,11 +31,13 @@ class Sequential(SubGraph):
         layers = [
                 Preprocess(functor=cifar10_mean_subtract),
                 Convolution((7, 7, 64), activation=Rectlin(), filter_init=KaimingInit())]
-        seq1= Sequential(layers)
+        seq1 = Sequential(layers)
 
     The above code is equivalent of doing
-        pp_opt = Preprocess(input)
-        conv_opt = Convolution(pp_opt)
+        preprocess = Preprocess(functor=cifar10_mean_subtract)
+        conv = Convolution((7, 7, 64), activation=Rectlin(), filter_init=KaimingInit())
+        x = preprocess(input)
+        output = conv(x)
     """
     def __init__(self, layers, name=None, **kwargs):
         super(Sequential, self).__init__(name=name, **kwargs)
@@ -128,6 +130,7 @@ class ResidualModule(object):
     TODO:
     When Gokce Keskin merges inception model, inherit from Parallel class and add "sum" mode with
     2 branches being main_path and side_path
+    https://github.com/NervanaSystems/private-ngraph/issues/2176
     """
     def __init__(self, main_path, side_path=None):
         self.main_path = main_path
@@ -138,5 +141,9 @@ class ResidualModule(object):
         mp = self.main_path(in_obj)
         # Computes the output of side path. Parallel path 2
         sp = in_obj if (self.side_path is None) else self.side_path(in_obj)
-        # Sum both and return
-        return mp + sp
+        # Check if their dimensions match
+        if(mp.axes == sp.axes) and (mp.axes.lengths == sp.axes.lengths):
+            # Sum both and return
+            return mp + sp
+        else:
+            raise ValueError("Dimensions mismatch. " + str(mp.axes) + " VS " + str(sp.axes))

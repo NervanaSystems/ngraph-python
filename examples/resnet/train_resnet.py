@@ -177,12 +177,13 @@ for step, data in enumerate(train_set):
                        interval=step // args.iter_interval,
                        iteration=step,
                        cost=interval_cost / args.iter_interval, tcost=eval_losses))
-        interval_cost = 0.0
         if(args.name is not None):
             # For storing to csv
             train_result.append(interval_cost / args.iter_interval)
             test_result.append(eval_losses['cross_ent_loss'])
             err_result.append(eval_losses['misclass'])
+        interval_cost = 0.0
+# Writing to CSV
 if(args.name is not None):
     print("\nSaving results to csv file")
     import csv
