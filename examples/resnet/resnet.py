@@ -16,7 +16,7 @@
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Sequential
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, Activation
+from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, Activation
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax
 from ngraph.frontends.neon.model import ResidualModule
 from ngraph.frontends.neon import ax
@@ -58,12 +58,12 @@ def num_i1k_resmods(size):
 
 # Returns dict of convolution layer parameters
 def conv_params(fil_size, num_fils, strides=1, batch_norm=True, activation=Rectlin()):
-    return dict(fshape=(fil_size, fil_size, num_fils),
+    return dict(filter_shape=(fil_size, fil_size, num_fils),
+                filter_init=KaimingInit(),
                 strides=strides,
                 padding=(1 if fil_size > 1 else 0),
                 batch_norm=batch_norm,
-                activation=activation,
-                filter_init=KaimingInit())
+                activation=activation)
 
 
 # Class for constructing the network as described in paper below
@@ -106,7 +106,7 @@ class BuildResnet(Sequential):
                         layers.append(ResidualModule(main_path, side_path))
                         layers.append(Activation(Rectlin()))
             # Do average pooling --> fully connected--> softmax.
-            layers.append(Pool2D(8, op='avg'))
+            layers.append(Pooling([8,8], op='avg'))
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=True))
             layers.append(Activation(Softmax()))
         # For I1K dataset
@@ -123,7 +123,7 @@ class BuildResnet(Sequential):
                 Convolution((7, 7, 64), strides=2, padding=3,
                             batch_norm=True, activation=Rectlin(), filter_init=KaimingInit()),
                 # Max Pooling
-                Pool2D(3, strides=2, op='max', padding=1)]
+                Pooling([3,3], strides=2, op='max', padding=1)]
             first_resmod = True  # Indicates the first residual module for which strides are 1
             # Loop 4 times for each filter
             for fil in range(4):
@@ -156,7 +156,7 @@ class BuildResnet(Sequential):
                         layers.append(ResidualModule(main_path, side_path))
                         layers.append(Activation(Rectlin()))
             # Do average pooling --> fully connected--> softmax.
-            layers.append(Pool2D(7, op='avg'))
+            layers.append(Pooling([7,7], op='avg'))
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=True))
             layers.append(Activation(Softmax()))
         else:

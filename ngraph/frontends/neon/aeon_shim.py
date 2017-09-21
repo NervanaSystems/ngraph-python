@@ -14,8 +14,10 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function, absolute_import
 import logging
+
 from builtins import object
 import ngraph as ng
+from ngraph.frontends.neon import ax
 
 logger = logging.getLogger(__name__)
 try:
@@ -31,12 +33,10 @@ except ImportError:
     logger.error(msg)
     raise ImportError(msg)
 
-
 NAME_MAP = {"channels": "C",
             "height": "H",
             "width": "W"}
 """Converts aeon axis names to canonical ngraph axis types."""
-
 
 class AeonDataLoader(object):
 
@@ -63,13 +63,12 @@ class AeonDataLoader(object):
         for placeholder_name, axis_info in self._dataloader.axes_info:
             p_axes = ng.make_axes([ax.N])
             for nm, sz in axis_info:
-                if placeholder_name == 'label':
-                    continue
-                nm = "C" if nm == "channels" else nm
+                if nm in NAME_MAP:
+                    nm = NAME_MAP[nm]
                 p_axes += ng.make_axis(name=nm, length=sz)
             placeholders[placeholder_name] = ng.placeholder(p_axes)
         if include_iteration:
-            placeholders['iteration'] = ng.placeholder(axes=ng.Axes())
+            placeholders['iteration'] = ng.placeholder(axes=())
         return placeholders
 
     def reset(self):
