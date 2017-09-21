@@ -105,7 +105,8 @@ if __name__ == "__main__":
             raise ValueError("Invalid i1k size. Select from " + str(dataset_sizes))
     else:
         raise NameError("Invalid Dataset. Dataset should be either cifar10 or i1k")
-
+# Set batch size
+ax.N.length = args.batch_size
 # Create training and validation set objects
 train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
                                          args.num_iterations, dataset=args.dataset)

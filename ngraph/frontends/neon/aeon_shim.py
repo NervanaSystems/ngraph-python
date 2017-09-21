@@ -16,8 +16,8 @@ from __future__ import print_function, absolute_import
 import logging
 
 from builtins import object
+
 import ngraph as ng
-from ngraph.frontends.neon import ax
 
 logger = logging.getLogger(__name__)
 try:
@@ -37,6 +37,7 @@ NAME_MAP = {"channels": "C",
             "height": "H",
             "width": "W"}
 """Converts aeon axis names to canonical ngraph axis types."""
+
 
 class AeonDataLoader(object):
 
@@ -59,9 +60,9 @@ class AeonDataLoader(object):
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
-        ax.N.length = self._dataloader.batch_size
+        batch_axis = ng.make_axis(self._dataloader.batch_size, name="N")
         for placeholder_name, axis_info in self._dataloader.axes_info:
-            p_axes = ng.make_axes([ax.N])
+            p_axes = ng.make_axes([batch_axis])
             for nm, sz in axis_info:
                 if nm in NAME_MAP:
                     nm = NAME_MAP[nm]
