@@ -21,15 +21,21 @@ from ngraph.frontends.neon.graph import SubGraph
 class Sequential(SubGraph):
     """
     Sequential is a container of layers that passes data through the layers in series.
+
     Arguments:
         layers: List of different layers in the network
         name: name to be used with selector
+
     Example:
     .. code-block:: python
         layers = [
                 Preprocess(functor=cifar10_mean_subtract),
-                Convolution(**conv_params(3, 16))]
-        Seq1= Sequential(layers)
+                Convolution((7, 7, 64), activation=Rectlin(), filter_init=KaimingInit())]
+        seq1= Sequential(layers)
+
+    The above code is equivalent of doing
+        pp_opt = Preprocess(input)
+        conv_opt = Convolution(pp_opt)
     """
     def __init__(self, layers, name=None, **kwargs):
         super(Sequential, self).__init__(name=name, **kwargs)
@@ -116,7 +122,7 @@ class ResidualModule(object):
     .. code-block:: python
         layers = [
                 Preprocess(functor=cifar10_mean_subtract),
-                Convolution(**conv_params(3, 16)),
+                Convolution((7, 7, 64), activation=Rectlin(), filter_init=KaimingInit())
                 ResidualModule(main_path, side_path)]
 
     TODO:
