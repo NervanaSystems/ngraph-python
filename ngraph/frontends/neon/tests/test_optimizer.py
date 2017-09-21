@@ -390,7 +390,7 @@ def test_weight_clipping(w_clip, optimizer):
 
     updated_weights = ng.sequential([opt_ng(cost), W])
 
-    epsilon = 1e-8
+    epsilon = w_clip * 1e-3
     # Set up the computation and run the "train" loop
     with ExecutorFactory() as ex:
         opt_ng_comp = ex.transformer.computation(updated_weights, data, target)
