@@ -32,6 +32,7 @@ class Sequential(SubGraph):
                 Preprocess(functor=cifar10_mean_subtract),
                 Convolution((7, 7, 64), activation=Rectlin(), filter_init=KaimingInit())]
         seq1 = Sequential(layers)
+        output = seq1(input)
 
     The above code is equivalent of doing
         preprocess = Preprocess(functor=cifar10_mean_subtract)
