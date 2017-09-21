@@ -19,6 +19,18 @@ from ngraph.frontends.neon.graph import SubGraph
 
 
 class Sequential(SubGraph):
+    """
+    Sequential is a container of layers that passes data through the layers in series.
+    Arguments:
+        layers: List of different layers in the network
+        name: name to be used with selector
+    Example:
+    .. code-block:: python
+        layers = [
+                Preprocess(functor=cifar10_mean_subtract),
+                Convolution(**conv_params(3, 16))]
+        Seq1= Sequential(layers)
+    """
     def __init__(self, layers, name=None, **kwargs):
         super(Sequential, self).__init__(name=name, **kwargs)
         self.layers = layers
@@ -89,9 +101,29 @@ def make_bound_computation(transformer, named_outputs, named_inputs):
     return BoundComputation(transformer, named_outputs, named_inputs)
 
 
-# Class for Residual Module
 class ResidualModule(object):
-    def __init__(self, main_path, side_path):
+    """
+    Creates a Residual object which takes in two parallel paths and returns their
+    element-wise sum.
+    It assumes that both the parallel paths have same dimensions.
+    If side_path is None then the original input is added to main_path output
+
+    Arguments:
+        main_path: This path typically contains Conv layers
+        side_path: This path implements the skip connections which can be direct mapping or
+                    1x1 convs for matching dimensions
+    Example:
+    .. code-block:: python
+        layers = [
+                Preprocess(functor=cifar10_mean_subtract),
+                Convolution(**conv_params(3, 16)),
+                ResidualModule(main_path, side_path)]
+
+    TODO:
+    When Gokce Keskin merges inception model, inherit from Parallel class and add "sum" mode with
+    2 branches being main_path and side_path
+    """
+    def __init__(self, main_path, side_path=None):
         self.main_path = main_path
         self.side_path = side_path
 

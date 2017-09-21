@@ -54,12 +54,12 @@ def num_i1k_resmods(size):
 
 
 # Returns dict of convolution layer parameters
-def conv_params(fil_size, num_fils, strides=1, batch_norm=True, relu=True):
+def conv_params(fil_size, num_fils, strides=1, batch_norm=True, activation=Rectlin()):
     return dict(fshape=(fil_size, fil_size, num_fils),
                 strides=strides,
                 padding=(1 if fil_size > 1 else 0),
                 batch_norm=batch_norm,
-                activation=(Rectlin() if relu else None),
+                activation=activation,
                 filter_init=KaimingInit())
 
 
@@ -130,20 +130,27 @@ class BuildResnet(Sequential):
                         if(first_resmod):
                             # Strides=1 and Convolution Side path
                             main_path, side_path = self.get_mp_sp(num_fils[fil],
-                                                                  net_type, direct=False)
+                                                                  net_type,
+                                                                  direct=False,
+                                                                  bottleneck=bottleneck)
                             layers.append(ResidualModule(main_path, side_path))
                             layers.append(Activation(Rectlin()))
                             first_resmod = False
                         else:
                             # Strides=2 and Convolution side path
-                            main_path, side_path = self.get_mp_sp(num_fils[fil], net_type,
-                                                                  direct=False, strides=2)
+                            main_path, side_path = self.get_mp_sp(num_fils[fil],
+                                                                  net_type,
+                                                                  direct=False,
+                                                                  bottleneck=bottleneck,
+                                                                  strides=2)
                             layers.append(ResidualModule(main_path, side_path))
                             layers.append(Activation(Rectlin()))
                     else:
                         # Strides=1 and direct connection
-                        main_path, side_path = self.get_mp_sp(num_fils[fil], net_type)
-                        layers.append(ResidualModule(num_fils[fil]), bottleneck=bottleneck)
+                        main_path, side_path = self.get_mp_sp(num_fils[fil],
+                                                              net_type,
+                                                              bottleneck=bottleneck)
+                        layers.append(ResidualModule(main_path, side_path))
                         layers.append(Activation(Rectlin()))
             # Do average pooling --> fully connected--> softmax.
             layers.append(Pool2D(7, op='avg'))
@@ -159,29 +166,30 @@ class BuildResnet(Sequential):
             # Mainpath for CIFAR10 is fixed
             main_path = Sequential([
                 Convolution(**conv_params(3, num_fils, strides=strides)),
-                Convolution(**conv_params(3, num_fils, relu=False))])
+                Convolution(**conv_params(3, num_fils, activation=None))])
             # Side Path
             if(direct):
                 side_path = None
             else:
                 side_path = Convolution(**conv_params(1, num_fils,
-                                                      strides=strides, relu=False))
+                                                      strides=strides, activation=None))
         elif(net_type == "i1k"):
             # Mainpath for i1k is depends if bottleneck is enabled or not
             if(bottleneck):
                 main_path = Sequential([
                     Convolution(**conv_params(1, num_fils, strides=strides)),
                     Convolution(**conv_params(3, num_fils)),
-                    Convolution(**conv_params(1, num_fils * 4, relu=False))])
+                    Convolution(**conv_params(1, num_fils * 4, activation=None))])
             else:
                 main_path = Sequential([
                     Convolution(**conv_params(3, num_fils, strides=strides)),
-                    Convolution(**conv_params(3, num_fils, relu=False))])
+                    Convolution(**conv_params(3, num_fils, activation=None))])
             # Side Path
             if(direct):
                 side_path = None
             else:
-                side_path = Convolution(**conv_params(1, num_fils, strides=strides, relu=False))
+                side_path = Convolution(**conv_params(1, num_fils,
+                                                      strides=strides, activation=None))
         else:
             raise NameError("Incorrect dataset. Should be --dataset cifar10 or --dataset i1k")
         return main_path, side_path

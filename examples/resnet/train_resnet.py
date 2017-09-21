@@ -25,22 +25,6 @@ from resnet import BuildResnet
 from contextlib import closing
 
 
-# Hyperparameters
-# Optimizer
-base_lr = 0.1
-gamma = 0.1
-momentum_coef = 0.9
-wdecay = 0.0001
-nesterov = False
-
-
-print("HyperParameters")
-print("Learning Rate:     " + str(base_lr))
-print("Momentum:          " + str(momentum_coef))
-print("Weight Decay:      " + str(wdecay))
-print("Nesterov           " + str(nesterov))
-
-
 # Result collector
 def loop_eval(dataset, computation, metric_names):
     dataset.reset()
@@ -59,12 +43,27 @@ def loop_eval(dataset, computation, metric_names):
 
 
 if __name__ == "__main__":
+    # Hyperparameters
+    # Optimizer
+    base_lr = 0.1
+    gamma = 0.1
+    momentum_coef = 0.9
+    wdecay = 0.0001
+    nesterov = False
+
+    print("HyperParameters")
+    print("Learning Rate:     " + str(base_lr))
+    print("Momentum:          " + str(momentum_coef))
+    print("Weight Decay:      " + str(wdecay))
+    print("Nesterov           " + str(nesterov))
+
     # Command Line Parser
     parser = NgraphArgparser(description="Resnet for Imagenet and Cifar10")
     parser.add_argument('--dataset', type=str, default="cifar10", help="Enter cifar10 or i1k")
     parser.add_argument('--size', type=int, default=56, help="Enter size of resnet")
     parser.add_argument('--tb', action="store_true", help="1- Enables tensorboard")
-    parser.add_argument('--name', type=str, default=None, help="Name of debug file")
+    parser.add_argument('--name', type=str, default=None, help="Name of the csv which \
+                        logs different metrics of model")
     args = parser.parse_args()
 
     # Checking Command line args are proper
@@ -83,7 +82,6 @@ if __name__ == "__main__":
             en_bottleneck = False
             # There are 10 classes so setting length of label axis to 10
             ax.Y.length = 10
-            print("Completed loading CIFAR10 dataset")
         else:
             raise ValueError("Invalid CIFAR10 size. Select from " + str(dataset_sizes))
     elif args.dataset == 'i1k':
@@ -95,13 +93,14 @@ if __name__ == "__main__":
             else:
                 en_bottleneck = True
             # Change iter_interval to print every epoch. TODO
-            args.iter_interval = 50000 // args.batch_size
+            args.iter_interval = 1281216 // args.batch_size
             learning_schedule = [84 * args.iter_interval, 124 * args.iter_interval]
+            print("Learning Schedule: " + str(learning_schedule))
+            # For now 200 to prints often will change later
+            args.iter_interval = 200
+            num_resnet_mods = 0
             # of Classes
             ax.Y.length = 1000
-            # Num of resnet mldules
-            num_resnet_mods = (args.size - 2) // 9
-            print("Completed loading Imagenet dataset")
         else:
             raise ValueError("Invalid i1k size. Select from " + str(dataset_sizes))
     else:
@@ -110,6 +109,7 @@ if __name__ == "__main__":
 # Create training and validation set objects
 train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
                                          args.num_iterations, dataset=args.dataset)
+print("Completed loading " + args.dataset + " dataset")
 # Randomize seed
 np.random.seed(args.rng_seed)
 # Make placeholders
