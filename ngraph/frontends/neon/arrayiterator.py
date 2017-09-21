@@ -106,6 +106,10 @@ class ArrayIterator(object):
         Yields:
             tuple: The next minibatch which includes both features and labels.
         """
+
+        if self.index >= self.total_iterations:
+            raise StopIteration
+
         i1 = (self.start + self.index * self.batch_size) % self.ndata
         bsz = min(self.batch_size, self.ndata - i1)
         oslice1 = slice(i1, i1 + bsz)
