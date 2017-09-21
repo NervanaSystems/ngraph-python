@@ -145,7 +145,7 @@ test_mkldnn: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_mkldnn: multinode_prepare test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
-	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
+	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed -n auto \
 	--junit-xml=testout_test_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...

@@ -72,6 +72,8 @@ class ConvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
+        self.channel_axes = inputs.axes[0]
+        self.spatial_axes = inputs.axes[1:4]
         self.__has_side_effects = False
 
     def copy_with_new_args(self, args):
@@ -135,11 +137,6 @@ class DeconvolutionOp(TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if not inputs.axes[0] == filters.axes[0]:
-            raise ValueError((
-                'the first axis in input {inputs} and filter {filters} are not the same.'
-            ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
-
         expected_keys = ['pad_h', 'pad_w', 'pad_d', 'str_h', 'str_w',
                          'str_d', 'dil_h', 'dil_w', 'dil_d']
         # TODO: maybe we should assume no padding and no dilation when
@@ -151,6 +148,8 @@ class DeconvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
+        self.channel_axes = inputs.axes[0]
+        self.spatial_axes = inputs.axes[1:4]
         self.__has_side_effects = False
 
     @property

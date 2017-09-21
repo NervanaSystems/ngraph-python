@@ -16,10 +16,12 @@ from __future__ import division, print_function, absolute_import
 
 import collections
 import itertools
+import six
 from contextlib import contextmanager
 
 import ngraph as ng
-from ngraph.frontends.common.utils import conv_output_dim, deconv_output_dim
+from ngraph.frontends.common import utils
+from ngraph.frontends.common.utils import make_poolparams
 from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
@@ -53,7 +55,7 @@ class Layer(SubGraph):
     def __init__(self, name=None, **kwargs):
         super(Layer, self).__init__(name=name, **kwargs)
 
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         raise NotImplementedError()
 
     @property
@@ -182,7 +184,7 @@ class Linear(Layer):
         self.W = None
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, reuse=True):
+    def __call__(self, in_obj, reuse=True, **kwargs):
 
         if not self.initialized:
             self.W = ng.variable(axes=(ng.make_axes(self.axes_map.keys()) +
@@ -237,7 +239,7 @@ class LookupTable(Layer):
         return init_w
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         """
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
@@ -277,77 +279,169 @@ class LookupTable(Layer):
 
 class ConvBase(Layer):
     """
-    Convolutional layer that requires explicit binding of all spatial roles
+    Convolutional layer that performs 3D convolutions. This is used under-the-hood and should not
+    be called directly.
 
-    Args:
-        fshape (dict): filter shape -- must contain keys 'T', 'R', 'S', 'K'
+    This layer provides an interface to the core convolution support within ngraph. 1D and 2D
+    convolutions are automatically represented as 3D convolutions, with extra axes
+    temporarily introduced as needed.
+
+    Arguments:
+        filter_shape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
         init (function): function for later initializing filters
-        strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
-        padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
-        dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
+        strides (dict): stride specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+        padding (dict): pad specification -- can contain keys 'D', 'H', 'W' - defaults to 0. Each
+            padding value can be one of:
+            - (int): specifies a symmetric padding value
+            - (tuple): specifies left and right padding values individually
+            - (str): one of "same", "valid", "full" or "causal"
+        dilation (dict): dilation specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+
+    Attributes:
+        W (TensorOp): The convolutional filters. Axes are ordered as:
+            C: input channels
+            D: depth
+            H: height
+            W: width
+            K: output channels
+        nout (int): The number of output channels
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
     """
 
-    def __init__(self, fshape, init, strides, padding, dilation, **kwargs):
+    def __init__(self, filter_shape, init, strides, padding, dilation, **kwargs):
         super(ConvBase, self).__init__(**kwargs)
-        self.convparams = dict(T=None, R=None, S=None, K=None,
-                               pad_h=None, pad_w=None, pad_d=None,
-                               str_h=None, str_w=None, str_d=None,
-                               dil_h=None, dil_w=None, dil_d=None)
 
-        for d in [fshape, strides, padding, dilation]:
-            self.convparams.update(d)
-
-        missing_keys = [k for k, v in self.convparams.items() if v is None]
-        if len(missing_keys) > 0:
-            raise ValueError("Missing conv keys: {}".format(missing_keys))
-
+        def check_dict(obj, name, keys=None):
+            if not isinstance(obj, dict):
+                raise TypeError("type({}) must be dict, not {}".format(name, type(obj)))
+            if keys is not None:
+                for key in keys:
+                    if key not in obj:
+                        raise ValueError("{} must have specified values for all axes,"
+                                         "{}. Found {}".format(name, ", ".join(keys),
+                                                               list(obj.keys())))
         self.init = init
-        self.W = None
-        self.W_name = 'convwt'
-        self.layer_name = 'convolution'
 
-    def _filter_axes(self, in_object):
-        f_axes = ng.make_axes([in_object.axes[0]])
-        for nm in 'TRSK':
-            f_axes |= ng.make_axis(length=self.convparams[nm], name=nm)
+        # Setup filter parameters
+        check_dict(filter_shape, "filter_shape", "DHWK")
+        self.nout = filter_shape.pop("K")
+        self.filter_shape = filter_shape
+
+        # Setup strides - default to 1
+        check_dict(strides, "strides")
+        self.strides = {key: 1 for key in "DHW"}
+        self.strides.update(strides)
+
+        # Setup padding - default to 0
+        check_dict(padding, "padding")
+        self.padding = {key: 0 for key in "DHW"}
+        self.padding.update(padding)
+
+        # Setup dilation - default to 1
+        check_dict(dilation, "dilation")
+        self.dilation = {key: 1 for key in "DHW"}
+        self.dilation.update(dilation)
+
+        self.W = None
+
+    def _filter_axes(self, channel_axes, spatial_axes):
+        """
+        Create the filter axes. They are ordered as (C, D, H, W, K).
+        """
+        f_axes = channel_axes
+        for key, ax in zip("DHW", spatial_axes):
+            f_axes += ng.make_axis(length=self.filter_shape[key],
+                                   name=ax.name)
+        f_axes += ng.make_axis(length=self.nout, name="K")
         return f_axes
 
-    def _output_axes(self, in_object):
-        in_axes = in_object.axes
+    def _output_axes(self, channel_axes, spatial_axes, batch_axis, pad_int):
+        """
+        Create the convolution output axes.
 
-        output_axes = ng.make_axes([
-            ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
-        ])
-        # set lengths
-        output_axes.set_shape(self._out_shape(in_axes))
-        output_axes |= in_axes.batch_axis()
+        TODO: This should be done in the core since it's fully determined.
+        """
+        output_axes = ng.make_axis(length=self.nout, name=channel_axes.name)
+        for key, ax in zip("DHW", spatial_axes):
+            output_axes += ng.make_axis(name=ax.name,
+                                        length=utils.conv_output_dim(ax.length,
+                                                                     self.filter_shape[key],
+                                                                     pad_int[key],
+                                                                     self.strides[key],
+                                                                     False,
+                                                                     self.dilation[key]))
+        return output_axes + batch_axis
 
-        return output_axes
+    def _get_pad_int(self, spatial_axes):
+        """
+        Get integer padding values for each spatial axis. If padding is asymmetric,
+        return the required manual paddings.
+        """
+        # Manual padding might be required for asymmetric paddings
+        manual_pad = {}
+        padding_int = {}
+        for name, ax in zip("DHW", spatial_axes):
+            pad = utils.ConvParameters(ax.length,
+                                       self.filter_shape[name],
+                                       self.strides[name],
+                                       self.dilation[name]).get_padding_size(self.padding[name])
+            symm_pad = min(pad)
+            padding_int[name] = symm_pad
+            if pad[0] != pad[1]:
+                manual_pad[ax.name] = (pad[0] - symm_pad, pad[1] - symm_pad)
 
-    def _out_shape(self, in_axes):
-        cpm = self.convparams.copy()
-        out_shape = [
-            self.W.axes[-1].length,
-            conv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'], cpm['str_d'], False,
-                            cpm['dil_d']),
-            conv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'], cpm['str_h'], False,
-                            cpm['dil_h']),
-            conv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'], cpm['str_w'], False,
-                            cpm['dil_w'])
-        ]
-        return out_shape
+        return padding_int, manual_pad
 
-    def _conv_op(self, in_obj):
-        return ng.convolution(self.convparams.copy(),
+    def _conv_op(self, in_obj, channel_axes, spatial_axes):
+        """
+        Setup for the call to ng.convolution.
+        """
+        manual_pad = collections.OrderedDict([(ax.name, (0, 0)) for ax in in_obj.axes])
+        pad_int, extra_pad = self._get_pad_int(spatial_axes)
+        manual_pad.update(extra_pad)
+        if any((pad != (0, 0)) for pad in manual_pad.values()):
+            in_obj = ng.pad(in_obj, manual_pad.values())
+            spatial_axes = in_obj.axes.get_by_names(*ng.make_axes(spatial_axes).names)
+        output_axes = self._output_axes(channel_axes, spatial_axes, in_obj.axes.batch_axis(),
+                                        pad_int)
+        convparams = utils.make_convparams(self.nout, self.filter_shape,
+                                           self.strides, pad_int, self.dilation)
+        return ng.convolution(convparams,
                               in_obj,
                               self.W,
-                              axes=self._output_axes(in_obj))
+                              axes=output_axes)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
-        in_obj = reorder_spatial_axes(in_obj)
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
+        """
+        Arguments:
+            in_obj (Op): Input op
+            channel_axes (str): name of the expected channel axis type - defaults to "C"
+            spatial_axes (tuple): names of expected depth, height and width axis types - defaults
+                                  to "D", "H", and "W"
+        """
+        if isinstance(spatial_axes, dict):
+            spatial_axes = tuple(spatial_axes.get(name, name)
+                                 for name in ("D", "H", "W"))
+        elif isinstance(spatial_axes, tuple):
+            if len(spatial_axes) < 3:
+                raise ValueError("spatial_axes must have length 3 (e.g. ('D', 'H', 'W'))")
+            spatial_axes = tuple(name if name else default
+                                 for name, default in zip(spatial_axes, ("D", "H", "W")))
 
-        filter_axes = self._filter_axes(in_obj)
+        orig_axes = in_obj.axes
+        in_obj = reorder_spatial_axes(in_obj, channel_axes, spatial_axes)
+        channel_axes = in_obj.axes.get_by_names(channel_axes)
+        spatial_axes = in_obj.axes.get_by_names(*spatial_axes)
+
+        filter_axes = self._filter_axes(channel_axes, spatial_axes)
 
         # mark 'K' as a shadow axis for the initializers.
         axes_map = shadow_axes_map(filter_axes.find_by_name('K'))
@@ -356,10 +450,10 @@ class ConvBase(Layer):
             for axis in filter_axes
         ])
 
-        if self.W is None:
+        if not self.initialized:
             self.W = ng.variable(axes=filter_axes,
                                  initial_value=self.init,
-                                 metadata={"label": LABELS["weight"]}).named(self.W_name)
+                                 metadata={"label": LABELS["weight"]}).named("W")
         else:
             if filter_axes != self.W.axes:
                 raise ValueError((
@@ -370,104 +464,137 @@ class ConvBase(Layer):
                     "{new_filter_axes} which are different than the existing "
                     "filter axes."
                 ).format(
-                    layer_name=self.layer_name,
+                    layer_name=self.name,
                     existing_filter_axes=self.W.axes,
                     input_axes=in_obj.axes,
                     new_filter_axes=filter_axes,
                 ))
 
-        return ng.map_roles(self._conv_op(in_obj), axes_map)
+        output = ng.map_roles(self._conv_op(in_obj, channel_axes, spatial_axes), axes_map)
+        # Reorder the output to match the input order
+        output_axis_order = ng.make_axes([output.axes.find_by_name(ax.name)[0]
+                                          for ax in orig_axes])
+        # Remove introduced axes. If their length is > 1, then perhaps they should be kept
+        slices = [0 if (ax not in orig_axes) and ax.length == 1 else slice(None)
+                  for ax in output.axes]
+        output = ng.tensor_slice(output, slices)
+        # New axes with length > 1 may have been introduced. Add them to the end.
+        output_axis_order = output_axis_order | output.axes
+        return ng.axes_with_order(output, output_axis_order)
 
 
 class DeconvBase(ConvBase):
     """
-    Deconvolutional layer that requires explicit binding of all spatial roles
+    Deconvolutional layer that performs 3D deconvolutions (otherwise known as transpose
+    convolutions or fractionally-strided convolutions).  This is used under-the-hood and should
+    not be called directly.
 
-    Args:
-        fshape (dict): filter shape -- must contain keys 'T', 'R', 'S', 'K'
+    This layer provides an interface to the core deconvolution support within ngraph. 1D and 2D
+    deconvolutions are automatically represented as 3D deconvolutions, with extra axes
+    temporarily introduced as needed. The specified strides, padding and dilation arguments are
+    for the corresponding forward convolution.
+
+    Arguments:
+        filter_shape (dict): filter shape -- must contain keys 'D', 'H', 'W', 'K'
         init (function): function for later initializing filters
-        strides (dict): stride specification -- must contain keys 'str_d', 'str_h', 'str_w'
-        padding (dict): pad specification -- must contain keys 'pad_d', 'pad_h', 'pad_w'
-        dilation (dict): dilation specification -- must contain keys 'dil_d', 'dil_h', 'dil_w'
-        deconv_out_shape (tuple, optional): only applicable if deconv is True. If given,
-            specifies shape of output (trims output)
+        strides (dict): stride specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+        padding (dict): pad specification -- can contain keys 'D', 'H', 'W' - defaults to 0. Each
+            padding value can be one of:
+            - (int): specifies a symmetric padding value
+            - (tuple): specifies left and right padding values individually
+            - (str): one of "same", "valid", "full" or "causal"
+        dilation (dict): dilation specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+
+    Attributes:
+        W (TensorOp): The deconvolutional filters. Axes are ordered as:
+            K: output channels
+            D: depth
+            H: height
+            W: width
+            C: input channels
+        nout (int): The number of output channels
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is
+                 supported.
+        spatial: The spatial axes over which to deconvolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
     """
-    metadata = {'layer_type': 'deconvolution'}
-
-    def __init__(self, fshape, init, strides, padding, dilation, deconv_out_shape=None, **kwargs):
-        super(DeconvBase, self).__init__(fshape, init, strides, padding, dilation, **kwargs)
-
-        self.W_name = 'deconvwt'
-        self.layer_name = 'deconvolution'
-        self.deconv_out_shape = deconv_out_shape
-
-    def _filter_axes(self, in_object):
-        # swap lengths of C and K
-        f_axes = ng.make_axes(ng.make_axis(length=self.convparams['K'], name='C'))
-        for nm in 'TRS':
-            f_axes |= ng.make_axis(length=self.convparams[nm], name=nm)
-        f_axes |= ng.make_axis(length=in_object.axes[0].length, name='K')
+    def _filter_axes(self, channel_axis, spatial_axes):
+        """
+        Create the filter axes. They are ordered as (K, D, H, W, C).
+        """
+        f_axes = ng.make_axis(length=self.nout, name="K")
+        for key, ax in zip("DHW", spatial_axes):
+            f_axes += ng.make_axis(length=self.filter_shape[key],
+                                   name=ax.name)
+        f_axes += channel_axis
         return f_axes
 
-    def _out_shape(self, in_axes):
-        cpm = self.convparams.copy()
-        # axes for deconv output shape without any trimming
-        out_max_shape = [
-            deconv_output_dim(in_axes[1].length, cpm['T'], cpm['pad_d'],
-                              cpm['str_d'], cpm['dil_d']),
-            deconv_output_dim(in_axes[2].length, cpm['R'], cpm['pad_h'],
-                              cpm['str_h'], cpm['dil_h']),
-            deconv_output_dim(in_axes[3].length, cpm['S'], cpm['pad_w'],
-                              cpm['str_w'], cpm['dil_w'])
-        ]
-        # output slice indices when output shape is specified
-        if self.deconv_out_shape is not None:
-            # slices to get center of image
-            for nm, l, lmax in zip('TRS', self.deconv_out_shape, out_max_shape):
-                if l > lmax:
-                    raise ValueError('specified {} output dimension {} is greater than {}'
-                                     .format(nm, l, lmax))
-                if l < lmax:
-                    extra = lmax - l
-                    i1 = int(extra) // 2
-                    # arbitrarily take off more from end when odd number
-                    i2 = int(lmax - (i1 + 1)) if extra % 2 == 1 else int(lmax - i1)
-                    setattr(self, nm + '_slice', slice(i1, i2))
-                else:
-                    setattr(self, nm + '_slice', slice(None))
-        out_shape = [self.W.axes[0].length] + out_max_shape
-        return out_shape
+    def _output_axes(self, channel_axis, spatial_axes, batch_axis, pad_int):
+        """
+        Create the deconvolution output axes.
 
-    def _conv_op(self, in_obj):
-        conv_op = ng.deconvolution(self.convparams.copy(),
-                                   in_obj,
-                                   self.W,
-                                   axes=self._output_axes(in_obj))
-        if self.deconv_out_shape:
-            conv_op = conv_op[:, self.T_slice, self.R_slice, self.S_slice, :]
-        return conv_op
+        TODO: This should be done in the core since it's fully determined.
+        """
+        output_axes = ng.make_axis(length=self.nout, name=channel_axis.name)
+        for key, ax in zip("DHW", spatial_axes):
+            output_axes += ng.make_axis(name=ax.name,
+                                        length=utils.deconv_output_dim(ax.length,
+                                                                       self.filter_shape[key],
+                                                                       pad_int[key],
+                                                                       self.strides[key],
+                                                                       self.dilation[key]))
+        return output_axes + batch_axis
+
+    def _conv_op(self, in_obj, channel_axes, spatial_axes):
+        """
+        Setup for the call to ng.deconvolution.
+        """
+
+        manual_pad = collections.OrderedDict([(ax.name, (0, 0)) for ax in in_obj.axes])
+        pad_int, extra_pad = self._get_pad_int(spatial_axes)
+        manual_pad.update(extra_pad)
+        if any((pad != (0, 0)) for pad in manual_pad.values()):
+            in_obj = ng.pad(in_obj, manual_pad.values())
+            spatial_axes = in_obj.axes.get_by_names(*ng.make_axes(spatial_axes).names)
+
+        output_axes = self._output_axes(channel_axes, spatial_axes, in_obj.axes.batch_axis(),
+                                        pad_int)
+        convparams = utils.make_convparams(self.nout, self.filter_shape,
+                                           self.strides, pad_int, self.dilation)
+        return ng.deconvolution(convparams,
+                                in_obj,
+                                self.W,
+                                axes=output_axes)
 
 
-def make_conv2d(fshape, init, strides, padding, dilation, deconv=False,
-                deconv_out_shape=None, **kwargs):
-    if isinstance(fshape, tuple) or isinstance(fshape, list):
-        if len(fshape) == 2:
-            fshape = (1, fshape[0], fshape[0], fshape[1])
-        elif len(fshape) == 3:
-            fshape = (1, fshape[0], fshape[1], fshape[2])
-        fshape = {k: x for k, x in zip('TRSK', fshape)}
+def make_conv(filter_shape, init, strides, padding, dilation, deconv=False,
+              **kwargs):
+    default_filter_shape = {k: 1 for k in "DHWK"}
+    if isinstance(filter_shape, (list, tuple)):
+        if (len(filter_shape) < 2) or (len(filter_shape) > 4):
+            raise ValueError("If filter_shape is a list, its length should be between 2 and 4, "
+                             "specifying the filter size for 1 to 3 spatial dimensions and the "
+                             "number of filters. Provided: {}".format(filter_shape))
+        axis_names = {2: "WK", 3: "HWK", 4: "DHWK"}[len(filter_shape)]
+        default_filter_shape.update(list(zip(axis_names, filter_shape)))
+        filter_shape = default_filter_shape
+    else:
+        axis_names = filter_shape.keys()
     if isinstance(strides, int):
-        strides = {'str_h': strides, 'str_w': strides, 'str_d': 1}
-    if isinstance(padding, int):
-        padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0}
+        strides = {k: strides for k in axis_names if k != "K"}
+    if isinstance(padding, (int, six.string_types, tuple)):
+        padding = {k: padding for k in axis_names if k != "K"}
     if isinstance(dilation, int):
-        dilation = {'dil_h': dilation, 'dil_w': dilation, 'dil_d': 1}
+        dilation = {k: dilation for k in axis_names if k != "K"}
 
     if deconv:
-        return DeconvBase(fshape, init, strides, padding, dilation,
-                          deconv_out_shape=deconv_out_shape, **kwargs)
+        return DeconvBase(filter_shape, init, strides, padding, dilation, **kwargs)
     else:
-        return ConvBase(fshape, init, strides, padding, dilation, **kwargs)
+        return ConvBase(filter_shape, init, strides, padding, dilation, **kwargs)
 
 
 class Activation(Layer):
@@ -481,7 +608,7 @@ class Activation(Layer):
         self.transform = transform
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         # An activation layer with no transform defaults to identity
         if self.transform:
             return self.transform(in_obj)
@@ -491,72 +618,201 @@ class Activation(Layer):
 
 class PoolBase(Layer):
     """
-    Pooling layer that requires explicit binding of all spatial roles
+    Pooling layer that performs 4D poolings. This is used under-the-hood and should not be called
+    directly.
 
-    Args:
-        fshape (dict): filter shape -- must contain keys 'J', 'T', 'R', 'S',
-        init (function): function for later initializing filters
-        strides (dict): stride specification -- must contain keys 'str_c', str_d', 'str_h', 'str_w'
-        padding (dict): pad specification -- must contain keys 'pad_c', pad_d', 'pad_h', 'pad_w'
+    This layer provides an interface to the core pooling support within ngraph. Lower dimensional
+    pooling operations are automatically represented as 4D poolings, with extra axes temporarily
+    introduced as needed.
+
+    Arguments:
+        pool_shape (dict): pooling shape -- must contain keys 'C', 'D', 'H', and 'W'
+        strides (dict): stride specification -- can contain keys 'D', 'H', 'W' - defaults to 1
+        padding (dict): pad specification -- can contain keys 'D', 'H', 'W' - defaults to 0. Each
+            padding value can be one of:
+            - (int): specifies a symmetric padding value
+            - (tuple): specifies left and right padding values individually
+            - (str): one of "same", "valid", "full" or "causal"
+        pool_type (str): type of pooling -- can be one of 'max' or 'avg', case-insensitive
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
     """
-    def __init__(self, fshape, strides, padding, op='max', **kwargs):
+
+    def __init__(self, pool_shape, strides, padding, pool_type='max', **kwargs):
         super(PoolBase, self).__init__(**kwargs)
-        self.poolparams = dict(J=None, T=None, R=None, S=None,
-                               pad_h=None, pad_w=None, pad_d=None, pad_c=None,
-                               str_h=None, str_w=None, str_d=None, str_c=None,
-                               op=op)
 
-        for d in [fshape, strides, padding]:
-            self.poolparams.update(d)
+        def check_dict(obj, name, keys=None):
+            if not isinstance(obj, dict):
+                raise TypeError("type({}) must be dict, not {}".format(name, type(obj)))
+            if keys is not None:
+                for key in keys:
+                    if key not in obj:
+                        raise ValueError("{} must have specified values for all axes,"
+                                         "{}. Found {}".format(name, ", ".join(keys),
+                                                               list(obj.keys())))
+        self.pool_type = pool_type.lower()
+        if self.pool_type not in ("max", "avg"):
+            raise ValueError("pool_type must be one of {}, not {}".format(('max', 'avg'),
+                                                                          pool_type))
 
-        missing_keys = [k for k, v in self.poolparams.items() if v is None]
-        if len(missing_keys) > 0:
-            raise ValueError("Missing pooling keys: {}".format(missing_keys))
+        # Setup pooling parameters
+        check_dict(pool_shape, "pool_shape", "CDHW")
+        self.pool_shape = pool_shape
 
-        self.o_axes = None
+        # Setup strides - default to 1
+        check_dict(strides, "strides")
+        self.strides = {key: 1 for key in "CDHW"}
+        self.strides.update(strides)
+
+        # Setup padding - default to 0
+        check_dict(padding, "padding")
+        self.padding = {key: 0 for key in "CDHW"}
+        self.padding.update(padding)
+
+    def _get_pad_int(self, axes):
+        """
+        Get integer padding values for each axis. If padding is asymmetric,
+        return the required manual paddings.
+        """
+        # Manual padding might be required for asymmetric paddings
+        manual_pad = {}
+        padding_int = {}
+        for name, ax in zip("CDHW", axes):
+            pad = utils.ConvParameters(ax.length,
+                                       self.pool_shape[name],
+                                       self.strides[name],
+                                       pooling=True).get_padding_size(self.padding[name])
+            symm_pad = min(pad)
+            padding_int[name] = symm_pad
+            if pad[0] != pad[1]:
+                manual_pad[ax.name] = (pad[0] - symm_pad, pad[1] - symm_pad)
+
+        return padding_int, manual_pad
+
+    def _output_axes(self, channel_axes, spatial_axes, batch_axis, pad_int):
+        """
+        Create the pooling output axes.
+
+        TODO: This should be done in the core since it's fully determined.
+        """
+        output_axes = ng.make_axes()
+        for name, ax in zip("CDHW", (channel_axes,) + spatial_axes):
+            output_axes += ng.make_axis(name=ax.name,
+                                        length=utils.conv_output_dim(ax.length,
+                                                                     self.pool_shape[name],
+                                                                     pad_int[name],
+                                                                     self.strides[name],
+                                                                     pooling=True))
+        return output_axes + batch_axis
+
+    def _pool_op(self, in_obj, channel_axes, spatial_axes):
+        """
+        Setup for the call to ng.pooling.
+        """
+        manual_pad = collections.OrderedDict([(ax.name, (0, 0)) for ax in in_obj.axes])
+        pad_int, extra_pad = self._get_pad_int((channel_axes, ) + spatial_axes)
+        manual_pad.update(extra_pad)
+        if any((pad != (0, 0)) for pad in manual_pad.values()):
+            in_obj = ng.pad(in_obj, manual_pad.values())
+            channel_axes = in_obj.axes.get_by_names(*ng.make_axes(channel_axes).names)
+            spatial_axes = in_obj.axes.get_by_names(*ng.make_axes(spatial_axes).names)
+        output_axes = self._output_axes(channel_axes, spatial_axes, in_obj.axes.batch_axis(),
+                                        pad_int)
+        poolparams = make_poolparams(self.pool_type,
+                                     self.pool_shape,
+                                     self.strides,
+                                     pad_int)
+        return ng.pooling(poolparams,
+                          in_obj,
+                          axes=output_axes)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
-        ppm = self.poolparams.copy()
-        in_obj = reorder_spatial_axes(in_obj)
-        in_axes = in_obj.axes
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
+        """
+        Pool over in_obj
 
-        if not self.initialized:
-            self.o_axes = ng.make_axes([
-                ng.make_axis(name=a.name) for a in in_axes if not a.is_batch
-            ])
-            # set lengths
-            out_shape = [
-                conv_output_dim(in_axes[0].length, ppm['J'], ppm['pad_d'], ppm['str_d']),
-                conv_output_dim(in_axes[1].length, ppm['T'], ppm['pad_d'], ppm['str_d']),
-                conv_output_dim(in_axes[2].length, ppm['R'], ppm['pad_h'], ppm['str_h']),
-                conv_output_dim(in_axes[3].length, ppm['S'], ppm['pad_w'], ppm['str_w'])
-            ]
-            self.o_axes.set_shape(out_shape)
-            self.o_axes |= in_axes.batch_axis()
+        Arguments:
+            in_obj (Op): Input op
+            channel_axes (str): name of the expected channel axis type - defaults to "C"
+            spatial_axes (tuple): names of expected depth, height and width axis types - defaults
+                                  to "D", "H", and "W"
+        """
+        if isinstance(spatial_axes, dict):
+            spatial_axes = tuple(spatial_axes.get(name, name)
+                                 for name in ("D", "H", "W"))
+        elif isinstance(spatial_axes, tuple):
+            if len(spatial_axes) < 3:
+                raise ValueError("spatial_axes must have length 3 (e.g. ('D', 'H', 'W'))")
+            spatial_axes = tuple(name if name else default
+                                 for name, default in zip(spatial_axes, ("D", "H", "W")))
 
-        return ng.pooling(ppm, in_obj, axes=self.o_axes)
+        orig_axes = in_obj.axes
+        in_obj = reorder_spatial_axes(in_obj, channel_axes, spatial_axes)
+        channel_axes = in_obj.axes.get_by_names(channel_axes)
+        spatial_axes = in_obj.axes.get_by_names(*spatial_axes)
+
+        output = self._pool_op(in_obj, channel_axes, spatial_axes)
+        # Reorder the output to match the input order
+        output_axis_order = ng.make_axes([output.axes.find_by_name(ax.name)[0]
+                                          for ax in orig_axes])
+        # Remove introduced axes
+        slices = [0 if (ax not in orig_axes) else slice(None) for ax in output.axes]
+        return ng.axes_with_order(ng.tensor_slice(output, slices), output_axis_order)
 
 
-class Pool2D(PoolBase):
+class Pooling(PoolBase):
     """
-    TODO: Document
-    """
-    def __init__(self, fshape, strides=1, padding=0, **kwargs):
+    Pooling layer that performs 1D to 4D pooling
 
-        if isinstance(fshape, int):
-            fshape = (1, 1, fshape, fshape)
-        if isinstance(fshape, tuple) or isinstance(fshape, list):
-            if len(fshape) == 2:
-                fshape = (1, 1, fshape[0], fshape[1])
-            if len(fshape) != 4:
-                raise ValueError("Incorrect filter specification: {}".format(fshape))
-            fshape = {k: x for k, x in zip('JTRS', fshape)}
+    Arguments:
+        pool_shape (tuple, dict): Pooling shape expressed as one of (width,), (height, width),
+            (depth, height, width), or (channel, depth, height, width) for 1D to 4D pooling,
+            respectively. pool_shape also accepts a dict of the format {"H": height, "W": width,
+            "D": depth, "C": channels}
+        strides (int, dict): Pooling stride value. If strides is a dict, must specify all axes
+            given in pool_shape as e.g. {"W": width}.
+        padding (int, tuple, str, dict): Input paddings. A padding value can be one of:
+            - (int): specifies a symmetric padding value
+            - (tuple): specifies left and right padding values individually
+            - (str): one of "same", "valid", "full" or "causal"
+            - (dict): specified as name: value, where name is one of 'C', 'D', 'H', or 'W' and
+                      value is one of the above.
+        pool_type (str): Type of pooling to perform. Currently available are 'max' and 'avg',
+            case-insensitive
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
+    """
+    def __init__(self, pool_shape, strides=1, padding=0, pool_type='max', **kwargs):
+
+        default_pool_shape = {k: 1 for k in "CDHW"}
+        if isinstance(pool_shape, (list, tuple)):
+            if (len(pool_shape) < 1) or (len(pool_shape) > 4):
+                raise ValueError("If pool_shape is a list, its length should be between 2 and 4, "
+                                 "specifying the pooling size for the channel axis and 1 to 3 "
+                                 "spatial dimensions. Provided: {}".format(pool_shape))
+            axis_names = {1: "W", 2: "HW", 3: "DHW", 4: "CDHW"}[len(pool_shape)]
+            default_pool_shape.update(list(zip(axis_names, pool_shape)))
+            pool_shape = default_pool_shape
+        else:
+            axis_names = pool_shape.keys()
         if isinstance(strides, int):
-            strides = {'str_h': strides, 'str_w': strides, 'str_d': 1, 'str_c': 1}
-        if isinstance(padding, int):
-            padding = {'pad_h': padding, 'pad_w': padding, 'pad_d': 0, 'pad_c': 0}
-        super(Pool2D, self).__init__(fshape, strides, padding, **kwargs)
+            strides = {k: strides for k in axis_names}
+        if isinstance(padding, (int, six.string_types, tuple)):
+            padding = {k: padding for k in axis_names}
+        super(Pooling, self).__init__(pool_shape, strides, padding, pool_type=pool_type,
+                                      **kwargs)
 
 
 class Bias(Layer):
@@ -577,7 +833,7 @@ class Bias(Layer):
         self.shared = shared
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         if not self.initialized:
             w_axes = in_obj.axes.feature_axes()
             if self.shared and in_obj.axes.channel_axis() is not None:
@@ -605,7 +861,7 @@ class Affine(Layer):
         self.activation_layer = Activation(transform=self.activation)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         l_out = self.linear(in_obj)
         # TODO: This is a bit convoluted. Need to clean it up.
         b_out = self.bias(l_out) if not self.batch_norm else l_out
@@ -613,44 +869,223 @@ class Affine(Layer):
         return self.activation_layer(bn_out)
 
 
-class Convolution(Layer):
+class Convolution(SubGraph):
     """
-    TODO: Document, bias should not be used when batch norm is
+    Compute a 1D to 3D convolution over the input.
+
+    A multi-part layer that computes a convolution over its input. Following convolution,
+    it adds a bias or performs batch normalization, then passes the output through an activation
+    function.
+
+    Arguments:
+        filter_shape (tuple, dict): Filter shape expressed as one of (width, nout), (height,
+            width, nout), or (depth, height, width, nout) for 1D to 3D convolutions,
+            respectively. filter_shape also accepts a dict of the format {"H": height, "W": width,
+            "D": depth, "K": nout}
+        filter_init (function): The filter initialization function
+        strides (int, dict, optional): Filter strides. If strides is a dictionary, it should be
+            formatted as {"H": str_h, "W": str_w}, where str_h and str_w should be integers.
+        padding (int, str, dict, optional): Input paddings. A padding value can be one of:
+            - (int): specifies a symmetric padding value
+            - (tuple): specifies left and right padding values individually
+            - (str): one of "same", "valid", "full" or "causal"
+            - (dict): specified as {"H": pad_h, "W": pad_w} where pad_h and pad_w are one of the
+                      above.
+        dilation (int, dict, optional): Filter dilations. If dilation is a dictionary, it should be
+            formatted as {"H": dil_h, "W": dil_w}, where dil_h and dil_w should be integers.
+        bias_init (function, optional): The bias initialization function. If bias_init is None,
+            then no bias is applied. If batch normalization is used, bias_init should be None.
+        activation (function, optional): Activation function to be applied to the output. The
+            default uses the identity function.
+        batch_norm (bool, optional): Whether or not to apply batch normalization. Batch
+            normalization contains its own bias, so if True, bias_init should not be supplied.
+
+    Attributes:
+        conv (Layer): The `ConvBase` layer that performs the convolution
+        bias (Layer): The `Bias` layer that performs bias addition
+        batch_norm (Layer): The `BatchNorm` layer that performs batch normalization
+        activation (Layer): The `Activation` layer to transform the output
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
+
+    Examples:
+        .. code-block:: python
+           # Create a 5x5 convolutional layer with batch normalization and a ReLU activation
+           conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
+                              activation=Rectlin(), batch_norm=True)
+           output = conv(input)
+
+        .. code-block:: python
+           # Convolve along the "time" axis of a spectrogram
+           conv = Convolution((nfrequencies, 11, 16), filter_init=GaussianInit(var=.05),
+                              padding="same", activation=Rectlin(), bias_init=ConstantInit(0))
+           output = conv(input, spatial_axes={"W": "time"})
+
+        .. code-block:: python
+           # Compute a 1-D causal convolution with filter width 2 and dilation 2
+           conv = Convolution((2, 16), filter_init=GaussianInit(var=.05), dilation=2,
+                              padding="causal", activation=Rectlin(), bias_init=ConstantInit(0))
+           output = conv(input)
     """
-    def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1,
-                 bias_init=None, activation=None, batch_norm=False, **kwargs):
+    def __init__(self, filter_shape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
+                 activation=None, batch_norm=False, **kwargs):
         super(Convolution, self).__init__(**kwargs)
-        self.make_conv_layer(fshape, filter_init, strides, padding, dilation, **kwargs)
-        self.bias = Bias(init=bias_init)
+        if batch_norm and (bias_init is not None):
+            raise ValueError("If batch normalization is used, bias_init should be None.")
+
+        self._make_conv_layer(filter_shape, filter_init, strides, padding, dilation, **kwargs)
+        self.bias = Bias(init=bias_init) if bias_init is not None else None
         self.batch_norm = BatchNorm() if batch_norm else None
         self.activation = Activation(transform=activation)
 
-    def make_conv_layer(self, fshape, filter_init, strides, padding, dilation, **kwargs):
-        self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
-                                deconv=False, **kwargs)
+    def _make_conv_layer(self, filter_shape, filter_init, strides, padding, dilation, **kwargs):
+        self.conv = make_conv(filter_shape, filter_init, strides, padding, dilation,
+                              deconv=False, **kwargs)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
-        l_out = self.conv(in_obj)
-        b_out = self.bias(l_out)
-        bn_out = self.batch_norm(b_out) if self.batch_norm else b_out
-        return self.activation(bn_out)
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
+        """
+        Compute a convolution over in_obj
+
+        Arguments:
+            in_obj (Op): Input op
+            channel_axes (str): name of the expected channel axis type - defaults to "C"
+            spatial_axes (tuple): names of expected depth, height and width axis types - defaults
+                                  to "D", "H", and "W"
+        """
+        l_out = self.conv(in_obj, channel_axes=channel_axes, spatial_axes=spatial_axes)
+        if self.batch_norm is not None:
+            l_out = self.batch_norm(l_out)
+        elif self.bias is not None:
+            l_out = self.bias(l_out)
+        return self.activation(l_out)
 
 
 class Deconvolution(Convolution):
+    """
+    Compute a 1D to 3D deconvolution over the input. This is also commonly known as a transpose
+    convolution or a fractionally-strided convolution.
 
-    def __init__(self, fshape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
+    A multi-part layer that computes a deconvolution over its input. Following convolution.
+    it adds a bias or performs batch normalization, then passes the output through an activation
+    function. The specified strides, padding and dilation arguments are
+    for the corresponding forward convolution.
+
+    Arguments:
+        filter_shape (tuple, dict): Filter shape expressed as one of (width, nout), (height,
+            width, nout), or (depth, height, width, nout) for 1D to 3D deconvolutions,
+            respectively. filter_shape also accepts a dict of the format {"H": height, "W": width,
+            "D": depth, "K": nout}
+        filter_init (function): The filter initialization function
+        strides (int, dict, optional): Filter strides. If strides is a dictionary, it should be
+            formatted as {"H": str_h, "W": str_w}, where str_h and str_w should be integers.
+        padding (int, str, dict, optional): Input paddings. A padding value can be one of:
+            - (int): specifies a symmetric padding value
+            - (tuple): specifies left and right padding values individually
+            - (str): one of "same", "valid", "full" or "causal"
+            - (dict): specified as {"H": pad_h, "W": pad_w} where pad_h and pad_w are one of the
+                      above.
+        dilation (int, dict, optional): Filter dilations. If dilation is a dictionary, it should be
+            formatted as {"H": dil_h, "W": dil_w}, where dil_h and dil_w should be integers.
+        bias_init (function, optional): The bias initialization function. If bias_init is None,
+            then no bias is applied. If batch normalization is used, bias_init should be None.
+        activation (function, optional): Activation function to be applied to the output. The
+            default uses the identity function.
+        batch_norm (bool, optional): Whether or not to apply batch normalization. Batch
+            normalization contains its own bias, so if True, bias_init should not be supplied.
+        deconv_out_shape (tuple, optional): If given, trims the output to the specified
+            shape, given as (depth_size, height_size, width_size). Unused axes can be specified
+            as None.
+
+    Attributes:
+        conv (Layer): The `DeconvBase` layer that performs the deconvolution
+        bias (Layer): The `Bias` layer that performs bias addition
+        batch_norm (Layer): The `BatchNorm` layer that performs batch normalization
+        activation (Layer): The `Activation` layer to transform the output
+
+    Required Axis Types:
+        channel: The input channel axis with default name "C". Currently only one channel axis is
+                 supported.
+        spatial: The spatial axes over which to convolve. Currently must be between 1 and 3.
+            depth: The depth axis with default name "D".
+            height: The height axis with default name "H".
+            width: The width axis with default name "W".
+
+    Examples:
+        .. code-block:: python
+           deconv = Deconvolution((1, 1, 16), filter_init=GaussianInit(var=.05), strides=1,
+                                  padding=0, activation=Rectlin(), batch_norm=True)
+           output = deconv(input)
+    """
+    def __init__(self, filter_shape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, deconv_out_shape=None, **kwargs):
-
-        self.deconv_out_shape = deconv_out_shape
-        super(Deconvolution, self).__init__(fshape, filter_init,
+        super(Deconvolution, self).__init__(filter_shape, filter_init,
                                             strides=strides, padding=padding, dilation=dilation,
                                             bias_init=bias_init, activation=activation,
                                             batch_norm=batch_norm, **kwargs)
+        self.deconv_out_shape = deconv_out_shape
 
-    def make_conv_layer(self, fshape, filter_init, strides, padding, dilation, **kwargs):
-        self.conv = make_conv2d(fshape, filter_init, strides, padding, dilation,
-                                deconv=True, deconv_out_shape=self.deconv_out_shape, **kwargs)
+    def _make_conv_layer(self, filter_shape, filter_init, strides, padding, dilation, **kwargs):
+        self.conv = make_conv(filter_shape, filter_init, strides, padding, dilation,
+                              deconv=True, **kwargs)
+
+    def _slice_output(self, output, spatial_axes):
+        """
+        Slice output to desired shape given by deconv_out_shape
+
+        Arguments:
+            output (TensorOp): tensor to slice
+            spatial_axes (tuple): names of spatial axes
+        """
+
+        if self.deconv_out_shape is None:
+            return output
+
+        if isinstance(spatial_axes, dict):
+            spatial_axes = tuple(spatial_axes.get(name, name)
+                                 for name in ("D", "H", "W"))
+        elif isinstance(spatial_axes, tuple):
+            if len(spatial_axes) < 3:
+                raise ValueError("spatial_axes must have length 3 (e.g. ('D', 'H', 'W'))")
+            spatial_axes = tuple(name if name else default
+                                 for name, default in zip(spatial_axes, ("D", "H", "W")))
+
+        slices = [slice(None)] * len(output.axes)
+        for ii, ax_name in enumerate(spatial_axes):
+            if ax_name in output.axes.names:
+                index = output.axes.names.index(ax_name)
+                out_size = output.axes[index].length
+                trim_size = self.deconv_out_shape[ii]
+                if trim_size > out_size:
+                    raise ValueError('specified {} output dimension {} is greater than {}'
+                                     .format(ax_name, trim_size, out_size))
+                elif trim_size < out_size:
+                    extra = out_size - trim_size
+                    start = extra // 2
+                    end = start + trim_size
+                    slices[index] = slice(start, end)
+
+        return ng.tensor_slice(output, slices)
+
+    def __call__(self, in_obj, channel_axes="C", spatial_axes=("D", "H", "W"), **kwargs):
+        """
+        Compute a deconvolution over in_obj
+
+        Arguments:
+            in_obj (Op): Input op
+            channel_axes (str): name of the expected channel axis type - defaults to "C"
+            spatial_axes (tuple): names of expected depth, height and width axis types - defaults
+                                  to "D", "H", and "W"
+        """
+
+        output = super(Deconvolution, self).__call__(in_obj, channel_axes, spatial_axes)
+        return self._slice_output(output, spatial_axes)
 
 
 class BatchNorm(Layer):
@@ -689,7 +1124,8 @@ class BatchNorm(Layer):
         self.gvar = None
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
+    
         in_axes = in_obj.axes
         if in_axes.channel_axis() is None:
             red_axes = ng.make_axes(in_axes.recurrent_axis()) + in_axes.batch_axes()
@@ -751,7 +1187,7 @@ class Dropout(Layer):
         self.mask = None
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         if Layer.inference_mode:
             return self.keep * in_obj
         else:
@@ -860,7 +1296,7 @@ class Recurrent(Layer):
         return self.activation(h_rec + h_ff + self.b)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, init_state=None):
+    def __call__(self, in_obj, init_state=None, **kwargs):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -982,7 +1418,7 @@ class BiRNN(Layer):
                                  return_sequence=return_sequence, backward=True)
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, init_state=None):
+    def __call__(self, in_obj, init_state=None, **kwargs):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -1105,7 +1541,7 @@ class LSTM(Recurrent):
         return [h, c]
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, init_state=None, return_cell_state=False):
+    def __call__(self, in_obj, init_state=None, return_cell_state=False, **kwargs):
         """
         Sets shape based parameters of this layer given an input tuple or int
         or input layer.
@@ -1321,7 +1757,7 @@ class BaseRNNCell(Layer):
         super(BaseRNNCell, self).__init__(**kwargs)
         self.cell_type = cell_type
 
-    def __call__(self, inputs, states):
+    def __call__(self, inputs, states, **kwargs):
         """
         Update the RNN cell for one time step. By definition,
         an RNN cell consumes a pair of inputs and states at a
@@ -1436,7 +1872,7 @@ class RNNCell(BaseRNNCell):
         return ('',)
 
     @SubGraph.scope_op_creation
-    def __call__(self, inputs, states, reset_cells=True):
+    def __call__(self, inputs, states, reset_cells=True, **kwargs):
         if states is None:
             batch_axis = inputs.axes.batch_axis()
             states = self.initialize_states(batch_axis,

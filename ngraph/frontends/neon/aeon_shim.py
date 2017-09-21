@@ -14,11 +14,8 @@
 # ----------------------------------------------------------------------------
 from __future__ import print_function, absolute_import
 import logging
-
 from builtins import object
-
 import ngraph as ng
-from ngraph.frontends.neon import ax
 
 logger = logging.getLogger(__name__)
 try:
@@ -33,6 +30,12 @@ except ImportError:
                      ""])
     logger.error(msg)
     raise ImportError(msg)
+
+
+NAME_MAP = {"channels": "C",
+            "height": "H",
+            "width": "W"}
+"""Converts aeon axis names to canonical ngraph axis types."""
 
 
 class AeonDataLoader(object):

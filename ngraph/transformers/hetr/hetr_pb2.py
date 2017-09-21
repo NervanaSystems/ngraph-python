@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='ngraph/transformers/hetr/hetr.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n#ngraph/transformers/hetr/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"(\n\x0c\x42uildRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"\x1c\n\nBuildReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"b\n\x12\x43omputationRequest\x12\x1b\n\x08subgraph\x18\x01 \x01(\x0b\x32\t.GraphDef\x12\x14\n\x07returns\x18\x02 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x03 \x03(\x0b\x32\x03.Op\"#\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\" \n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\":\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x17\n\x07results\x18\x02 \x03(\x0b\x32\x06.Value2\xda\x01\n\x04Hetr\x12\x30\n\x10\x42uildTransformer\x12\r.BuildRequest\x1a\x0b.BuildReply\"\x00\x12\x37\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n#ngraph/transformers/hetr/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"(\n\x0c\x42uildRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"\x1c\n\nBuildReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"m\n\x12\x43omputationRequest\x12\x10\n\x03ops\x18\x01 \x03(\x0b\x32\x03.Op\x12\x14\n\x05\x65\x64ges\x18\x02 \x03(\x0b\x32\x05.Edge\x12\x14\n\x07returns\x18\x03 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x04 \x03(\x0b\x32\x03.Op\"#\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\" \n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\":\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x17\n\x07results\x18\x02 \x03(\x0b\x32\x06.Value2\xdc\x01\n\x04Hetr\x12\x30\n\x10\x42uildTransformer\x12\r.BuildRequest\x1a\x0b.BuildReply\"\x00\x12\x39\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00(\x01\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x62\x06proto3')
   ,
   dependencies=[ngraph_dot_op__graph_dot_serde_dot_ops__pb2.DESCRIPTOR,])
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
@@ -139,22 +139,29 @@ _COMPUTATIONREQUEST = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='subgraph', full_name='ComputationRequest.subgraph', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
+      name='ops', full_name='ComputationRequest.ops', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='returns', full_name='ComputationRequest.returns', index=1,
+      name='edges', full_name='ComputationRequest.edges', index=1,
       number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='placeholders', full_name='ComputationRequest.placeholders', index=2,
+      name='returns', full_name='ComputationRequest.returns', index=2,
       number=3, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='placeholders', full_name='ComputationRequest.placeholders', index=3,
+      number=4, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -172,7 +179,7 @@ _COMPUTATIONREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=216,
-  serialized_end=314,
+  serialized_end=325,
 )
 
 
@@ -202,8 +209,8 @@ _COMPUTATIONREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=316,
-  serialized_end=351,
+  serialized_start=327,
+  serialized_end=362,
 )
 
 
@@ -240,8 +247,8 @@ _FEEDINPUTREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=353,
-  serialized_end=412,
+  serialized_start=364,
+  serialized_end=423,
 )
 
 
@@ -271,8 +278,8 @@ _FEEDINPUTREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=414,
-  serialized_end=446,
+  serialized_start=425,
+  serialized_end=457,
 )
 
 
@@ -302,8 +309,8 @@ _GETRESULTSREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=448,
-  serialized_end=484,
+  serialized_start=459,
+  serialized_end=495,
 )
 
 
@@ -340,8 +347,8 @@ _GETRESULTSREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=486,
-  serialized_end=544,
+  serialized_start=497,
+  serialized_end=555,
 )
 
 _VALUE.fields_by_name['scalar'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._SCALAR
@@ -352,7 +359,8 @@ _VALUE.fields_by_name['scalar'].containing_oneof = _VALUE.oneofs_by_name['value'
 _VALUE.oneofs_by_name['value'].fields.append(
   _VALUE.fields_by_name['tensor'])
 _VALUE.fields_by_name['tensor'].containing_oneof = _VALUE.oneofs_by_name['value']
-_COMPUTATIONREQUEST.fields_by_name['subgraph'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._GRAPHDEF
+_COMPUTATIONREQUEST.fields_by_name['ops'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
+_COMPUTATIONREQUEST.fields_by_name['edges'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._EDGE
 _COMPUTATIONREQUEST.fields_by_name['returns'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
 _COMPUTATIONREQUEST.fields_by_name['placeholders'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
 _FEEDINPUTREQUEST.fields_by_name['values'].message_type = _VALUE
@@ -454,7 +462,7 @@ try:
           request_serializer=BuildRequest.SerializeToString,
           response_deserializer=BuildReply.FromString,
           )
-      self.Computation = channel.unary_unary(
+      self.Computation = channel.stream_unary(
           '/Hetr/Computation',
           request_serializer=ComputationRequest.SerializeToString,
           response_deserializer=ComputationReply.FromString,
@@ -478,7 +486,7 @@ try:
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
-    def Computation(self, request, context):
+    def Computation(self, request_iterator, context):
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
@@ -501,7 +509,7 @@ try:
             request_deserializer=BuildRequest.FromString,
             response_serializer=BuildReply.SerializeToString,
         ),
-        'Computation': grpc.unary_unary_rpc_method_handler(
+        'Computation': grpc.stream_unary_rpc_method_handler(
             servicer.Computation,
             request_deserializer=ComputationRequest.FromString,
             response_serializer=ComputationReply.SerializeToString,
@@ -530,7 +538,7 @@ try:
     only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0."""
     def BuildTransformer(self, request, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
-    def Computation(self, request, context):
+    def Computation(self, request_iterator, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def FeedInput(self, request, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
@@ -547,7 +555,7 @@ try:
     def BuildTransformer(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
       raise NotImplementedError()
     BuildTransformer.future = None
-    def Computation(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+    def Computation(self, request_iterator, timeout, metadata=None, with_call=False, protocol_options=None):
       raise NotImplementedError()
     Computation.future = None
     def FeedInput(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
@@ -578,7 +586,7 @@ try:
     }
     method_implementations = {
       ('Hetr', 'BuildTransformer'): face_utilities.unary_unary_inline(servicer.BuildTransformer),
-      ('Hetr', 'Computation'): face_utilities.unary_unary_inline(servicer.Computation),
+      ('Hetr', 'Computation'): face_utilities.stream_unary_inline(servicer.Computation),
       ('Hetr', 'FeedInput'): face_utilities.unary_unary_inline(servicer.FeedInput),
       ('Hetr', 'GetResults'): face_utilities.unary_unary_inline(servicer.GetResults),
     }
@@ -606,7 +614,7 @@ try:
     }
     cardinalities = {
       'BuildTransformer': cardinality.Cardinality.UNARY_UNARY,
-      'Computation': cardinality.Cardinality.UNARY_UNARY,
+      'Computation': cardinality.Cardinality.STREAM_UNARY,
       'FeedInput': cardinality.Cardinality.UNARY_UNARY,
       'GetResults': cardinality.Cardinality.UNARY_UNARY,
     }

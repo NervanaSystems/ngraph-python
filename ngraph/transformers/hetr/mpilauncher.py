@@ -29,7 +29,6 @@ class Launcher(object):
             subprocess.call(mpirun_str, shell=True)
         elif (hetr_server_gpu_num is not None):
             cmd = ['mpirun',
-                   '--allow-run-as-root',
                    '-n', hetr_server_gpu_num,
                    'python', hetr_server_path,
                    '-p'] + self.port_list
