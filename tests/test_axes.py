@@ -107,12 +107,12 @@ axes_ops_test_cases = [
     ['is_sub_set', [ax_A, ax_B], [ax_B, ax_A], True],
     ['is_sub_set', [ax_A, ax_B], [ax_B_, ax_A_], True],
     # superset
-    ['is_super_set', [], [], False],
+    ['is_super_set', [], [], True],
     ['is_super_set', [ax_A], [], True],
     ['is_super_set', [], [ax_A], False],
-    ['is_super_set', [ax_A_], [ax_A], False],
-    ['is_super_set', [ax_A, ax_B], [ax_B, ax_A], False],
-    ['is_super_set', [ax_A, ax_B], [ax_B_, ax_A_], False],
+    ['is_super_set', [ax_A_], [ax_A], True],
+    ['is_super_set', [ax_A, ax_B], [ax_B, ax_A], True],
+    ['is_super_set', [ax_A], [ax_B_, ax_A_], False],
     # set equal
     ['is_equal_set', [], [], True],
     ['is_equal_set', [ax_A], [], False],

@@ -90,8 +90,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0):
     valid_config = common_config(valid_manifest, batch_size)
     valid_config['iteration_mode'] = "ONCE"
 
-    import json
-    train_loader = AeonDataLoader(json.dumps(train_config))
-    valid_loader = AeonDataLoader(json.dumps(valid_config))
+    train_loader = AeonDataLoader(train_config)
+    valid_loader = AeonDataLoader(valid_config)
 
     return (train_loader, valid_loader)
