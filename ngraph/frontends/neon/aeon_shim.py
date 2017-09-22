@@ -38,7 +38,6 @@ NAME_MAP = {"channels": "C",
             "width": "W"}
 """Converts aeon axis names to canonical ngraph axis types."""
 
-
 class AeonDataLoader(object):
 
     def __init__(self, config, *args, **kwargs):
@@ -60,13 +59,12 @@ class AeonDataLoader(object):
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
-        ax.N.length = self._dataloader.batch_size
-        # for placeholder_name, axis_info in self._dataloader.axes_info.items():
+        batch_axis = ng.make_axis(self._dataloader.batch_size, name="N")
         for placeholder_name, axis_info in self._dataloader.axes_info:
-            p_axes = ng.make_axes([ax.N])
+            p_axes = ng.make_axes([batch_axis])
             for nm, sz in axis_info:
-            # for nm, sz in axis_info.items():
-                nm = "C" if nm == "channels" else nm
+                if nm in NAME_MAP:
+                    nm = NAME_MAP[nm]
                 p_axes += ng.make_axis(name=nm, length=sz)
             placeholders[placeholder_name] = ng.placeholder(p_axes)
         if include_iteration:
@@ -75,6 +73,3 @@ class AeonDataLoader(object):
 
     def reset(self):
         self._dataloader.reset()
-
-    def ndata(self):
-        self._dataloader.ndata

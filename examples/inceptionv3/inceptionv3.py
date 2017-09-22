@@ -105,6 +105,7 @@ args = parser.parse_args()
 
 # Number of outputs of last layer.
 ax.Y.length = 1000
+ax.N.length = args.batch_size
 
 # Build AEON data loader objects
 train_set, valid_set = make_aeon_loaders(train_manifest=args.train_manifest_file,
@@ -167,8 +168,14 @@ label_indices = inputs['label'][:, 0]
 
 # Build the computations for inference (evaluation)
 with Layer.inference_mode_on():
+    inference_prob = inception.seq2(inception.seq1(inputs['image']))
+    slices = [0 if cx.name in ("H", "W") else slice(None) for cx in inference_prob.axes]
+    inference_prob = ng.tensor_slice(inference_prob, slices)
+    inference_prob = ng.map_roles(inference_prob, {"C": "Y"})
+    """
     inference_prob = ng.cast_role(inception.seq2(inception.seq1(inputs['image']))[:, 0, 0, 0, :],
                                   axes=y_onehot.axes)
+    """
     errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
     eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot)
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']

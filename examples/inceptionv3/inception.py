@@ -14,14 +14,14 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from ngraph.frontends.neon import XavierInit, UniformInit
-from ngraph.frontends.neon import Convolution, Pool2D, Sequential, Parallel
+from ngraph.frontends.neon import Convolution, Pooling, Sequential, Parallel
 from ngraph.frontends.neon import Rectlin, Softmax, Dropout, Explin
 
 
-def conv_params(filt_params, strides=1, batch_norm=True, activation=Rectlin(),
-                bias_init=UniformInit(low=-0.3, high=0.3),
+def conv_params(filter_shape, strides=1, batch_norm=True, activation=Rectlin(),
+                bias_init=None,
                 filter_init=UniformInit(low=-0.3, high=0.3), padding=0):
-    return dict(fshape=filt_params,
+    return dict(filter_shape=filter_shape,
                 strides=strides,
                 padding=padding,
                 batch_norm=batch_norm,
@@ -45,17 +45,17 @@ class Inceptionv3_b1(object):
         """
         (p1, p2, p3, p4) = branch_units
 
-        branch1 = Convolution(**conv_params(filt_params=(1, 1, p1[0])))
-        branch2 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p2[0]))),
-                              Convolution(**conv_params(filt_params=(5, 5, p2[1]),
+        branch1 = Convolution(**conv_params(filter_shape=(1, 1, p1[0])))
+        branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(**conv_params(filter_shape=(5, 5, p2[1]),
                                                         padding=2))])
-        branch3 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p3[0]))),
-                              Convolution(**conv_params(filt_params=(3, 3, p3[1]),
+        branch3 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p3[0]))),
+                              Convolution(**conv_params(filter_shape=(3, 3, p3[1]),
                                                         padding=1)),
-                              Convolution(**conv_params(filt_params=(3, 3, p3[2]),
+                              Convolution(**conv_params(filter_shape=(3, 3, p3[2]),
                                                         padding=1))])
-        branch4 = Sequential([Pool2D(fshape=3, padding=1, strides=1, op="avg"),
-                              Convolution(**conv_params(filt_params=(1, 1, p4[0])))])
+        branch4 = Sequential([Pooling(pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
+                              Convolution(**conv_params(filter_shape=(1, 1, p4[0])))])
 
         self.model = Parallel([branch1, branch2, branch3, branch4])
 
@@ -77,16 +77,16 @@ class Inceptionv3_b2(object):
         """
         (p1, p2) = branch_units
 
-        branch1 = Convolution(**conv_params(filt_params=(3, 3, p1[0]),
+        branch1 = Convolution(**conv_params(filter_shape=(3, 3, p1[0]),
                                             strides=2, padding=0))
 
-        branch2 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p2[0]))),
-                              Convolution(**conv_params(filt_params=(3, 3, p2[1]),
+        branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(**conv_params(filter_shape=(3, 3, p2[1]),
                                                         padding=1)),
-                              Convolution(**conv_params(filt_params=(3, 3, p2[2]),
+                              Convolution(**conv_params(filter_shape=(3, 3, p2[2]),
                                                         strides=2, padding=0))])
 
-        branch3 = Pool2D(fshape=3, padding=0, strides=2, op="max")
+        branch3 = Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type="max")
 
         self.model = Parallel([branch1, branch2, branch3])
 
@@ -108,35 +108,35 @@ class Inceptionv3_b3(object):
         Mixed_6b, Mixed_6c, Mixed_6c, Mixed_6d, Mixed_6e layers
         """
         (p1, p2, p3, p4) = branch_units
-        branch1 = Convolution(**conv_params(filt_params=(1, 1, p1[0])))
-        branch2 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p2[0]))),
-                              Convolution(**conv_params(filt_params=(1, 7, p2[1]),
+        branch1 = Convolution(**conv_params(filter_shape=(1, 1, p1[0])))
+        branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(**conv_params(filter_shape=(1, 7, p2[1]),
                                                         padding={'pad_h': 0,
                                                                  'pad_w': 3,
                                                                  'pad_d': 0})),
-                              Convolution(**conv_params(filt_params=(7, 1, p2[2]),
+                              Convolution(**conv_params(filter_shape=(7, 1, p2[2]),
                                                         padding={'pad_h': 3,
                                                                  'pad_w': 0,
                                                                  'pad_d': 0}))])
-        branch3 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p3[0]))),
-                              Convolution(**conv_params(filt_params=(7, 1, p3[1]),
+        branch3 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p3[0]))),
+                              Convolution(**conv_params(filter_shape=(7, 1, p3[1]),
                                                         padding={'pad_h': 3,
                                                                  'pad_w': 0,
                                                                  'pad_d': 0})),
-                              Convolution(**conv_params(filt_params=(1, 7, p3[2]),
+                              Convolution(**conv_params(filter_shape=(1, 7, p3[2]),
                                                         padding={'pad_h': 0,
                                                                  'pad_w': 3,
                                                                  'pad_d': 0})),
-                              Convolution(**conv_params(filt_params=(7, 1, p3[3]),
+                              Convolution(**conv_params(filter_shape=(7, 1, p3[3]),
                                                         padding={'pad_h': 3,
                                                                  'pad_w': 0,
                                                                  'pad_d': 0})),
-                              Convolution(**conv_params(filt_params=(1, 7, p3[4]),
+                              Convolution(**conv_params(filter_shape=(1, 7, p3[4]),
                                                         padding={'pad_h': 0,
                                                                  'pad_w': 3,
                                                                  'pad_d': 0}))])
-        branch4 = Sequential([Pool2D(fshape=3, padding=1, strides=1, op="avg"),
-                              Convolution(**conv_params(filt_params=(1, 1, p4[0])))])
+        branch4 = Sequential([Pooling(pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
+                              Convolution(**conv_params(filter_shape=(1, 1, p4[0])))])
 
         self.model = Parallel([branch1, branch2, branch3, branch4])
 
@@ -157,21 +157,21 @@ class Inceptionv3_b4(object):
         Mixed_7a layer
         """
         (p1, p2) = branch_units
-        branch1 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p1[0]))),
-                              Convolution(**conv_params(filt_params=(3, 3, p1[1]),
+        branch1 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p1[0]))),
+                              Convolution(**conv_params(filter_shape=(3, 3, p1[1]),
                                                         strides=2, padding=0))])
-        branch2 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p2[0]))),
-                              Convolution(**conv_params(filt_params=(1, 7, p2[1]),
+        branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(**conv_params(filter_shape=(1, 7, p2[1]),
                                                         padding={'pad_h': 0,
                                                                  'pad_w': 3,
                                                                  'pad_d': 0})),
-                              Convolution(**conv_params(filt_params=(7, 1, p2[2]),
+                              Convolution(**conv_params(filter_shape=(7, 1, p2[2]),
                                                         padding={'pad_h': 3,
                                                                  'pad_w': 0,
                                                                  'pad_d': 0})),
-                              Convolution(**conv_params(filt_params=(3, 3, p2[3]),
+                              Convolution(**conv_params(filter_shape=(3, 3, p2[3]),
                                                         strides=2, padding=0))])
-        branch3 = Pool2D(fshape=3, padding=0, strides=2, op="max")
+        branch3 = Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type="max")
         self.model = Parallel([branch1, branch2, branch3])
 
     def __call__(self, in_obj):
@@ -194,34 +194,34 @@ class Inceptionv3_b5(object):
         (p1, p2, p3, p4) = branch_units
 
         # Branch 1
-        branch1 = Convolution(**conv_params(filt_params=(1, 1, p1[0])))
+        branch1 = Convolution(**conv_params(filter_shape=(1, 1, p1[0])))
 
         # Branch 2
-        branch2a1_params = conv_params(filt_params=(1, 3, p2[1]),
+        branch2a1_params = conv_params(filter_shape=(1, 3, p2[1]),
                                        padding={'pad_h': 0, 'pad_w': 1, 'pad_d': 0})
-        branch2a2_params = conv_params(filt_params=(3, 1, p2[2]),
+        branch2a2_params = conv_params(filter_shape=(3, 1, p2[2]),
                                        padding={'pad_h': 1, 'pad_w': 0, 'pad_d': 0})
         # This is the sub-branch with two parallel branches of 1x3 and 3x1
         branch2a = Parallel([Convolution(**branch2a1_params),
                              Convolution(**branch2a2_params)])
-        branch2 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p2[0]))),
+        branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
                               branch2a])
 
         # Branch 3
-        branch3a1_params = conv_params(filt_params=(1, 3, p3[2]),
+        branch3a1_params = conv_params(filter_shape=(1, 3, p3[2]),
                                        padding={'pad_h': 0, 'pad_w': 1, 'pad_d': 0})
-        branch3a2_params = conv_params(filt_params=(3, 1, p3[3]),
+        branch3a2_params = conv_params(filter_shape=(3, 1, p3[3]),
                                        padding={'pad_h': 1, 'pad_w': 0, 'pad_d': 0})
         branch3a = Parallel([Convolution(**branch3a1_params),
                              Convolution(**branch3a2_params)])
-        branch3 = Sequential([Convolution(**conv_params(filt_params=(1, 1, p3[0]))),
-                              Convolution(**conv_params(filt_params=(3, 3, p3[1]),
+        branch3 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p3[0]))),
+                              Convolution(**conv_params(filter_shape=(3, 3, p3[1]),
                                                         padding=1)),
                               branch3a])
 
         # Branch 4
-        branch4 = Sequential([Pool2D(fshape=3, padding=1, strides=1, op="avg"),
-                              Convolution(**conv_params(filt_params=(1, 1, p4[0])))])
+        branch4 = Sequential([Pooling(pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
+                              Convolution(**conv_params(filter_shape=(1, 1, p4[0])))])
 
         # Combine branches
         self.model = Parallel([branch1, branch2, branch3, branch4])
@@ -244,21 +244,19 @@ class Inception(object):
             This is the mini model with reduced number of filters in each layer
             """
             # Root branch of the tree
-            seq1 = Sequential([Convolution(**conv_params(filt_params=(3, 3, 32),
-                               #Convolution(**conv_params(filt_params=(3, 3, 16), 
+            seq1 = Sequential([Convolution(**conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(**conv_params(filt_params=(3, 3, 16), padding=0)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 16), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(**conv_params(filt_params=(3, 3, 16), padding=1)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 16), padding=1)),
                                # conv2d_2b_3x3
-                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3
-                               Convolution(**conv_params(filt_params=(1, 1, 16))),
+                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
+                               Convolution(**conv_params(filter_shape=(1, 1, 16))),
                                # conv2d_3b_1x1
-                               #Convolution(**conv_params(filt_params=(3, 3, 32), padding=1)),
-                               Convolution(**conv_params(filt_params=(3, 3, 16), padding=1)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 16), padding=1)),
                                # conv2d_4a_3x3
-                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
+                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5b
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5c
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5d
@@ -278,32 +276,32 @@ class Inception(object):
                                                (32, 32, 32, 32), (32,)]),  # mixed_7b
                                Inceptionv3_b5([(32,), (32, 32, 32),
                                                (32, 32, 32, 32), (32,)]),  # mixed_7c
-                               Pool2D(fshape=8, padding=0, strides=2, op='avg'),  # Last Avg Pool
+                               Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
                                Dropout(keep=0.8),
-                               Convolution(**conv_params(filt_params=(1, 1, 1000),
+                               Convolution(**conv_params(filter_shape=(1, 1, 1000),
                                                          activation=Softmax()))])
 
             # Auxiliary classifier
-            seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'),
-                                  Convolution(**conv_params(filt_params=(1, 1, 32))),
-                                  Convolution(**conv_params(filt_params=(5, 5, 32))),
-                                  Convolution(**conv_params(filt_params=(1, 1, 1000),
+            seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
+                                  Convolution(**conv_params(filter_shape=(1, 1, 32))),
+                                  Convolution(**conv_params(filter_shape=(5, 5, 32))),
+                                  Convolution(**conv_params(filter_shape=(1, 1, 1000),
                                                             activation=Softmax()))])
 
         else:
-            seq1 = Sequential([Convolution(**conv_params(filt_params=(3, 3, 32),
+            seq1 = Sequential([Convolution(**conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(**conv_params(filt_params=(3, 3, 32), padding=0)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 32), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(**conv_params(filt_params=(3, 3, 64), padding=1)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 64), padding=1)),
                                # conv2d_2b_3x3
-                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_3a_3x3
-                               Convolution(**conv_params(filt_params=(1, 1, 80))),
+                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
+                               Convolution(**conv_params(filter_shape=(1, 1, 80))),
                                # conv2d_3b_1x1
-                               Convolution(**conv_params(filt_params=(3, 3, 192), padding=1)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 192), padding=1)),
                                # conv2d_4a_3x3
-                               Pool2D(fshape=3, padding=0, strides=2, op='max'),  # maxpool_5a_3x3
+                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
                                Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (32, )]),  # mixed_5b
                                Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5c
                                Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5d
@@ -323,16 +321,16 @@ class Inception(object):
                                                (448, 384, 384, 384), (192,)]),  # mixed_7b
                                Inceptionv3_b5([(320,), (384, 384, 384),
                                                (448, 384, 384, 384), (192,)]),  # mixed_7c
-                               Pool2D(fshape=8, padding=0, strides=2, op='avg'),  # Last Avg Pool
+                               Pooling(pool_fshape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
                                Dropout(keep=0.8),
-                               Convolution(**conv_params(filt_params=(1, 1, 1000),
+                               Convolution(**conv_params(filter_shape=(1, 1, 1000),
                                                          activation=Softmax()))])
 
             # Auxiliary classifier
-            seq_aux = Sequential([Pool2D(fshape=5, padding=0, strides=3, op='avg'),
-                                  Convolution(**conv_params(filt_params=(1, 1, 128))),
-                                  Convolution(**conv_params(filt_params=(5, 5, 768))),
-                                  Convolution(**conv_params(filt_params=(1, 1, 1000),
+            seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
+                                  Convolution(**conv_params(filter_shape=(1, 1, 128))),
+                                  Convolution(**conv_params(filter_shape=(5, 5, 768))),
+                                  Convolution(**conv_params(filter_shape=(1, 1, 1000),
                                                             activation=Softmax()))])
 
         self.seq1 = seq1
