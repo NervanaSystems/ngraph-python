@@ -200,6 +200,7 @@ with closing(ngt.make_transformer()) as transformer:
         data['iteration'] = iter_no
         # Scale the image to [0., .1]
         data['image'] = scale_set(data['image'])
+        data['label'] = data['label'].reshape((args.batch_size, 1))
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         #output, grads = train_function(feed_dict=feed_dict)
         output = train_function(feed_dict=feed_dict)

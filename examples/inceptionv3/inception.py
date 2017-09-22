@@ -111,30 +111,30 @@ class Inceptionv3_b3(object):
         branch1 = Convolution(**conv_params(filter_shape=(1, 1, p1[0])))
         branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
                               Convolution(**conv_params(filter_shape=(1, 7, p2[1]),
-                                                        padding={'pad_h': 0,
-                                                                 'pad_w': 3,
-                                                                 'pad_d': 0})),
+                                                        padding={'H': 0,
+                                                                 'W': 3,
+                                                                 'D': 0})),
                               Convolution(**conv_params(filter_shape=(7, 1, p2[2]),
-                                                        padding={'pad_h': 3,
-                                                                 'pad_w': 0,
-                                                                 'pad_d': 0}))])
+                                                        padding={'H': 3,
+                                                                 'W': 0,
+                                                                 'D': 0}))])
         branch3 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p3[0]))),
                               Convolution(**conv_params(filter_shape=(7, 1, p3[1]),
-                                                        padding={'pad_h': 3,
-                                                                 'pad_w': 0,
-                                                                 'pad_d': 0})),
+                                                        padding={'H': 3,
+                                                                 'W': 0,
+                                                                 'D': 0})),
                               Convolution(**conv_params(filter_shape=(1, 7, p3[2]),
-                                                        padding={'pad_h': 0,
-                                                                 'pad_w': 3,
-                                                                 'pad_d': 0})),
+                                                        padding={'H': 0,
+                                                                 'W': 3,
+                                                                 'D': 0})),
                               Convolution(**conv_params(filter_shape=(7, 1, p3[3]),
-                                                        padding={'pad_h': 3,
-                                                                 'pad_w': 0,
-                                                                 'pad_d': 0})),
+                                                        padding={'H': 3,
+                                                                 'W': 0,
+                                                                 'D': 0})),
                               Convolution(**conv_params(filter_shape=(1, 7, p3[4]),
-                                                        padding={'pad_h': 0,
-                                                                 'pad_w': 3,
-                                                                 'pad_d': 0}))])
+                                                        padding={'H': 0,
+                                                                 'W': 3,
+                                                                 'D': 0}))])
         branch4 = Sequential([Pooling(pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
                               Convolution(**conv_params(filter_shape=(1, 1, p4[0])))])
 
@@ -162,13 +162,13 @@ class Inceptionv3_b4(object):
                                                         strides=2, padding=0))])
         branch2 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p2[0]))),
                               Convolution(**conv_params(filter_shape=(1, 7, p2[1]),
-                                                        padding={'pad_h': 0,
-                                                                 'pad_w': 3,
-                                                                 'pad_d': 0})),
+                                                        padding={'H': 0,
+                                                                 'W': 3,
+                                                                 'D': 0})),
                               Convolution(**conv_params(filter_shape=(7, 1, p2[2]),
-                                                        padding={'pad_h': 3,
-                                                                 'pad_w': 0,
-                                                                 'pad_d': 0})),
+                                                        padding={'H': 3,
+                                                                 'W': 0,
+                                                                 'D': 0})),
                               Convolution(**conv_params(filter_shape=(3, 3, p2[3]),
                                                         strides=2, padding=0))])
         branch3 = Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type="max")
@@ -198,9 +198,9 @@ class Inceptionv3_b5(object):
 
         # Branch 2
         branch2a1_params = conv_params(filter_shape=(1, 3, p2[1]),
-                                       padding={'pad_h': 0, 'pad_w': 1, 'pad_d': 0})
+                                       padding={'H': 0, 'W': 1, 'D': 0})
         branch2a2_params = conv_params(filter_shape=(3, 1, p2[2]),
-                                       padding={'pad_h': 1, 'pad_w': 0, 'pad_d': 0})
+                                       padding={'H': 1, 'W': 0, 'D': 0})
         # This is the sub-branch with two parallel branches of 1x3 and 3x1
         branch2a = Parallel([Convolution(**branch2a1_params),
                              Convolution(**branch2a2_params)])
@@ -209,9 +209,9 @@ class Inceptionv3_b5(object):
 
         # Branch 3
         branch3a1_params = conv_params(filter_shape=(1, 3, p3[2]),
-                                       padding={'pad_h': 0, 'pad_w': 1, 'pad_d': 0})
+                                       padding={'H': 0, 'W': 1, 'D': 0})
         branch3a2_params = conv_params(filter_shape=(3, 1, p3[3]),
-                                       padding={'pad_h': 1, 'pad_w': 0, 'pad_d': 0})
+                                       padding={'H': 1, 'W': 0, 'D': 0})
         branch3a = Parallel([Convolution(**branch3a1_params),
                              Convolution(**branch3a2_params)])
         branch3 = Sequential([Convolution(**conv_params(filter_shape=(1, 1, p3[0]))),
@@ -238,8 +238,7 @@ class Inception(object):
         """
 
         # Input size is 299 x 299 x 3
-        # weight initialization
-        if(mini is True):
+        if mini:
             """
             This is the mini model with reduced number of filters in each layer
             """
@@ -254,7 +253,7 @@ class Inception(object):
                                Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
                                Convolution(**conv_params(filter_shape=(1, 1, 16))),
                                # conv2d_3b_1x1
-                               Convolution(**conv_params(filter_shape=(3, 3, 16), padding=1)),
+                               Convolution(**conv_params(filter_shape=(3, 3, 32), padding=1)),
                                # conv2d_4a_3x3
                                Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )]),  # mixed_5b
