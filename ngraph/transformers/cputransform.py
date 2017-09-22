@@ -46,8 +46,8 @@ from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
     MklAddLayoutConversions, MklReorderOp
-from ngraph.transformers.passes.layout import AddLayoutConversions
-from ngraph.transformers.passes.expass import SSAConversion, IndexElision, DeadCodeEliminationPass
+from ngraph.transformers.passes.expass import SSAConversion, IndexElision, \
+    CopyElimination, DeadCodeEliminationPass
 from ngraph.transformers.passes.memlayout import MemLayoutPass
 from ngraph.transformers.passes.memoptimize import MemOptimizePass
 from ngraph.transformers.passes.liveness import LivenessPass
@@ -166,6 +166,7 @@ class CPUPoolEngine(object):
 
 
 class CPUDeviceComputation(DeviceComputation):
+
     def __init__(self, transformer, computation_op, **kwargs):
         super(CPUDeviceComputation, self).__init__(transformer, computation_op, **kwargs)
         self.pool_params = dict()
@@ -610,10 +611,11 @@ class CPUCodeGenerator(PyGen):
                     output, gamma, bias, mean, variance, epsilon)
 
     @generate_op.on_type(BpropBatchnormOp)
-    def generate_op(self, op, output, delta, inputs, gamma, bias, mean, variance):
+    def generate_op(self, op, output, delta, inputs, dgamma, dbeta, gamma, bias, mean, variance):
         self.append("mkldnn.bprop_batchnorm('{}', outputs={}, delta={}, inputs={}, \
-                    gamma={}, bias={}, mean={}, variance={}, epsilon={})", op.safe_name, output,
-                    delta, inputs, gamma, bias, mean, variance, op.fprop.eps)
+                    dgamma={}, dbeta={}, gamma={}, bias={}, mean={}, variance={}, \
+                    epsilon={})", op.safe_name, output, delta, inputs, dgamma, dbeta,
+                    gamma, bias, mean, variance, op.fprop.eps)
 
     @generate_op.on_type(ReluOp)
     def generate_op(self, op, outputs, inputs):
@@ -822,7 +824,7 @@ class CPUTransformer(ExecutionGraphTransformer):
     import imp
     try:
         imp.find_module('mlsl')
-        use_mlsl = True
+        use_mlsl = False
     except ImportError:
         use_mlsl = False
 
@@ -854,7 +856,7 @@ class CPUTransformer(ExecutionGraphTransformer):
 
         self.graph_passes = []
         if self.mkldnn.enabled:
-            self.graph_passes.append(CPUFusion())
+            self.graph_passes += [CPUFusion()]
             self.byte_alignment = 64
         self.graph_passes += [
             # ExVizPass(view=True, filename="initial"),
@@ -865,19 +867,21 @@ class CPUTransformer(ExecutionGraphTransformer):
             DeadCodeEliminationPass(),
         ]
 
-        add_layout_conversion = AddLayoutConversions(None)
         if self.mkldnn.enabled:
-            self.graph_passes.append(MklCreateOpDescriptors(mkldnn=self.mkldnn))
-            self.graph_passes.append(MklAddLayoutConversions(mkldnn=self.mkldnn,
-                                                             layoutpass=add_layout_conversion))
+            self.graph_passes += [
+                MklCreateOpDescriptors(mkldnn=self.mkldnn),
+                MklAddLayoutConversions(mkldnn=self.mkldnn),
+                DeadCodeEliminationPass(),
+            ]
 
         self.graph_passes += [
             SSAConversion(),
-            IndexElision(),
             # DCE here eliminates return values. Need to figure out why.
             # DeadCodeEliminationPass(),
             LivenessPass(),
             MemOptimizePass(),
+            CopyElimination(),
+            IndexElision(),
             LivenessPass(),
             MemLayoutPass()
         ]

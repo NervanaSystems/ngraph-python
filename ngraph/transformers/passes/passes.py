@@ -515,7 +515,8 @@ class SimplePrune(PeepholeGraphPass):
     @visit.on_type(Prod)
     def visit(self, op, x):
         """
-        TODO.
+        If x is filled with the same value, then replace the prod op
+        with `power`.
 
         Arguments:
           op: TODO

@@ -50,13 +50,13 @@ class MNIST(object):
             self.train_set, self.valid_set = pickle_load(f)
 
         self.train_set = {'image': {'data': self.train_set[0].reshape(60000, 28, 28),
-                                    'axes': ('batch', 'height', 'width')},
+                                    'axes': ('N', 'H', 'W')},
                           'label': {'data': self.train_set[1],
-                                    'axes': ('batch',)}}
+                                    'axes': ('N',)}}
         self.valid_set = {'image': {'data': self.valid_set[0].reshape(10000, 28, 28),
-                                    'axes': ('batch', 'height', 'width')},
+                                    'axes': ('N', 'H', 'W')},
                           'label': {'data': self.valid_set[1],
-                                    'axes': ('batch',)}}
+                                    'axes': ('N',)}}
 
         return self.train_set, self.valid_set
 
