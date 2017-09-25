@@ -49,7 +49,7 @@ def cifar_mean_subtract(x):
 
 
 def conv_params(fsize, nfm, strides=1, relu=True, batch_norm=True):
-    return dict(fshape=(fsize, fsize, nfm),
+    return dict(filter_shape=(fsize, fsize, nfm),
                 strides=strides,
                 padding=(1 if fsize > 1 else 0),
                 activation=(Rectlin() if relu else None),

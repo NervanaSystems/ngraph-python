@@ -76,3 +76,6 @@ class AeonDataLoader(object):
 
     def reset(self):
         self._dataloader.reset()
+
+    def ndata(self):
+        self._dataloader.ndata
