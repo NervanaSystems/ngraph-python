@@ -4227,6 +4227,10 @@ class DerivOp(ValueOp):
             adjoint = adjoints[independent.forwarded.tensor]
             self.value_tensor = broadcast(adjoint.forwarded, axes=independent.axes)
 
+        # add hetr metadata to the deriv op
+        # should be allreduced across data-parallel workers
+        self.value_tensor.metadata['reduce_func'] = 'sum'
+
 
 def deriv(dependent, independent, error=None):
     """
