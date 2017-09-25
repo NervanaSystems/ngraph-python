@@ -27,7 +27,7 @@ from contextlib import closing
 
 # Result collector
 def loop_eval(dataset, computation, metric_names):
-    dataset.reset()
+    dataset._dataloader.reset()
     all_results = None
     for data in dataset:
         feed_dict = {input_ph[k]: data[k] for k in data.keys()}
@@ -45,7 +45,7 @@ def loop_eval(dataset, computation, metric_names):
 if __name__ == "__main__":
     # Hyperparameters
     # Optimizer
-    base_lr = 0.1
+    base_lr = 0.01
     gamma = 0.1
     momentum_coef = 0.9
     wdecay = 0.0001
@@ -156,40 +156,40 @@ with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
     # Inference
     eval_function = transformer.add_computation(eval_computation)
-# Progress bar
-tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
-interval_cost = 0.0
-if(args.name is not None):
-    train_result = []
-    test_result = []
-    err_result = []
-for step, data in enumerate(train_set):
-    data['iteration'] = step
-    feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-    output = train_function(feed_dict=feed_dict)
-    tpbar.update(1)
-    tpbar.set_description("Training {:0.4f}".format(output[()]))
-    interval_cost += output[()]
-    if (step + 1) % args.iter_interval == 0 and step > 0:
-        eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
-        tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                   "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
-                       interval=step // args.iter_interval,
-                       iteration=step,
-                       cost=interval_cost / args.iter_interval, tcost=eval_losses))
-        if(args.name is not None):
-            # For storing to csv
-            train_result.append(interval_cost / args.iter_interval)
-            test_result.append(eval_losses['cross_ent_loss'])
-            err_result.append(eval_losses['misclass'])
-        interval_cost = 0.0
-# Writing to CSV
-if(args.name is not None):
-    print("\nSaving results to csv file")
-    import csv
-    with open(args.name + ".csv", 'wb') as train_test_file:
-        wr = csv.writer(train_test_file, quoting=csv.QUOTE_ALL)
-        wr.writerow(train_result)
-        wr.writerow(test_result)
-        wr.writerow(err_result)
-print("\nTraining Completed")
+    # Progress bar
+    tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
+    interval_cost = 0.0
+    if(args.name is not None):
+        train_result = []
+        test_result = []
+        err_result = []
+    for step, data in enumerate(train_set):
+        data['iteration'] = step
+        feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
+        output = train_function(feed_dict=feed_dict)
+        tpbar.update(1)
+        tpbar.set_description("Training {:0.4f}".format(output[()]))
+        interval_cost += output[()]
+        if (step + 1) % args.iter_interval == 0 and step > 0:
+            eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
+            tqdm.write("Interval {interval} Iteration {iteration} complete. "
+                    "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
+                        interval=step // args.iter_interval,
+                        iteration=step,
+                        cost=interval_cost / args.iter_interval, tcost=eval_losses))
+            if(args.name is not None):
+                # For storing to csv
+                train_result.append(interval_cost / args.iter_interval)
+                test_result.append(eval_losses['cross_ent_loss'])
+                err_result.append(eval_losses['misclass'])
+            interval_cost = 0.0
+    # Writing to CSV
+    if(args.name is not None):
+        print("\nSaving results to csv file")
+        import csv
+        with open(args.name + ".csv", 'wb') as train_test_file:
+            wr = csv.writer(train_test_file, quoting=csv.QUOTE_ALL)
+            wr.writerow(train_result)
+            wr.writerow(test_result)
+            wr.writerow(err_result)
+    print("\nTraining Completed")
