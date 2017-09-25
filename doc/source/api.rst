@@ -1,5 +1,7 @@
+.. _api:
+
 .. ---------------------------------------------------------------------------
-.. Copyright 2016 Nervana Systems Inc.
+.. Copyright 2017 Intel Corporation
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -13,19 +15,19 @@
 .. limitations under the License.
 .. ---------------------------------------------------------------------------
 
-ngraph
-======
+Intel® Nervana™ graph
+*********************
 
-This API documentation covers the public API for ngraph, organized into three main modules:
+This API documentation covers the public API for Intel® Nervana™ graph (ngraph), organized into three main modules:
 
 - ``ngraph``: Contains the core ops for constructing the graph.
 - ``ngraph.transformers``: Defines methods for executing a defined graph on hardware.
-- ``ngraph.types``: Types in ngraph (e.g. ``Axes``, ``Op``, etc.)
+- ``ngraph.types``: Types in ngraph (for example, ``Axes``, ``Op``, etc.)
 
-ngraph
-------
+Intel Nervana (ngraph) API 
+==========================
 
-Several ops are used to create different types of tensors
+Several ops are used to create different types of tensors:
 
 .. csv-table::
     :header: "Method", "Description"
@@ -37,7 +39,7 @@ Several ops are used to create different types of tensors
 	:meth:`ngraph.placeholder` | Used for input values, typically from host.
 	:meth:`ngraph.constant` | Immutable constant that can be inlined.
 
-Assign the above tensors requires defining ``Axis``, which can be done using the following methods:
+Assigning the above tensors requires defining ``Axis``, which can be done using the following methods:
 
 .. csv-table::
     :header: "Method", "Description"
@@ -92,11 +94,11 @@ To compose a computational graph, we support the following operations:
 	:meth:`ngraph.squared_L2` | dot x with itself
 
 
-.. note::
-	Additional operations are supported that are not currently documented, and so are not included in the list above. We will continue to populate this API when the documentation is updated.
+.. Note::
+   Additional operations are supported that are not currently documented, and so are not included in the list above. We will continue to populate this API when the documentation is updated.
 
 ngraph.transformers
--------------------
+===================
 
 .. csv-table::
     :header: "Method", "Description"
@@ -111,7 +113,7 @@ ngraph.transformers
     :meth:`ngraph.transformers.Transformer` | Produce an executable version of op-graphs.
 
 ngraph.types
-------------
+============
 
 .. csv-table::
     :header: "Method", "Description"
@@ -128,7 +130,7 @@ ngraph.types
     :meth:`ngraph.types.TensorOp` | Base class for ops related to Tensors.
 
 ngraph
-~~~~~~
+------
 
 Graph construction.
 
@@ -138,7 +140,7 @@ Graph construction.
    :members:
 
 ngraph.transformers
-~~~~~~~~~~~~~~~~~~~
+-------------------
 
 Transformer manipulation.
 
@@ -148,7 +150,7 @@ Transformer manipulation.
    :members:
 
 ngraph.types
-~~~~~~~~~~~~
+------------
 
 .. py:module: ngraph.types
 
