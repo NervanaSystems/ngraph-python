@@ -200,7 +200,7 @@ expected behavors.
 
 
 Element-wise binary ops
-======================
+=======================
 
 - When axes match, output the same axes. 
 
