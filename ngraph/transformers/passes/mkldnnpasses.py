@@ -354,7 +354,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op, input, filter, bias=None):
 
         # Only 2D convolution supported in MKLDNN for now
-        if (input.axes.find_by_name('__NG_DEPTH').size != 1):
+        if (input.axes[1].length != 1):
             return
         # Only single precision float supported for now
         if (op.dtype.type != np.float32):
@@ -401,7 +401,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(bprop_conv)
     def visit(self, op, input, filter):
         # Only 2D convolution supported in MKLDNN for now
-        if (input.axes.find_by_name('__NG_DEPTH').size != 1):
+        if (input.axes[1].length != 1):
             return
         # Only single precision float supported for now
         if (op.dtype.type != np.float32):
@@ -444,7 +444,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(update_conv)
     def visit(self, op, delta, inputs, dbias=None):
         # Only 2D convolution supported in MKLDNN for now
-        if (delta.axes.find_by_name('__NG_DEPTH').size != 1):
+        if (delta.axes[1].length != 1):
             return
         # Only single precision float supported for now
         if (op.dtype.type != np.float32):
@@ -554,7 +554,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(PoolingOp)
     def visit(self, op, input):
         # Only 2D pooling supported in MKLDNN for now
-        if (input.axes.find_by_name('__NG_DEPTH').size != 1):
+        if (input.axes[1].length != 1):
             return
         if (op.pool_params['J'] != 1 or op.pool_params['T'] != 1):
             return
@@ -595,7 +595,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(BpropPoolOp)
     def visit(self, op, input):
         # Only 2D pooling supported in MKLDNN for now
-        if (input.axes.find_by_name('__NG_DEPTH').size != 1):
+        if (input.axes[1].length != 1):
             return
         if (op.pool_params['J'] != 1 or op.pool_params['T'] != 1):
             return
