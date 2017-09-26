@@ -150,12 +150,12 @@ with Layer.inference_mode_on():
     eval_loss_names = ['cross_ent_loss', 'misclass']
     eval_computation = ng.computation([eval_loss, errors], "all")
 
-    # Training the network by calling transformer
-    with closing(ngt.make_transformer()) as transformer:
-        # Trainer
-        train_function = transformer.add_computation(train_computation)
-        # Inference
-        eval_function = transformer.add_computation(eval_computation)
+# Training the network by calling transformer
+with closing(ngt.make_transformer()) as transformer:
+    # Trainer
+    train_function = transformer.add_computation(train_computation)
+    # Inference
+    eval_function = transformer.add_computation(eval_computation)
     # Progress bar
     tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
     interval_cost = 0.0
@@ -173,10 +173,10 @@ with Layer.inference_mode_on():
         if (step + 1) % args.iter_interval == 0 and step > 0:
             eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                       "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
-                           interval=step // args.iter_interval,
-                           iteration=step,
-                           cost=interval_cost / args.iter_interval, tcost=eval_losses))
+                        "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
+                            interval=step // args.iter_interval,
+                            iteration=step,
+                            cost=interval_cost / args.iter_interval, tcost=eval_losses))
             if(args.name is not None):
                 # For storing to csv
                 train_result.append(interval_cost / args.iter_interval)
