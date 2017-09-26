@@ -213,15 +213,23 @@ class update_conv(ConvDerivOp):
         filters : filter/kernel tensor.
     """
 
-    def __init__(self, delta, inputs, filters, fprop, **kwargs):
-        super(update_conv, self).__init__(
-            args=(delta, inputs),
-            fprop=fprop,
-            axes=filters.axes, **kwargs
-        )
+    def __init__(self, delta, inputs, filters, fprop, dbias=None, **kwargs):
+        if dbias is None:
+            super(update_conv, self).__init__(
+                args=(delta, inputs),
+                fprop=fprop,
+                axes=filters.axes, **kwargs
+            )
+        else:
+            super(update_conv, self).__init__(
+                args=(delta, inputs, dbias),
+                fprop=fprop,
+                axes=filters.axes, **kwargs
+            )
+        self.dbias = dbias
 
     def copy_with_new_args(self, args):
-        return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)
+        return type(self)(args[0], args[1], self.fprop.args[1], self.fprop, self.dbias)
 
     def generate_adjoints(self, adjoints, delta, inputs, filters, bias=None):
         import warnings

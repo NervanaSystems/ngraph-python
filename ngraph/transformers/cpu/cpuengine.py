@@ -134,8 +134,8 @@ class Mkldnn(object):
             self.update_conv_kernel = \
                 self.mkllib.create_mkldnn_conv_bprop_weights_kernel
             self.update_conv_kernel.argtypes = \
-                [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
-                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
+                [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
+                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
                  ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
 
             self.innerproduct_fprop_kernel = \
@@ -387,11 +387,13 @@ class Mkldnn(object):
         else:
             output[()] = input
 
-    def update_conv(self, name, conv_slices, I, E, U):
+    def update_conv(self, name, conv_slices, I, E, U, dB):
         if (self.enabled and name in self.kernels):
             self.set_input_tensor(self.kernels[name], E.ctypes.data, 0)
             self.set_input_tensor(self.kernels[name], I.ctypes.data, 1)
             self.set_output_tensor(self.kernels[name], U.ctypes.data, 0)
+            if dB is not None:
+                self.set_output_tensor(self.kernels[name], dB.ctypes.data, 1)
             self.run_opkernel(self.kernels[name], self.mkldnn_verbose)
         else:
             mSlice, pSlice, qSlice, _, _, _ = conv_slices
