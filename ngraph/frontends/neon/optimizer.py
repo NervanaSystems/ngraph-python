@@ -99,6 +99,28 @@ def clip_gradient_value(grad, clip_value=None):
         return ng.minimum(ng.maximum(grad, -abs(clip_value)), abs(clip_value))
 
 
+def clip_weight_value(weight, clip_value=None, min_value_override=None):
+    """
+    Element-wise clip a weight tensor to between ``min_value_override`` and ``clip_value``.
+
+    Arguments:
+        weight (Tensor): List of gradients for a single layer
+        clip_value (float, optional): Value to element-wise clip weights.
+                                      Defaults to None.
+        min_value (float, optional): Value to minimum value to element-wise clip
+                                     weights. Defaults to -abs(clip_value)
+
+    Returns:
+        weight (list): List of clipped weights.
+    """
+    if clip_value is None:
+        return weight
+    else:
+        if min_value_override is None:
+            min_value_override = -abs(clip_value)
+        return ng.minimum(ng.maximum(weight, min_value_override), abs(clip_value))
+
+
 class Optimizer(SubGraph):
     """TODO."""
     metadata = {'layer_type': 'optimizer'}
@@ -164,7 +186,9 @@ class LearningRateOptimizer(Optimizer):
             all_updates.append(updates)
         updates = ng.doall(all_updates)
         grads = ng.doall(grads)
-        return ng.sequential([grads, updates, 0])
+        clips = ng.doall([ng.assign(variable, clip_weight_value(variable, self.weight_clip_value))
+                          for variable in variables])
+        return ng.sequential([grads, updates, clips, 0])
 
 
 class GradientDescentMomentum(LearningRateOptimizer):
@@ -215,12 +239,14 @@ class GradientDescentMomentum(LearningRateOptimizer):
             wdecay=0.0,
             gradient_clip_norm=None,
             gradient_clip_value=None,
+            weight_clip_value=None,
             nesterov=False,
             **kwargs):
         super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
         self.momentum_coef = momentum_coef
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
         self.wdecay = wdecay
         self.nesterov = nesterov
 
@@ -228,9 +254,6 @@ class GradientDescentMomentum(LearningRateOptimizer):
         updates = []
         velocity = ng.persistent_tensor(axes=variable.axes,
                                         initial_value=0.).named(variable.name + '_vel')
-        # add metadata to the gradient node indicating that
-        # it should be reduced across data-parallel workers before used for optimization
-        grad.metadata['reduce_func'] = 'sum'
         clip_grad = clip_gradient_value(grad, self.gradient_clip_value)
         lr = - self.lrate * (scale_factor * clip_grad + self.wdecay * variable)
         updates.append(ng.assign(velocity, velocity * self.momentum_coef + lr))
@@ -265,6 +288,7 @@ class RMSProp(LearningRateOptimizer):
         epsilon=1e-6,
         gradient_clip_norm=None,
         gradient_clip_value=None,
+        weight_clip_value=None,
         **kwargs
     ):
         """
@@ -288,6 +312,7 @@ class RMSProp(LearningRateOptimizer):
         self.decay_rate = decay_rate
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
 
     def variable_update(self, variable, grad, scale_factor):
         epsilon, decay = (self.epsilon, self.decay_rate)
@@ -318,6 +343,7 @@ class Adam(LearningRateOptimizer):
         epsilon=1e-8,
         gradient_clip_norm=None,
         gradient_clip_value=None,
+        weight_clip_value=None,
         **kwargs
     ):
         """
@@ -339,6 +365,7 @@ class Adam(LearningRateOptimizer):
         self.epsilon = epsilon
         self.gradient_clip_norm = gradient_clip_norm
         self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
 
     @SubGraph.scope_op_creation
     def __call__(self, *args, **kwargs):

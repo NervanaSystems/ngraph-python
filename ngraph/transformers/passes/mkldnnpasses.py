@@ -442,7 +442,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(update_conv)
-    def visit(self, op, delta, inputs):
+    def visit(self, op, delta, inputs, dbias=None):
         # Only 2D convolution supported in MKLDNN for now
         if (delta.axes.find_by_name('__NG_DEPTH').size != 1):
             return
@@ -456,6 +456,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         (inputs_shape, inputs_layout) = self.get_arg_shape_and_layout(op, inputs, [4, 0, 2, 3])
         # Output
         (filter_shape, filter_layout) = self.get_op_shape_and_layout(op, [4, 0, 2, 3], 0)
+        (bias_shape, _) = self.get_op_shape_and_layout(op.dbias, [0], 0) if dbias else (None, None)
         pad_d, pad_h, pad_w = itemgetter(
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(
@@ -469,9 +470,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.mkldnn_engine,
             len(delta_shape),
             len(filter_shape),
+            len(bias_shape) if bias_shape else 0,
             len(inputs_shape),
             get_ctypes_arg(delta_shape),
             get_ctypes_arg(filter_shape),
+            get_ctypes_arg(bias_shape),
             get_ctypes_arg(inputs_shape),
             get_ctypes_arg(stride),
             get_ctypes_arg(pad),
@@ -483,6 +486,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
                 op.name])
         # Output is in ngraph layout. We dont need set_mkl_layout
         dbg_print_kernel(self.mkldnn, op, op_id)
+
+        if dbias:
+            # MKLDNN kernel computes dbias as well
+            self.replace_exop(op, dbias)
 
     @visit.on_type(ReluOp)
     def visit(self, op, input):
@@ -597,6 +604,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             return
         # Sanity check tensor shapes
         if (len(op.axes.lengths) != 5):
+            return
+
+        if op.fprop.forwarded.name not in self.mkldnn.kernels:
             return
 
         data_type = self.mkldnn.datatype[op.dtype.type]
