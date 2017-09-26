@@ -528,9 +528,9 @@ class CPUCodeGenerator(PyGen):
                     op.safe_name, op.fprop.forwarded.safe_name, delta, filters, outputs)
 
     @generate_op.on_type(update_conv)
-    def generate_op(self, op, outputs, delta, inputs):
-        self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={})",
-                    op.safe_name, op.fprop.forwarded.safe_name, inputs, delta, outputs)
+    def generate_op(self, op, outputs, delta, inputs, dbias=None):
+        self.append("mkldnn.update_conv('{}', self.conv_slices['{}'], I={}, E={}, U={}, dB={})",
+                    op.safe_name, op.fprop.forwarded.safe_name, inputs, delta, outputs, dbias)
 
     @generate_op.on_type(DeconvolutionOp)
     def generate_op(self, op, outputs, inputs, filters):
@@ -870,8 +870,8 @@ class CPUTransformer(ExecutionGraphTransformer):
         if self.mkldnn.enabled:
             self.graph_passes += [
                 MklCreateOpDescriptors(mkldnn=self.mkldnn),
-                MklAddLayoutConversions(mkldnn=self.mkldnn),
                 DeadCodeEliminationPass(),
+                MklAddLayoutConversions(mkldnn=self.mkldnn),
             ]
 
         self.graph_passes += [

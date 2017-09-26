@@ -3697,6 +3697,48 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
     return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
+def L2_norm(x, eps=1e-8, out_axes=None, reduction_axes=None):
+    """
+    L2 norm of the input tensor
+
+    Args:
+        x (TensorOp): Tensor
+        eps (Scalar): Small non-negative number to prevent divide by
+                      zero in the derivative of squareroot. Default is
+                      1e-8.
+        reduction_axes: if supplied, return the norm on these axes
+                        instead. Default is sample axes.
+    Returns:
+        TensorOp: The result.
+    """
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sqrt(eps + sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes))
+
+
+def L1_norm(x, out_axes=None, reduction_axes=None):
+    """
+    L1 norm of the input tensor
+
+    Args:
+        x (TensorOp): Tensor
+        out_axes:
+        reduction_axes: if supplied, return the norm on these axes
+                        instead. Default is sample axes.
+    Returns:
+        TensorOp: The result.
+    """
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(absolute(x), out_axes=out_axes, reduction_axes=reduction_axes)
+
+
 class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, bias=None, **kwargs):
