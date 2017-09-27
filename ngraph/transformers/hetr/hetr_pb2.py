@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='ngraph/transformers/hetr/hetr.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n#ngraph/transformers/hetr/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"(\n\x0c\x42uildRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"\x1c\n\nBuildReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"b\n\x12\x43omputationRequest\x12\x1b\n\x08subgraph\x18\x01 \x01(\x0b\x32\t.GraphDef\x12\x14\n\x07returns\x18\x02 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x03 \x03(\x0b\x32\x03.Op\"#\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\" \n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\":\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x17\n\x07results\x18\x02 \x03(\x0b\x32\x06.Value2\xda\x01\n\x04Hetr\x12\x30\n\x10\x42uildTransformer\x12\r.BuildRequest\x1a\x0b.BuildReply\"\x00\x12\x37\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n#ngraph/transformers/hetr/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"3\n\x17\x42uildTransformerRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"8\n\x15\x42uildTransformerReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"\x19\n\x17\x43loseTransformerRequest\"8\n\x15\x43loseTransformerReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"m\n\x12\x43omputationRequest\x12\x10\n\x03ops\x18\x01 \x03(\x0b\x32\x03.Op\x12\x14\n\x05\x65\x64ges\x18\x02 \x03(\x0b\x32\x05.Edge\x12\x14\n\x07returns\x18\x03 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x04 \x03(\x0b\x32\x03.Op\"4\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x0f\n\x07message\x18\x02 \x01(\t\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\"1\n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\"K\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x17\n\x07results\x18\x03 \x03(\x0b\x32\x06.Value\"\x0e\n\x0c\x43loseRequest\"\x1d\n\nCloseReply\x12\x0f\n\x07message\x18\x01 \x01(\t2\xe1\x02\n\x04Hetr\x12\x46\n\x10\x42uildTransformer\x12\x18.BuildTransformerRequest\x1a\x16.BuildTransformerReply\"\x00\x12\x46\n\x10\x43loseTransformer\x12\x18.CloseTransformerRequest\x1a\x16.CloseTransformerReply\"\x00\x12\x39\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00(\x01\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x12%\n\x05\x43lose\x12\r.CloseRequest\x1a\x0b.CloseReply\"\x00\x62\x06proto3')
   ,
   dependencies=[ngraph_dot_op__graph_dot_serde_dot_ops__pb2.DESCRIPTOR,])
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
@@ -69,15 +69,15 @@ _VALUE = _descriptor.Descriptor(
 )
 
 
-_BUILDREQUEST = _descriptor.Descriptor(
-  name='BuildRequest',
-  full_name='BuildRequest',
+_BUILDTRANSFORMERREQUEST = _descriptor.Descriptor(
+  name='BuildTransformerRequest',
+  full_name='BuildTransformerRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='transformer_type', full_name='BuildRequest.transformer_type', index=0,
+      name='transformer_type', full_name='BuildTransformerRequest.transformer_type', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -96,21 +96,28 @@ _BUILDREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=144,
-  serialized_end=184,
+  serialized_end=195,
 )
 
 
-_BUILDREPLY = _descriptor.Descriptor(
-  name='BuildReply',
-  full_name='BuildReply',
+_BUILDTRANSFORMERREPLY = _descriptor.Descriptor(
+  name='BuildTransformerReply',
+  full_name='BuildTransformerReply',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='status', full_name='BuildReply.status', index=0,
+      name='status', full_name='BuildTransformerReply.status', index=0,
       number=1, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='message', full_name='BuildTransformerReply.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -126,8 +133,70 @@ _BUILDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=186,
-  serialized_end=214,
+  serialized_start=197,
+  serialized_end=253,
+)
+
+
+_CLOSETRANSFORMERREQUEST = _descriptor.Descriptor(
+  name='CloseTransformerRequest',
+  full_name='CloseTransformerRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=255,
+  serialized_end=280,
+)
+
+
+_CLOSETRANSFORMERREPLY = _descriptor.Descriptor(
+  name='CloseTransformerReply',
+  full_name='CloseTransformerReply',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='CloseTransformerReply.status', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='message', full_name='CloseTransformerReply.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=282,
+  serialized_end=338,
 )
 
 
@@ -139,22 +208,29 @@ _COMPUTATIONREQUEST = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='subgraph', full_name='ComputationRequest.subgraph', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
+      name='ops', full_name='ComputationRequest.ops', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='returns', full_name='ComputationRequest.returns', index=1,
+      name='edges', full_name='ComputationRequest.edges', index=1,
       number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='placeholders', full_name='ComputationRequest.placeholders', index=2,
+      name='returns', full_name='ComputationRequest.returns', index=2,
       number=3, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='placeholders', full_name='ComputationRequest.placeholders', index=3,
+      number=4, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -171,8 +247,8 @@ _COMPUTATIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=216,
-  serialized_end=314,
+  serialized_start=340,
+  serialized_end=449,
 )
 
 
@@ -190,6 +266,13 @@ _COMPUTATIONREPLY = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    _descriptor.FieldDescriptor(
+      name='message', full_name='ComputationReply.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -202,8 +285,8 @@ _COMPUTATIONREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=316,
-  serialized_end=351,
+  serialized_start=451,
+  serialized_end=503,
 )
 
 
@@ -240,8 +323,8 @@ _FEEDINPUTREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=353,
-  serialized_end=412,
+  serialized_start=505,
+  serialized_end=564,
 )
 
 
@@ -259,6 +342,13 @@ _FEEDINPUTREPLY = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    _descriptor.FieldDescriptor(
+      name='message', full_name='FeedInputReply.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -271,8 +361,8 @@ _FEEDINPUTREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=414,
-  serialized_end=446,
+  serialized_start=566,
+  serialized_end=615,
 )
 
 
@@ -302,8 +392,8 @@ _GETRESULTSREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=448,
-  serialized_end=484,
+  serialized_start=617,
+  serialized_end=653,
 )
 
 
@@ -322,8 +412,15 @@ _GETRESULTSREPLY = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='results', full_name='GetResultsReply.results', index=1,
-      number=2, type=11, cpp_type=10, label=3,
+      name='message', full_name='GetResultsReply.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='results', full_name='GetResultsReply.results', index=2,
+      number=3, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -340,8 +437,63 @@ _GETRESULTSREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=486,
-  serialized_end=544,
+  serialized_start=655,
+  serialized_end=730,
+)
+
+
+_CLOSEREQUEST = _descriptor.Descriptor(
+  name='CloseRequest',
+  full_name='CloseRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=732,
+  serialized_end=746,
+)
+
+
+_CLOSEREPLY = _descriptor.Descriptor(
+  name='CloseReply',
+  full_name='CloseReply',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='message', full_name='CloseReply.message', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=748,
+  serialized_end=777,
 )
 
 _VALUE.fields_by_name['scalar'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._SCALAR
@@ -352,20 +504,25 @@ _VALUE.fields_by_name['scalar'].containing_oneof = _VALUE.oneofs_by_name['value'
 _VALUE.oneofs_by_name['value'].fields.append(
   _VALUE.fields_by_name['tensor'])
 _VALUE.fields_by_name['tensor'].containing_oneof = _VALUE.oneofs_by_name['value']
-_COMPUTATIONREQUEST.fields_by_name['subgraph'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._GRAPHDEF
+_COMPUTATIONREQUEST.fields_by_name['ops'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
+_COMPUTATIONREQUEST.fields_by_name['edges'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._EDGE
 _COMPUTATIONREQUEST.fields_by_name['returns'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
 _COMPUTATIONREQUEST.fields_by_name['placeholders'].message_type = ngraph_dot_op__graph_dot_serde_dot_ops__pb2._OP
 _FEEDINPUTREQUEST.fields_by_name['values'].message_type = _VALUE
 _GETRESULTSREPLY.fields_by_name['results'].message_type = _VALUE
 DESCRIPTOR.message_types_by_name['Value'] = _VALUE
-DESCRIPTOR.message_types_by_name['BuildRequest'] = _BUILDREQUEST
-DESCRIPTOR.message_types_by_name['BuildReply'] = _BUILDREPLY
+DESCRIPTOR.message_types_by_name['BuildTransformerRequest'] = _BUILDTRANSFORMERREQUEST
+DESCRIPTOR.message_types_by_name['BuildTransformerReply'] = _BUILDTRANSFORMERREPLY
+DESCRIPTOR.message_types_by_name['CloseTransformerRequest'] = _CLOSETRANSFORMERREQUEST
+DESCRIPTOR.message_types_by_name['CloseTransformerReply'] = _CLOSETRANSFORMERREPLY
 DESCRIPTOR.message_types_by_name['ComputationRequest'] = _COMPUTATIONREQUEST
 DESCRIPTOR.message_types_by_name['ComputationReply'] = _COMPUTATIONREPLY
 DESCRIPTOR.message_types_by_name['FeedInputRequest'] = _FEEDINPUTREQUEST
 DESCRIPTOR.message_types_by_name['FeedInputReply'] = _FEEDINPUTREPLY
 DESCRIPTOR.message_types_by_name['GetResultsRequest'] = _GETRESULTSREQUEST
 DESCRIPTOR.message_types_by_name['GetResultsReply'] = _GETRESULTSREPLY
+DESCRIPTOR.message_types_by_name['CloseRequest'] = _CLOSEREQUEST
+DESCRIPTOR.message_types_by_name['CloseReply'] = _CLOSEREPLY
 
 Value = _reflection.GeneratedProtocolMessageType('Value', (_message.Message,), dict(
   DESCRIPTOR = _VALUE,
@@ -374,19 +531,33 @@ Value = _reflection.GeneratedProtocolMessageType('Value', (_message.Message,), d
   ))
 _sym_db.RegisterMessage(Value)
 
-BuildRequest = _reflection.GeneratedProtocolMessageType('BuildRequest', (_message.Message,), dict(
-  DESCRIPTOR = _BUILDREQUEST,
+BuildTransformerRequest = _reflection.GeneratedProtocolMessageType('BuildTransformerRequest', (_message.Message,), dict(
+  DESCRIPTOR = _BUILDTRANSFORMERREQUEST,
   __module__ = 'ngraph.transformers.hetr.hetr_pb2'
-  # @@protoc_insertion_point(class_scope:BuildRequest)
+  # @@protoc_insertion_point(class_scope:BuildTransformerRequest)
   ))
-_sym_db.RegisterMessage(BuildRequest)
+_sym_db.RegisterMessage(BuildTransformerRequest)
 
-BuildReply = _reflection.GeneratedProtocolMessageType('BuildReply', (_message.Message,), dict(
-  DESCRIPTOR = _BUILDREPLY,
+BuildTransformerReply = _reflection.GeneratedProtocolMessageType('BuildTransformerReply', (_message.Message,), dict(
+  DESCRIPTOR = _BUILDTRANSFORMERREPLY,
   __module__ = 'ngraph.transformers.hetr.hetr_pb2'
-  # @@protoc_insertion_point(class_scope:BuildReply)
+  # @@protoc_insertion_point(class_scope:BuildTransformerReply)
   ))
-_sym_db.RegisterMessage(BuildReply)
+_sym_db.RegisterMessage(BuildTransformerReply)
+
+CloseTransformerRequest = _reflection.GeneratedProtocolMessageType('CloseTransformerRequest', (_message.Message,), dict(
+  DESCRIPTOR = _CLOSETRANSFORMERREQUEST,
+  __module__ = 'ngraph.transformers.hetr.hetr_pb2'
+  # @@protoc_insertion_point(class_scope:CloseTransformerRequest)
+  ))
+_sym_db.RegisterMessage(CloseTransformerRequest)
+
+CloseTransformerReply = _reflection.GeneratedProtocolMessageType('CloseTransformerReply', (_message.Message,), dict(
+  DESCRIPTOR = _CLOSETRANSFORMERREPLY,
+  __module__ = 'ngraph.transformers.hetr.hetr_pb2'
+  # @@protoc_insertion_point(class_scope:CloseTransformerReply)
+  ))
+_sym_db.RegisterMessage(CloseTransformerReply)
 
 ComputationRequest = _reflection.GeneratedProtocolMessageType('ComputationRequest', (_message.Message,), dict(
   DESCRIPTOR = _COMPUTATIONREQUEST,
@@ -430,6 +601,20 @@ GetResultsReply = _reflection.GeneratedProtocolMessageType('GetResultsReply', (_
   ))
 _sym_db.RegisterMessage(GetResultsReply)
 
+CloseRequest = _reflection.GeneratedProtocolMessageType('CloseRequest', (_message.Message,), dict(
+  DESCRIPTOR = _CLOSEREQUEST,
+  __module__ = 'ngraph.transformers.hetr.hetr_pb2'
+  # @@protoc_insertion_point(class_scope:CloseRequest)
+  ))
+_sym_db.RegisterMessage(CloseRequest)
+
+CloseReply = _reflection.GeneratedProtocolMessageType('CloseReply', (_message.Message,), dict(
+  DESCRIPTOR = _CLOSEREPLY,
+  __module__ = 'ngraph.transformers.hetr.hetr_pb2'
+  # @@protoc_insertion_point(class_scope:CloseReply)
+  ))
+_sym_db.RegisterMessage(CloseReply)
+
 
 try:
   # THESE ELEMENTS WILL BE DEPRECATED.
@@ -451,10 +636,15 @@ try:
       """
       self.BuildTransformer = channel.unary_unary(
           '/Hetr/BuildTransformer',
-          request_serializer=BuildRequest.SerializeToString,
-          response_deserializer=BuildReply.FromString,
+          request_serializer=BuildTransformerRequest.SerializeToString,
+          response_deserializer=BuildTransformerReply.FromString,
           )
-      self.Computation = channel.unary_unary(
+      self.CloseTransformer = channel.unary_unary(
+          '/Hetr/CloseTransformer',
+          request_serializer=CloseTransformerRequest.SerializeToString,
+          response_deserializer=CloseTransformerReply.FromString,
+          )
+      self.Computation = channel.stream_unary(
           '/Hetr/Computation',
           request_serializer=ComputationRequest.SerializeToString,
           response_deserializer=ComputationReply.FromString,
@@ -469,6 +659,11 @@ try:
           request_serializer=GetResultsRequest.SerializeToString,
           response_deserializer=GetResultsReply.FromString,
           )
+      self.Close = channel.unary_unary(
+          '/Hetr/Close',
+          request_serializer=CloseRequest.SerializeToString,
+          response_deserializer=CloseReply.FromString,
+          )
 
 
   class HetrServicer(object):
@@ -478,7 +673,12 @@ try:
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
-    def Computation(self, request, context):
+    def CloseTransformer(self, request, context):
+      context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+      context.set_details('Method not implemented!')
+      raise NotImplementedError('Method not implemented!')
+
+    def Computation(self, request_iterator, context):
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
@@ -493,15 +693,25 @@ try:
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
+    def Close(self, request, context):
+      context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+      context.set_details('Method not implemented!')
+      raise NotImplementedError('Method not implemented!')
+
 
   def add_HetrServicer_to_server(servicer, server):
     rpc_method_handlers = {
         'BuildTransformer': grpc.unary_unary_rpc_method_handler(
             servicer.BuildTransformer,
-            request_deserializer=BuildRequest.FromString,
-            response_serializer=BuildReply.SerializeToString,
+            request_deserializer=BuildTransformerRequest.FromString,
+            response_serializer=BuildTransformerReply.SerializeToString,
         ),
-        'Computation': grpc.unary_unary_rpc_method_handler(
+        'CloseTransformer': grpc.unary_unary_rpc_method_handler(
+            servicer.CloseTransformer,
+            request_deserializer=CloseTransformerRequest.FromString,
+            response_serializer=CloseTransformerReply.SerializeToString,
+        ),
+        'Computation': grpc.stream_unary_rpc_method_handler(
             servicer.Computation,
             request_deserializer=ComputationRequest.FromString,
             response_serializer=ComputationReply.SerializeToString,
@@ -515,6 +725,11 @@ try:
             servicer.GetResults,
             request_deserializer=GetResultsRequest.FromString,
             response_serializer=GetResultsReply.SerializeToString,
+        ),
+        'Close': grpc.unary_unary_rpc_method_handler(
+            servicer.Close,
+            request_deserializer=CloseRequest.FromString,
+            response_serializer=CloseReply.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -530,11 +745,15 @@ try:
     only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0."""
     def BuildTransformer(self, request, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
-    def Computation(self, request, context):
+    def CloseTransformer(self, request, context):
+      context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
+    def Computation(self, request_iterator, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def FeedInput(self, request, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def GetResults(self, request, context):
+      context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
+    def Close(self, request, context):
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
 
 
@@ -547,7 +766,10 @@ try:
     def BuildTransformer(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
       raise NotImplementedError()
     BuildTransformer.future = None
-    def Computation(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+    def CloseTransformer(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      raise NotImplementedError()
+    CloseTransformer.future = None
+    def Computation(self, request_iterator, timeout, metadata=None, with_call=False, protocol_options=None):
       raise NotImplementedError()
     Computation.future = None
     def FeedInput(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
@@ -556,6 +778,9 @@ try:
     def GetResults(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
       raise NotImplementedError()
     GetResults.future = None
+    def Close(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      raise NotImplementedError()
+    Close.future = None
 
 
   def beta_create_Hetr_server(servicer, pool=None, pool_size=None, default_timeout=None, maximum_timeout=None):
@@ -565,20 +790,26 @@ try:
     file not marked beta) for all further purposes. This function was
     generated only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0"""
     request_deserializers = {
-      ('Hetr', 'BuildTransformer'): BuildRequest.FromString,
+      ('Hetr', 'BuildTransformer'): BuildTransformerRequest.FromString,
+      ('Hetr', 'Close'): CloseRequest.FromString,
+      ('Hetr', 'CloseTransformer'): CloseTransformerRequest.FromString,
       ('Hetr', 'Computation'): ComputationRequest.FromString,
       ('Hetr', 'FeedInput'): FeedInputRequest.FromString,
       ('Hetr', 'GetResults'): GetResultsRequest.FromString,
     }
     response_serializers = {
-      ('Hetr', 'BuildTransformer'): BuildReply.SerializeToString,
+      ('Hetr', 'BuildTransformer'): BuildTransformerReply.SerializeToString,
+      ('Hetr', 'Close'): CloseReply.SerializeToString,
+      ('Hetr', 'CloseTransformer'): CloseTransformerReply.SerializeToString,
       ('Hetr', 'Computation'): ComputationReply.SerializeToString,
       ('Hetr', 'FeedInput'): FeedInputReply.SerializeToString,
       ('Hetr', 'GetResults'): GetResultsReply.SerializeToString,
     }
     method_implementations = {
       ('Hetr', 'BuildTransformer'): face_utilities.unary_unary_inline(servicer.BuildTransformer),
-      ('Hetr', 'Computation'): face_utilities.unary_unary_inline(servicer.Computation),
+      ('Hetr', 'Close'): face_utilities.unary_unary_inline(servicer.Close),
+      ('Hetr', 'CloseTransformer'): face_utilities.unary_unary_inline(servicer.CloseTransformer),
+      ('Hetr', 'Computation'): face_utilities.stream_unary_inline(servicer.Computation),
       ('Hetr', 'FeedInput'): face_utilities.unary_unary_inline(servicer.FeedInput),
       ('Hetr', 'GetResults'): face_utilities.unary_unary_inline(servicer.GetResults),
     }
@@ -593,20 +824,26 @@ try:
     file not marked beta) for all further purposes. This function was
     generated only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0"""
     request_serializers = {
-      ('Hetr', 'BuildTransformer'): BuildRequest.SerializeToString,
+      ('Hetr', 'BuildTransformer'): BuildTransformerRequest.SerializeToString,
+      ('Hetr', 'Close'): CloseRequest.SerializeToString,
+      ('Hetr', 'CloseTransformer'): CloseTransformerRequest.SerializeToString,
       ('Hetr', 'Computation'): ComputationRequest.SerializeToString,
       ('Hetr', 'FeedInput'): FeedInputRequest.SerializeToString,
       ('Hetr', 'GetResults'): GetResultsRequest.SerializeToString,
     }
     response_deserializers = {
-      ('Hetr', 'BuildTransformer'): BuildReply.FromString,
+      ('Hetr', 'BuildTransformer'): BuildTransformerReply.FromString,
+      ('Hetr', 'Close'): CloseReply.FromString,
+      ('Hetr', 'CloseTransformer'): CloseTransformerReply.FromString,
       ('Hetr', 'Computation'): ComputationReply.FromString,
       ('Hetr', 'FeedInput'): FeedInputReply.FromString,
       ('Hetr', 'GetResults'): GetResultsReply.FromString,
     }
     cardinalities = {
       'BuildTransformer': cardinality.Cardinality.UNARY_UNARY,
-      'Computation': cardinality.Cardinality.UNARY_UNARY,
+      'Close': cardinality.Cardinality.UNARY_UNARY,
+      'CloseTransformer': cardinality.Cardinality.UNARY_UNARY,
+      'Computation': cardinality.Cardinality.STREAM_UNARY,
       'FeedInput': cardinality.Cardinality.UNARY_UNARY,
       'GetResults': cardinality.Cardinality.UNARY_UNARY,
     }

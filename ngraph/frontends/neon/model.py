@@ -24,9 +24,9 @@ class Sequential(SubGraph):
         self.layers = layers
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj):
+    def __call__(self, in_obj, **kwargs):
         for l in self.layers:
-            in_obj = l(in_obj)
+            in_obj = l(in_obj, **kwargs)
         return in_obj
 
 

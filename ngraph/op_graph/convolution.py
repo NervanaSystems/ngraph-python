@@ -72,7 +72,9 @@ class ConvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
-        self.__has_side_effects = False
+        self.channel_axes = inputs.axes[0]
+        self.spatial_axes = inputs.axes[1:4]
+        self._has_side_effects = False
 
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
@@ -91,11 +93,11 @@ class ConvolutionOp(TensorOp):
 
     @property
     def has_side_effects(self):
-        return self.__has_side_effects
+        return self._has_side_effects
 
     @has_side_effects.setter
     def has_side_effects(self, value):
-        self.__has_side_effects = value
+        self._has_side_effects = value
 
 
 def deconvolution(conv_params, inputs, filters, axes, docstring=None):
@@ -135,11 +137,6 @@ class DeconvolutionOp(TensorOp):
                 'convolution filter shape must be length 5, found {}'
             ).format(len(filters.shape)))
 
-        if not inputs.axes[0] == filters.axes[0]:
-            raise ValueError((
-                'the first axis in input {inputs} and filter {filters} are not the same.'
-            ).format(inputs=inputs.axes[0], filters=filters.axes[0]))
-
         expected_keys = ['pad_h', 'pad_w', 'pad_d', 'str_h', 'str_w',
                          'str_d', 'dil_h', 'dil_w', 'dil_d']
         # TODO: maybe we should assume no padding and no dilation when
@@ -151,15 +148,17 @@ class DeconvolutionOp(TensorOp):
                 ).format(key=k))
 
         self.conv_params = conv_params
-        self.__has_side_effects = False
+        self.channel_axes = inputs.axes[0]
+        self.spatial_axes = inputs.axes[1:4]
+        self._has_side_effects = False
 
     @property
     def has_side_effects(self):
-        return self.__has_side_effects
+        return self._has_side_effects
 
     @has_side_effects.setter
     def has_side_effects(self, value):
-        self.__has_side_effects = value
+        self._has_side_effects = value
 
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
@@ -181,10 +180,12 @@ class ConvDerivOp(TensorOp):
     Arguments:
         fprop: The original convolution.
     """
+
     def __init__(self, fprop, **kwargs):
         super(ConvDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
         fprop.has_side_effects = True
+        self._has_side_effects = False
 
     @property
     def conv_params(self):
@@ -196,6 +197,14 @@ class ConvDerivOp(TensorOp):
         """
         return self.fprop.forwarded.conv_params
 
+    @property
+    def has_side_effects(self):
+        return self._has_side_effects
+
+    @has_side_effects.setter
+    def has_side_effects(self, value):
+        self._has_side_effects = value
+
 
 class update_conv(ConvDerivOp):
     """
@@ -203,15 +212,28 @@ class update_conv(ConvDerivOp):
         inputs  : input tensor.
         filters : filter/kernel tensor.
     """
-    def __init__(self, delta, inputs, filters, fprop, **kwargs):
-        super(update_conv, self).__init__(
-            args=(delta, inputs),
-            fprop=fprop,
-            axes=filters.axes, **kwargs
-        )
+
+    def __init__(self, delta, inputs, filters, fprop, dbias=None, **kwargs):
+        if dbias is None:
+            super(update_conv, self).__init__(
+                args=(delta, inputs),
+                fprop=fprop,
+                axes=filters.axes, **kwargs
+            )
+        else:
+            super(update_conv, self).__init__(
+                args=(delta, inputs, dbias),
+                fprop=fprop,
+                axes=filters.axes, **kwargs
+            )
+        self.dbias = dbias
 
     def copy_with_new_args(self, args):
-        return type(self)(args[0], args[1], self.fprop.args[1], self.fprop)
+        return type(self)(args[0], args[1], self.fprop.args[1], self.fprop, self.dbias)
+
+    def generate_adjoints(self, adjoints, delta, inputs, filters, bias=None):
+        import warnings
+        warnings.warn("Adjoint for update_conv not implemented")
 
 
 class bprop_conv(ConvDerivOp):
@@ -220,6 +242,7 @@ class bprop_conv(ConvDerivOp):
         inputs  : input tensor.
         filters : filter/kernel tensor.
     """
+
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         super(bprop_conv, self).__init__(
             args=(delta, filters),
@@ -230,8 +253,18 @@ class bprop_conv(ConvDerivOp):
     def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
 
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        # bprop of conv is deconv, so use DeconvDerivOp here
+        deconv_deriv_op = DeconvDerivOp(delta, inputs, filters, self)
+        deconv_deriv_op.add_control_dep(self)
+        inputs.generate_add_delta(adjoints, deconv_deriv_op)
+        update_conv_op = update_conv(inputs, delta, filters, self)
+        update_conv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)
+
 
 class DeconvDerivOp(ConvDerivOp):
+
     def __init__(self, delta, inputs, filters, fprop, **kwargs):
         """
         Deconv backprop
@@ -248,3 +281,12 @@ class DeconvDerivOp(ConvDerivOp):
 
     def copy_with_new_args(self, args):
         return type(self)(args[0], self.fprop.args[0], args[1], self.fprop)
+
+    def generate_adjoints(self, adjoints, delta, inputs, filters):
+        # bprop of deconv is conv, so use bprop_conv here
+        bprop_conv_op = bprop_conv(delta, inputs, filters, self)
+        bprop_conv_op.add_control_dep(self)
+        inputs.generate_add_delta(adjoints, bprop_conv_op)
+        update_conv_op = update_conv(delta, inputs, filters, self)
+        update_conv_op.add_control_dep(self)
+        filters.generate_add_delta(adjoints, update_conv_op)

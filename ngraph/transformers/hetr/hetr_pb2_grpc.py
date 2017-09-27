@@ -14,10 +14,15 @@ class HetrStub(object):
     """
     self.BuildTransformer = channel.unary_unary(
         '/Hetr/BuildTransformer',
-        request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildRequest.SerializeToString,
-        response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildReply.FromString,
+        request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildTransformerRequest.SerializeToString,
+        response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildTransformerReply.FromString,
         )
-    self.Computation = channel.unary_unary(
+    self.CloseTransformer = channel.unary_unary(
+        '/Hetr/CloseTransformer',
+        request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseTransformerRequest.SerializeToString,
+        response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseTransformerReply.FromString,
+        )
+    self.Computation = channel.stream_unary(
         '/Hetr/Computation',
         request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationRequest.SerializeToString,
         response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationReply.FromString,
@@ -32,6 +37,11 @@ class HetrStub(object):
         request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.GetResultsRequest.SerializeToString,
         response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.GetResultsReply.FromString,
         )
+    self.Close = channel.unary_unary(
+        '/Hetr/Close',
+        request_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseRequest.SerializeToString,
+        response_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseReply.FromString,
+        )
 
 
 class HetrServicer(object):
@@ -41,7 +51,12 @@ class HetrServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Computation(self, request, context):
+  def CloseTransformer(self, request, context):
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Computation(self, request_iterator, context):
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
@@ -56,15 +71,25 @@ class HetrServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def Close(self, request, context):
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_HetrServicer_to_server(servicer, server):
   rpc_method_handlers = {
       'BuildTransformer': grpc.unary_unary_rpc_method_handler(
           servicer.BuildTransformer,
-          request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildRequest.FromString,
-          response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildReply.SerializeToString,
+          request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildTransformerRequest.FromString,
+          response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.BuildTransformerReply.SerializeToString,
       ),
-      'Computation': grpc.unary_unary_rpc_method_handler(
+      'CloseTransformer': grpc.unary_unary_rpc_method_handler(
+          servicer.CloseTransformer,
+          request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseTransformerRequest.FromString,
+          response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseTransformerReply.SerializeToString,
+      ),
+      'Computation': grpc.stream_unary_rpc_method_handler(
           servicer.Computation,
           request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationRequest.FromString,
           response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.ComputationReply.SerializeToString,
@@ -78,6 +103,11 @@ def add_HetrServicer_to_server(servicer, server):
           servicer.GetResults,
           request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.GetResultsRequest.FromString,
           response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.GetResultsReply.SerializeToString,
+      ),
+      'Close': grpc.unary_unary_rpc_method_handler(
+          servicer.Close,
+          request_deserializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseRequest.FromString,
+          response_serializer=ngraph_dot_transformers_dot_hetr_dot_hetr__pb2.CloseReply.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

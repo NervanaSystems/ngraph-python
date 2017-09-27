@@ -47,13 +47,13 @@ import numpy as np
 import ngraph
 import ngraph.op_graph.op_graph as op_graph
 from ngraph.op_graph.op_graph import Op
-from ngraph.op_graph.axes import Axes, Axis, FlattenedAxis
+from ngraph.op_graph.axes import Axes, Axis, FlattenedAxis, AxesMap
 
 import ngraph.op_graph.serde.ops_pb2 as ops_pb
 
 
 # Attributes of an Op that are private but we want to serialize
-EXCEPTION_ATTRIBUTES = {'_axes', '_tensor', '_const', '_deriv_handler'}
+EXCEPTION_ATTRIBUTES = {'_axes', '_tensor', '_const', '_deriv_handler', '_has_side_effects'}
 
 # Dict of Axis and Axes UUID to Axis to enable matching of deserialized axis
 GLOBAL_AXIS_REGISTRY = weakref.WeakValueDictionary()
@@ -90,6 +90,12 @@ def axis_to_protobuf(axis):
     return pb_axis
 
 
+def axes_map_to_protobuf(axes_map):
+    pb_axes_map = ops_pb.AxesMap()
+    assign_scalar(pb_axes_map.mapping, dict(axes_map))
+    return pb_axes_map
+
+
 def axes_to_protobuf(axes):
     pb_axes = ops_pb.Axes()
     for axis in axes:
@@ -117,7 +123,8 @@ def unhandled_scalar_value(value):
 
 def is_scalar_type(value):
     return value is None or \
-        isinstance(value, (str, six.text_type, float, bool, Axis, dict, slice, np.generic) +
+        isinstance(value, (str, six.text_type, float, bool, Axis,
+                           AxesMap, dict, slice, np.generic) +
                    six.integer_types)
 
 
@@ -155,6 +162,8 @@ def assign_scalar(message, value):
         assign_scalar(message.map_val.map['_ngraph_map_sentinel_'], '')
     elif isinstance(value, Axis):
         message.axis.CopyFrom(axis_to_protobuf(value))
+    elif isinstance(value, AxesMap):
+        message.axes_map.CopyFrom(axes_map_to_protobuf(value))
     else:
         raise unhandled_scalar_value(value)
 
@@ -366,6 +375,8 @@ def protobuf_scalar_to_python(val):
         return pb_to_dtype(val.dtype_val)
     elif scalar_key == 'axis':
         return pb_to_axis(val.axis)
+    elif scalar_key == 'axes_map':
+        return pb_to_axes_map(val.axes_map)
     return getattr(val, scalar_key)
 
 
@@ -413,6 +424,11 @@ def pb_to_axis(msg):
     return axis
 
 
+def pb_to_axes_map(msg):
+    axes_map = AxesMap(pb_to_dict(msg.mapping.map_val.map))
+    return axes_map
+
+
 def get_ngraph_op_cls(op_type):
     """ Walk over python modules in ngraph.op_graph and look for op_type class. """
     for importer, modname, ispkg in pkgutil.iter_modules(ngraph.op_graph.__path__):
@@ -436,7 +452,7 @@ def protobuf_to_op(pb_op):
     # helpful defaults
     py_op = cls.__new__(cls)
     op_graph.Op.__init__(py_op)
-    py_op.name = pb_op.name
+    py_op.name = str(pb_op.name)
 
     if 'valfun_value' in pb_op.attrs:
         valfun_value = pb_to_tensor(pb_op.attrs['valfun_value'].tensor)
@@ -461,6 +477,21 @@ def protobuf_to_op(pb_op):
             value = pb_op.attrs[key]
             setattr(py_op, key, protobuf_attr_to_python(value))
     return py_op
+
+
+def _deserialize_graph_ops_edges(pb_ops, pb_edges):
+    """
+    Given a set of serialized ops and edges, this will deserialize them and return the
+    list of all ops in that graph.
+    """
+    graph_def = ops_pb.GraphDef()
+    for edge in pb_edges:
+        temp = graph_def.edges.add()
+        temp.CopyFrom(edge)
+    for op in pb_ops:
+        temp = graph_def.ops.add()
+        temp.CopyFrom(op)
+    return _deserialize_graph(graph_def)
 
 
 def _deserialize_graph(graph_pb):

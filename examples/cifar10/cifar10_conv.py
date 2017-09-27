@@ -29,7 +29,7 @@ from __future__ import print_function
 from contextlib import closing
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Layer, Affine, Preprocess, Convolution, Pool2D, Sequential
+from ngraph.frontends.neon import Layer, Affine, Preprocess, Convolution, Pooling, Sequential
 from ngraph.frontends.neon import UniformInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, loop_train
 from ngraph.frontends.neon import NgraphArgparser, make_bound_computation, make_default_callbacks
@@ -70,10 +70,10 @@ init_uni = UniformInit(-0.1, 0.1)
 seq1 = Sequential([Preprocess(functor=cifar_mean_subtract),
                    Convolution((5, 5, 16), filter_init=init_uni, activation=Rectlin(),
                                batch_norm=args.use_batch_norm),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Convolution((5, 5, 32), filter_init=init_uni, activation=Rectlin(),
                                batch_norm=args.use_batch_norm),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Affine(nout=500, weight_init=init_uni, activation=Rectlin(),
                           batch_norm=args.use_batch_norm),
                    Affine(axes=ax.Y, weight_init=init_uni, activation=Softmax())])
