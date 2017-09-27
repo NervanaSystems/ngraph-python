@@ -45,7 +45,7 @@ def loop_eval(dataset, computation, metric_names):
 if __name__ == "__main__":
     # Hyperparameters
     # Optimizer
-    base_lr = 0.01
+    base_lr = 0.1
     gamma = 0.1
     momentum_coef = 0.9
     wdecay = 0.0001
