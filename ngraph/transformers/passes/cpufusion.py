@@ -471,9 +471,8 @@ class CPUFusion(GraphRewritePass):
             variance = label_map[self.batchnorm_fprop_variance_label]
             mean = label_map[self.batchnorm_fprop_mean_label]
             epsilon = self.op_arg(label_map[self.batchnorm_fprop_epsilon_label], 0).tensor.const
-
-            if len(inputs.axes) != 5 or inputs.axes[
-                    1].length != 1 or inputs.axes[0].length % 8 != 0:
+            if len(inputs.axes) != 4 or \
+                    inputs.axes[0].length % 8 != 0:
                 return
             if op.dtype.name != 'float32':
                 return
