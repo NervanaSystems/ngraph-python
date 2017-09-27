@@ -1910,10 +1910,21 @@ class ExpandDims(IndexOp):
         Returns:
           TODO
         """
-        x.generate_add_delta(
-            adjoints,
-            sum(delta, reduction_axes=delta.axes - x.axes)
-        )
+        reduction_axes=delta.axes - x.axes
+        assert len(reduction_axes)==1
+        if reduction_axes[0].length == 1:
+            slices = []
+            for axis in delta.axes:
+                slices.append(slice(None) if axis in x.axes else 0)
+            x.generate_add_delta(
+                adjoints,
+                tensor_slice(delta, slices, x.axes)
+            )
+        else:
+            x.generate_add_delta(
+                adjoints,
+                sum(delta, reduction_axes=delta.axes - x.axes)
+            )
 
 
 def expand_dims(x, axis, dim):

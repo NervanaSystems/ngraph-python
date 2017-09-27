@@ -496,21 +496,14 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         if (op.dtype.type != np.float32):
             return
 
-
-        # Create Relu MKL kernel only if the input is coming in MKL layout
-        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(input))
-        if self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout is None:
-            return
-
         data_type = self.mkldnn.datatype[op.dtype.type]
-        # if len(op.axes) == 4:
-        #    (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [0, 1, 2, 3])
-        #    out_axes = get_axes_mkl_order(op.axes, [0, 1, 2, 3])
-        # elif len(op.axes) == 2:
-        #    (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [1, 0])
-        #    out_axes = get_axes_mkl_order(op.axes, [1, 0])
-        (_, input_axes) = self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout
-        mkl_order = get_order_from_axes(op.axes, input_axes)
+        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(input))
+        mkl_layout = self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout
+        if mkl_layout:
+            (_, input_axes) = mkl_layout
+            mkl_order = get_order_from_axes(op.axes, input_axes)
+        else:
+            mkl_order = list(range(len(op.axes)))
         (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, mkl_order)
 
         input_size = np.prod(input.axes.lengths)
@@ -530,20 +523,19 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op, delta, fprop_src):
         if (op.dtype.type != np.float32):
             return
-        if (len(op.axes) != 5 and len(op.axes) != 2):
-            return
 
         data_type = self.mkldnn.datatype[op.dtype.type]
-        if len(op.axes) == 5:
-            (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [4, 0, 2, 3])
-            (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(
-                op, fprop_src, [4, 0, 2, 3])
-            out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
-        elif len(op.axes) == 2:
-            (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [1, 0])
-            (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(
-                op, fprop_src, [1, 0])
-            out_axes = get_axes_mkl_order(op.axes, [1, 0])
+
+        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(delta))
+        mkl_layout = self.get_exop(delta).output_decls[arg_idx].tensor_view_decl.mkl_layout
+        if mkl_layout:
+            (_, input_axes) = mkl_layout
+            mkl_order = get_order_from_axes(op.axes, input_axes)
+        else:
+            mkl_order = list(range(len(op.axes)))
+        (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, mkl_order)
+        (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(op, fprop_src, mkl_order)
+        out_axes = get_axes_mkl_order(op.axes, mkl_order)
 
         input_size = np.prod(delta.axes.lengths)
         op_id = len(self.mkldnn.kernels)
