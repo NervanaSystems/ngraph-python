@@ -19,6 +19,10 @@ from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
     MutateInsteadOfCopyWithNewArgsMixin
 from ngraph.op_graph.axes import Axes, make_axes, make_axis
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_gather_axes(axes, gather_axis, num_devices):
@@ -198,6 +202,10 @@ class GatherSendOp(SendOp):
             "from_node must have a specified parallel attribute in metadata"
         self.metadata['parallel'] = from_node.metadata['parallel']
 
+        # todo: replace by real reduce operation
+        self.metadata['parallel'] = from_node.metadata['parallel']
+        self.use_reduce = False
+
 
 class GatherRecvOp(RecvOp):
     """
@@ -223,6 +231,14 @@ class GatherRecvOp(RecvOp):
         self._slices = get_slices(self.axes,
                                   self.metadata['parallel'],
                                   len(self.from_id))
+
+        # todo: replace by real reduce operation
+        self.use_reduce = False
+        parallel_axis = self.metadata['parallel']
+        if parallel_axis == send_node.metadata['parallel'] and \
+           self.axes.find_by_name(parallel_axis.name) != parallel_axis.axes:
+            self.use_reduce = True
+            send_node.use_reduce = True
 
     @property
     def slices(self):
@@ -287,74 +303,6 @@ class GPUCudaGatherRecvOp(GatherRecvOp):
         super(GPUCudaGatherRecvOp, self).__init__(from_node, to_node, send_node)
 
 
-class CPUQueueSendOp(MutateInsteadOfCopyWithNewArgsMixin, SendOp):
-
-    def __init__(self, from_node):
-        super(CPUQueueSendOp, self).__init__(from_node=from_node)
-        self._queue = multiprocessing.Queue()
-
-    @property
-    def queue(self):
-        return self._queue
-
-
-class CPUQueueRecvOp(RecvOp):
-
-    def __init__(self, to_node, send_node):
-        super(CPUQueueRecvOp, self).__init__(to_node, send_node)
-        self._queue = send_node.queue
-
-    @property
-    def queue(self):
-        return self._queue
-
-
-class CPUQueueScatterSendOp(MutateInsteadOfCopyWithNewArgsMixin, ScatterSendOp):
-
-    def __init__(self, from_node, to_node):
-        super(CPUQueueScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
-        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
-
-
-class CPUQueueScatterRecvOp(ScatterRecvOp):
-
-    def __init__(self, to_node, send_node):
-        super(CPUQueueScatterRecvOp, self).__init__(to_node, send_node)
-        self.idx = 0
-        self._shared_queues = send_node.shared_queues
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
-
-
-class CPUQueueGatherSendOp(MutateInsteadOfCopyWithNewArgsMixin, GatherSendOp):
-
-    def __init__(self, from_node):
-        super(CPUQueueGatherSendOp, self).__init__(from_node=from_node)
-        self.idx = 0
-        self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
-
-
-class CPUQueueGatherRecvOp(GatherRecvOp):
-
-    def __init__(self, from_node, to_node, send_node):
-        super(CPUQueueGatherRecvOp, self).__init__(from_node, to_node, send_node)
-        self._shared_queues = send_node.shared_queues
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
-
-
 class AllReduceOp(CommunicationOp):
     """
     Represents an AllReduce op. Sets reduction axes and out axes.
@@ -374,28 +322,6 @@ class AllReduceOp(CommunicationOp):
         if (self.reduce_func == 'mean' or self.reduce_func == 'sum') is False:
             raise RuntimeError(
                 'Reduce function {} is not supported!'.format(self.reduce_func))
-
-
-class CPUQueueAllReduceOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
-    """
-    Represents CPU-based queue implementation for AllReduce op. Sets reduction function and creates
-    shared queues.
-
-    Arguments:
-        x: The input node.
-        func: The reduction function, e.g. 'sum', 'mean'.
-    """
-    def __init__(self, input_node, func=None):
-        super(CPUQueueAllReduceOp, self).__init__(x=input_node,
-                                                  out_axes=input_node.axes,
-                                                  dtype=input_node.dtype,
-                                                  func=func)
-        self.idx = 0
-        self._shared_queues = [multiprocessing.Queue() for i in input_node.metadata['device_id']]
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
 
 
 class GPUCudaAllReduceOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
@@ -443,30 +369,108 @@ class BroadcastRecvOp(RecvOp):
         super(BroadcastRecvOp, self).__init__(to_node, send_node)
 
 
-class CPUQueueBroadcastSendOp(BroadcastSendOp):
+class CPUMlslSendOp(SendOp):
+
+    def __init__(self, from_node):
+        super(CPUMlslSendOp, self).__init__(from_node=from_node)
+
+
+class CPUMlslRecvOp(RecvOp):
+
+    def __init__(self, to_node, send_node):
+        super(CPUMlslRecvOp, self).__init__(to_node, send_node)
+
+
+class CPUMlslScatterSendOp(ScatterSendOp):
+
+    def __init__(self, from_node, to_node):
+        super(CPUMlslScatterSendOp, self).__init__(from_node, to_node)
+        self.arr = None
+
+
+class CPUMlslScatterRecvOp(ScatterRecvOp):
+
+    def __init__(self, to_node, send_node):
+        super(CPUMlslScatterRecvOp, self).__init__(to_node, send_node)
+
+
+class CPUMlslGatherSendOp(GatherSendOp):
+
+    def __init__(self, from_node):
+        super(CPUMlslGatherSendOp, self).__init__(from_node)
+        self.arr = None
+
+
+class CPUMlslGatherRecvOp(GatherRecvOp):
+
+    def __init__(self, from_node, to_node, send_node):
+        super(CPUMlslGatherRecvOp, self).__init__(from_node, to_node, send_node)
+
+
+class CPUMlslAllReduceStartOp(AllReduceOp):
     """
-    Represents CPU-based queue implementation for BroadcastSend op.
-    Creates shared queues.
+    Represents CPU-based implementation for AllReduce op over async MLSL::AllReduce.
+    Start async communication.
+
+    Arguments:
+        x: The input node.
+        func: The reduction function, e.g. 'sum', 'mean'.
+    """
+    def __init__(self, input_node, func=None):
+        super(CPUMlslAllReduceStartOp, self).__init__(x=input_node,
+                                                      out_axes=input_node.axes,
+                                                      dtype=input_node.dtype,
+                                                      func=func)
+        self._req = [None]  # use mutable field to share it between start and wait ops
+
+    @property
+    def req(self):
+        return self._req[0]
+
+    @req.setter
+    def req(self, value):
+        self._req[0] = value
+
+
+class CPUMlslAllReduceWaitOp(AllReduceOp):
+    """
+    Represents CPU-based implementation for AllReduce op over async MLSL::AllReduce.
+    Complete async communication.
+
+    Arguments:
+        x: The input node.
+        func: The reduction function, e.g. 'sum', 'mean'.
+    """
+    def __init__(self, input_node, start_node, func=None):
+        super(CPUMlslAllReduceWaitOp, self).__init__(x=input_node,
+                                                     out_axes=input_node.axes,
+                                                     dtype=input_node.dtype,
+                                                     func=func)
+        self._args = tuple([])
+        self.add_control_dep(start_node)
+        self._req = start_node._req
+
+    @property
+    def req(self):
+        return self._req[0]
+
+    @req.setter
+    def req(self, value):
+        self._req[0] = value
+
+
+class CPUMlslBroadcastSendOp(BroadcastSendOp):
+    """
+    Represents CPU-based MLSL implementation for BroadcastSend op over MLSL::Bcast
     """
     def __init__(self, from_node, to_node):
-        super(CPUQueueBroadcastSendOp, self).__init__(from_node, to_node)
-        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
+        super(CPUMlslBroadcastSendOp, self).__init__(from_node, to_node)
+        self.arr = None
 
 
-class CPUQueueBroadcastRecvOp(BroadcastRecvOp):
+class CPUMlslBroadcastRecvOp(BroadcastRecvOp):
     """
-    Represents CPU-based queue implementation for BroadcastRecv op.
-    Creates shared queues.
+    Represents CPU-based queue implementation for BroadcastRecv op over MLSL::Bcast.
     """
     def __init__(self, to_node, send_node):
-        super(CPUQueueBroadcastRecvOp, self).__init__(to_node, send_node)
-        self.idx = 0
-        self._shared_queues = send_node.shared_queues
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
+        super(CPUMlslBroadcastRecvOp, self).__init__(to_node, send_node)

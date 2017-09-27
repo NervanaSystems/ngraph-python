@@ -20,13 +20,12 @@ from orderedset import OrderedSet
 from test_hetr_passes import check_device_assign_pass, check_communication_pass
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.op_graph.comm_nodes import CPUQueueAllReduceOp
-from ngraph.transformers.hetr.mpilauncher import Launcher
+from ngraph.transformers.hetr.mpilauncher import MPILauncher
 from multiprocessing import active_children
-import threading
 import time
 import os
 import subprocess
+import tempfile
 
 
 pytestmark = pytest.mark.hetr_only
@@ -156,6 +155,35 @@ def test_distributed_dot(hetr_device, config):
         np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
 
 
+def test_distributed_dot_parallel_first_axis():
+    H = ng.make_axis(length=4, name='height')
+    N = ng.make_axis(length=8, name='batch')
+    weight = ng.make_axis(length=2, name='weight')
+    x = ng.placeholder(axes=[N, H])
+    w = ng.placeholder(axes=[H, weight])
+    with ng.metadata(device_id=('0', '1'), parallel=N):
+        dot = ng.dot(x, w)
+
+    np_x = np.random.randint(100, size=[N.length, H.length])
+    np_weight = np.random.randint(100, size=[H.length, weight.length])
+    with ExecutorFactory() as ex:
+        computation = ex.executor(dot, x, w)
+        res = computation(np_x, np_weight)
+        np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
+
+
+def test_distributed_dot_parallel_second_axis():
+    pytest.xfail("'parallel' for not first axis isn't supported yet")
+
+    H = ng.make_axis(length=4, name='height')
+    N = ng.make_axis(length=8, name='batch')
+    weight = ng.make_axis(length=2, name='weight')
+    x = ng.placeholder(axes=[H, N])
+    w = ng.placeholder(axes=[weight, H])
+    with ng.metadata(device_id=('0', '1'), parallel=N):
+        dot = ng.dot(w, x)
+
+
 @pytest.mark.multi_device
 @pytest.mark.parametrize('config', [
     {
@@ -274,7 +302,7 @@ def test_recvop_axes_using_dot():
         computation = ex.executor(result, x, w)
         val_ng = computation(x_value, w_value)
         val_np = np.dot(x_value, w_value)
-        assert ng.testing.allclose(val_ng, val_np)
+        ng.testing.assert_allclose(val_ng, val_np)
 
 
 def test_recvop_tensorupdate():
@@ -384,24 +412,24 @@ def test_terminate_op():
     termOp = TerminateOp()
     assert len(baseline) == 0
     with ExecutorFactory() as ex:
-        comp = ex.executor(termOp)
-        assert len(active_children()) == 1
-        with pytest.raises(RuntimeError):
-            comp()
-        assert len(active_children()) == 1
+        with pytest.raises(RuntimeError) as excinfo:
+            ex.executor(termOp)
+        assert 'Cannot find op_type of TerminateOp in any ngraph.op_graph modules' \
+            in str(excinfo.value)
+        assert len(active_children()) == 0
     assert len(active_children()) == len(baseline)
 
 
 def test_process_leak():
     baseline = active_children()
-    with ng.metadata(device_id=('2')):
+    with ng.metadata(device_id=('0')):
         x = ng.constant(2)
     assert len(active_children()) == 0
     with ExecutorFactory() as ex:
         comp = ex.executor(x)
-        assert len(active_children()) == 1
+        assert len(active_children()) == 0
         comp()
-        assert len(active_children()) == 2
+        assert len(active_children()) == 0
     assert len(active_children()) == len(baseline)
 
 
@@ -465,26 +493,28 @@ def test_allreduce_cpu_op(config):
 
 class ClosingHetrServers():
     def __init__(self, ports):
+        self.tmpfile = tempfile.NamedTemporaryFile(dir=os.path.dirname(os.path.realpath(__file__)),
+                                                   delete=True)
         self.processes = []
         for p in ports:
             hetr_server = os.path.dirname(os.path.realpath(__file__)) +\
                 "/../../ngraph/transformers/hetr/hetr_server.py"
-            command = ["python", hetr_server, "-p", p]
+            command = ["python", hetr_server, "-tf", self.tmpfile.name, "-p", p]
             try:
                 proc = subprocess.Popen(command)
                 self.processes.append(proc)
             except Exception as e:
                 print(e)
-            time.sleep(STARTUP_TIME)
+        time.sleep(STARTUP_TIME)
 
     def close(self):
         for p in self.processes:
             p.terminate()
-        time.sleep(STARTUP_TIME)
         for p in self.processes:
             p.kill()
         for p in self.processes:
             p.wait()
+        self.tmpfile.close()
 
 
 def test_rpc_transformer():
@@ -495,17 +525,25 @@ def test_rpc_transformer():
 
     with closing(ClosingHetrServers(port_list)):
         for p in range(num_procs):
-            rpc_client_list.append(RPCTransformerClient('cpu' + str(p), port_list[p]))
-            np.testing.assert_equal(rpc_client_list[p].initialized, True)
+            rpc_client_list.append(RPCTransformerClient('cpu' + str(p),
+                                                        'localhost:' + port_list[p]))
+            np.testing.assert_equal(rpc_client_list[p].is_trans_built, False)
+            np.testing.assert_equal(rpc_client_list[p].transformer_type, 'cpu' + str(p))
+            np.testing.assert_equal(rpc_client_list[p].server_address, 'localhost:' + port_list[p])
+        for p in range(num_procs):
+            rpc_client_list[p].build_transformer()
+            np.testing.assert_equal(rpc_client_list[p].is_trans_built, True)
+        for p in range(num_procs):
+            rpc_client_list[p].close_transformer()
+        for p in range(num_procs):
+            rpc_client_list[p].close()
+            np.testing.assert_equal(rpc_client_list[p].is_trans_built, False)
 
 
 def test_mpilauncher():
-    port_list = ['51111', '51112']
-    num_procs = len(port_list)
-    os.environ["HETR_SERVER_GPU_NUM"] = str(num_procs)
-
-    mpilauncher = Launcher(port_list)
-    mpilauncher.launch()
+    os.environ["HETR_SERVER_PORTS"] = "51111, 51112"
+    mpilauncher = MPILauncher()
+    mpilauncher.launch(2)
 
     # Check if process has launched
     assert mpilauncher.mpirun_proc.poll() is None
@@ -513,4 +551,4 @@ def test_mpilauncher():
     mpilauncher.close()
 
     # Check if process has completed
-    assert mpilauncher.mpirun_proc.poll() is not None
+    assert mpilauncher.mpirun_proc is None

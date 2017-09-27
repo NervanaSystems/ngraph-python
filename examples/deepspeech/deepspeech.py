@@ -261,7 +261,7 @@ if __name__ == "__main__":
     logger.debug("Creating deepspeech2 model")
     ds2 = Deepspeech(args.nfilters, args.filter_width, args.str_w, nbands,
                      args.depth, args.hidden_size, batch_norm=args.batch_norm)
-    output = ds2(inputs["audio"])
+    output = ds2(inputs["audio"], spatial_axes={"H": "frequency", "W": "time"})
 
     # set up ctc loss
     loss = ng.ctc(output,
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     train_computation = ng.computation([mean_cost, output], "all")
     if inference is True:
         with Layer.inference_mode_on():
-            eval_output = ds2(inputs["audio"])
+            eval_output = ds2(inputs["audio"], spatial_axes={"H": "frequency", "W": "time"})
         eval_computation = ng.computation(eval_output, "all")
 
     # Now bind the computations we are interested in

@@ -255,14 +255,17 @@ def is_flex_factory(transformer_factory):
 
 
 def is_flex(name):
-    # Probably 'argon' also need to be added here
-    flex_transformers = ['flexgpu']
+    flex_transformers = ['flexgpu', 'argon']
     if name in flex_transformers:
         return True
     return False
 
 
 def reset_flex_entries(comp):
-    for flex_id in comp.executor.output_flex_ids:
-        flex_entry = comp.transformer.flex_manager.flex_entries[flex_id]
-        flex_entry.reset_entry()
+    # TODO
+    # Currently Argon does not support resetting flex entries
+    # May be necessary in the future
+    if comp.transformer.transformer_name != 'argon':
+        for flex_id in comp.executor.output_flex_ids:
+            flex_entry = comp.transformer.flex_manager.flex_entries[flex_id]
+            flex_entry.reset_entry()
