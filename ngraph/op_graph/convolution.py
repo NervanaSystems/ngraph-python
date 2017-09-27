@@ -74,7 +74,7 @@ class ConvolutionOp(TensorOp):
         self.conv_params = conv_params
         self.channel_axes = inputs.axes[0]
         self.spatial_axes = inputs.axes[1:4]
-        self.__has_side_effects = False
+        self._has_side_effects = False
 
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
@@ -93,11 +93,11 @@ class ConvolutionOp(TensorOp):
 
     @property
     def has_side_effects(self):
-        return self.__has_side_effects
+        return self._has_side_effects
 
     @has_side_effects.setter
     def has_side_effects(self, value):
-        self.__has_side_effects = value
+        self._has_side_effects = value
 
 
 def deconvolution(conv_params, inputs, filters, axes, docstring=None):
@@ -150,15 +150,15 @@ class DeconvolutionOp(TensorOp):
         self.conv_params = conv_params
         self.channel_axes = inputs.axes[0]
         self.spatial_axes = inputs.axes[1:4]
-        self.__has_side_effects = False
+        self._has_side_effects = False
 
     @property
     def has_side_effects(self):
-        return self.__has_side_effects
+        return self._has_side_effects
 
     @has_side_effects.setter
     def has_side_effects(self, value):
-        self.__has_side_effects = value
+        self._has_side_effects = value
 
     def copy_with_new_args(self, args):
         return type(self)(self.conv_params, *args, axes=self.axes)
@@ -185,7 +185,7 @@ class ConvDerivOp(TensorOp):
         super(ConvDerivOp, self).__init__(**kwargs)
         self.fprop = fprop
         fprop.has_side_effects = True
-        self.__has_side_effects = False
+        self._has_side_effects = False
 
     @property
     def conv_params(self):
@@ -199,11 +199,11 @@ class ConvDerivOp(TensorOp):
 
     @property
     def has_side_effects(self):
-        return self.__has_side_effects
+        return self._has_side_effects
 
     @has_side_effects.setter
     def has_side_effects(self, value):
-        self.__has_side_effects = value
+        self._has_side_effects = value
 
 
 class update_conv(ConvDerivOp):

@@ -20,6 +20,10 @@ from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import as_op, ReturnOp, LiteralScalarOp
 
 import numpy as np
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class ElementType(object):
@@ -802,6 +806,18 @@ class ExOpBlock(ExecutionGraphElt):
         old_exop = self.computation_decl.get_exop(old_op)
         after_exop = old_exop.prev_exop
         self.remove_exop(old_exop)
+
+        # FIXME: find better way to update dependencies
+        next_op = old_exop.next_exop.op
+        if old_op in next_op.control_deps:
+            next_op.remove_control_dep(old_op)
+            next_op.add_control_dep(new_op)
+
+        # FIXME: find better way to preserve metadata
+        if hasattr(old_op, 'metadata') and hasattr(new_op, 'metadata') and \
+           len(old_op.metadata) > len(new_op.metadata):
+            new_op.metadata = old_op.metadata
+
         if old_op is new_op:
             # Hetr bashes some ops. See MutateInsteadOfCopyWithNewArgsMixin, issue #1410
             self.add_ops([new_op], after_exop=after_exop)
@@ -1198,7 +1214,11 @@ class ExecutionState(object):
             raise ValueError(
                 "Tensor description base {} has no Op".format(tensor_description_base))
 
-        tensor_decl = self.__tensors_decls.get(tensor_description_base.op, None)
+        # UUID is needed here due to separate copies of the computation graph
+        # existing for each RPC-computation with hetr
+        # and instead of checking op-sameness via pointer, we should use UUID
+        # which is preserved from copy to copy of the graph
+        tensor_decl = self.__tensors_decls.get(tensor_description_base.op.uuid, None)
         if tensor_decl is None:
             tensor_decl = TensorDecl(op,
                                      element_type=etype(tensor_description_base.dtype),
@@ -1207,7 +1227,7 @@ class ExecutionState(object):
                                      is_input=tensor_description_base.is_input,
                                      tensor_description_base=tensor_description_base,
                                      execution_graph=execution_graph)
-            self.__tensors_decls[tensor_description_base.op] = tensor_decl
+            self.__tensors_decls[tensor_description_base.op.uuid] = tensor_decl
         return tensor_decl
 
 
