@@ -116,7 +116,7 @@ if __name__ == "__main__":
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
     if args.hetr_device == 'gpu':
-        os.environ["HETR_SERVER_GPU_NUM"] = str(len(device_ids[0]))
+        os.environ["HETR_SERVER_NUM"] = str(len(device_ids[0]))
 
     ax.Y.length = args.nout
     ax.Y.name = "characters"
