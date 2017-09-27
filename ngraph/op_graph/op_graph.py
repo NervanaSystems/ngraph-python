@@ -2714,12 +2714,20 @@ class UnsliceOp(SequentialOp):
         super(UnsliceOp, self).__init__(**kwargs)
         self.x = x
         self.slices = slices
-        temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
-        self.ops = [
-            Fill(temp, 0),
-            set_item(temp, slices, x),
-            temp
-        ]
+        if all(s==0 or s==slice(None) for s in slices) and\
+            len(axes - x.axes) == 1:
+            # Add the missing dimension
+            for i, s in enumerate(slices):
+                if s == 0:
+                    dim_idx = i
+            self.ops = [expand_dims(x, axes[dim_idx], dim_idx)]
+        else:
+            temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
+            self.ops = [
+                Fill(temp, 0),
+                set_item(temp, slices, x),
+                temp
+            ]
 
         # Handle adjoint generation for the result
         self.value_tensor.deriv_handler = self

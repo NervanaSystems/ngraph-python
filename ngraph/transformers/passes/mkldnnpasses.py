@@ -15,7 +15,7 @@
 from __future__ import division
 
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv
-from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, \
+from ngraph.op_graph.op_graph import Op, MapRolesOp, TensorOp, TensorSliceOp, ExpandDims, \
     Flatten, Unflatten, ReorderAxes, DotLowDimension, Add, ContiguousOp, ReturnOp
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
@@ -495,16 +495,23 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op, input):
         if (op.dtype.type != np.float32):
             return
-        if (len(op.axes) != 5 and len(op.axes) != 2):
+
+
+        # Create Relu MKL kernel only if the input is coming in MKL layout
+        arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(input))
+        if self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout is None:
             return
 
         data_type = self.mkldnn.datatype[op.dtype.type]
-        if len(op.axes) == 5:
-            (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [4, 0, 2, 3])
-            out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
-        elif len(op.axes) == 2:
-            (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [1, 0])
-            out_axes = get_axes_mkl_order(op.axes, [1, 0])
+        # if len(op.axes) == 4:
+        #    (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [0, 1, 2, 3])
+        #    out_axes = get_axes_mkl_order(op.axes, [0, 1, 2, 3])
+        # elif len(op.axes) == 2:
+        #    (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, [1, 0])
+        #    out_axes = get_axes_mkl_order(op.axes, [1, 0])
+        (_, input_axes) = self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout
+        mkl_order = get_order_from_axes(op.axes, input_axes)
+        (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, mkl_order)
 
         input_size = np.prod(input.axes.lengths)
         op_id = len(self.mkldnn.kernels)
@@ -516,7 +523,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             data_type,
             self.mkldnn.kernels[op.name])
 
-        self.set_mkl_layout(op, out_axes)
+        self.set_mkl_layout(op, input_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropReluOp)
@@ -679,8 +686,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         # Sanity check for tensor shapes
         if (op.dtype.type != np.float32):
             return
-        if len(x.shape) != 5 or len(y.shape) != 5:
-            return
+        # if len(x.shape) != 5 or len(y.shape) != 5:
+        #    return
 
         arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(x))
         if self.get_exop(x).output_decls[arg_idx].tensor_view_decl.mkl_layout is None:
@@ -767,6 +774,28 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             new_axes = get_axes_mkl_order(op.axes, order)
             self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = (layout, new_axes)
 
+    @visit.on_type(TensorSliceOp)
+    def visit(self, op, arg):
+        mkl_layout = self.get_arg_mkl_layout(op, arg)
+        if mkl_layout:
+            (layout, mkl_axes) = mkl_layout
+            if all(s==0 or s==slice(None) for s in op.slices) and\
+                op.axes.is_equal_set(mkl_axes):
+                # We are slicing out axes that are size 1 and not visible to MKL.
+                # Its ok to keep data in mkl layout
+                self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = mkl_layout
+
+    @visit.on_type(ExpandDims)
+    def visit(self, op, arg):
+        mkl_layout = self.get_arg_mkl_layout(op, arg)
+        if mkl_layout:
+            (layout, mkl_axes) = mkl_layout
+            new_axes = op.axes - mkl_axes
+            for axis in new_axes:
+                if axis.length != 1:
+                    return
+            self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout = mkl_layout
+
 
 class MklAddLayoutConversions(PeepholeGraphPass):
     """
@@ -817,7 +846,7 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         return self.get_exop(arg).output_decls[arg_idx].tensor_view_decl.mkl_layout
 
     def is_mkl_pass_through(self, op):
-        if isinstance(op, (Flatten, Unflatten, ReorderAxes, ContiguousOp)) \
+        if isinstance(op, (Flatten, Unflatten, TensorSliceOp, ExpandDims, ReorderAxes, ContiguousOp)) \
                 and self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout is not None:
             return True
         else:
