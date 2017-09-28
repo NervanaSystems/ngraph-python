@@ -154,11 +154,15 @@ def test_distributed_dot(hetr_device, config):
         np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
 
 
-def test_distributed_dot_parallel_first_axis():
+@pytest.mark.multi_device
+def test_comm_broadcast_op(hetr_device):
+    if hetr_device == 'gpu':
+        pytest.skip('gpu communication broadcast op is not supported.')
     H = ng.make_axis(length=4, name='height')
     N = ng.make_axis(length=8, name='batch')
     weight = ng.make_axis(length=2, name='weight')
     x = ng.placeholder(axes=[N, H])
+    # w will be broadcasted to devices
     w = ng.placeholder(axes=[H, weight])
     with ng.metadata(device_id=('0', '1'), parallel=N):
         dot = ng.dot(x, w)
@@ -181,6 +185,13 @@ def test_distributed_dot_parallel_second_axis():
     w = ng.placeholder(axes=[weight, H])
     with ng.metadata(device_id=('0', '1'), parallel=N):
         dot = ng.dot(w, x)
+
+    np_x = np.random.randint(100, size=[H.length, N.length])
+    np_weight = np.random.randint(100, size=[weight.length, H.length])
+    with ExecutorFactory() as ex:
+        computation = ex.executor(dot, x, w)
+        res = computation(np_x, np_weight)
+        np.testing.assert_array_equal(res, np.dot(np_weight, np_x))
 
 
 @pytest.mark.multi_device

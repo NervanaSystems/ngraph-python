@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-import multiprocessing
 import collections
 from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
