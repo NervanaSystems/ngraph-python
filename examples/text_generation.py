@@ -15,7 +15,7 @@
 # ----------------------------------------------------------------------------
 """
 Usage:
-python text_generation.py -z 128 -b gpu -t 100000
+python text_generation.py -z 128 -b gpu
 
 Uses Shakespeare text sample to train an LSTM based model to predict the next character
 Uses the trained model to generate own text
@@ -168,7 +168,7 @@ parser.add_argument('--seq_len', type=int,
 parser.add_argument('--recurrent_units', type=int,
                     help="Number of recurrent units in the network",
                     default=256)
-parser.set_defaults(num_iterations=40000)
+parser.set_defaults(num_iterations=20000)
 args = parser.parse_args()
 
 use_embedding = args.use_embedding
