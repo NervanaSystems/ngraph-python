@@ -588,6 +588,9 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
+        # FIXME: cuurently input layout is causing issue, when the mkl_layout is in [C,N,H,W]
+        # even though get_rotate_layout sets the layout to [N, C, H, W].
+        # As work around setting input_layout=None.
         self.mkldnn.pool_fprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(input_shape), len(output_shape),
