@@ -32,8 +32,8 @@ from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Sequential, LSTM, Affine, Softmax, Preprocess, LookupTable
-from ngraph.frontends.neon import UniformInit, Tanh, Logistic, RMSProp
-from ngraph.frontends.neon import NgraphArgparser
+from ngraph.frontends.neon import UniformInit, Tanh, Logistic
+from ngraph.frontends.neon import NgraphArgparser, GradientDescentMomentum
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import Shakespeare, SequentialArrayIterator
 
@@ -243,9 +243,8 @@ learning_rate_policy = {'name': 'schedule',
                         'schedule': schedule,
                         'gamma': 0.95,
                         'base_lr': 0.01}
-optimizer = RMSProp(gradient_clip_value=1, learning_rate=learning_rate_policy,
+optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                     iteration=inputs['iteration'])
-
 # Define the loss function (Cross entropy loss)
 # Note that we convert the integer values of input['y'] to one hot here
 fwd_prop = seq1(inputs['X'])
