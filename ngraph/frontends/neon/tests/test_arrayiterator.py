@@ -122,6 +122,44 @@ def test_nowindow(input_seq, batch_size, seq_len, shuffle):
         assert np.all(sequence_seen)
 
 
+def test_iterator(input_seq, iterations):
+    # create iterator 
+    data_array = {'X': input_seq,
+                  'y': np.roll(input_seq, axis=0, shift=-1)}
+    it_array = SequentialArrayIterator(data_arrays=data_array, time_steps=time_steps,
+                                       batch_size=batch_size, tgt_key='y', shuffle=shuffle,
+                                       total_iterations=iterations)
+
+    # create expected numpy samples --> set
+    input_seq2 = np.copy(input_seq)
+    input_seq2 = input_seq2[:seq_len * batch_size * (len(input_seq) // seq_len // batch_size)]
+
+    expected_sequences = set()
+    sample2loc = dict()
+    
+    def samples2charlist():
+        # TODO code here
+
+    # for 1 iteration
+    for i in range(len(input_seq2)//seq_len):
+        idcs = np.arange(i * seq_len, (i + 1) * seq_len) % len(input_seq)
+        sample = samples2charlist(input_seq[idcs])
+        expected_sequences.add(sample)
+        sample2loc[sample] = i
+
+    count = 0
+    for idx, iter_val in enumerate(it_array):
+        # for every sample in this batch
+        minibatch = data_array['X']
+        for j, sample in enumerate(minibatch):
+            assert sample in expected_sequences  # check sequence is valid
+            expected_sequences.pop(sample) 
+            if (idx * batch_size + j ) == sample2loc[sample]:
+                count += 1
+    assert count < some fraction of number of sequences  # check shuffle happened
+    assert len(expected_sequnces) == 0      # check every sequence appeared in iterator
+            
+
 @pytest.mark.parametrize("strides", [3, 8])
 def test_rolling_window(input_seq, batch_size, seq_len, strides):
     # This test checks if the rolling window works
