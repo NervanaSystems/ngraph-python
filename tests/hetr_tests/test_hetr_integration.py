@@ -407,42 +407,6 @@ def test_recvop_tensorupdate():
                                             [8., 8., 8., 8.]])
 
 
-def test_terminate_op():
-
-    class TerminateOp(ng.Op):
-
-        def __init__(self, **kwargs):
-            super(TerminateOp, self).__init__(**kwargs)
-
-        @property
-        def has_side_effects(self):
-            return True
-
-    baseline = active_children()
-    termOp = TerminateOp()
-    assert len(baseline) == 0
-    with ExecutorFactory() as ex:
-        with pytest.raises(RuntimeError) as excinfo:
-            ex.executor(termOp)
-        assert 'Cannot find op_type of TerminateOp in any ngraph.op_graph modules' \
-            in str(excinfo.value)
-        assert len(active_children()) == 0
-    assert len(active_children()) == len(baseline)
-
-
-def test_process_leak():
-    baseline = active_children()
-    with ng.metadata(device_id=('0')):
-        x = ng.constant(2)
-    assert len(active_children()) == 0
-    with ExecutorFactory() as ex:
-        comp = ex.executor(x)
-        assert len(active_children()) == 0
-        comp()
-        assert len(active_children()) == 0
-    assert len(active_children()) == len(baseline)
-
-
 class ClosingHetrServers():
     def __init__(self, ports):
         self.tmpfile = tempfile.NamedTemporaryFile(dir=os.path.dirname(os.path.realpath(__file__)),
