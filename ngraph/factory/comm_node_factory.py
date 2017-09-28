@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, CPUQueueSendOp, \
-    CPUQueueRecvOp, CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
-    CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
-    CPUQueueBroadcastRecvOp, GPUCudaGatherSendOp, GPUCudaGatherRecvOp, \
-    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaAllReduceOp
+from ngraph.op_graph.comm_nodes import \
+    CPUMlslSendOp, CPUMlslRecvOp, \
+    CPUMlslGatherSendOp, CPUMlslGatherRecvOp, \
+    CPUMlslScatterSendOp, CPUMlslScatterRecvOp, \
+    CPUMlslAllReduceStartOp, CPUMlslAllReduceWaitOp, \
+    CPUMlslBroadcastSendOp, CPUMlslBroadcastRecvOp, \
+    GPUQueueSendOp, GPUQueueRecvOp, \
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, \
+    GPUCudaScatterRecvOp, GPUCudaAllReduceOp
 
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
@@ -127,6 +131,8 @@ class CommNodePair(object):
                 comm_type=comm_type,
                 to_node=to_node,
                 send_node=self.send_node)
+            self.send_node.metadata['peer_id'] = int(self.recv_node.metadata['device_id'])
+            self.recv_node.metadata['peer_id'] = int(self.send_node.metadata['device_id'])
 
     def get_send_node(self):
         return self.send_node
@@ -223,8 +229,8 @@ class CPUCommNodeFactory(CommNodeFactory):
 
     def send_recv_types(self, location):
         types = [
-            ('remote', 'mpi'),
-            ('local', 'queue'),
+            ('remote', 'mlsl'),
+            ('local', 'mlsl')
         ]
 
         send_recv_types = defaultdict(list)
@@ -235,49 +241,45 @@ class CPUCommNodeFactory(CommNodeFactory):
 
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
-            if comm_type == 'queue':
-                return CPUQueueSendOp(
-                    from_node=from_node)
+            return CPUMlslSendOp(
+                from_node=from_node)
         elif node_type == 'recv':
-            if comm_type == 'queue':
-                return CPUQueueRecvOp(
-                    to_node=to_node,
-                    send_node=send_node)
+            return CPUMlslRecvOp(
+                to_node=to_node,
+                send_node=send_node)
         elif node_type == 'scatter_send':
-            if comm_type == 'queue':
-                return CPUQueueScatterSendOp(
-                    from_node=from_node,
-                    to_node=to_node)
+            return CPUMlslScatterSendOp(
+                from_node=from_node,
+                to_node=to_node)
         elif node_type == 'scatter_recv':
-            if comm_type == 'queue':
-                return CPUQueueScatterRecvOp(
-                    to_node=to_node,
-                    send_node=send_node)
+            return CPUMlslScatterRecvOp(
+                to_node=to_node,
+                send_node=send_node)
         elif node_type == 'gather_send':
-            if comm_type == 'queue':
-                return CPUQueueGatherSendOp(
-                    from_node=from_node)
+            return CPUMlslGatherSendOp(
+                from_node=from_node)
         elif node_type == 'gather_recv':
-            if comm_type == 'queue':
-                return CPUQueueGatherRecvOp(
-                    from_node=from_node,
-                    to_node=to_node,
-                    send_node=send_node)
+            return CPUMlslGatherRecvOp(
+                from_node=from_node,
+                to_node=to_node,
+                send_node=send_node)
         elif node_type == 'broadcast_send':
-            if comm_type == 'queue':
-                return CPUQueueBroadcastSendOp(
-                    from_node=from_node,
-                    to_node=to_node)
+            return CPUMlslBroadcastSendOp(
+                from_node=from_node,
+                to_node=to_node)
         elif node_type == 'broadcast_recv':
-            if comm_type == 'queue':
-                return CPUQueueBroadcastRecvOp(
-                    to_node=to_node,
-                    send_node=send_node)
+            return CPUMlslBroadcastRecvOp(
+                to_node=to_node,
+                send_node=send_node)
         elif node_type == 'allreduce':
-            if comm_type == 'queue':
-                return CPUQueueAllReduceOp(
-                    input_node=from_node,
-                    func=from_node.metadata['reduce_func'])
+            start_node = CPUMlslAllReduceStartOp(
+                input_node=from_node,
+                func=from_node.metadata['reduce_func'])
+            wait_node = CPUMlslAllReduceWaitOp(
+                input_node=from_node,
+                start_node=start_node,
+                func=from_node.metadata['reduce_func'])
+            return dict(start_node=start_node, wait_node=wait_node)
         else:
             assert False, "Not supported!!!"
 
