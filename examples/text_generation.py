@@ -244,7 +244,7 @@ learning_rate_policy = {'name': 'schedule',
                         'gamma': 0.95,
                         'base_lr': 0.01}
 optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                    iteration=inputs['iteration'])
+                                    iteration=inputs['iteration'])
 # Define the loss function (Cross entropy loss)
 # Note that we convert the integer values of input['y'] to one hot here
 fwd_prop = seq1(inputs['X'])
