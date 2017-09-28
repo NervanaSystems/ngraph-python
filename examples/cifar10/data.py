@@ -25,10 +25,11 @@ def ingest_cifar10(root_dir, padded_size=32, overwrite=False):
     '''
     Save CIFAR-10 dataset as PNG files
     '''
-    out_dir = os.path.join(root_dir, 'cifar10')
+    #out_dir = os.path.join(root_dir, 'cifar10')
+    out_dir = root_dir
 
-    set_names = ('train', 'valid')
-    manifest_files = [os.path.join(out_dir, setn + '-index.csv') for setn in set_names]
+    set_names = ('train', 'val')
+    manifest_files = [os.path.join(out_dir, setn + '-index-tabbed.csv') for setn in set_names]
 
     if (all([os.path.exists(manifest) for manifest in manifest_files]) and not overwrite):
         return manifest_files
