@@ -120,7 +120,7 @@ def update_comm_deps(ops):
                         r.add_control_dep(op)
 
 
-def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
+def clone_graph(root, clone_id, parallel_axis):
     """
     clone graph with serde (serialization)
     input:
@@ -147,9 +147,8 @@ def clone_graph(root, clone_id, shared_queues_idx, parallel_axis, num_clones):
             op.metadata['device_id'] = str(clone_id)
 
             if isinstance(op, (ScatterRecvOp, GatherSendOp, AllReduceOp, BroadcastRecvOp)):
-                if hasattr(orig_ops[op.uuid], 'shared_queues'):
-                    op._shared_queues = orig_ops[op.uuid].shared_queues
-                op.idx = shared_queues_idx
+                # for gpu communication op buffer
+                op.idx = int(clone_id)
                 if isinstance(op, (ScatterRecvOp, BroadcastRecvOp)):
                     op._send_node = orig_ops[op.uuid].send_node()
 
