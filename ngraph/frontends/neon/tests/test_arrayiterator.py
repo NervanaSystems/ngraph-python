@@ -43,17 +43,18 @@ def seq_len(request):
     return request.param
 
 
+"""
 @pytest.mark.parametrize("shuffle", [True, False])
 def test_nowindow(input_seq, batch_size, seq_len, shuffle):
-    """
-    This test checks shuffle and no-shuffle option, with non-overlapping windows
+
+    This test checks no-shuffle option, with non-overlapping windows
     We check only the first sample in each batch
-    """
     # Truncate input sequence such that last section that doesn't fit in a batch
     # is thrown away
-    input_seq = input_seq[:seq_len * batch_size * (len(input_seq) // seq_len // batch_size)]
     data_array = {'X': input_seq,
                   'y': np.roll(input_seq, axis=0, shift=-1)}
+
+    input_seq = input_seq[:seq_len * batch_size * (len(input_seq) // seq_len // batch_size)]
     time_steps = seq_len
     iterations = None
 
@@ -120,45 +121,86 @@ def test_nowindow(input_seq, batch_size, seq_len, shuffle):
     # Make sure all sequences are seen (in shuffle mode)
     if shuffle:
         assert np.all(sequence_seen)
+"""
 
 
-def test_iterator(input_seq, iterations):
-    # create iterator 
-    data_array = {'X': input_seq,
+def test_nowindow(input_seq, batch_size, seq_len):
+    """
+    This test checks no-shuffle option, with non-overlapping windows
+    Goes over the dataset just once
+    """
+    # Create the iterator
+    data_array = {'X': np.copy(input_seq),
                   'y': np.roll(input_seq, axis=0, shift=-1)}
-    it_array = SequentialArrayIterator(data_arrays=data_array, time_steps=time_steps,
-                                       batch_size=batch_size, tgt_key='y', shuffle=shuffle,
+    iterations = None
+    it_array = SequentialArrayIterator(data_arrays=data_array, time_steps=seq_len,
+                                       batch_size=batch_size, tgt_key='y', shuffle=False,
                                        total_iterations=iterations)
 
-    # create expected numpy samples --> set
-    input_seq2 = np.copy(input_seq)
-    input_seq2 = input_seq2[:seq_len * batch_size * (len(input_seq) // seq_len // batch_size)]
+    # Cut off the last samples of the input sequence that don't fit in a batch
+    no_samples = seq_len * batch_size * (len(input_seq) // seq_len // batch_size)
+    target_seq = input_seq[1:no_samples + 1]
+    input_seq = input_seq[:no_samples]
 
-    expected_sequences = set()
-    sample2loc = dict()
-    
-    def samples2charlist():
-        # TODO code here
+    for idx, iter_val in enumerate(it_array):
+        # Start of the array needs to be time_steps * idx * batch_size
+        start_idx = seq_len * idx * batch_size
+        idcs = np.arange(start_idx, start_idx + seq_len * batch_size) % input_seq.shape[0]
 
-    # for 1 iteration
-    for i in range(len(input_seq2)//seq_len):
-        idcs = np.arange(i * seq_len, (i + 1) * seq_len) % len(input_seq)
-        sample = samples2charlist(input_seq[idcs])
-        expected_sequences.add(sample)
-        sample2loc[sample] = i
+        # Reshape the input sequence into batches
+        reshape_dims = (batch_size, seq_len)
+        if len(input_seq.shape) > 1:
+            reshape_dims = (batch_size, seq_len, input_seq.shape[1])
+        # expected_x will have contigous non-overlapping samples
+        expected_x = input_seq[idcs].reshape(reshape_dims)
+        expected_y = target_seq[idcs].reshape(reshape_dims)
+
+        # We are not shuffling, consecutive samples are contiguous
+        # They will also be non-overlapping
+        assert np.array_equal(expected_x, iter_val['X'])
+        assert np.array_equal(expected_y, iter_val['y'])
+
+
+def test_shuffle(input_seq, batch_size, seq_len):
+    def sample2char(sample):
+        # Converts a numpy array into a single string
+        # sample is a numpy array
+        str_array = ''.join(['%1.2f' % i for i in sample.flatten()])
+        return str_array
+    # create iterator
+    data_array = {'X': np.copy(input_seq),
+                  'y': np.roll(input_seq, axis=0, shift=-1)}
+    it_array = SequentialArrayIterator(data_arrays=data_array, time_steps=seq_len,
+                                       batch_size=batch_size, tgt_key='y', shuffle=True,
+                                       total_iterations=None)
+
+    # Cut off the last samples of the input sequence that don't fit in a batch
+    no_batches = len(input_seq) // seq_len // batch_size
+    no_samples = batch_size * no_batches
+    used_steps = seq_len * no_samples
+    input_seq = input_seq[:used_steps]
+
+    # Reshape the input sequence into batches
+    reshape_dims = (no_samples, seq_len)
+    if len(input_seq.shape) > 1:
+        reshape_dims = (no_samples, seq_len, input_seq.shape[1])
+    expected_x = input_seq.reshape(reshape_dims)
+    # Convert each sample into text and build a set
+    set_x = set([sample2char(sample) for sample in expected_x])
+    sample2loc = {sample2char(sample): idx for idx, sample in enumerate(expected_x)}
 
     count = 0
     for idx, iter_val in enumerate(it_array):
         # for every sample in this batch
-        minibatch = data_array['X']
-        for j, sample in enumerate(minibatch):
-            assert sample in expected_sequences  # check sequence is valid
-            expected_sequences.pop(sample) 
-            if (idx * batch_size + j ) == sample2loc[sample]:
+        for j, sample in enumerate(iter_val['X']):
+            txt_sample = sample2char(sample)
+            assert txt_sample in set_x  # check sequence is valid
+            set_x.discard(txt_sample)
+            if (idx * batch_size + j) == sample2loc[txt_sample]:
                 count += 1
-    assert count < some fraction of number of sequences  # check shuffle happened
-    assert len(expected_sequnces) == 0      # check every sequence appeared in iterator
-            
+    assert count < (len(expected_x) * .5)  # check shuffle happened
+    assert len(set_x) == 0      # check every sequence appeared in iterator
+
 
 @pytest.mark.parametrize("strides", [3, 8])
 def test_rolling_window(input_seq, batch_size, seq_len, strides):
