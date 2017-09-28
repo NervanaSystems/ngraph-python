@@ -1944,6 +1944,9 @@ class BroadcastOp(IndexOp):
             x, axes=axes, **kwargs
         )
 
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], axes=self.axes)
+
     def transform_tensor_description(self, tensor_description):
         return tensor_description.broadcast(self.axes)
 
@@ -2767,6 +2770,9 @@ class RngOp(TensorOp):
 
     def generate_adjoints(self, adjoints, delta, x):
         x.generate_add_delta(adjoints, delta)
+
+    def copy_with_new_args(self, args):
+        return type(self)(self.distribution, self.params, *args)
 
 
 def uniform(x, low=0.0, high=1.0):
@@ -3691,6 +3697,48 @@ def squared_L2(x, out_axes=None, reduction_axes=None):
     return sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes)
 
 
+def L2_norm(x, eps=1e-8, out_axes=None, reduction_axes=None):
+    """
+    L2 norm of the input tensor
+
+    Args:
+        x (TensorOp): Tensor
+        eps (Scalar): Small non-negative number to prevent divide by
+                      zero in the derivative of squareroot. Default is
+                      1e-8.
+        reduction_axes: if supplied, return the norm on these axes
+                        instead. Default is sample axes.
+    Returns:
+        TensorOp: The result.
+    """
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sqrt(eps + sum(x * x, out_axes=out_axes, reduction_axes=reduction_axes))
+
+
+def L1_norm(x, out_axes=None, reduction_axes=None):
+    """
+    L1 norm of the input tensor
+
+    Args:
+        x (TensorOp): Tensor
+        out_axes:
+        reduction_axes: if supplied, return the norm on these axes
+                        instead. Default is sample axes.
+    Returns:
+        TensorOp: The result.
+    """
+    if reduction_axes is None:
+        if out_axes is None:
+            reduction_axes = x.axes.sample_axes()
+        else:
+            reduction_axes = x.axes - make_axes(out_axes)
+    return sum(absolute(x), out_axes=out_axes, reduction_axes=reduction_axes)
+
+
 class DotLowDimension(TensorOp):
 
     def __init__(self, x, y, axes, bias=None, **kwargs):
@@ -3956,7 +4004,7 @@ def pad(x, paddings, axes=None):
         in which case the padding will be symmetrical, or a tuple
         of the form (before, after)
       axes: the axes to be given to the padded tensor.
-        If unsupplied, we create anonymous axes of the correct lengths.
+        If unsupplied, we create new axes of the correct lengths.
 
     Returns:
         TensorOp: symbolic expression for the padded tensor
@@ -3983,7 +4031,7 @@ def pad(x, paddings, axes=None):
     paddings = tuple(pad_to_tuple(pad) for pad in paddings)
     if axes is None:
         axes = make_axes(
-            make_axis(length=axis.length + pad[0] + pad[1])
+            make_axis(length=axis.length + pad[0] + pad[1], name=axis.name)
             if pad != (0, 0) else axis
             for axis, pad in zip(x.axes, paddings)
         )
@@ -4178,6 +4226,10 @@ class DerivOp(ValueOp):
         else:
             adjoint = adjoints[independent.forwarded.tensor]
             self.value_tensor = broadcast(adjoint.forwarded, axes=independent.axes)
+
+        # add hetr metadata to the deriv op
+        # should be allreduced across data-parallel workers
+        self.value_tensor.metadata['reduce_func'] = 'sum'
 
 
 def deriv(dependent, independent, error=None):

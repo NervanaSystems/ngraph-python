@@ -21,7 +21,7 @@ from __future__ import division
 from __future__ import print_function
 from benchmark import Benchmark
 from fake_data_generator import generate_data
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
+from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
@@ -82,7 +82,7 @@ class mini_residual_network(Sequential):
         if activation:
             layers.append(Activation(Rectlin()))
 
-        layers.append(Pool2D(8, strides=2, op='avg'))
+        layers.append(Pooling((8, 8), strides=2, pool_type='avg'))
         if dataset == 'cifar10':
             ax.Y.length = 10
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),

@@ -28,7 +28,7 @@ from builtins import range
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Layer, Sequential
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
+from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import make_bound_computation, make_default_callbacks, loop_train  # noqa
@@ -101,7 +101,7 @@ class residual_network(Sequential):
 
         layers.append(BatchNorm())
         layers.append(Activation(Rectlin()))
-        layers.append(Pool2D(8, op='avg'))
+        layers.append(Pooling((8, 8), pool_type='avg'))
         layers.append(Affine(axes=ax.Y,
                              weight_init=KaimingInit(),
                              activation=Softmax()))

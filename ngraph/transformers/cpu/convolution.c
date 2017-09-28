@@ -388,16 +388,18 @@ void create_mkldnn_conv_bprop_data_kernel(
 
 // src - diff_dst
 // weights - diff_weights
+// bias - diff_bias
 // dst - fprop_src
 void create_mkldnn_conv_bprop_weights_kernel(
-    mkldnn_engine_t engine, int src_dims, int weights_dims, int dst_dims,
-    int* src_sizes, int* weights_sizes, int* dst_sizes, int* strides,
-    int* padding, mkldnn_memory_desc_t* input_src_md,
+    mkldnn_engine_t engine, int src_dims, int weights_dims, int bias_dims, 
+    int dst_dims, int* src_sizes, int* weights_sizes, int* bias_sizes, 
+    int* dst_sizes, int* strides, int* padding, 
+    mkldnn_memory_desc_t* input_src_md,
     mkldnn_memory_desc_t* input_weights_md,
     mkldnn_memory_desc_t* input_dst_md, mkldnn_data_type_t data_type,
     mkldnn_opkernel_t opkernel) {
   mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_dst_md,
-      mkldnn_memory_desc_weights_md;
+      mkldnn_memory_desc_diff_bias_md, mkldnn_memory_desc_weights_md;
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                     src_sizes, data_type, mkldnn_any));
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_weights_md,
@@ -405,11 +407,23 @@ void create_mkldnn_conv_bprop_weights_kernel(
                                     mkldnn_any));
   MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_dst_md, dst_dims,
                                     dst_sizes, data_type, mkldnn_any));
+  if (bias_sizes) {
+    MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_diff_bias_md, bias_dims,
+                                      bias_sizes, data_type, mkldnn_x));
+  }
+
   mkldnn_convolution_desc_t conv_desc_weights;
-  MKL_CHECK(mkldnn_convolution_backward_weights_desc_init(
-      &conv_desc_weights, mkldnn_convolution_direct, &mkldnn_memory_desc_dst_md,
-      &mkldnn_memory_desc_weights_md, NULL, &mkldnn_memory_desc_src_md, strides,
-      padding, padding, mkldnn_padding_zero));
+  if (bias_sizes) {
+    MKL_CHECK(mkldnn_convolution_backward_weights_desc_init(
+        &conv_desc_weights, mkldnn_convolution_direct, &mkldnn_memory_desc_dst_md,
+        &mkldnn_memory_desc_weights_md, &mkldnn_memory_desc_diff_bias_md, &mkldnn_memory_desc_src_md, strides,
+        padding, padding, mkldnn_padding_zero));
+  } else {
+    MKL_CHECK(mkldnn_convolution_backward_weights_desc_init(
+        &conv_desc_weights, mkldnn_convolution_direct, &mkldnn_memory_desc_dst_md,
+        &mkldnn_memory_desc_weights_md, NULL, &mkldnn_memory_desc_src_md, strides,
+        padding, padding, mkldnn_padding_zero));
+  }
   MKL_CHECK(mkldnn_primitive_desc_create(&opkernel->op_desc, &conv_desc_weights,
                                          engine, NULL));
 
@@ -442,8 +456,15 @@ void create_mkldnn_conv_bprop_weights_kernel(
     create_mkldnn_tensor(weights_dims, weights_sizes, data_type, mkldnn_ihwo,
                          engine, &(opkernel->outputs[0]));
   }
+  
+  if (bias_sizes)
+  {
+    create_mkldnn_tensor(bias_dims, bias_sizes, data_type, mkldnn_x,
+                           engine, &(opkernel->outputs[1]));
+  }
+
   opkernel->num_inputs = 2;
-  opkernel->num_outputs = 1;
+  opkernel->num_outputs = bias_sizes ? 2 : 1;
 
   // Reorder inputs
   if (!mkldnn_memory_primitive_desc_equal(opkernel->inputs[0].desc,
@@ -496,6 +517,8 @@ void create_mkldnn_conv_bprop_weights_kernel(
   } else {
     opkernel->reorder_o[0] = NULL;
   }
+  if (bias_sizes) 
+    opkernel->reorder_o[1] = NULL;
 
   /* Allocate memory for internal format conversions */
   if (opkernel->reorder_i[0]) {
@@ -531,7 +554,10 @@ void create_mkldnn_conv_bprop_weights_kernel(
       opkernel->reorder_o[0] ? opkernel->internal_outputs[0].prim
                              : opkernel->outputs[0].prim;
 
-  const_mkldnn_primitive_t conv_dsts[] = {mkldnn_memory_prim_weights};
+  const_mkldnn_primitive_t conv_dsts[2];
+  conv_dsts[0] = mkldnn_memory_prim_weights;
+  if (bias_sizes)
+      conv_dsts[1] = opkernel->outputs[1].prim;
 
   /* create a convolution primitive */
   mkldnn_primitive_at_t conv_srcs[] = {

@@ -100,30 +100,36 @@ class ArrayIterator(object):
         self.start = 0
         self.index = 0
 
-    def __iter__(self):
+    def __next__(self):
         """
         Returns a new minibatch of data with each call.
 
         Yields:
             tuple: The next minibatch which includes both features and labels.
         """
-        i1 = self.start
-        while self.index < self.total_iterations:
-            i1 = (self.start + self.index * self.batch_size) % self.ndata
-            bsz = min(self.batch_size, self.ndata - i1)
-            oslice1 = slice(i1, i1 + bsz)
-            self.index += 1
 
-            if self.batch_size > bsz:
-                batch_bufs = {k: np.concatenate([src[oslice1], src[:self.batch_size - bsz]])
-                              for k, src in self.data_arrays.items()}
-            else:
-                batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.items()}
+        if self.index >= self.total_iterations:
+            raise StopIteration
 
-            batch_bufs['iteration'] = self.index
-            yield batch_bufs
+        i1 = (self.start + self.index * self.batch_size) % self.ndata
+        bsz = min(self.batch_size, self.ndata - i1)
+        oslice1 = slice(i1, i1 + bsz)
+        self.index += 1
 
-        self.start = (self.start + self.total_iterations * self.batch_size) % self.ndata
+        if self.batch_size > bsz:
+            batch_bufs = {k: np.concatenate([src[oslice1], src[:self.batch_size - bsz]])
+                          for k, src in self.data_arrays.items()}
+        else:
+            batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.items()}
+
+        batch_bufs['iteration'] = self.index
+        return batch_bufs
+
+    def next(self):
+        return self.__next__()
+
+    def __iter__(self):
+        return self
 
 
 class SequentialArrayIterator(object):

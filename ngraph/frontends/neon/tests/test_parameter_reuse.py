@@ -56,10 +56,10 @@ def test_inference_reuse_batch_norm(input_placeholder):
 
 def test_inference_reuse_conv(conv_input_placeholder):
 
-    fshape = {k: 1 for k in "TRSK"}
-    dilation = {"dil_{}".format(k): 1 for k in "hwd"}
-    padding = {"pad_{}".format(k): 0 for k in "hwd"}
-    strides = {"str_{}".format(k): 1 for k in "hwd"}
+    fshape = {k: 1 for k in "DHWK"}
+    dilation = {"dil_{}".format(k): 1 for k in "DHW"}
+    padding = {"pad_{}".format(k): 0 for k in "DHW"}
+    strides = {"str_{}".format(k): 1 for k in "DHW"}
     layer = ConvBase(fshape,
                      dummy_init,
                      dilation=dilation,
