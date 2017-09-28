@@ -34,8 +34,7 @@ STARTUP_TIME = 3
 
 def prepare_environment(hetr_device, num_device):
     if hetr_device == 'gpu':
-        os.environ["HETR_SERVER_GPU_NUM"] = str(num_device)
-        # pytest.skip('gpu test is not supported now.')
+        os.environ["HETR_SERVER_NUM"] = str(num_device)
 
 
 def test_singleton_device_id(hetr_device):
@@ -431,64 +430,6 @@ def test_process_leak():
         comp()
         assert len(active_children()) == 0
     assert len(active_children()) == len(baseline)
-
-
-@pytest.mark.parametrize('config', [
-    {
-        'device_id': ('0', '1', '2', '3'),
-        'x_input': [6, 3, 9, 10],
-        'func': 'mean',
-        'results': [7, 7, 7, 7],
-    },
-    {
-        'device_id': ('0', '1', '2', '3', '4', '5', '6', '7'),
-        'x_input': [5, 6, 11, 13, 2, 3, 5, 7],
-        'func': 'sum',
-        'results': [52, 52, 52, 52, 52, 52, 52, 52],
-    },
-])
-def test_allreduce_cpu_op(config):
-    class myThread(threading.Thread):
-        def __init__(self, y):
-            threading.Thread.__init__(self)
-            self.y = y
-
-        def run(self):
-            with closing(ngt.make_transformer_factory('cpu')()) as t:
-                comp = t.computation(self.y)
-                self.result = comp()
-
-        def get_result(self):
-            self.join()
-            return self.result
-
-    c = config
-    x = list()
-    y = list()
-    thread = list()
-    results = list()
-
-    with ng.metadata(device_id=c['device_id'],
-                     transformer='None',
-                     host_transformer='None'):
-        for i in c['x_input']:
-            x.append(ng.constant(i))
-
-    for i in range(len(c['device_id'])):
-        ar_op = CPUQueueAllReduceOp(x[i], c['func'])
-        if (i != 0):
-            ar_op.idx = i
-            ar_op._shared_queues = y[0].shared_queues
-        y.append(ar_op)
-
-    for i in range(len(c['device_id'])):
-        thread.append(myThread(y[i]))
-        thread[i].start()
-
-    for i in range(len(c['device_id'])):
-        results.append(thread[i].get_result())
-
-    np.testing.assert_array_equal(results, c['results'])
 
 
 class ClosingHetrServers():

@@ -216,7 +216,7 @@ def test_allreduce_hint(hetr_device, config):
     if hetr_device == 'gpu':
         if 'gpu' not in ngt.transformer_choices():
             pytest.skip("GPUTransformer not available")
-        os.environ["HETR_SERVER_GPU_NUM"] = str(len(config['device_id']))
+        os.environ["HETR_SERVER_NUM"] = str(len(config['device_id']))
 
     input = config['input']
     device_id = config['device_id']
