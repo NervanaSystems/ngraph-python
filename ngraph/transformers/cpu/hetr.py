@@ -125,10 +125,7 @@ class HetrLocals(object):
 
             # todo: replace by real reduce operation
             if gather_recv_op.use_reduce:
-                divisor = np.full(shape=out.shape,
-                                  fill_value=float(self.process_count),
-                                  dtype='float32')
-                out[...] = np.divide(out, divisor)
+                out /= self.process_count
 
         return out
 
@@ -192,10 +189,7 @@ class HetrLocals(object):
             # sum reduction is performed inside MLSL
             pass
         elif allreduce_op.reduce_func == 'mean':
-            divisor = np.full(shape=start_node.arr.shape,
-                              fill_value=float(self.process_count),
-                              dtype='float32')
-            start_node.arr[...] = np.divide(start_node.arr, divisor)
+            start_node.arr /= self.process_count
         else:
             raise RuntimeError('Reduce function {} is not supported.'
                                .format(allreduce_op.reduce_func))
