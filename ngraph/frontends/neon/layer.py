@@ -1125,7 +1125,6 @@ class BatchNorm(Layer):
 
     @SubGraph.scope_op_creation
     def __call__(self, in_obj, **kwargs):
-
         in_axes = in_obj.axes
         if in_axes.channel_axis() is None:
             red_axes = ng.make_axes(in_axes.recurrent_axis()) + in_axes.batch_axes()
@@ -1145,7 +1144,8 @@ class BatchNorm(Layer):
                                     metadata={"label": LABELS["bias"]}).named('beta')
             self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
 
-        in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
+        in_obj = ng.flatten(ng.axes_with_order(in_obj, out_axes | red_axes),
+                            out_axes | red_axes.flatten(force=True))
         xmean = ng.mean(in_obj, out_axes=out_axes)
         xvar = ng.variance(in_obj, out_axes=out_axes)
 

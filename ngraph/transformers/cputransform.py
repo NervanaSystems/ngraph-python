@@ -1055,7 +1055,7 @@ from ngraph.transformers.cputransform import align_ndarray
 
         mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
-        module.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
+        module.execute("mkldnn = Mkldnn(r'{}')".format(mkldnn_engine_path))
         module.execute("mkldnn.open()")
         self.mkldnn = module['mkldnn']
         if self.use_mlsl:
