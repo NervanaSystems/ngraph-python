@@ -27,7 +27,7 @@ def reference_conv1d(inputs, filters, activation, strides=1, padding=0):
     for t in range(time_steps_out):
         for k in range(K):
             for n in range(batch_size):
-                result[k, t, n] = np.sum(inputs[:, t:t+filter_width, n] * filters[:, :, k])
+                result[k, t, n] = np.sum(inputs[:, t:t + filter_width, n] * filters[:, :, k])
     result = activation(result)
     # expand dimensions from K, time_steps, batch_size to (K, 1, time_steps, 1, batch_size)
     result = np.expand_dims(np.expand_dims(result, axis=1), axis=3)
@@ -169,8 +169,8 @@ def test_conv1d(transformer_factory, filter_width, num_filters, strides, padding
     filter_init = GaussianInit()
 
     conv1d = Convolution((filter_width, num_filters), filter_init,
-                           strides=strides, padding=padding, dilation=dilation,
-                           bias_init=None, activation=Rectlin(), batch_norm=None)
+                         strides=strides, padding=padding, dilation=dilation,
+                         bias_init=None, activation=Rectlin(), batch_norm=None)
 
     result_op = conv1d(inputs, channel_axes='F', spatial_axes={'W': 'REC'})
 
@@ -179,7 +179,8 @@ def test_conv1d(transformer_factory, filter_width, num_filters, strides, padding
         filter_vals = transformer.add_computation(ng.computation(conv1d.conv.W))()
 
         result_ng = result_comp(input_vals)
-        result_np = np.squeeze(reference_conv1d(input_vals, filter_vals, lambda x: np.maximum(0, x)))
+        result_np = np.squeeze(reference_conv1d(input_vals, filter_vals,
+                                                lambda x: np.maximum(0, x)))
         ng.testing.assert_allclose(result_ng, result_np)
 
 
