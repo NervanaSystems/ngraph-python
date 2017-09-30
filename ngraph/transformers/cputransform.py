@@ -68,11 +68,23 @@ from ngraph.op_graph.comm_nodes import CPUMlslSendOp, CPUMlslRecvOp, \
 from ngraph.util.trace_events import is_tracing_enabled
 
 
+try:
+    import mlsl
+    import ctypes
+    import atexit
+    mlsl_obj = mlsl.MLSL()
+    mlsl_obj.init()
+
+    def exit_func():
+        mlsl_obj.finalize()
+    atexit.register(exit_func)
+    use_mlsl = True
+except ImportError:
+    use_mlsl = False
+
+
 def align_ndarray(element_count, alignment, dtype):
-    try:
-        import mlsl
-        import ctypes
-        mlsl_obj = mlsl.MLSL()
+    if use_mlsl:
         if dtype.name == 'float32':
             c_type_name = 'c_float'
         elif dtype.name == 'float64':
@@ -84,7 +96,7 @@ def align_ndarray(element_count, alignment, dtype):
         array = ctypes.cast(mlsl_buf, ctypes.POINTER(getattr(ctypes, c_type_name) * element_count))
         np_array = np.frombuffer(array.contents, dtype)
         return np_array
-    except ImportError:
+    else:
         x = np.empty(element_count + (alignment - 1), dtype)
         offset = (x.ctypes.data % alignment) // dtype.itemsize
         padding = 0 if offset == 0 else (alignment - offset)
@@ -241,29 +253,9 @@ class CPUDeviceTensor(DeviceTensor):
         self.transformer.allocate_storage_code.append("def {}():", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
-            if self.dtype.name == 'float32':
-                c_type_name = 'c_float'
-            elif self.dtype.name == 'float64':
-                c_type_name = 'c_double'
-            else:
-                c_type_name = None
-
-            if c_type_name is not None and self.transformer.use_mlsl:
-                self.transformer.allocate_storage_code.append(
-                    """try:
-    type_size = ctypes.sizeof(ctypes.{3}(1))
-    mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
-    array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(ctypes.{3} * {1}))
-    np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
-    {0}(np_array_{0})
-except NameError as error:
-    print str(error)
-    {0}(np.empty({1}, dtype=np.dtype('{2}')))""",
-                    self.update_name, elts, self.dtype.name, c_type_name)
-            else:
-                self.transformer.allocate_storage_code.append(
-                    "{}(np.empty({}, dtype=np.dtype('{}')))",
-                    self.update_name, elts, self.dtype.name)
+            self.transformer.allocate_storage_code.append(
+                "{}(np.empty({}, dtype=np.dtype('{}')))",
+                self.update_name, elts, self.dtype.name)
 
             self.transformer.allocate_storage_code.endl()
 
@@ -844,13 +836,6 @@ class CPUTransformer(ExecutionGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    import imp
-    try:
-        imp.find_module('mlsl')
-        use_mlsl = True
-    except ImportError:
-        use_mlsl = False
-
     def __init__(self, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
         self.device_computation = None
@@ -919,7 +904,7 @@ class CPUTransformer(ExecutionGraphTransformer):
 
     def start_define_computation(self, computation_decl):
 
-        if self.use_mlsl:
+        if use_mlsl:
             self.exop_codegen.append("class {}(HetrLocals, ConvLocals):",
                                      computation_decl.computation_op.name)
         else:
@@ -944,7 +929,7 @@ self.__profiler_stop__  = list()
 
             self.exop_codegen.append("def close(self):")
             with indenting(self.exop_codegen):
-                if self.use_mlsl:
+                if use_mlsl:
                     self.exop_codegen.append('HetrLocals.close(self)')
                 else:
                     self.exop_codegen.append('pass')
@@ -1005,7 +990,7 @@ self.__profiler_stop__  = list()
                   'pool_params': device_computation.pool_params,
                   'conv_slices': device_computation.conv_slices,
                   'pool_slices': device_computation.pool_slices}
-        if self.use_mlsl:
+        if use_mlsl:
             params.update({'send_nodes': device_computation.send_nodes,
                            'recv_nodes': device_computation.recv_nodes,
                            'scatter_send_nodes': device_computation.scatter_send_nodes,
@@ -1040,8 +1025,6 @@ import numpy.ctypeslib as npct
 import itertools as itt
 from monotonic import monotonic as monotonic
 try:
-    import mlsl
-    import ctypes
     from ngraph.transformers.cpu.hetr import HetrLocals
 except ImportError:
     pass
@@ -1058,9 +1041,6 @@ from ngraph.transformers.cputransform import align_ndarray
         module.execute("mkldnn = Mkldnn(r'{}')".format(mkldnn_engine_path))
         module.execute("mkldnn.open()")
         self.mkldnn = module['mkldnn']
-        if self.use_mlsl:
-            module.execute("mlsl_obj = mlsl.MLSL()")
-            module.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -1084,21 +1064,17 @@ from ngraph.transformers.cputransform import align_ndarray
             try:
                 if self.globals.get('mkldnn', None) is not None:
                     self.globals.execute('mkldnn.close()')
-                if self.globals.get('mlsl_obj', None) is not None:
+
+                if use_mlsl:
                     for computation in self.device_computations.values():
                         comp_name = computation.computation_decl.computation_op.name
-                        self.globals.execute("""
-t_pool_exists = '{cname}_temporary_pool' in locals() or '{cname}_temporary_pool' in globals()
-p_pool_exists = '{cname}_persistent_pool' in locals() or '{cname}_persistent_pool' in globals()
-if t_pool_exists:
-    mem_pool = {cname}_temporary_pool
-    p = mem_pool.__array_interface__['data'][0]
-    mlsl_obj.free(p)
-if p_pool_exists:
-    mem_pool = {cname}_persistent_pool
-    p = mem_pool.__array_interface__['data'][0]
-    mlsl_obj.free(p)""".format(cname=comp_name))
-                    self.globals.execute('mlsl_obj.finalize()')
+                        pool_name = comp_name + '_temporary_pool'
+                        if pool_name in self.globals:
+                            mlsl_obj.free(self.globals[pool_name].__array_interface__['data'][0])
+                        pool_name = comp_name + '_persistent_pool'
+                        if pool_name in self.globals:
+                            mlsl_obj.free(self.globals[pool_name].__array_interface__['data'][0])
+
                 for computation in self.device_computations.values():
                     if hasattr(computation, 'executor') and computation.executor is not None:
                         computation.executor.close()
