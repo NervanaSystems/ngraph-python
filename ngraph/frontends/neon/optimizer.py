@@ -390,3 +390,73 @@ class Adam(LearningRateOptimizer):
                       variable - (scale_factor * self.ell * m) / (ng.sqrt(v) + self.epsilon))
         ])
         return updates
+
+
+class Adagrad(LearningRateOptimizer):
+    """
+    Adagrad optimization algorithm.
+
+    Adagrad is an algorithm that adapts the learning rate individually for each parameter
+    by dividing by the :math:`L_2`-norm of all previous gradients. Given the parameters
+    :math:`\\theta`, gradient :math:`\\nabla J`, accumulating norm :math:`G`, and smoothing
+    factor :math:`\\epsilon`, we use the update equations:
+
+    .. math::
+
+        G' = G + (\\nabla J)^2
+
+    .. math::
+
+        \\theta' = \\theta - \\frac{\\alpha}{\sqrt{G' + \\epsilon}} \\nabla J
+
+    where the smoothing factor :math:`\\epsilon` prevents from dividing by zero.
+    By adjusting the learning rate individually for each parameter, Adagrad adapts
+    to the geometry of the error surface. Differently scaled weights have appropriately scaled
+    update steps.
+
+    Example usage:
+
+    .. code-block:: python
+
+        import ngraph as ng
+        from ngraph.frontends.neon.optimizers import Adagrad
+
+        # use Adagrad with a learning rate of 1e-3
+        optimizer = Adagrad(learning_rate=1e-3, epsilon=1e-8)
+    """
+    metadata = {'layer_type': 'adagrad_optimizer'}
+
+    def __init__(
+        self,
+        learning_rate=1e-3,
+        epsilon=1e-8,
+        gradient_clip_norm=None,
+        gradient_clip_value=None,
+        **kwargs
+    ):
+        """
+        Class constructor.
+        Arguments:
+            learning_rate (float): the multiplication coefficient of updates
+            epsilon (float): numerical stability factor
+            gradient_clip_norm (float, optional): Target gradient norm.
+                                                  Defaults to None.
+            gradient_clip_value (float, optional): Value to element-wise clip
+                                                   gradients.
+                                                   Defaults to None.
+        """
+        super(Adagrad, self).__init__(learning_rate, **kwargs)
+        self.epsilon = epsilon
+        self.gradient_clip_norm = gradient_clip_norm
+        self.gradient_clip_value = gradient_clip_value
+
+    def variable_update(self, variable, grad, scale_factor):
+        grad = clip_gradient_value(grad, self.gradient_clip_value)
+        state = ng.persistent_tensor(axes=grad.axes, initial_value=0.)
+        updates = ng.sequential([
+            ng.assign(state, state + ng.square(grad)),
+            ng.assign(variable,
+                      variable - (scale_factor * self.lrate * grad)
+                      / (ng.sqrt(state + self.epsilon)))
+        ])
+        return updates
