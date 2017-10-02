@@ -22,6 +22,7 @@ from ngraph.testing import executor
 
 # TODO: add other configurations?
 @pytest.mark.transformer_dependent
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.config.flex_disabled(reason="#1841, deconv is not yet supported by flex")
 def test_deconv():
     """

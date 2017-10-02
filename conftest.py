@@ -92,3 +92,5 @@ def pytest_configure(config):
                                           reason="Randomly failing test for Flex")
     config.flex_skip_now = pytest.skip if config.getvalue("transformer") == "flexgpu" \
         else pass_method
+    config.argon_skip_now = pytest.skip if config.getvalue("transformer") == "argon" \
+        else pass_method

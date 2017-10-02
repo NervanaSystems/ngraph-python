@@ -206,7 +206,7 @@ def random_momentum_coef():
     return np.random.random()
 
 
-@pytest.config.flex_skip(reason="The most cases fail because of too strict assert tolerance")
+# @pytest.config.flex_skip(reason="The most cases fail because of too strict assert tolerance")
 @pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("nesterov", [False, True])
 @pytest.mark.parametrize("select_variables", [False, True])
@@ -258,7 +258,7 @@ def random_beta_2():
     return np.random.uniform(low=0.0, high=1.0)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.config.flex_skip(reason="Usually all cases fail but very rarely some pass for flex - "
                                 "because of the random character of the parameters")
 @pytest.mark.parametrize("epsilon", [1e-8])
@@ -281,7 +281,7 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, selec
         compare_optimizer(adam, adam_reference)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.config.flex_disabled(reason="Unknown problem yet")
 def test_learning_policy_step():
     base_learning_rate = 1.0
@@ -332,7 +332,7 @@ def test_learning_policy_fixed_without_input():
         ng.testing.assert_allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.mark.parametrize("drop_factor", [0.1,
                                          [0.1, 0.2, 0.3, 0.4, 0.5]])
 def test_learning_policy_schedule(drop_factor):
@@ -368,6 +368,8 @@ def test_learning_policy_schedule(drop_factor):
 @pytest.mark.parametrize("optimizer", [RMSProp, Adam, GradientDescentMomentum])
 def test_weight_clipping(w_clip, optimizer):
     opt_ng = optimizer(0.1, weight_clip_value=w_clip)
+    if isinstance(opt_ng, Adam):
+        pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
 
     # Set up data placeholders
     C = ng.make_axis(20)

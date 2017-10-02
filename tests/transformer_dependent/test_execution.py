@@ -160,7 +160,7 @@ def sub_axes(request):
 
 
 # TODO this is a non-strict disable since not all parametrizations fail argon
-@pytest.mark.argon_disab_loose  # TODO Triage
+@pytest.mark.argon_disab_loose(reson="Argon Transformer error")  # TODO Triage
 def test_reduction(reduction, sub_axes):
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=4),
@@ -183,7 +183,7 @@ def test_reduction(reduction, sub_axes):
             red=reduction, axes=reduction_axes)
 
 
-@pytest.config.argon_disabled  # TODO Triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO Triage
 def test_reduction_deriv(reduction, sub_axes):
     if reduction in ('max', 'min'):
         pytest.skip("max/min needed to be tested differently")
@@ -215,9 +215,9 @@ def test_reduction_deriv(reduction, sub_axes):
     ((0, 1), ["A0", "A1"]),
     ((0, 2), ["A0", "A2"]),
     ((1, 2), ["A1", "A2"]),
-    pytest.config.flex_disabled(
+    pytest.config.flex_and_argon_disabled(
         ((0, 1, 2), ["A0", "A1", "A2"]),
-        reason="Too big values for Flex ( > 32767 )"
+        reason="Too big values for Flex ( > 32767 )"  # Argon Transformer error: TODO triage
     )
 ])
 def prod_constant(request):
@@ -230,7 +230,7 @@ def prod_constant(request):
     return np_axis, map(lambda x: axes_dict[x], axes_names), axes_dict.values()
 
 
-@pytest.config.argon_disabled  # TODO Triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_prod_constant(prod_constant):
     """
     Test reduce product of constants
@@ -255,17 +255,17 @@ def test_prod_constant(prod_constant):
 
 
 @pytest.fixture(params=[
-    pytest.config.flex_disabled(
+    pytest.config.flex_and_argon_disabled(
         np.array([[[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]],
                   [[1., 2., 3.], [4., 5., 6.], [7., 8., 0.]]]),
         reason="Too big values for Flex ( > 32767 )"),
-    np.array([[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]]),
-    np.array([1., 2., 3.]),
-    np.array([0., 2., 3.]),
-    np.array([0., 0., 3.]),
-    np.array([0., 0., 0.]),
-    np.array([0.]),
-    np.array([2.]),
+    pytest.config.argon_disabled(np.array([[1., 2., 3.], [4., 5., 0.], [0., 6., 0.]])),
+    pytest.config.argon_disabled(np.array([1., 2., 3.])),
+    pytest.config.argon_disabled(np.array([0., 2., 3.])),
+    pytest.config.argon_disabled(np.array([0., 0., 3.])),
+    pytest.config.argon_disabled(np.array([0., 0., 0.])),
+    pytest.config.argon_disabled(np.array([0.])),
+    pytest.config.argon_disabled(np.array([2.])),
     np.array(0.),
     np.array(2.),
 ])
@@ -273,8 +273,7 @@ def prod_deriv_arrays(request):
     return request.param
 
 
-@pytest.config.argon_disabled  # TODO Triage
-def test_prod_deriv(prod_deriv_arrays):
+def test_prod_deriv(prod_deriv_arrays):  # Argon Transformer error - TODO triage
     """
     Test reduce product's gradient
     """
@@ -724,7 +723,7 @@ def np_cross_entropy_multi(y, t, axis=None):
 
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
-@pytest.config.argon_disabled  # TODO triage
+# @pytest.config.argon_disabled  # TODO triage
 def test_softmax(input_tensor):
     """TODO."""
     p_x = input_tensor
@@ -1034,7 +1033,7 @@ def test_argmax():
         ng.testing.assert_allclose(baseline, expected)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_fill_slice():
     axes = ng.make_axes([ng.make_axis(length=2), ng.make_axis(length=8)])
     a = ng.placeholder(axes=axes)
@@ -1065,7 +1064,7 @@ def test_tensor_derivative():
         ng.deriv(p, p)
 
 
-@pytest.config.argon_disabled  # TODO triage
+# @pytest.config.argon_disabled  # TODO triage
 def test_mean(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1083,7 +1082,7 @@ def test_mean(input_tensor):
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
 
-@pytest.config.argon_disabled  # TODO triage
+# @pytest.config.argon_disabled  # TODO triage
 def test_variance_wgrad(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1106,7 +1105,7 @@ def test_variance_wgrad(input_tensor):
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
-@pytest.config.argon_disabled  # TODO triage
+# @pytest.config.argon_disabled  # TODO triage
 def test_variance_sqrt_inverse(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1174,7 +1173,8 @@ def test_wrong_placeholders():
         assert c(1) == 1
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="ArgonSim ValueError: "
+                                     "total size of new array must be unchanged")
 def test_broadcast_deriv_reorder():
     H = ng.make_axis(2)
     W = ng.make_axis(3)

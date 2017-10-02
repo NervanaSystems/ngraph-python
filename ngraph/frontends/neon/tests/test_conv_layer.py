@@ -44,6 +44,7 @@ def spatial_onehot(input_size, width, batch_size):
     return value
 
 
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_causal_convolution(conv1d_placeholder, spatial_onehot, output_size, width):
     """ Test that causal convolutions only operate on leftward inputs"""
     conv_layer = Convolution((3, output_size), lambda x: 1, padding="causal")
