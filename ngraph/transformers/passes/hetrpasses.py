@@ -67,7 +67,16 @@ class CommunicationPass(GraphBuildingPass):
                 if pair.get_send_node():
                     self.send_nodes.add(pair.get_send_node())
                 if pair.get_recv_node():
-                    args.append(pair.get_recv_node())
+                    recv_node = pair.get_recv_node()
+                    if isinstance(recv_node, (dict)):
+                        start_node = recv_node['start_node']
+                        wait_node = recv_node['wait_node']
+                        args.append(start_node)
+                        op.add_control_dep(wait_node)
+                        start_node.invalidate_property_cache('all_deps')
+                        wait_node.invalidate_property_cache('all_deps')
+                    else:
+                        args.append(pair.get_recv_node())
             else:
                 args.append(arg)
 

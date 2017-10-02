@@ -26,16 +26,33 @@ follow the rest of the steps to install Nervana Graph.
 export MKLDNN_ROOT=/path/to/mkldnn/root
 ```
 
-### Multinode Support
-MPI is required for multinode support. Follow the instructions [here](https://www.open-mpi.org/) for Open-MPI.
+### Multi-node Support
+MPI is required for multi-node (multi-CPU and multi-GPU) support.  
+Download Intel MPI from [here](https://software.intel.com/en-us/intel-mpi-library)
+(select Linux OS, Intel MPI library product and go to 'Free Download' link).
+Intel MPI package contains SDK part (headers and compiler scripts) required for mpi4py installation.
+
+Install Intel MPI (use install.sh script from package).
+
+Setup Intel MPI environment:
 ```
-export MPI_ROOT=/path/to/mpi
+source <impi_install_path>/bin64/mpivars.sh
+```
+Intel MLSL is required for multi-CPU support in addtion to MPI.  
+Download Intel MLSL from [here](https://github.com/01org/MLSL/releases).
+
+Install Intel MLSL (follow the instructions [here](https://github.com/01org/MLSL/blob/master/README.md)).
+
+Setup Intel MLSL environment:
+```
+source <mlsl_install_path>/intel64/bin/mlslvars.sh
 ```
 Then, run
 ```
 make multinode_prepare
 ```
 
+### Nervana Graph installation
 We recommend installing Nervana Graph inside a virtual environment.
 
 To create and activate a Python 3 virtualenv:

@@ -805,6 +805,11 @@ class MklAddLayoutConversions(PeepholeGraphPass):
             mkl_layout = self.get_exop(op).output_decls[0].tensor_view_decl.mkl_layout
             reorder_op = MklReorderOp(
                 op, in_layout=mkl_layout, out_layout=None)
+
+            # FIXME: find better way to preserve metadata
+            if hasattr(op, 'metadata'):
+                reorder_op.metadata = op.metadata
+
             self.reorder_ops[op.name] = reorder_op
             self.init_mkldnn_reorder(reorder_op)
             return reorder_op

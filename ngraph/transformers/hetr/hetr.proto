@@ -3,10 +3,12 @@ syntax = "proto3";
 import "ngraph/op_graph/serde/ops.proto";
 
 service Hetr {
-    rpc BuildTransformer (BuildRequest) returns (BuildReply) {}
+    rpc BuildTransformer (BuildTransformerRequest) returns (BuildTransformerReply) {}
+    rpc CloseTransformer (CloseTransformerRequest) returns (CloseTransformerReply) {}
     rpc Computation (stream ComputationRequest) returns (ComputationReply) {}
     rpc FeedInput (FeedInputRequest) returns (FeedInputReply) {}
     rpc GetResults (GetResultsRequest) returns (GetResultsReply) {}
+    rpc Close (CloseRequest) returns (CloseReply) {}
 }
 
 message Value {
@@ -16,12 +18,21 @@ message Value {
     }
 }
 
-message BuildRequest {
+message BuildTransformerRequest {
     string transformer_type = 1;
 }
 
-message BuildReply {
+message BuildTransformerReply {
     bool status = 1;
+    string message = 2;
+}
+
+message CloseTransformerRequest {
+}
+
+message CloseTransformerReply {
+    bool status = 1;
+    string message = 2;
 }
 
 message ComputationRequest {
@@ -33,6 +44,7 @@ message ComputationRequest {
 
 message ComputationReply {
     int32 comp_id = 1;
+    string message = 2;
 }
 
 message FeedInputRequest {
@@ -42,6 +54,7 @@ message FeedInputRequest {
 
 message FeedInputReply {
     bool status = 1;
+    string message = 2;
 }
 
 message GetResultsRequest {
@@ -50,5 +63,13 @@ message GetResultsRequest {
 
 message GetResultsReply {
     bool status = 1;
-    repeated Value results = 2;
+    string message = 2;
+    repeated Value results = 3;
+}
+
+message CloseRequest {
+}
+
+message CloseReply {
+    string message = 1;
 }
