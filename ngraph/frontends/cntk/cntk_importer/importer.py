@@ -22,6 +22,41 @@ import numpy as np
 
 import ngraph as ng
 from ngraph.frontends.cntk.cntk_importer.ops_bridge import OpsBridge
+from ngraph.frontends.neon import GradientDescentMomentum
+
+
+def create_loss_and_learner(
+        model, labels, learning_rate,
+        momentum_coef=0.0, wdecay=0.0, nesterov=False,
+        gradient_clip_norm=None, gradient_clip_value=None):
+    """
+    Auxiliary function to create loss function (cross entropy and softmax)
+    and trainer using stochastic gradient descent with momentum.
+
+    Arguments:
+        model - imported model
+        labels - placeholder for one-hot labels array
+        learning_rate - learning rate for trainer
+        momentum_coef - coefficient of momentum (deafult 0.0)
+        wdecay - amount of weight decay (default 0.0)
+        nesterov - use nesterov accelerated gradient (dafault False)
+        gradient_clip_norm - target gradient norm (default None)
+        gradient_clip_value - value to element-wise clip gradients (default None)
+
+    Returns:
+        Loss function (mean for batch)
+    """
+    if model.axes.lengths != labels.axes.lengths:
+        labels = ng.Transpose(labels)
+    assert model.axes.lengths == labels.axes.lengths
+    model = ng.cast_axes(model, axes=labels.axes)
+
+    loss = ng.cross_entropy_multi(ng.softmax(model), labels)
+    optimizer = GradientDescentMomentum(
+        learning_rate, momentum_coef, wdecay,
+        gradient_clip_norm, gradient_clip_value, nesterov
+    )
+    return ng.sequential([optimizer(loss), ng.mean(loss, out_axes=())])
 
 
 def cross_entropy_with_softmax(model, labels):
@@ -30,7 +65,7 @@ def cross_entropy_with_softmax(model, labels):
     to imported model for training.
 
     Arguments:
-        model - imported CNTK model
+        model - imported model
         labels - placeholder for one-hot labels array
 
     Returns:
@@ -51,7 +86,7 @@ def classification_error(model, labels):
     imported model for testing.
 
     Arguments:
-        model - imported CNTK model
+        model - imported model
         labels - placeholder for one-hot labels array
 
     Returns:
@@ -110,7 +145,7 @@ class CNTKImporter:
                     stack.append(i.owner)
 
         if self.debug:
-            print("Functions used in model: " + str(functions))
+            print("Functions used in model: {}".format(', '.join(str(i) for i in functions)))
             print("All operations in model:")
             for i in visited:
                 print("  " + i + "(" + self.uid_op_map[i].op_name + ")")
@@ -126,14 +161,6 @@ class CNTKImporter:
         Returns:
             Translated operation.
         """
-        if self.debug:
-            for _ in range(len(inspect.stack())):
-                print(' ', end="")
-            print("Importing: " + cntk_op.uid + "(", end="")
-            for i in cntk_op.inputs:
-                print(i.uid + str(i.shape) + ",", end="")
-            print(")")
-
         inputs = []
         for i in cntk_op.inputs:
             axes = [
@@ -149,12 +176,6 @@ class CNTKImporter:
                     if temp is None:
                         raise ValueError("Error translating: " + uid)
                     else:
-                        if self.debug:
-                            for _ in range(len(inspect.stack()) + 1):
-                                print(' ', end="")
-                            print("Finished importing: " +
-                                  uid + str(cntk_op.shape) + " -> " +
-                                  temp.name + str(temp.shape.full_lengths))
                         self.uid_op_map[uid] = temp
                 inputs.append(temp)
             elif i.is_input:
@@ -174,7 +195,26 @@ class CNTKImporter:
                     inputs.append(ng.variable(axes, dtype, input_value).named(i.uid))
                 else:
                     raise ValueError("Unknown input: " + i.uid)
-        return self.ops_bridge(cntk_op, inputs)
+
+        if self.debug:
+            for _ in range(len(inspect.stack())):
+                print(' ', end="")
+            print("Importing: " + cntk_op.uid + str(cntk_op.shape) + ": ", end="")
+            for i in cntk_op.inputs:
+                print(i.uid + str(i.shape) + ", ", end="")
+            print("")
+
+        ng_op = self.ops_bridge(cntk_op, inputs)
+
+        if self.debug:
+            for _ in range(len(inspect.stack())):
+                print(' ', end="")
+            print("Imported: " + ng_op.name + str(ng_op.axes.lengths) + ": ", end="")
+            for i in inputs:
+                print(i.name + str(i.axes.lengths) + ", ", end="")
+            print("")
+
+        return ng_op
 
     def import_model(self, cntk_model):
         """
@@ -193,13 +233,6 @@ class CNTKImporter:
         if temp is None:
             raise ValueError("Error translating: " + cntk_model.root_function.uid)
         else:
-            if self.debug:
-                for _ in range(len(inspect.stack()) + 1):
-                    print(' ', end="")
-                print("Finished importing: " +
-                      cntk_model.root_function.uid + str(cntk_model.root_function.shape) + " -> " +
-                      temp.name + str(temp.shape.full_lengths))
-                print("")
             self.uid_op_map[cntk_model.root_function.uid] = temp
 
         return temp, self.placeholders

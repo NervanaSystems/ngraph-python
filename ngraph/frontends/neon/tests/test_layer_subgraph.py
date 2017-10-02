@@ -56,8 +56,8 @@ def test_layer_inputs(input_placeholder):
 
     layer(input_placeholder)
     assert len(layer.inputs) == 1
-    assert input_placeholder.name in layer.inputs
-    assert layer.inputs[input_placeholder.name] is input_placeholder
+    assert input_placeholder.unscoped_name in layer.inputs
+    assert layer.inputs[input_placeholder.unscoped_name] is input_placeholder
 
 
 def test_layer_variables(input_placeholder):
@@ -71,8 +71,8 @@ def test_layer_variables(input_placeholder):
     layer(input_placeholder)
 
     assert len(layer.variables) == 1
-    assert layer.weight.name in layer.variables
-    assert layer.variables[layer.weight.name] is layer.weight
+    assert layer.weight.unscoped_name in layer.variables
+    assert layer.variables[layer.weight.unscoped_name] is layer.weight
 
 
 def test_layer_side_effects(input_placeholder):
@@ -100,8 +100,8 @@ def test_layer_outputs(input_placeholder):
     out = layer(input_placeholder)
 
     assert len(layer.outputs) == 1
-    assert out.name in layer.outputs
-    assert layer.outputs[out.name] is out
+    assert out.tensor.unscoped_name in layer.outputs
+    assert layer.outputs[out.tensor.unscoped_name] is out.tensor
 
 
 def test_nested_layer_scopes(input_placeholder):
@@ -133,8 +133,8 @@ def test_layer_metadata(input_placeholder):
                 assert key in op.metadata
                 assert op.metadata[key] == value
 
-    assert "label" in layer.variables[layer.name + "/W"].metadata
-    assert layer.variables[layer.name + "/W"].metadata["label"] == LABELS["weight"]
+    assert "label" in layer.variables["W"].metadata
+    assert layer.variables["W"].metadata["label"] == LABELS["weight"]
 
 
 def test_scope_ops(input_placeholder):
@@ -148,16 +148,16 @@ def test_scope_ops(input_placeholder):
         z = y + 4
         v1 = ng.persistent_tensor(w.axes, initial_value=0, name="effect1")
         v2 = ng.persistent_tensor(w.axes, initial_value=0, name="effect2")
-        ng.sequential([ng.assign(v1, w), ng.assign(v2, w), z]).named("output")
+        ng.sequential([ng.assign(v1, w), ng.assign(v2, w), z.named("output")])
 
     assert len(subgraph.inputs) == 1
-    assert input_placeholder.name in subgraph.inputs
+    assert input_placeholder.unscoped_name in subgraph.inputs
 
     assert len(subgraph.variables) == 1
-    assert "foo/W" in subgraph.variables
+    assert "W" in subgraph.variables
 
     assert len(subgraph.outputs) == 1
-    assert "foo/output" in subgraph.outputs
+    assert "output" in subgraph.outputs
 
     assert len(subgraph.side_effects) == 2
 

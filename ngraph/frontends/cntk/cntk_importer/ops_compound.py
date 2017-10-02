@@ -15,8 +15,8 @@
 from __future__ import division
 
 import ngraph as ng
-from ngraph.frontends.common.utils import remove_ones_axes
-from ngraph.frontends.neon.layer import Dropout
+from ngraph.frontends.common.utils import squeeze_axes
+from ngraph.frontends.neon.layer import BatchNorm, Dropout
 
 
 class OpsCompound:
@@ -24,18 +24,58 @@ class OpsCompound:
     Bridging compoud operations between CNTK and ngraph.
     """
 
-    def Dense(self, cntk_op, inputs):
+    def CrossEntropyWithSoftmax(self, cntk_op, inputs):
         """
-        Computes fully-connected layer with optional activation function.
+        Computes the softmax cross entropy between the inputs[0] and inputs[1].
 
         Arguments:
-            cntk_op: CNTK block to be imported.
+            cntk_op: CNTK operation to be imported.
             inputs: List of inputs to this node.
 
         Returns:
             A ngraph Op.
         """
-        return self._block_import(cntk_op, inputs)
+        cast_0, cast_1 = squeeze_axes(inputs)
+
+        if cast_0.axes.lengths != cast_1.axes.lengths:
+            cast_0 = ng.Transpose(cast_0)
+        assert cast_0.axes.lengths == cast_1.axes.lengths
+
+        cast_0 = ng.cast_axes(cast_0, axes=cast_1.axes)
+        loss = ng.cross_entropy_multi(ng.softmax(cast_0), cast_1)
+
+        return ng.mean(loss, out_axes=()).named(cntk_op.uid)
+
+    def Combine(self, cntk_op, inputs):
+        """
+        Returns combined outputs of inputs list.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return ng.stack(inputs, ng.make_axis(len(inputs))).named(cntk_op.uid)
+
+    def _block_op_import(self, cntk_op, inputs, block_op):
+        """
+        Helper function to import block operations.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+            block_op: Function of this class importing the operation.
+
+        Returns:
+            A ngraph Op.
+        """
+        if cntk_op.is_block:
+            ret_op = self._block_import(cntk_op, inputs)
+        else:
+            ret_op = block_op(cntk_op, inputs)
+        return ret_op.named(cntk_op.uid)
 
     def _block_import(self, cntk_op, inputs):
         """
@@ -96,6 +136,19 @@ class OpsCompound:
                 raise TypeError("Unknown operation: " + node.op_name)
 
         return imported_ops[return_op]
+
+    def Dense(self, cntk_op, inputs):
+        """
+        Computes fully-connected layer with optional activation function.
+
+        Arguments:
+            cntk_op: CNTK block to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return self._block_import(cntk_op, inputs)
 
     def _expand_input_axes(self, inputs):
         """
@@ -231,26 +284,6 @@ class OpsCompound:
         elif dim == 1:
             return (1, strides[0], 1, 1)
 
-    def _make_kernel(self, window):
-        """
-        Make pool kernel shape.
-
-        Arguments:
-            window: CNTK pooling window shape.
-
-        Returns:
-            Kernel shape (T, M1, M2, C).
-        """
-        dim = len(window)
-        if dim == 4:
-            return (window[3], window[1], window[2], window[0])
-        elif dim == 3:
-            return (1, window[1], window[2], window[0])
-        elif dim == 2:
-            return (1, window[0], window[1], 1)
-        elif dim == 1:
-            return (1, window[0], 1, 1)
-
     def _make_padding(self, op, padding, input_shape, kernel_shape, output_shape, strides):
         """
         Make padding vector out of CNTK convolution's auto padding values.
@@ -294,10 +327,6 @@ class OpsCompound:
     def _convolution_op(self, cntk_op, inputs):
         """
         Computes the convolution of a tensor with operand.
-                      CNTK            Ngraph
-        in       ((C, H, W) N))   (C, D, H, W, N)
-        filter   (O, C, M1, M2)   (C, T, M1, M2, O)
-        out      ((O, H, W) N)    (O, M, H, W, N)
 
         Arguments:
             cntk_op: CNTK operation to be imported.
@@ -333,11 +362,11 @@ class OpsCompound:
         )
 
         conv = ng.convolution(params, inputs, filters, out_axes)
-        return remove_ones_axes([conv])[0]
+        return squeeze_axes([conv])[0]
 
     def Convolution(self, cntk_op, inputs):
         """
-        Imports the Convolution block or operation.
+        Imports Convolution operation block.
 
         Arguments:
             cntk_op: CNTK operation to be imported.
@@ -346,23 +375,35 @@ class OpsCompound:
         Returns:
             A ngraph Op.
         """
-        if cntk_op.is_block:
-            ret_op = self._block_import(cntk_op, inputs)
-        else:
-            ret_op = self._convolution_op(cntk_op, inputs)
-        return ret_op.named(cntk_op.uid)
+        return self._block_op_import(cntk_op, inputs, self._convolution_op)
 
-    def _pooling_op(self, cntk_op, inputs, op):
+    def _make_kernel(self, window):
+        """
+        Make pool kernel shape.
+
+        Arguments:
+            window: CNTK pooling window shape.
+
+        Returns:
+            Kernel shape (T, M1, M2, C).
+        """
+        dim = len(window)
+        if dim == 4:
+            return (window[3], window[1], window[2], window[0])
+        elif dim == 3:
+            return (1, window[1], window[2], window[0])
+        elif dim == 2:
+            return (1, window[0], window[1], 1)
+        elif dim == 1:
+            return (1, window[0], 1, 1)
+
+    def _pooling_op(self, cntk_op, inputs):
         """
         Computes the pooling of a tensor.
-                    CNTK             Ngraph
-        in     ((C, H, W), N)   (C, D, H, W, N)
-        out    (N, P, Q, K)     (K, M, P, Q, N)
 
         Arguments:
             cntk_op: CNTK function to be imported.
             inputs: List of inputs to this node.
-            op: 'max' for MaxPooling and 'avg' for AvgPooling
 
         Returns:
             A ngraph Op.
@@ -371,6 +412,11 @@ class OpsCompound:
         C, D, H, W, N = inputs.axes
 
         M, P, Q = self._make_out_axes(cntk_op.shape)
+
+        if cntk_op.attributes['poolingType'] == 0:
+            pool_type = 'max'
+        else:
+            pool_type = 'avg'
 
         strides = self._make_strides(cntk_op.attributes['strides'])
         kernel = self._make_kernel(cntk_op.attributes['poolingWindowShape'])
@@ -383,18 +429,31 @@ class OpsCompound:
         )
 
         params = dict(
-            op=op,
+            op=pool_type,
             pad_d=pad[0], pad_h=pad[1], pad_w=pad[2], pad_c=pad[3],
             str_d=strides[0], str_h=strides[1], str_w=strides[2], str_c=strides[3],
             T=kernel[0], R=kernel[1], S=kernel[2], J=kernel[3]
         )
 
         pool = ng.pooling(params, inputs, [C, M, P, Q, N])
-        return remove_ones_axes([pool])[0]
+        return squeeze_axes([pool])[0]
+
+    def Pooling(self, cntk_op, inputs):
+        """
+        Import Pooling operation block.
+
+        Arguments:
+            cntk_op: CNTK block to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return self._block_op_import(cntk_op, inputs, self._pooling_op)
 
     def MaxPooling(self, cntk_op, inputs):
         """
-        Computes the max pooling of a tensor.
+        Import MaxPooling operation block.
 
         Arguments:
             cntk_op: CNTK block to be imported.
@@ -403,11 +462,11 @@ class OpsCompound:
         Returns:
             A ngraph Op.
         """
-        return self._pooling_op(cntk_op.block_root.root_function, inputs, 'max')
+        return self._block_op_import(cntk_op, inputs, self._pooling_op)
 
     def AveragePooling(self, cntk_op, inputs):
         """
-        Computes the average pooling of a tensor.
+        Import AveragePooling operation block.
 
         Arguments:
             cntk_op: CNTK block to be imported.
@@ -416,44 +475,9 @@ class OpsCompound:
         Returns:
             A ngraph Op.
         """
-        return self._pooling_op(cntk_op.block_root.root_function, inputs, 'avg')
+        return self._block_op_import(cntk_op, inputs, self._pooling_op)
 
-    def CrossEntropyWithSoftmax(self, cntk_op, inputs):
-        """
-        Computes the softmax cross entropy between the inputs[0] and inputs[1].
-
-        Arguments:
-            cntk_op: CNTK operation to be imported.
-            inputs: List of inputs to this node.
-
-        Returns:
-            A ngraph Op.
-        """
-        cast_0, cast_1 = remove_ones_axes(inputs)
-
-        if cast_0.axes.lengths != cast_1.axes.lengths:
-            cast_0 = ng.Transpose(cast_0)
-        assert cast_0.axes.lengths == cast_1.axes.lengths
-
-        cast_0 = ng.cast_axes(cast_0, axes=cast_1.axes)
-        loss = ng.cross_entropy_multi(ng.softmax(cast_0), cast_1)
-
-        return ng.mean(loss, out_axes=()).named(cntk_op.uid)
-
-    def Combine(self, cntk_op, inputs):
-        """
-        Returns combined outputs of inputs list.
-
-        Arguments:
-            cntk_op: CNTK operation to be imported.
-            inputs: List of inputs to this node.
-
-        Returns:
-            A ngraph Op.
-        """
-        return ng.stack(inputs, ng.make_axis(len(inputs))).named(cntk_op.uid)
-
-    def Dropout(self, cntk_op, inputs):
+    def _dropout_op(self, cntk_op, inputs):
         """
         Stochastically dropping activations to prevent overfitting
 
@@ -464,6 +488,44 @@ class OpsCompound:
         Returns:
             A ngraph Op.
         """
-        node = cntk_op.block_root.root_function
-        layer = Dropout(node.attributes['dropoutRate'])
-        return layer(inputs[0]).named(cntk_op.uid)
+        return Dropout(cntk_op.attributes['dropoutRate'])(inputs[0])
+
+    def Dropout(self, cntk_op, inputs):
+        """
+        Import Dropout operation block.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return self._block_op_import(cntk_op, inputs, self._dropout_op)
+
+    def _batch_norm_op(self, cntk_op, inputs):
+        """
+        Normalizes a batch worth of inputs by subtracting batch mean and
+        dividing by batch variance.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return BatchNorm(eps=cntk_op.attributes['epsilon'])(inputs[0])
+
+    def BatchNormalization(self, cntk_op, inputs):
+        """
+        Import BatchNormalization operation block.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return self._block_op_import(cntk_op, inputs, self._batch_norm_op)

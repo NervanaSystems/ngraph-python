@@ -29,7 +29,7 @@ from contextlib import closing
 
 from ngraph.frontends.neon import NgraphArgparser, ArrayIterator
 from ngraph.frontends.neon import GaussianInit, UniformInit
-from ngraph.frontends.neon import Affine, Convolution, Pool2D, Sequential
+from ngraph.frontends.neon import Affine, Convolution, Pooling, Sequential
 from ngraph.frontends.neon import Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax
 
@@ -45,9 +45,9 @@ image_size = 224
 X_train = np.random.uniform(-1, 1, (args.batch_size, 3, image_size, image_size))
 y_train = np.ones(shape=(args.batch_size), dtype=np.int32)
 train_data = {'image': {'data': X_train,
-                        'axes': ('batch', 'C', 'height', 'width')},
+                        'axes': ('N', 'C', 'H', 'W')},
               'label': {'data': y_train,
-                        'axes': ('batch',)}}
+                        'axes': ('N',)}}
 train_set = ArrayIterator(train_data,
                           batch_size=args.batch_size,
                           total_iterations=args.num_iterations)
@@ -61,32 +61,32 @@ init = UniformInit(low=-0.08, high=0.08)
 seq1 = Sequential([Convolution((3, 3, 64), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Convolution((3, 3, 128), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Convolution((3, 3, 256), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
                    Convolution((3, 3, 256), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
                    Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
                    Convolution((3, 3, 512), filter_init=GaussianInit(var=0.01),
                                bias_init=init,
                                activation=Rectlin(), padding=1),
-                   Pool2D(2, strides=2),
+                   Pooling((2, 2), strides=2),
                    Affine(nout=4096, weight_init=GaussianInit(var=0.01),
                           bias_init=init,
                           activation=Rectlin()),

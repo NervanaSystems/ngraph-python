@@ -83,7 +83,6 @@ with Layer.inference_mode_on():
     inference_prob = seq1(inputs['review'])
 
 errors = ng.not_equal(ng.argmax(inference_prob, reduction_axes=[ax.Y]), inputs['label'])
-
 eval_loss = ng.cross_entropy_multi(inference_prob,
                                    ng.one_hot(inputs['label'], axis=ax.Y),
                                    usebits=True)

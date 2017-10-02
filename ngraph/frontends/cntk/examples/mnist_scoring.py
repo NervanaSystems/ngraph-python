@@ -19,7 +19,7 @@ Example based on network trained by mnist_training.py example. It will create
 To be able to run this example you need to download the MNST database as jpg
 images and put it in /tmp/data/MNIST/jpg/ folder.
 """
-from __future__ import print_function
+from __future__ import division, print_function
 
 import glob
 import os
@@ -32,29 +32,48 @@ import ngraph as ng
 from ngraph.frontends.cntk.cntk_importer.importer import CNTKImporter
 
 
-def load_and_score(mnist_jpg_dir):
-    cntk_model = C.ops.functions.load_model("/tmp/data/MNIST/MNIST.dnn")
+def load_and_score(mnist_dir):
+    jpg_files = glob.glob(os.path.join(mnist_dir, 'jpg/*.jpg'))
+    if not jpg_files:
+        raise RuntimeError(
+            "This example require a dataset. Please download and extract the MNIST jpg files."
+        )
+
+    trained_network = os.path.join(mnist_dir, "MNIST.dnn")
+    if not os.path.exists(trained_network):
+        raise RuntimeError(
+            "This example require trained network. Please run mnist_training.py example."
+        )
+
+    cntk_model = C.ops.functions.load_model(trained_network)
 
     ng_model, ng_placeholders = CNTKImporter().import_model(cntk_model)
     eval_fun = ng.transformers.make_transformer().computation(ng_model, *ng_placeholders)
 
-    for filename in glob.glob(os.path.join(mnist_jpg_dir, '*.jpg')):
+    cntk_results = []
+    ng_results = []
+    for filename in jpg_files:
+        label = int(os.path.basename(filename).split("_")[1])
+
         rgb_image = np.asarray(Image.open(filename), dtype="float32")
         pic = np.ascontiguousarray(rgb_image).flatten()
 
         cntk_predictions = np.squeeze(
-            cntk_model.eval({cntk_model.arguments[0]: [pic]}))
-        cntk_top_class = np.argmax(cntk_predictions)
+            cntk_model.eval({cntk_model.arguments[0]: [pic]})
+        )
+        cntk_results.append(int(np.argmax(cntk_predictions) == label))
 
         ng_predictions = eval_fun(pic)
-        ng_top_class = np.argmax(ng_predictions)
+        ng_results.append(int(np.argmax(ng_predictions) == label))
 
-        actual_number = os.path.basename(filename).split("_")[1]
-        print("Digit in jpg file: " + actual_number)
-        print("\tCNTK prediction:   " + str(cntk_top_class))
-        print("\tngraph prediction: " + str(ng_top_class))
-        print("")
+    test_size = len(jpg_files)
+    print('CNTK prediction correctness - {0:.2f}%'.format(
+        np.count_nonzero(cntk_results) * 100 / test_size
+    ))
+    print('ngraph prediction correctness - {0:.2f}%'.format(
+        np.count_nonzero(ng_results) * 100 / test_size
+    ))
 
 
 if __name__ == "__main__":
-    load_and_score("/tmp/data/MNIST/jpg/")
+    load_and_score("/tmp/data/MNIST/")

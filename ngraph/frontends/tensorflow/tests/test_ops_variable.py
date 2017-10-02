@@ -37,7 +37,7 @@ class Tester(ImporterTester):
         # test
         self.run(result, tf_init_op=init_op)
 
-    @pytest.mark.xfail(strict=True)
+    @pytest.mark.xfail(strict=False)
     def test_ref_assign(self):
         # Currently ngraph and tf have different assign semantics
         # eval(ng.assign(a, 1)) resturns None, but eval(tf.assign(a, 1)) returns
@@ -54,9 +54,9 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert ng.testing.allclose(tf_result, ng_result)
+        ng.testing.assert_allclose(tf_result, ng_result)
 
-    @pytest.mark.xfail(strict=True)
+    @pytest.mark.xfail(strict=False)
     def test_ref_assign_add(self):
         # Currently ngraph and tf have different assign semantics
         # eval(ng.assign(a, 1)) resturns None, but eval(tf.assign(a, 1)) returns
@@ -73,4 +73,4 @@ class Tester(ImporterTester):
         # test
         tf_result = self.tf_run(a_update, tf_init_op=init_op)
         ng_result = self.ng_run(a)
-        assert ng.testing.allclose(tf_result, ng_result)
+        ng.testing.assert_allclose(tf_result, ng_result)

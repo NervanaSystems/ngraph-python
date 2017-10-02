@@ -21,7 +21,7 @@ from __future__ import division
 from __future__ import print_function
 from benchmark import Benchmark
 from fake_data_generator import generate_data
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pool2D, BatchNorm, Activation
+from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
@@ -82,7 +82,7 @@ class mini_residual_network(Sequential):
         if activation:
             layers.append(Activation(Rectlin()))
 
-        layers.append(Pool2D(8, strides=2, op='avg'))
+        layers.append(Pooling((8, 8), strides=2, pool_type='avg'))
         if dataset == 'cifar10':
             ax.Y.length = 10
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
@@ -116,11 +116,12 @@ def get_fake_data(dataset, batch_size, num__iterations):
 
 
 def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
-                         transformer_type, device, bprop=True, visualize=False):
+                         transformer_type, device, bprop=True, batch_norm=False,
+                         visualize=False):
     inputs, data, train_set = get_fake_data(dataset, batch_size, num_iterations)
 
     # Running forward propagation
-    model_out = get_mini_resnet(inputs, dataset, device_id)
+    model_out = get_mini_resnet(inputs, dataset, device_id, batch_norm=batch_norm)
 
     # Running back propagation
     if bprop:
@@ -156,6 +157,8 @@ if __name__ == "__main__":
     parser.add_argument('--hetr_device', default='cpu', choices=['cpu', 'gpu'],
                         help="device to run HeTr")
     parser.add_argument('--bprop', action="store_true", help="enable back propagation")
+    parser.add_argument('--use_batch_norm', action='store_true',
+                        help='whether to use batch normalization')
     parser.add_argument('--graph_vis', action="store_true", help="enable graph visualization")
     args = parser.parse_args()
 
@@ -170,4 +173,5 @@ if __name__ == "__main__":
                              transformer_type=args.backend,
                              device=args.hetr_device,
                              bprop=args.bprop,
+                             batch_norm=args.use_batch_norm,
                              visualize=args.graph_vis)

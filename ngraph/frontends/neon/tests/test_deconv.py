@@ -1,12 +1,29 @@
+# ----------------------------------------------------------------------------
+# Copyright 2017 Nervana Systems Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ----------------------------------------------------------------------------
+import pytest
 import numpy as np
-from contextlib import closing
 import ngraph as ng
-import ngraph.transformers as ngt
+from ngraph.frontends.common import utils
 from ngraph.frontends.neon import Deconvolution, ConstantInit
+from ngraph.testing import executor
 
 
 # TODO: add other configurations?
-def test_deconv(transformer_factory):
+@pytest.mark.transformer_dependent
+@pytest.config.flex_disabled(reason="#1841, deconv is not yet supported by flex")
+def test_deconv():
     """
     basic test of deconv fprop.
     ngraph/tests/test_conv.py tests ng.deconvolution bprop
@@ -35,9 +52,7 @@ def test_deconv(transformer_factory):
 
     output = deconv(image)
 
-    with closing(ngt.make_transformer()) as transformer:
-        comp = transformer.computation(output, image)
-
+    with executor(output, image) as comp:
         input_val = np.zeros(image_shape + (N.length, ), dtype=float)
         input_val[0, 0, 0, 0, 0] = 1
         input_val[0, 0, 5, 5, 0] = 1
@@ -54,3 +69,22 @@ def test_deconv(transformer_factory):
         result3 = filter_val_nz.copy()
         result3[0, 0] = 26
         assert (feature_map[-5:, -5:] == result3).all()
+
+
+@pytest.mark.parametrize("input_size", (10, 25))
+@pytest.mark.parametrize("filter_size", (3, 4))
+@pytest.mark.parametrize("padding", ((0, 0), (3, 4)))
+@pytest.mark.parametrize("stride", (1, 3))
+def test_conv_inverts_deconv(input_size, filter_size, padding, stride):
+    """ Test that conv and deconv are inverse operations given the same parameters"""
+
+    # convolutions whose output size are not an even multiple of stride cannot be exactly inverted
+    a = (input_size + sum(padding) - filter_size) % stride
+    conv_output = utils.conv_output_dim(input_size, filter_size, padding, stride)
+    deconv_output = utils.deconv_output_dim(conv_output, filter_size, padding, stride)
+
+    assert deconv_output == (input_size - a), ("Convolution and Deconvolution do not invert:\n"
+                                               "output ({}) != input ({}) - a ({})\n"
+                                               "filter: {}, padding: {}, stride: {}"
+                                               ).format(deconv_output, input_size, a,
+                                                        filter_size, padding, stride)

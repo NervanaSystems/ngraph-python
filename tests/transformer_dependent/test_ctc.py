@@ -23,7 +23,7 @@ from third_party.warp_ctc.ctc import CTC
 import pytest
 
 pytestmark = [pytest.mark.transformer_dependent("module"),
-              pytest.config.flex_disabled(reason="no CTCKernel for Flex"),
+              pytest.config.flex_disabled(reason="#1898 no CTCKernel for Flex"),
               pytest.config.argon_disabled(scope="module")]
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -61,7 +61,7 @@ def ctc_ref(acts, lbls, utt_lens, lbl_lens):
     return costs, grads
 
 
-def test_ctc(transformer_factory, data_args):
+def test_ctc(data_args):
     """
     test ctc fprop and bprop
     """

@@ -1,6 +1,5 @@
-#!/usr/bin/env python
 # ----------------------------------------------------------------------------
-# Copyright 2016 Nervana Systems Inc.
+# Copyright 2017 Nervana Systems Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,25 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from __future__ import print_function
-from contextlib import closing
-import ngraph as ng
-import ngraph.transformers as ngt
 
-# Build the graph for our mock hetr_server
-x = ng.placeholder(())
-x_plus_one = x + 1
+from ngraph.transformers.passes.passes import GraphPass
+from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
 
-# TBD:
-# 1) Setting up RPC endpoint to get serialized subgraph
-# 2) Deserialize subgraph
 
-# Select CPU transformer
-with closing(ngt.make_transformer_factory('cpu')()) as cpu_t:
-    # Define a computation based on deserialized subgraph (just use a mock so far)
-    plus_one = cpu_t.computation(x_plus_one, x)
+class TensorBoardPass(GraphPass):
+    """
+    A pass that saves graph for TensorBoard graph dispaly
 
-    # Run the computation
-    res = plus_one(0)
+    Arguments:
+        logdir: directory to save the log
+    """
+    def __init__(self, logdir):
+        super(TensorBoardPass, self).__init__()
+        self.logdir = logdir
 
-    # Logic for returning the results using RPC
+    def do_pass(self, ops):
+        tb = TensorBoard(self.logdir)
+        tb.add_graph(ops)
+        return ops

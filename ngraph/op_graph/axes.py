@@ -201,6 +201,50 @@ class Axis(object):
     def __eq__(self, other):
         return isinstance(other, Axis) and self.name == other.name
 
+    def __ne__(self, other):
+        return not self == other
+
+    def __len__(self):
+        return self.length
+
+    def __add__(self, other):
+        """
+        Returns list concatenated axes. Throws exception when there are Axis
+        duplication.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            current axis concatenated with the other axes
+        """
+
+        return make_axes(self) + other
+
+    def __or__(self, other):
+        """
+        Returns ordered set union of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set union of axes
+        """
+        return make_axes(self) | other
+
+    def __and__(self, other):
+        """
+        Returns ordered set intersection of axes.
+
+        Arguments:
+            other: the right-hand side operator axes
+
+        Returns:
+            The ordered set intersection of axes
+        """
+        return make_axes(self) & other
+
     def __hash__(self):
         return hash((self.name, self.length))
 
@@ -321,6 +365,9 @@ class Axes(object):
             axes = tuple(axes)
         elif isinstance(axes, (list, tuple)) and not isinstance(axes, Axes):
             axes = tuple(axes)
+        elif isinstance(axes, dict):
+            axes = tuple(make_axis(length=value, name=key)
+                         for key, value in axes.items())
 
         def convert(seq):
             """
@@ -336,7 +383,7 @@ class Axes(object):
             elems = []
             for x in seq:
                 if isinstance(x, collections.Iterable):
-                    x = Axes(convert(x)).flatten()
+                    x = Axes(convert(x)).flatten(force=True)
                 elems.append(x)
             return elems
 
@@ -388,7 +435,35 @@ class Axes(object):
         Returns:
             tuple: The lengths of the outer axes.
         """
+
         return tuple(x.length for x in self)
+
+    def get_by_names(self, *names):
+        """
+        Get multiple axis objects by their names
+
+        Arguments:
+            *names: One name for each axis to return
+
+        Returns:
+            Axis or tuple: Returns the requested axis. If multiple are requested, returns a tuple.
+
+        Raises:
+            KeyError: If a name is not found.
+        """
+
+        axes = []
+        for name in names:
+            ax = self.find_by_name(name)
+            if ax is not None:
+                axes.append(ax[0])  # Only one axis can be named `name`.
+            else:
+                raise KeyError("No axis of name {}".format(name))
+
+        if len(axes) > 1:
+            return tuple(axes)
+        else:
+            return axes[0]
 
     def batch_axes(self):
         """
@@ -414,7 +489,7 @@ class Axes(object):
     def channel_axis(self):
         """
         Returns:
-            The tensor's batch Axis or None if there isn't one.
+            The tensor's channel Axis or None if there isn't one.
         """
         for axis in self:
             if axis.is_channel:
@@ -618,7 +693,7 @@ class Axes(object):
         Returns:
             bool, true if other is superset of self
         """
-        return not self.is_sub_set(other)
+        return set(self.names).issuperset(set(make_axes(other).names))
 
     def is_equal_set(self, other):
         """
@@ -951,9 +1026,20 @@ class FlattenedAxis(Axis):
     def is_flattened(self):
         """
         Returns:
-            True is this is a FlattendAxis.
+            True if this is a FlattenedAxis.
         """
         return True
+
+    @property
+    def is_batch(self):
+        """
+        Tests if an axis is a batch axis.
+
+        Returns:
+            bool: True if the axis is a batch axis.
+
+        """
+        return False
 
     @property
     def empty(self):
@@ -978,6 +1064,14 @@ class FlattenedAxis(Axis):
             The flattened axes contained in this object.
         """
         return self._axes
+
+    @property
+    def length(self):
+        """
+        Returns:
+            The length of the FlattenedAxis.
+        """
+        return reduce(operator.mul, self.axes.lengths, 1)
 
     def __eq__(self, other):
         return other.is_flattened\
@@ -1106,8 +1200,7 @@ class TensorDescription(NameableValue):
         self.__is_input = is_input
         self.__is_placeholder = is_placeholder
         self.op = op
-        if not isinstance(self.name, str):
-            raise ValueError()
+        self.name = str(self.name)
         for axis in axes:
             if axis.length is None:
                 raise ValueError((

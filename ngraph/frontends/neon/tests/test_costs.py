@@ -88,7 +88,7 @@ class MeanSquaredPair(CostPair):
     SumSquaredPair(),
     MeanSquaredPair()
 ])
-def test_costs(y, t, cost, transformer_factory):
+def test_costs(y, t, cost):
     ng.testing.assert_allclose(cost.baseline_value(y, t),
                                cost.reference_value(y, t),
                                rtol=cost.tolerance)

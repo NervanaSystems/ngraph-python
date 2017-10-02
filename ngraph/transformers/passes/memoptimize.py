@@ -15,6 +15,7 @@
 
 from ngraph.transformers.exop import ExOpBlock
 from ngraph.op_graph.op_graph import WriteOp, ReadOp
+from ngraph.op_graph.ctc import CTCOp
 from ngraph.transformers.passes.passes import GraphPass
 from ngraph.op_graph.comm_nodes import CommunicationOp
 
@@ -86,6 +87,8 @@ class MemOptimizePass(GraphPass):
             elif isinstance(exop.op, WriteOp):
                 pass
             elif isinstance(exop.op, CommunicationOp):
+                pass
+            elif isinstance(exop.op, CTCOp):
                 pass
             else:
                 for tensor in exop.liveness_new_list:

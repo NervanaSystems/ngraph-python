@@ -12,11 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+"""
+To visualize HeTr computational graph with Tensorboard
+
+1. run `python dist_hetr.py -v`
+
+2. run `tensorboard --logdir /tmp/hetr_tb/ --port 6006`
+
+use ssh port forwarding to run on remote server
+https://stackoverflow.com/questions/37987839/how-can-i-run-tensorboard-on-a-remote-server
+"""
 from __future__ import print_function
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
-import ngraph.transformers.passes.nviz
+from ngraph.op_graph.tensorboard.tensorboardpass import TensorBoardPass
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -38,7 +48,7 @@ with ng.metadata(device_id=('0', '1'), parallel=N):
 with closing(ngt.make_transformer_factory('hetr')()) as hetr:
     # Visualize the graph
     if args.visualize:
-        hetr.register_graph_pass(ngraph.transformers.passes.nviz.VizPass(show_all_metadata=True))
+        hetr.register_graph_pass(TensorBoardPass('/tmp/hetr_tb'))
 
     # Define a computation
     computation = hetr.computation(dot, x, w)

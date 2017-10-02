@@ -25,7 +25,7 @@ pytestmark = pytest.mark.transformer_dependent("module")
 
 @pytest.fixture
 def iter_buf():
-    return ng.placeholder(axes=(), dtype=np.dtype(np.uint32))
+    return ng.placeholder(axes=())
 
 
 @pytest.fixture
@@ -56,6 +56,8 @@ def test_fixed_lr(iter_buf, max_iter, base_lr):
         ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
+@pytest.config.flex_disabled(reason="Results for flex are mostly very similar"
+                                    "but few are very different")
 def test_step_lr(iter_buf, max_iter, base_lr):
     # set up
     name = 'step'
@@ -140,6 +142,8 @@ def test_poly_lr(iter_buf, max_iter, base_lr):
         ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
 
 
+@pytest.config.flex_disabled(reason="Results for flex are mostly very similar"
+                                    "but few are very different")
 def test_sigmoid_lr(iter_buf, max_iter, base_lr):
     # set up
     name = 'sigmoid'
