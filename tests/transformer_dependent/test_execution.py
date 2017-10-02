@@ -1173,7 +1173,7 @@ def test_wrong_placeholders():
         assert c(1) == 1
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: "
+@pytest.config.argon_disabled(reason="#2220 - ArgonSim ValueError: "
                                      "total size of new array must be unchanged")
 def test_broadcast_deriv_reorder():
     H = ng.make_axis(2)

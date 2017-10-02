@@ -216,7 +216,7 @@ def test_initial_value():
     ng.testing.assert_allclose(result, np.asarray(w, dtype=np.float32))
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 def test_multiple_computations():
     """
     Create multiple computations for the same value.

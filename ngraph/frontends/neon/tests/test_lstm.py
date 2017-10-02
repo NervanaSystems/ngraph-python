@@ -63,7 +63,7 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('reflstmargs', fargs)
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 def test_ref_compare_rand(reflstmargs):
         # run comparison with reference code
         # for Gaussian random init
@@ -73,7 +73,7 @@ def test_ref_compare_rand(reflstmargs):
                    num_iter=num_iter)
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 def test_ref_stacked(reflstmargs):
         seq_len, input_size, hidden_size, batch_size, num_iter, reset_cells = reflstmargs
         check_stacked_lstm(seq_len, input_size, hidden_size, batch_size,

@@ -245,7 +245,7 @@ def test_batchnorm_bprop(input_placeholder, bn_params):
         ng.testing.assert_allclose(dbeta, dbeta_ref, rtol=rtol, atol=atol)
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 @pytest.config.flex_disabled(reason="#1975 BatchNorm not yet supported - Results mismatch")
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])
@@ -302,7 +302,7 @@ def test_recurrent_batchnorm_fprop(RNN, recurrent_input, output_size, bn_params)
             ng.testing.assert_allclose(gvar, bn_params['gvar'], rtol=rtol, atol=recurrent_atol)
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 @pytest.config.flex_skip(reason="#1975 BatchNorm not yet supported - Results mismatch")
 @pytest.mark.parametrize("input_size", [4])
 @pytest.mark.parametrize("sequence_length", [2])

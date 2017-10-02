@@ -265,7 +265,7 @@ def test_convolution_backprop(n128_hw32_c3_2x2):
 
 
 @pytest.config.flex_disabled(reason="Unknown problem yet")
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 def test_conv_flatten_deriv(n4_hw12_c3_5x5):
     """
     Test deriv of conv followed by flatten

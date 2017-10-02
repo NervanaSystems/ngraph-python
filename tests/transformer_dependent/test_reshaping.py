@@ -184,7 +184,7 @@ def test_reverse_slice():
         ng.set_item(x, [0, slice(None, None, -1)], 0)
 
 
-@pytest.config.argon_disabled(reason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 @pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
 def test_multiple_slices():
     C = ng.make_axis(length=2)

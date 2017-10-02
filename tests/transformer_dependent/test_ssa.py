@@ -130,7 +130,7 @@ def test_specific_slice_deriv():
 
 
 @pytest.config.flex_disabled(reason="#1954, UnsliceOp multiple slicing not yet supported by flex")
-@pytest.config.argon_disabled(rason="ArgonSim ValueError: axes don't match array")
+@pytest.config.argon_disabled(rason="#2219 - ArgonSim ValueError: axes don't match array")
 def test_slice_deriv():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
