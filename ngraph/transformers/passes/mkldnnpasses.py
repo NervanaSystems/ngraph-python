@@ -40,6 +40,11 @@ class MklReorderOp(TensorOp):
         self.out_layout = out_layout
 
 
+def get_mkl_order_from_axes_names(input_axis, axis_in_mkl_order):
+    axis_name_tuple = input_axis.names
+    return [axis_name_tuple.index(axis_name) for axis_name in axis_in_mkl_order]
+
+
 def get_order_from_axes(axes, sub_axes):
     order = []
     for a in sub_axes:
@@ -245,7 +250,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(BatchnormOp)
     def visit(self, op, inputs, gamma, bias, epsilon, mean, variance):
         # Op is only created in the fusion pass if supported by MKLDNN
-        mkl_order = [4, 0, 2, 3]
+        # We need MKL_order to be always in [N, C, H, W]
+        mkl_order = get_mkl_order_from_axes_names(inputs.axes, ['N', 'C', 'H', 'W'])
+        (inputs_shape, inputs_layout) = self.get_arg_shape_and_layout(op, inputs, mkl_order)        
+        outputs_shape = get_size_mkl_order(op.axes, mkl_order)
         data_type = self.mkldnn.datatype[op.dtype.type]
         mean_size = mean.axes.lengths[0]
         mean_dims = 1
@@ -253,13 +261,10 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         bias_shape = bias.axes.lengths[0]
         variance_size = variance.axes.lengths[0]
         variance_dims = 1
-        outputs_shape = get_size_mkl_order(op.axes, mkl_order)
 
         # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd
         # dimension contains beta parameter.
         weights_shape = [gamma_shape, bias_shape]
-
-        (inputs_shape, inputs_layout) = self.get_arg_shape_and_layout(op, inputs, mkl_order)
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
@@ -294,24 +299,23 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     @visit.on_type(BpropBatchnormOp)
     def visit(self, op, delta, fprop_src, dgamma, dbeta, gamma, bias, mean, variance):
         # Op is only created in the fusion pass if supported by MKLDNN
-
-        outputs_shape = get_size_mkl_order(op.axes, [4, 0, 2, 3])
-
+        mkl_order = get_mkl_order_from_axes_names(delta.axes, ['N', 'C', 'H', 'W'])
+        (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, mkl_order)
+        (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(op, fprop_src, mkl_order)
+        outputs_shape = get_size_mkl_order(op.axes, mkl_order)
+        out_axes = get_axes_mkl_order(op.axes, mkl_order)
+        
         data_type = self.mkldnn.datatype[op.dtype.type]
         mean_dims = 1
         variance_dims = 1
         mean_size = mean.axes.lengths[0]
         variance_size = variance.axes.lengths[0]
-
         # weights is 2 dimensional, 1-st dimension contains gamma parameter, 2-nd
         # dimension contains beta parameter.
         gamma_shape = gamma.axes.lengths[0]
         bias_shape = bias.axes.lengths[0]
         weights_shape = [gamma_shape, bias_shape]
 
-        (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, [4, 0, 2, 3])
-        (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(
-            op, fprop_src, [4, 0, 2, 3])
         mean_layout = None
         variance_layout = None
 
@@ -342,7 +346,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             self.mkldnn.kernels[
                 op.name])
 
-        out_axes = get_axes_mkl_order(op.axes, [4, 0, 2, 3])
         self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
@@ -495,7 +498,6 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def visit(self, op, input):
         if (op.dtype.type != np.float32):
             return
-
         data_type = self.mkldnn.datatype[op.dtype.type]
         arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(input))
         mkl_layout = self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout
@@ -515,8 +517,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             input_layout,
             data_type,
             self.mkldnn.kernels[op.name])
-
-        self.set_mkl_layout(op, input_axes)
+        
+        if mkl_layout:
+            self.set_mkl_layout(op, input_axes)
+        else:
+            out_axes = get_axes_mkl_order(op.axes, mkl_order)
+            self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropReluOp)
@@ -532,6 +538,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             (_, input_axes) = mkl_layout
             mkl_order = get_order_from_axes(op.axes, input_axes)
         else:
+            # Note: For relu, order need not be in [N, C, H, W]
             mkl_order = list(range(len(op.axes)))
         (delta_shape, delta_layout) = self.get_arg_shape_and_layout(op, delta, mkl_order)
         (fprop_src_shape, fprop_src_layout) = self.get_arg_shape_and_layout(op, fprop_src, mkl_order)
@@ -581,12 +588,16 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
+        # FIXME: cuurently input layout is causing issue, when the mkl_layout is in [C,N,H,W]
+        # even though get_rotate_layout sets the layout to [N, C, H, W].
+        # As work around setting input_layout=None.
         self.mkldnn.pool_fprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(input_shape), len(output_shape),
             get_ctypes_arg(input_shape), get_ctypes_arg(kernel), get_ctypes_arg(output_shape),
             get_ctypes_arg(stride), get_ctypes_arg(pad), pool_type,
-            input_layout, data_type, self.mkldnn.kernels[op.name])
+            None, data_type, self.mkldnn.kernels[op.name])
+
 
         self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
@@ -633,6 +644,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             input_layout, data_type,
             self.mkldnn.kernels[op.fprop.forwarded.name],
             self.mkldnn.kernels[op.name])
+
 
         self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)

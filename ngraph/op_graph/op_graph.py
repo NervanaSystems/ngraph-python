@@ -1890,12 +1890,17 @@ class ExpandDims(IndexOp):
     """
 
     def __init__(self, x, axis, dim, **kwargs):
+        self.dim = dim
+        self.axis = axis
         axes = []
         axes.extend(x.axes[:dim])
         axes.append(axis)
         axes.extend(x.axes[dim:])
         axes = make_axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.axis, self.dim)
 
     def transform_tensor_description(self, tensor_description):
         return tensor_description.broadcast(self.axes)
