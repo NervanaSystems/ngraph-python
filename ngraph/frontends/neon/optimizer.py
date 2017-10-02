@@ -86,8 +86,7 @@ def clip_gradient_value(grad, clip_value=None):
 
     Arguments:
         grad (Tensor): List of gradients for a single layer
-        clip_value (float, optional): Value to element-wise clip
-                                      gradients.
+        clip_value (float, optional): Value to element-wise clip gradients.
                                       Defaults to None.
 
     Returns:
@@ -123,7 +122,6 @@ def clip_weight_value(weight, clip_value=None, min_value_override=None):
 
 class Optimizer(SubGraph):
     """TODO."""
-    metadata = {'layer_type': 'optimizer'}
 
     def __init__(self, name=None, **kwargs):
         super(Optimizer, self).__init__(name=name, **kwargs)
@@ -133,10 +131,31 @@ class Optimizer(SubGraph):
 
 
 class LearningRateOptimizer(Optimizer):
+    """
+    Base class for a gradient-based optimizer
 
-    def __init__(self, learning_rate, iteration=0, **kwargs):
+    Arguments:
+        learning_rate (float): Multiplicative coefficient to scale gradients before the updates
+                               are applied
+        iteration (placeholder, optional): Placeholder op used to store the current training
+                                           iteration for the purposes of using learning rate
+                                           schedulers
+        gradient_clip_norm (float, optional): Target norm for the gradients
+        gradient_clip_value (float, optional): Value to element-wise clip gradients
+        weight_clip_value (float, optional): Value to element-wise clip weights after updates are
+                                             applied
+    """
+
+    def __init__(self, learning_rate, iteration=0,
+                 gradient_clip_norm=None,
+                 gradient_clip_value=None,
+                 weight_clip_value=None,
+                 **kwargs):
         super(LearningRateOptimizer, self).__init__(**kwargs)
         self.lrate = get_learning_rate_policy_callback(learning_rate)(iteration)
+        self.gradient_clip_norm = gradient_clip_norm
+        self.gradient_clip_value = gradient_clip_value
+        self.weight_clip_value = weight_clip_value
 
     @SubGraph.scope_op_creation
     def __call__(self, cost_func, variables=None, subgraph=None, warning=False):
@@ -148,7 +167,7 @@ class LearningRateOptimizer(Optimizer):
             warning (bool): If True displays warning message if any variables
                             specified do not participate in batch cost computation
 
-        Notes:
+        .. Note::
             If subgraph is provided, the variables to optimize will be taken from it.
             Otherwise, they can be provided explicitly by passing a list as `variables`.
             If neither `subgraph` nor `variables` is provided, the variables to optimize will be
@@ -217,8 +236,21 @@ class GradientDescentMomentum(LearningRateOptimizer):
         v' = \\gamma^2 v + \\alpha (\\gamma + 1) (\\nabla J(\\theta; x) + \\lambda\\theta)
         theta' = \\theta + v'
 
-    Example usage:
+    Arguments:
+        learning_rate (float): Multiplicative coefficient to scale gradients before the updates
+                               are applied
+        momentum_coef (float, optional): Coefficient of momentum. Defaults to 0
+        wdecay (float, optional): Amount of weight decay. Defaults to 0
+        nesterov (bool, optional): Use nesterov accelerated gradient. Defaults to False
+        iteration (placeholder, optional): Placeholder op used to store the current training
+                                           iteration for the purposes of using learning rate
+                                           schedulers
+        gradient_clip_norm (float, optional): Target norm for the gradients
+        gradient_clip_value (float, optional): Value to element-wise clip gradients
+        weight_clip_value (float, optional): Value to element-wise clip weights after updates are
+                                             applied. Default to None.
 
+    Examples:
     .. code-block:: python
 
         import ngraph as ng
@@ -230,7 +262,6 @@ class GradientDescentMomentum(LearningRateOptimizer):
         opt = GradientDescentMomentum(0.01, 0.9, gradient_clip_value=5)
         updates = opt(loss)
     """
-    metadata = {'layer_type': 'gradient_descent_optimizer'}
 
     def __init__(
             self,
@@ -242,11 +273,12 @@ class GradientDescentMomentum(LearningRateOptimizer):
             weight_clip_value=None,
             nesterov=False,
             **kwargs):
-        super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate, **kwargs)
+        super(GradientDescentMomentum, self).__init__(learning_rate=learning_rate,
+                                                      gradient_clip_norm=gradient_clip_norm,
+                                                      gradient_clip_value=gradient_clip_value,
+                                                      weight_clip_value=weight_clip_value,
+                                                      **kwargs)
         self.momentum_coef = momentum_coef
-        self.gradient_clip_norm = gradient_clip_norm
-        self.gradient_clip_value = gradient_clip_value
-        self.weight_clip_value = weight_clip_value
         self.wdecay = wdecay
         self.nesterov = nesterov
 
@@ -268,51 +300,50 @@ class GradientDescentMomentum(LearningRateOptimizer):
 class RMSProp(LearningRateOptimizer):
     """
     Root Mean Square propagation.
+
     Root Mean Square (RMS) propagation protects against vanishing and
     exploding gradients. In RMSprop, the gradient is divided by a running
     average of recent gradients. Given the parameters :math:`\\theta`, gradient :math:`\\nabla J`,
     we keep a running average :math:`\\mu` of the last :math:`1/\\lambda` gradients squared.
     The update equations are then given by
+
     .. math::
         \\mu' &= \\lambda\\mu + (1-\\lambda)(\\nabla J)^2
+
     .. math::
         \\theta' &= \\theta - \\frac{\\alpha}{\\sqrt{\\mu + \\epsilon} + \\epsilon}\\nabla J
+
     where we use :math:`\\epsilon` as a (small) smoothing factor to prevent from dividing by zero.
+
+    Arguments:
+        decay_rate (float): decay rate of states
+        learning_rate (float): the multiplication coefficent of updates
+        epsilon (float): smoothing epsilon to avoid divide by zeros
+        gradient_clip_norm (float, optional): Target gradient norm. Defaults to None.
+        gradient_clip_value (float, optional): Value to element-wise clip gradients.
+                                               Defaults to None.
+        weight_clip_value (float, optional): Value to element-wise clip weights after updates are
+                                             applied. Defaults to None.
     """
-    metadata = {'layer_type': 'RMS_prop_optimizer'}
 
     def __init__(
-        self,
-        decay_rate=0.95,
-        learning_rate=2e-3,
-        epsilon=1e-6,
-        gradient_clip_norm=None,
-        gradient_clip_value=None,
-        weight_clip_value=None,
-        **kwargs
+            self,
+            decay_rate=0.95,
+            learning_rate=2e-3,
+            epsilon=1e-6,
+            gradient_clip_norm=None,
+            gradient_clip_value=None,
+            weight_clip_value=None,
+            **kwargs
     ):
-        """
-        Class constructor.
-        Arguments:
-            decay_rate (float): decay rate of states
-            learning_rate (float): the multiplication coefficent of updates
-            epsilon (float): smoothing epsilon to avoid divide by zeros
-            gradient_clip_norm (float, optional): Target gradient norm.
-                                                  Defaults to None.
-            gradient_clip_value (float, optional): Value to element-wise clip
-                                                   gradients.
-                                                   Defaults to None.
-
-        Notes:
-            Only constant learning rate is supported currently.
-        """
-        super(RMSProp, self).__init__(learning_rate=learning_rate, **kwargs)
+        super(RMSProp, self).__init__(learning_rate=learning_rate,
+                                      gradient_clip_norm=gradient_clip_norm,
+                                      gradient_clip_value=gradient_clip_value,
+                                      weight_clip_value=weight_clip_value,
+                                      **kwargs)
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
-        self.gradient_clip_norm = gradient_clip_norm
-        self.gradient_clip_value = gradient_clip_value
-        self.weight_clip_value = weight_clip_value
 
     def variable_update(self, variable, grad, scale_factor):
         epsilon, decay = (self.epsilon, self.decay_rate)
@@ -330,46 +361,66 @@ class Adam(LearningRateOptimizer):
     """
     Adam optimizer
 
-    TODO docstring
+    The Adam optimizer combines features from RMSprop and Adagrad. We
+    accumulate both the first and second moments of the gradient with decay
+    rates :math:`\\beta_1` and :math:`\\beta_2` corresponding to window sizes of
+    :math:`1/\\beta_1` and :math:`1/\\beta_2`, respectively.
 
+    .. math::
+        m' &= \\beta_1 m + (1-\\beta_1) \\nabla J
+
+    .. math::
+        v' &= \\beta_2 v + (1-\\beta_2) (\\nabla J)^2
+
+    We update the parameters by the ratio of the two moments:
+
+    .. math::
+        \\theta = \\theta - \\alpha \\frac{\\hat{m}'}{\\sqrt{\\hat{v}'}+\\epsilon}
+
+    where we compute the bias-corrected moments :math:`\\hat{m}'` and :math:`\\hat{v}'` via
+
+    .. math::
+        \\hat{m}' &= m'/(1-\\beta_1^t)
+
+    .. math::
+        \\hat{v}' &= v'/(1-\\beta_1^t)
+
+    Arguments:
+        learning_rate (float): the multiplication coefficient of updates
+        beta_1 (float): decay of 1st order moment
+        beta_2 (float): decay of 2nd order moment
+        epsilon (float): numerical stability factor
+        gradient_clip_norm (float, optional): Target gradient norm.
+                                              Defaults to None.
+        gradient_clip_value (float, optional): Value to element-wise clip
+                                               gradients.
+                                               Defaults to None.
+        weight_clip_value (float, optional): Value to element-wise clip weights after updates are
+                                             applied. Defaults to None.
     """
-    metadata = {'layer_type': 'adam_optimizer'}
 
     def __init__(
-        self,
-        learning_rate=1e-3,
-        beta_1=0.9,
-        beta_2=0.999,
-        epsilon=1e-8,
-        gradient_clip_norm=None,
-        gradient_clip_value=None,
-        weight_clip_value=None,
-        **kwargs
+            self,
+            learning_rate=1e-3,
+            beta_1=0.9,
+            beta_2=0.999,
+            epsilon=1e-8,
+            gradient_clip_norm=None,
+            gradient_clip_value=None,
+            weight_clip_value=None,
+            **kwargs
     ):
-        """
-        Class constructor.
-        Arguments:
-            learning_rate (float): the multiplication coefficient of updates
-            beta_1 (float): decay of 1st order moment
-            beta_2 (float): decay of 2nd order moment
-            epsilon (float): numerical stability factor
-            gradient_clip_norm (float, optional): Target gradient norm.
-                                                  Defaults to None.
-            gradient_clip_value (float, optional): Value to element-wise clip
-                                                   gradients.
-                                                   Defaults to None.
-        """
-        super(Adam, self).__init__(learning_rate, **kwargs)
+        super(Adam, self).__init__(learning_rate,
+                                   gradient_clip_norm=gradient_clip_norm,
+                                   gradient_clip_value=gradient_clip_value,
+                                   weight_clip_value=weight_clip_value,
+                                   **kwargs)
         self.beta_1 = beta_1
         self.beta_2 = beta_2
         self.epsilon = epsilon
-        self.gradient_clip_norm = gradient_clip_norm
-        self.gradient_clip_value = gradient_clip_value
-        self.weight_clip_value = weight_clip_value
 
     @SubGraph.scope_op_creation
     def __call__(self, *args, **kwargs):
-
         if len(self.ops) == 0:
             self.beta_1 = ng.constant(self.beta_1, dtype=np.float32)
             self.beta_2 = ng.constant(self.beta_2, dtype=np.float32)
@@ -414,8 +465,19 @@ class Adagrad(LearningRateOptimizer):
     to the geometry of the error surface. Differently scaled weights have appropriately scaled
     update steps.
 
-    Example usage:
+    Arguments:
+        learning_rate (float): Multiplicative coefficient to scale gradients before the updates
+                               are applied
+        epsilon (float, optional): Numerical stability factor. Default 1e-8.
+        iteration (placeholder, optional): Placeholder op used to store the current training
+                                           iteration for the purposes of using learning rate
+                                           schedulers
+        gradient_clip_norm (float, optional): Target norm for the gradients
+        gradient_clip_value (float, optional): Value to element-wise clip gradients
+        weight_clip_value (float, optional): Value to element-wise clip weights after updates are
+                                             applied. Defaults to None.
 
+    Examples:
     .. code-block:: python
 
         import ngraph as ng
@@ -424,31 +486,22 @@ class Adagrad(LearningRateOptimizer):
         # use Adagrad with a learning rate of 1e-3
         optimizer = Adagrad(learning_rate=1e-3, epsilon=1e-8)
     """
-    metadata = {'layer_type': 'adagrad_optimizer'}
 
     def __init__(
-        self,
-        learning_rate=1e-3,
-        epsilon=1e-8,
-        gradient_clip_norm=None,
-        gradient_clip_value=None,
-        **kwargs
+            self,
+            learning_rate=1e-3,
+            epsilon=1e-8,
+            gradient_clip_norm=None,
+            gradient_clip_value=None,
+            weight_clip_value=None,
+            **kwargs
     ):
-        """
-        Class constructor.
-        Arguments:
-            learning_rate (float): the multiplication coefficient of updates
-            epsilon (float): numerical stability factor
-            gradient_clip_norm (float, optional): Target gradient norm.
-                                                  Defaults to None.
-            gradient_clip_value (float, optional): Value to element-wise clip
-                                                   gradients.
-                                                   Defaults to None.
-        """
-        super(Adagrad, self).__init__(learning_rate, **kwargs)
+        super(Adagrad, self).__init__(learning_rate,
+                                      gradient_clip_norm=gradient_clip_norm,
+                                      gradient_clip_value=gradient_clip_value,
+                                      weight_clip_value=weight_clip_value,
+                                      **kwargs)
         self.epsilon = epsilon
-        self.gradient_clip_norm = gradient_clip_norm
-        self.gradient_clip_value = gradient_clip_value
 
     def variable_update(self, variable, grad, scale_factor):
         grad = clip_gradient_value(grad, self.gradient_clip_value)
