@@ -23,9 +23,6 @@ from ngraph.testing import check_derivative, ExecutorFactory, \
     RandomTensorGenerator, numeric_derivative, executor
 
 pytestmark = pytest.mark.transformer_dependent
-pytest.mark.argon_disab_loose = pytest.mark.xfail(pytest.config.getvalue("transformer") == "argon",
-                                                  reason="Not supported by argon backend",
-                                                  strict=False)
 
 
 rng = RandomTensorGenerator(0, np.float32)
@@ -160,7 +157,7 @@ def sub_axes(request):
 
 
 # TODO this is a non-strict disable since not all parametrizations fail argon
-@pytest.mark.argon_disab_loose(reson="Argon Transformer error")  # TODO Triage
+@pytest.config.argon_disabled(reson="Argon Transformer error")  # TODO Triage
 def test_reduction(reduction, sub_axes):
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=4),
