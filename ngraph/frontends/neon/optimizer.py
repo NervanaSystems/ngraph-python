@@ -59,8 +59,7 @@ def clip_gradient_norm(grad_list, clip_norm=None):
     Arguments:
         param_list (list): List of layer parameters
         clip_norm (float, optional): Target norm for the gradients. If not provided
-                                     the returned scale_factor will equal 1.
-
+                                     the returned scale_factor will equal 1
 
     Returns:
         Computed scale factor (float)
@@ -86,8 +85,7 @@ def clip_gradient_value(grad, clip_value=None):
 
     Arguments:
         grad (Tensor): List of gradients for a single layer
-        clip_value (float, optional): Value to element-wise clip gradients.
-                                      Defaults to None.
+        clip_value (float, optional): Value to element-wise clip gradients. Default: no clipping
 
     Returns:
         grad (list): List of clipped gradients.
@@ -104,10 +102,9 @@ def clip_weight_value(weight, clip_value=None, min_value_override=None):
 
     Arguments:
         weight (Tensor): List of gradients for a single layer
-        clip_value (float, optional): Value to element-wise clip weights.
-                                      Defaults to None.
+        clip_value (float, optional): Value to element-wise clip weights. Default: no clipping
         min_value (float, optional): Value to minimum value to element-wise clip
-                                     weights. Defaults to -abs(clip_value)
+                                     weights. Default: -abs(clip_value)
 
     Returns:
         weight (list): List of clipped weights.
@@ -139,11 +136,12 @@ class LearningRateOptimizer(Optimizer):
                                are applied
         iteration (placeholder, optional): Placeholder op used to store the current training
                                            iteration for the purposes of using learning rate
-                                           schedulers
-        gradient_clip_norm (float, optional): Target norm for the gradients
-        gradient_clip_value (float, optional): Value to element-wise clip gradients
+                                           schedulers. Default: None
+        gradient_clip_norm (float, optional): Target norm for the gradients. Default: no clipping
+        gradient_clip_value (float, optional): Value to element-wise clip gradients.
+                                               Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
-                                             applied
+                                             applied, symmetric around 0. Default: no clipping
     """
 
     def __init__(self, learning_rate, iteration=0,
@@ -239,16 +237,17 @@ class GradientDescentMomentum(LearningRateOptimizer):
     Arguments:
         learning_rate (float): Multiplicative coefficient to scale gradients before the updates
                                are applied
-        momentum_coef (float, optional): Coefficient of momentum. Defaults to 0
-        wdecay (float, optional): Amount of weight decay. Defaults to 0
-        nesterov (bool, optional): Use nesterov accelerated gradient. Defaults to False
+        momentum_coef (float, optional): Coefficient of momentum. Default: 0
+        wdecay (float, optional): Amount of weight decay. Default: 0
+        nesterov (bool, optional): Use nesterov accelerated gradient. Default: False
         iteration (placeholder, optional): Placeholder op used to store the current training
                                            iteration for the purposes of using learning rate
-                                           schedulers
-        gradient_clip_norm (float, optional): Target norm for the gradients
-        gradient_clip_value (float, optional): Value to element-wise clip gradients
+                                           schedulers. Default: None
+        gradient_clip_norm (float, optional): Target norm for the gradients. Default: no clipping
+        gradient_clip_value (float, optional): Value to element-wise clip gradients.
+                                               Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
-                                             applied. Default to None.
+                                             applied, symmetric around 0. Default: no clipping
 
     Examples:
     .. code-block:: python
@@ -316,14 +315,17 @@ class RMSProp(LearningRateOptimizer):
     where we use :math:`\\epsilon` as a (small) smoothing factor to prevent from dividing by zero.
 
     Arguments:
-        decay_rate (float): decay rate of states
+        decay_rate (float): decay rate of states. Default: 0.95
         learning_rate (float): the multiplication coefficent of updates
-        epsilon (float): smoothing epsilon to avoid divide by zeros
-        gradient_clip_norm (float, optional): Target gradient norm. Defaults to None.
+        epsilon (float): smoothing epsilon to avoid divide by zeros. Default: 1e-6
+        iteration (placeholder, optional): Placeholder op used to store the current training
+                                           iteration for the purposes of using learning rate
+                                           schedulers. Default: None
+        gradient_clip_norm (float, optional): Target norm for the gradients. Default: no clipping
         gradient_clip_value (float, optional): Value to element-wise clip gradients.
-                                               Defaults to None.
+                                               Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
-                                             applied. Defaults to None.
+                                             applied, symmetric around 0. Default: no clipping
     """
 
     def __init__(
@@ -387,16 +389,17 @@ class Adam(LearningRateOptimizer):
 
     Arguments:
         learning_rate (float): the multiplication coefficient of updates
-        beta_1 (float): decay of 1st order moment
-        beta_2 (float): decay of 2nd order moment
-        epsilon (float): numerical stability factor
-        gradient_clip_norm (float, optional): Target gradient norm.
-                                              Defaults to None.
-        gradient_clip_value (float, optional): Value to element-wise clip
-                                               gradients.
-                                               Defaults to None.
+        beta_1 (float): decay of 1st order moment. Default: .9
+        beta_2 (float): decay of 2nd order moment. Default: .999
+        epsilon (float): numerical stability factor. Default: 1e-8
+        iteration (placeholder, optional): Placeholder op used to store the current training
+                                           iteration for the purposes of using learning rate
+                                           schedulers. Default: None
+        gradient_clip_norm (float, optional): Target norm for the gradients. Default: no clipping
+        gradient_clip_value (float, optional): Value to element-wise clip gradients.
+                                               Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
-                                             applied. Defaults to None.
+                                             applied, symmetric around 0. Default: no clipping
     """
 
     def __init__(
@@ -468,15 +471,15 @@ class Adagrad(LearningRateOptimizer):
     Arguments:
         learning_rate (float): Multiplicative coefficient to scale gradients before the updates
                                are applied
-        epsilon (float, optional): Numerical stability factor. Default 1e-8.
+        epsilon (float, optional): Numerical stability factor. Default: 1e-8
         iteration (placeholder, optional): Placeholder op used to store the current training
                                            iteration for the purposes of using learning rate
-                                           schedulers
-        gradient_clip_norm (float, optional): Target norm for the gradients
-        gradient_clip_value (float, optional): Value to element-wise clip gradients
+                                           schedulers. Default: None
+        gradient_clip_norm (float, optional): Target norm for the gradients. Default: no clipping
+        gradient_clip_value (float, optional): Value to element-wise clip gradients.
+                                               Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
-                                             applied. Defaults to None.
-
+                                             applied, symmetric around 0. Default: no clipping
     Examples:
     .. code-block:: python
 

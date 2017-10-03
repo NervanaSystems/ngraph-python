@@ -25,7 +25,7 @@ from ngraph.testing.execution import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
 
-
+optimizer_list = [GradientDescentMomentum, RMSProp, Adam, Adagrad]
 atol = rtol = 1e-5
 
 
@@ -410,7 +410,7 @@ def test_learning_policy_schedule(drop_factor):
 
 
 @pytest.mark.parametrize("w_clip", [0.001, 0.01, 0.1, 1])
-@pytest.mark.parametrize("optimizer", [RMSProp, Adam, GradientDescentMomentum])
+@pytest.mark.parametrize("optimizer", optimizer_list)
 def test_weight_clipping(w_clip, optimizer):
     opt_ng = optimizer(0.1, weight_clip_value=w_clip)
 
