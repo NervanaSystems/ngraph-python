@@ -21,7 +21,6 @@ from test_hetr_passes import check_device_assign_pass, check_communication_pass
 import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.transformers.hetr.mpilauncher import MPILauncher
-from multiprocessing import active_children
 import time
 import os
 import subprocess
@@ -34,7 +33,7 @@ STARTUP_TIME = 3
 
 def prepare_environment(hetr_device, num_device):
     if hetr_device == 'gpu':
-        os.environ["HETR_SERVER_NUM"] = str(num_device)
+        os.environ["HETR_SERVER_GPU_NUM"] = str(num_device)
 
 
 def test_singleton_device_id(hetr_device):

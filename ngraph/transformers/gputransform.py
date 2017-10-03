@@ -464,9 +464,11 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(GPUCudaScatterSendOp)
     def add_kernel(self, op):
         self.kernels.append(CudaScatterSendKernel(self.transformer, self.comm, op))
+        print('add cuda scatter send op')
 
     @add_kernel.on_type(GPUCudaScatterRecvOp)
     def add_kernel(self, op):
+        print('add cuda scatter recv op')
         self.kernels.append(CudaScatterRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaGatherSendOp)
@@ -511,6 +513,8 @@ class GPUKernelGroup(object):
         we have to update GPU memory pointers in the arguments for each kernel on the
         first execution of each kernel.
         """
+        for k in self.kernels:
+            print(k, k.buffers_bound)
         for k in self.kernels:
             if not k.buffers_bound:
                 k.bind_buffers()

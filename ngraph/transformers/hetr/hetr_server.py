@@ -10,7 +10,6 @@ from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, tensor_to_protobuf,\
     _deserialize_graph_ops_edges, assign_scalar, protobuf_scalar_to_python, is_scalar_type
 from ngraph.transformers.hetrtransform import build_transformer
-from ngraph.transformers.cpu.hetr import HetrLocals
 import logging
 import os
 import fcntl
@@ -141,6 +140,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
     def Close(self, request, context):
         logger.info("server: close, self.transformer_type %s", self.transformer_type)
         if self.transformer_type == 'cpu':
+            from ngraph.transformers.cpu.hetr import HetrLocals
             HetrLocals.close_module()
         self.server.stop(0)
         return hetr_pb2.CloseReply()
