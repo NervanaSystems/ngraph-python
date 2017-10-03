@@ -85,9 +85,9 @@ def test_relu():
 
 
 def test_reciprocal():
-    assert_cntk_ngraph_array_equal(C.reciprocal([-1 / 3, 1 / 5, -2, 3]))
-    assert_cntk_ngraph_array_equal(C.reciprocal([[-1, 0.5], [-3, 4]]))
-    assert_cntk_ngraph_array_equal(C.reciprocal([[[1, 0.5], [-3, 0.33]], [[1, -2], [3, 4]]]))
+    assert_cntk_ngraph_isclose(C.reciprocal([-1 / 3, 1 / 5, -2, 3]))
+    assert_cntk_ngraph_isclose(C.reciprocal([[-1, 0.5], [-3, 4]]))
+    assert_cntk_ngraph_isclose(C.reciprocal([[[1, 0.5], [-3, 0.33]], [[1, -2], [3, 4]]]))
 
 
 def test_negate():
@@ -103,9 +103,9 @@ def test_log():
 
 
 def test_sqrt():
-    assert_cntk_ngraph_array_equal(C.sqrt([0., 4.]))
-    assert_cntk_ngraph_array_equal(C.sqrt([[1, 2], [3, 4]]))
-    assert_cntk_ngraph_array_equal(C.sqrt([[[1, 2], [3, 4]], [[1, 2], [3, 4]]]))
+    assert_cntk_ngraph_isclose(C.sqrt([0., 4.]))
+    assert_cntk_ngraph_isclose(C.sqrt([[1, 2], [3, 4]]))
+    assert_cntk_ngraph_isclose(C.sqrt([[[1, 2], [3, 4]], [[1, 2], [3, 4]]]))
 
 
 def test_floor():
