@@ -44,7 +44,6 @@ void create_mkldnn_pool_fprop_kernel(mkldnn_engine_t engine, int src_dims,
   if (!opkernel->op_desc) {
     // We dont have a pooling kernel that supports the input layout. Default to
     // the nchw kernel
-    printf("Default kernel\n");
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                       src_sizes, data_type, mkldnn_nchw));
     MKL_CHECK(mkldnn_pooling_forward_desc_init(
@@ -159,7 +158,6 @@ void create_mkldnn_pool_bprop_kernel(mkldnn_engine_t engine, int src_dims,
                                   engine, fprop_opkernel->op_desc);
   }
   if (!opkernel->op_desc) {
-    printf("Default bprop kernel\n");
     MKL_CHECK(mkldnn_memory_desc_init(&mkldnn_memory_desc_src_md, src_dims,
                                       src_sizes, data_type, mkldnn_nchw));
     MKL_CHECK(mkldnn_pooling_backward_desc_init(
