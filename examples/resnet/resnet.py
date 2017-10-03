@@ -106,7 +106,7 @@ class BuildResnet(Sequential):
                         layers.append(ResidualModule(main_path, side_path))
                         layers.append(Activation(Rectlin()))
             # Do average pooling --> fully connected--> softmax.
-            layers.append(Pooling([8, 8], op='avg'))
+            layers.append(Pooling([8, 8], pool_type='avg'))
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=True))
             layers.append(Activation(Softmax()))
         # For I1K dataset
@@ -156,7 +156,7 @@ class BuildResnet(Sequential):
                         layers.append(ResidualModule(main_path, side_path))
                         layers.append(Activation(Rectlin()))
             # Do average pooling --> fully connected--> softmax.
-            layers.append(Pooling([7, 7], op='avg'))
+            layers.append(Pooling([7, 7], pool_type='avg'))
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=True))
             layers.append(Activation(Softmax()))
         else:
