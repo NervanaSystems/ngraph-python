@@ -13,10 +13,22 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-from functools import reduce
+
+import numpy as np
+import mlsl
+from mpi4py import MPI
+from ngraph.op_graph.comm_nodes import \
+    CPUMlslGatherSendOp, CPUMlslScatterSendOp, \
+    CPUMlslAllReduceStartOp, CPUMlslBroadcastSendOp
+import logging
+
+
+logger = logging.getLogger(__name__)
+USER_TAG = 1
 
 
 class HetrLocals(object):
+
     def __init__(self, send_nodes, recv_nodes,
                  scatter_send_nodes, scatter_recv_nodes,
                  gather_send_nodes, gather_recv_nodes,
@@ -33,92 +45,191 @@ class HetrLocals(object):
         self.broadcast_send_nodes = broadcast_send_nodes
         self.broadcast_recv_nodes = broadcast_recv_nodes
 
-    def queue_send(self, send_id, x_nparr):
+        # MLSL-specific
+        self.mlsl_obj = mlsl.MLSL()
+        self.mlsl_obj.init()
+        self.process_count = self.mlsl_obj.get_process_count()
+        self.process_idx = self.mlsl_obj.get_process_idx()
+        # data parallelism
+        self.distribution = self.mlsl_obj.create_distribution(self.process_count, 1)
+
+        # MPI-specific
+        self.comm = MPI.COMM_WORLD
+        self.rank = self.comm.Get_rank()
+
+    def close(self):
+        self.mlsl_obj.delete_distribution(self.distribution)
+        self.mlsl_obj.finalize()
+
+    @staticmethod
+    def close_module():
+        mlsl.close()
+
+    def mlsl_send(self, send_id, x_nparr):
         send_op = self.send_nodes[send_id]
-        q = send_op.queue
+        self.comm.Send(x_nparr, dest=send_op.metadata['peer_id'], tag=USER_TAG)
 
-        # TODO
-        # below converts DeviceTensor to numpy array
-        # should we instead serialize DeviceTensor?
-        q.put(x_nparr)
-
-    def recv_from_queue_send(self, recv_id, out):
+    def recv_from_mlsl_send(self, recv_id, out):
         recv_op = self.recv_nodes[recv_id]
-        q = recv_op.queue
-        out[...] = q.get()
+        self.comm.Recv(out, source=recv_op.metadata['peer_id'], tag=USER_TAG)
         return out
 
-    def queue_gather_send(self, gather_send_id, x_nparr):
+    def mlsl_gather_send(self, gather_send_id, x_nparr):
         gather_send_op = self.gather_send_nodes[gather_send_id]
-        q = gather_send_op.shared_queues[gather_send_op.idx]
-        # TODO
-        # below converts DeviceTensor to numpy array
-        # should we instead serialize DeviceTensor?
-        q.put(x_nparr)
 
-    def gather_recv_from_queue_gather_send(self, gather_recv_id, out):
-        gather_recv_op = self.gather_recv_nodes[gather_recv_id]
-        for i in range(len(gather_recv_op.from_id)):
-            # work around when the length of slices == 0
-            # it indicates that a reduce op was needed instead of a gather op.
-            # since we do not have reduce ops
-            # we use a gather op, but ignore gather functionality
-            if len(gather_recv_op.slices[i]) == 0:
-                continue
-            q = gather_recv_op.shared_queues[i]
-            x = q.get()
-            out[gather_recv_op.slices[i]] = x
-        return out
+        # todo: get real root_idx
+        root_idx = 0
 
-    def queue_scatter_send(self, scatter_send_id, x_nparr):
-        scatter_send_op = self.scatter_send_nodes[scatter_send_id]
-        # TODO
-        # below converts DeviceTensor to numpy array
-        # should we instead serialize DeviceTensor?
-        for i in range(len(scatter_send_op.to_id)):
-            q = scatter_send_op.shared_queues[i]
-            q.put(x_nparr[scatter_send_op.slices[i]])
-
-    def scatter_recv_from_queue_scatter_send(self, scatter_recv_id, out):
-        scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
-        q = scatter_recv_op.shared_queues[scatter_recv_op.idx]
-        out[...] = q.get()
-        return out
-
-    def queue_allreduce(self, allreduce_id, x_nparr):
-        allreduce_op = self.allreduce_nodes[allreduce_id]
-        recv_buf = list()
-
-        # Send to all devices
-        for i, q in enumerate(allreduce_op.shared_queues):
-            if i != allreduce_op.idx:
-                q.put(x_nparr)
-
-        # Receive from all devices
-        recv_buf.append(x_nparr)
-        q = allreduce_op.shared_queues[allreduce_op.idx]
-        for i in range(len(allreduce_op.shared_queues) - 1):
-            recv_buf.append(q.get())
-
-        # Apply reduce function
-        if allreduce_op.reduce_func == 'sum':
-            result = reduce(lambda x, y: x + y, recv_buf)
-        elif allreduce_op.reduce_func == 'mean':
-            result = reduce(lambda x, y: x + y, recv_buf) / len(recv_buf)
+        if self.process_idx == root_idx:
+            # todo: remove that workaround for non-symmetric case
+            gather_send_op.arr = x_nparr
+            logger.debug("gather_send_root: arr %s", x_nparr)
         else:
-            raise RuntimeError(
-                'Reduce function {} is not supported.'.format(allreduce_op.reduce_func))
+            send_buf = np.ctypeslib.as_ctypes(x_nparr)
+            send_count = x_nparr.size
+            recv_buf = None
+            logger.debug("gather_send_non_root: arr %s", x_nparr)
+            if gather_send_op.use_reduce:
+                req = self.distribution.reduce(send_buf, send_buf, send_count,
+                                               mlsl.DataType.FLOAT, mlsl.ReductionType.SUM,
+                                               root_idx, mlsl.GroupType.DATA)
+            else:
+                req = self.distribution.gather(send_buf, send_count, recv_buf,
+                                               mlsl.DataType.FLOAT, root_idx,
+                                               mlsl.GroupType.DATA)
+            self.mlsl_obj.wait(req)
 
-        return result
+    def gather_recv_from_mlsl_gather_send(self, gather_recv_id, out):
+        gather_recv_op = self.gather_recv_nodes[gather_recv_id]
 
-    def queue_broadcast_send(self, broadcast_send_id, x_nparr):
+        # todo: get real root_idx
+        root_idx = 0
+
+        # todo: remove that workaround for non-symmetric case
+        if self.process_idx == root_idx:
+            send_node = next(op for op in gather_recv_op.control_deps
+                             if isinstance(op, CPUMlslGatherSendOp))
+            send_buf = np.ctypeslib.as_ctypes(send_node.arr)
+            send_count = send_node.arr.size
+            recv_buf = np.ctypeslib.as_ctypes(out)
+            if gather_recv_op.use_reduce:
+                req = self.distribution.reduce(send_buf, recv_buf, send_count,
+                                               mlsl.DataType.FLOAT, mlsl.ReductionType.SUM,
+                                               root_idx, mlsl.GroupType.DATA)
+            else:
+                req = self.distribution.gather(send_buf, send_count, recv_buf,
+                                               mlsl.DataType.FLOAT, root_idx,
+                                               mlsl.GroupType.DATA)
+            self.mlsl_obj.wait(req)
+            logger.debug("gather_recv: out %s", out)
+
+            # todo: replace by real reduce operation
+            if gather_recv_op.use_reduce:
+                out /= self.process_count
+
+        return out
+
+    def mlsl_scatter_send(self, scatter_send_id, x_nparr):
+        scatter_send_op = self.scatter_send_nodes[scatter_send_id]
+
+        # todo: get real root_idx
+        root_idx = 0
+
+        # todo: remove that workaround for non-symmetric case
+        if self.process_idx == root_idx:
+            scatter_send_op.arr = x_nparr
+            logger.debug("scatter_send_root: arr %s", x_nparr)
+
+    def scatter_recv_from_mlsl_scatter_send(self, scatter_recv_id, out):
+        scatter_recv_op = self.scatter_recv_nodes[scatter_recv_id]
+
+        # todo: get real root_idx
+        root_idx = 0
+
+        # todo: remove that workaround for non-symmetric case
+        send_buf = None
+        if self.process_idx == root_idx:
+            send_node = next(op for op in scatter_recv_op.control_deps
+                             if isinstance(op, CPUMlslScatterSendOp))
+            send_buf = np.ctypeslib.as_ctypes(send_node.arr)
+        recv_buf = np.ctypeslib.as_ctypes(out)
+        recv_count = out.size
+
+        req = self.distribution.scatter(send_buf, recv_buf, recv_count,
+                                        mlsl.DataType.FLOAT, root_idx,
+                                        mlsl.GroupType.DATA)
+        self.mlsl_obj.wait(req)
+        logger.debug("scatter_recv: out %s", out)
+        return out
+
+    def mlsl_allreduce_start(self, allreduce_id, out, x_nparr):
+        allreduce_op = self.allreduce_nodes[allreduce_id]
+        if not hasattr(allreduce_op, '_req'):
+            allreduce_op._req = [None]
+        if allreduce_op.reduce_func == 'sum' or allreduce_op.reduce_func == 'mean':
+            allreduce_op.arr = out
+            send_buf = np.ctypeslib.as_ctypes(x_nparr)
+            send_count = x_nparr.size
+            recv_buf = np.ctypeslib.as_ctypes(out)
+            allreduce_op.req = self.distribution.all_reduce(send_buf, recv_buf, send_count,
+                                                            mlsl.DataType.FLOAT,
+                                                            mlsl.ReductionType.SUM,
+                                                            mlsl.GroupType.DATA)
+        else:
+            raise RuntimeError('Reduce function {} is not supported.'
+                               .format(allreduce_op.reduce_func))
+
+    def mlsl_allreduce_wait(self, allreduce_id):
+        allreduce_op = self.allreduce_nodes[allreduce_id]
+        start_node = next(op for op in allreduce_op.control_deps
+                          if isinstance(op, CPUMlslAllReduceStartOp))
+        self.mlsl_obj.wait(start_node.req)
+
+        if allreduce_op.reduce_func == 'sum':
+            # sum reduction is performed inside MLSL
+            pass
+        elif allreduce_op.reduce_func == 'mean':
+            start_node.arr /= self.process_count
+        else:
+            raise RuntimeError('Reduce function {} is not supported.'
+                               .format(allreduce_op.reduce_func))
+
+    def mlsl_broadcast_send(self, broadcast_send_id, x_nparr):
         broadcast_send_op = self.broadcast_send_nodes[broadcast_send_id]
-        for i in range(len(broadcast_send_op.to_id)):
-            q = broadcast_send_op.shared_queues[i]
-            q.put(x_nparr)
 
-    def broadcast_recv_from_queue_broadcast_send(self, broadcast_recv_id, out):
+        # todo: get real root_idx
+        root_idx = 0
+
+        # todo: remove that workaround for non-symmetric case
+        if self.process_idx == root_idx:
+            broadcast_send_op.arr = x_nparr
+            logger.debug("bcast_send: arr %s, send_op %s", x_nparr, broadcast_send_op)
+
+    def broadcast_recv_from_mlsl_broadcast_send(self, broadcast_recv_id, out):
         broadcast_recv_op = self.broadcast_recv_nodes[broadcast_recv_id]
-        q = broadcast_recv_op.shared_queues[broadcast_recv_op.idx]
-        out[...] = q.get()
+
+        # todo: get real root_idx
+        root_idx = 0
+
+        # todo: remove that workaround for non-symmetric case
+        req = None
+        if self.process_idx == root_idx:
+            send_buf = None
+            send_node = next(op for op in broadcast_recv_op.control_deps
+                             if isinstance(op, CPUMlslBroadcastSendOp))
+            send_buf = np.ctypeslib.as_ctypes(send_node.arr)
+            count = send_node.arr.size
+            logger.debug("bcast_recv_root: arr %s, send_op %s", send_node.arr, send_node)
+            req = self.distribution.bcast(send_buf, count,
+                                          mlsl.DataType.FLOAT, root_idx,
+                                          mlsl.GroupType.DATA)
+            out[...] = send_node.arr
+        else:
+            recv_buf = np.ctypeslib.as_ctypes(out)
+            count = out.size
+            req = self.distribution.bcast(recv_buf, count,
+                                          mlsl.DataType.FLOAT, root_idx,
+                                          mlsl.GroupType.DATA)
+        self.mlsl_obj.wait(req)
+        logger.debug("bcast_recv: out %s", out)
         return out

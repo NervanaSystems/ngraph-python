@@ -105,7 +105,7 @@ def test_concatenate():
         ng.testing.assert_allclose(j_val, j_np)
 
 
-@pytest.config.cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
+@pytest.config.hetr_and_cpu_enabled_only(reason="Only CPU supports dynamic graph changes")
 def test_specific_slice_deriv():
     #
     with ExecutorFactory() as ex:

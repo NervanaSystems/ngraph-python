@@ -53,6 +53,7 @@ message Scalar {
     Slice slice_val = 9; // Python slices
     DTYPE dtype_val = 10;
     Axis axis = 11;
+    AxesMap axes_map = 12;
   }
 }
 
@@ -145,6 +146,10 @@ message Axis {
   bool match_on_length = 6;
   string docstring = 8;
   Axes flattened_axes = 9;
+}
+
+message AxesMap {
+  Scalar mapping = 1;
 }
 
 // Allows for detecting nullable int64 values in things like Slice

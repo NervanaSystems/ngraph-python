@@ -59,19 +59,36 @@ from ngraph.transformers.extransform import ExecutionGraphTransformer, \
 
 from ngraph.transformers.exop import InputDecl, OutputDecl, LiteralScalarOp
 
-from ngraph.op_graph.comm_nodes import CPUQueueSendOp, CPUQueueRecvOp, \
-    CPUQueueGatherSendOp, CPUQueueGatherRecvOp, CPUQueueScatterSendOp, \
-    CPUQueueScatterRecvOp, CPUQueueAllReduceOp, CPUQueueBroadcastSendOp, \
-    CPUQueueBroadcastRecvOp
+from ngraph.op_graph.comm_nodes import CPUMlslSendOp, CPUMlslRecvOp, \
+    CPUMlslGatherSendOp, CPUMlslGatherRecvOp, \
+    CPUMlslScatterSendOp, CPUMlslScatterRecvOp, \
+    CPUMlslAllReduceStartOp, CPUMlslAllReduceWaitOp, \
+    CPUMlslBroadcastSendOp, CPUMlslBroadcastRecvOp
 
 from ngraph.util.trace_events import is_tracing_enabled
 
 
 def align_ndarray(element_count, alignment, dtype):
-    x = np.empty(element_count + (alignment - 1), dtype)
-    offset = (x.ctypes.data % alignment) // dtype.itemsize
-    padding = 0 if offset == 0 else (alignment - offset)
-    return x[padding:padding + element_count]
+    try:
+        import mlsl
+        import ctypes
+        mlsl_obj = mlsl.MLSL()
+        if dtype.name == 'float32':
+            c_type_name = 'c_float'
+        elif dtype.name == 'float64':
+            c_type_name = 'c_double'
+        else:
+            c_type_name = None
+        type_size = ctypes.sizeof(getattr(ctypes, c_type_name)(1))
+        mlsl_buf = mlsl_obj.alloc(element_count * type_size, alignment)
+        array = ctypes.cast(mlsl_buf, ctypes.POINTER(getattr(ctypes, c_type_name) * element_count))
+        np_array = np.frombuffer(array.contents, dtype)
+        return np_array
+    except ImportError:
+        x = np.empty(element_count + (alignment - 1), dtype)
+        offset = (x.ctypes.data % alignment) // dtype.itemsize
+        padding = 0 if offset == 0 else (alignment - offset)
+        return x[padding:padding + element_count]
 
 
 class CPUConvEngine(object):
@@ -751,60 +768,66 @@ class CPUCodeGenerator(PyGen):
     def generate_op(self, op, out, x):
         self.append("{}.fill({})", out, op.reduction_axes.size)
 
-    @generate_op.on_type(CPUQueueSendOp)
+    @generate_op.on_type(CPUMlslSendOp)
     def generate_op(self, op, out, arg):
         send_id = len(self.send_nodes)
         self.send_nodes.append(op)
-        self.append("self.queue_send({}, {})", send_id, arg)
+        self.append("self.mlsl_send({}, {})", send_id, arg)
 
-    @generate_op.on_type(CPUQueueRecvOp)
+    @generate_op.on_type(CPUMlslRecvOp)
     def generate_op(self, op, out):
         recv_id = len(self.recv_nodes)
         self.recv_nodes.append(op)
-        self.append("self.recv_from_queue_send({}, out={})", recv_id, out)
+        self.append("self.recv_from_mlsl_send({}, out={})", recv_id, out)
 
-    @generate_op.on_type(CPUQueueGatherSendOp)
+    @generate_op.on_type(CPUMlslGatherSendOp)
     def generate_op(self, op, out, arg):
         gather_send_id = len(self.gather_send_nodes)
         self.gather_send_nodes.append(op)
-        self.append("self.queue_gather_send({}, {})", gather_send_id, arg)
+        self.append("self.mlsl_gather_send({}, {})", gather_send_id, arg)
 
-    @generate_op.on_type(CPUQueueGatherRecvOp)
+    @generate_op.on_type(CPUMlslGatherRecvOp)
     def generate_op(self, op, out):
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes.append(op)
-        self.append("self.gather_recv_from_queue_gather_send({}, out={})", gather_recv_id, out)
+        self.append("self.gather_recv_from_mlsl_gather_send({}, out={})", gather_recv_id, out)
 
-    @generate_op.on_type(CPUQueueScatterSendOp)
+    @generate_op.on_type(CPUMlslScatterSendOp)
     def generate_op(self, op, out, arg):
         scatter_send_id = len(self.scatter_send_nodes)
         self.scatter_send_nodes.append(op)
-        self.append("self.queue_scatter_send({}, {})", scatter_send_id, arg)
+        self.append("self.mlsl_scatter_send({}, {})", scatter_send_id, arg)
 
-    @generate_op.on_type(CPUQueueScatterRecvOp)
+    @generate_op.on_type(CPUMlslScatterRecvOp)
     def generate_op(self, op, out):
         scatter_recv_id = len(self.scatter_recv_nodes)
         self.scatter_recv_nodes.append(op)
-        self.append("self.scatter_recv_from_queue_scatter_send({}, out={})",
+        self.append("self.scatter_recv_from_mlsl_scatter_send({}, out={})",
                     scatter_recv_id, out)
 
-    @generate_op.on_type(CPUQueueAllReduceOp)
+    @generate_op.on_type(CPUMlslAllReduceStartOp)
     def generate_op(self, op, out, arg):
         allreduce_id = len(self.allreduce_nodes)
         self.allreduce_nodes.append(op)
-        self.append("{}[...] = self.queue_allreduce({}, {})", out, allreduce_id, arg)
+        self.append("self.mlsl_allreduce_start({}, {}, {})", allreduce_id, out, arg)
 
-    @generate_op.on_type(CPUQueueBroadcastSendOp)
+    @generate_op.on_type(CPUMlslAllReduceWaitOp)
+    def generate_op(self, op, out):
+        allreduce_id = len(self.allreduce_nodes)
+        self.allreduce_nodes.append(op)
+        self.append("self.mlsl_allreduce_wait({})", allreduce_id)
+
+    @generate_op.on_type(CPUMlslBroadcastSendOp)
     def generate_op(self, op, out, arg):
         broadcast_send_id = len(self.broadcast_send_nodes)
         self.broadcast_send_nodes.append(op)
-        self.append("self.queue_broadcast_send({}, {})", broadcast_send_id, arg)
+        self.append("self.mlsl_broadcast_send({}, {})", broadcast_send_id, arg)
 
-    @generate_op.on_type(CPUQueueBroadcastRecvOp)
+    @generate_op.on_type(CPUMlslBroadcastRecvOp)
     def generate_op(self, op, out):
         broadcast_recv_id = len(self.broadcast_recv_nodes)
         self.broadcast_recv_nodes.append(op)
-        self.append("self.broadcast_recv_from_queue_broadcast_send({}, out={})",
+        self.append("self.broadcast_recv_from_mlsl_broadcast_send({}, out={})",
                     broadcast_recv_id, out)
 
 
@@ -824,7 +847,7 @@ class CPUTransformer(ExecutionGraphTransformer):
     import imp
     try:
         imp.find_module('mlsl')
-        use_mlsl = False
+        use_mlsl = True
     except ImportError:
         use_mlsl = False
 
@@ -895,8 +918,14 @@ class CPUTransformer(ExecutionGraphTransformer):
         self.exop_codegen.endl(2)
 
     def start_define_computation(self, computation_decl):
-        self.exop_codegen.append("class {}(HetrLocals, ConvLocals):",
-                                 computation_decl.computation_op.name)
+
+        if self.use_mlsl:
+            self.exop_codegen.append("class {}(HetrLocals, ConvLocals):",
+                                     computation_decl.computation_op.name)
+        else:
+            self.exop_codegen.append("class {}(ConvLocals):",
+                                     computation_decl.computation_op.name)
+
         with indenting(self.exop_codegen):
             self.exop_codegen.append("def __init__(self, **kwargs):")
             with indenting(self.exop_codegen):
@@ -913,7 +942,12 @@ self.__profiler_stop__  = list()
                     self.exop_codegen.exop = exop
                     self.exop_codegen.allocate_op(exop.op, output_decl, *exop.input_decls)
 
-            self.exop_codegen.endl()
+            self.exop_codegen.append("def close(self):")
+            with indenting(self.exop_codegen):
+                if self.use_mlsl:
+                    self.exop_codegen.append('HetrLocals.close(self)')
+                else:
+                    self.exop_codegen.append('pass')
 
         self.exop_codegen.indent(1)
         self.exop_codegen.append("def __call__(self):")
@@ -964,21 +998,24 @@ self.__profiler_stop__  = list()
         code += '# code\n'
         code += '#---------------------------------------------\n'
         code += self.exop_codegen.take_code()
+
         self.globals.compile(code)
         cls = self.globals[computation_decl.computation_op.name]
-        executor = cls(conv_params=device_computation.conv_params,
-                       pool_params=device_computation.pool_params,
-                       conv_slices=device_computation.conv_slices,
-                       pool_slices=device_computation.pool_slices,
-                       send_nodes=device_computation.send_nodes,
-                       recv_nodes=device_computation.recv_nodes,
-                       scatter_send_nodes=device_computation.scatter_send_nodes,
-                       scatter_recv_nodes=device_computation.scatter_recv_nodes,
-                       gather_send_nodes=device_computation.gather_send_nodes,
-                       gather_recv_nodes=device_computation.gather_recv_nodes,
-                       allreduce_nodes=device_computation.allreduce_nodes,
-                       broadcast_send_nodes=device_computation.broadcast_send_nodes,
-                       broadcast_recv_nodes=device_computation.broadcast_recv_nodes)
+        params = {'conv_params': device_computation.conv_params,
+                  'pool_params': device_computation.pool_params,
+                  'conv_slices': device_computation.conv_slices,
+                  'pool_slices': device_computation.pool_slices}
+        if self.use_mlsl:
+            params.update({'send_nodes': device_computation.send_nodes,
+                           'recv_nodes': device_computation.recv_nodes,
+                           'scatter_send_nodes': device_computation.scatter_send_nodes,
+                           'scatter_recv_nodes': device_computation.scatter_recv_nodes,
+                           'gather_send_nodes': device_computation.gather_send_nodes,
+                           'gather_recv_nodes': device_computation.gather_recv_nodes,
+                           'allreduce_nodes': device_computation.allreduce_nodes,
+                           'broadcast_send_nodes': device_computation.broadcast_send_nodes,
+                           'broadcast_recv_nodes': device_computation.broadcast_recv_nodes})
+        executor = cls(**params)
         return executor
 
     def make_device_tensor(self, computation, tensor_decl):
@@ -1005,20 +1042,20 @@ from monotonic import monotonic as monotonic
 try:
     import mlsl
     import ctypes
+    from ngraph.transformers.cpu.hetr import HetrLocals
 except ImportError:
     pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
 from ngraph.transformers.cpu.cpuengine import ConvLocals
-from ngraph.transformers.cpu.hetr import HetrLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 from ngraph.transformers.cputransform import align_ndarray
         """)
 
         mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
-        module.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
+        module.execute("mkldnn = Mkldnn(r'{}')".format(mkldnn_engine_path))
         module.execute("mkldnn.open()")
         self.mkldnn = module['mkldnn']
         if self.use_mlsl:
@@ -1048,11 +1085,24 @@ from ngraph.transformers.cputransform import align_ndarray
                 if self.globals.get('mkldnn', None) is not None:
                     self.globals.execute('mkldnn.close()')
                 if self.globals.get('mlsl_obj', None) is not None:
-                    for device_buffer in self.device_buffers:
-                        self.globals.execute("mlsl_obj.free({}.__array_interface__['data'][0])"
-                                             .format(device_buffer.ref_str))
-
+                    for computation in self.device_computations.values():
+                        comp_name = computation.computation_decl.computation_op.name
+                        self.globals.execute("""
+t_pool_exists = '{cname}_temporary_pool' in locals() or '{cname}_temporary_pool' in globals()
+p_pool_exists = '{cname}_persistent_pool' in locals() or '{cname}_persistent_pool' in globals()
+if t_pool_exists:
+    mem_pool = {cname}_temporary_pool
+    p = mem_pool.__array_interface__['data'][0]
+    mlsl_obj.free(p)
+if p_pool_exists:
+    mem_pool = {cname}_persistent_pool
+    p = mem_pool.__array_interface__['data'][0]
+    mlsl_obj.free(p)""".format(cname=comp_name))
                     self.globals.execute('mlsl_obj.finalize()')
+                for computation in self.device_computations.values():
+                    if hasattr(computation, 'executor') and computation.executor is not None:
+                        computation.executor.close()
+
             except TypeError:
                 pass
         self.code = None
