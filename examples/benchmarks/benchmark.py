@@ -87,7 +87,7 @@ class Benchmark(object):
         start = Benchmark.marker.init_mark()
         end = Benchmark.marker.init_mark()
         t_args = {}
-        if self.transformer=='hetr':
+        if self.transformer == 'hetr':
             t_args['device'] = self.device
         with closing(ngt.make_transformer_factory(self.transformer, **t_args)()) as transformer:
             if visualize:
