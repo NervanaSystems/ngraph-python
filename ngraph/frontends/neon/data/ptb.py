@@ -28,13 +28,14 @@ class PTB(object):
                                 version of the sequence. Default to be True, for
                                 language models.
     """
-    def __init__(self, path='.', shift_target=True):
+    def __init__(self, path='.', use_words=False, shift_target=True):
         self.path = path
         self.url = 'https://raw.githubusercontent.com/wojzaremba/lstm/master/data'
         self.filemap = dict(train=dict(filename='ptb.train.txt', size=5101618),
                             test=dict(filename='ptb.test.txt', size=449945),
                             valid=dict(filename='ptb.valid.txt', size=399782))
         self.shift_target = shift_target
+        self.use_words = use_words
 
     def load_data(self):
         self.data_dict = {}
@@ -47,7 +48,10 @@ class PTB(object):
 
             tokens = open(filepath).read()  # add tokenization here if necessary
 
-            self.vocab = sorted(set(tokens if self.vocab is None else self.vocab))
+            if self.use_words:
+                tokens = tokens.strip().split()
+
+            self.vocab = sorted(set(tokens)) if self.vocab is None else self.vocab
 
             # vocab dicts
             self.token_to_index = dict((t, i) for i, t in enumerate(self.vocab))
