@@ -2730,8 +2730,8 @@ class UnsliceOp(SequentialOp):
         super(UnsliceOp, self).__init__(**kwargs)
         self.x = x
         self.slices = slices
-        if all(s==0 or s==slice(None) for s in slices) and\
-            len(axes - x.axes) == 1:
+        if all(sl==0 or sl==slice(None) for sl in slices) and\
+            len(axes - x.axes) == 1 and (axes-x.axes)[0].length == 1:
             # Add the missing dimension
             for i, s in enumerate(slices):
                 if s == 0:

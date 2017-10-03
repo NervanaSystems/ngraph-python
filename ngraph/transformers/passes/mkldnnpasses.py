@@ -71,7 +71,7 @@ def get_strides_mkl_order(td, order):
     return [td.strides[index] for index in order]
 
 
-def get_native_layout(mkldnn, td, order):
+def get_native_layout(mkldnn, td, order, use_formats=False):
     '''
     Create an MKL layout object in transformer-visible layout
     :param td: tensor description of the op. Currently owns tensor layout info in graph
@@ -88,18 +88,19 @@ def get_native_layout(mkldnn, td, order):
     memory_format = mkldnn.memory_format['blocked']
 
     # Look for canned formats
-    if len(mkl_strides) == 4:
-        [N, C, H, W] = mkl_strides
-        stride_order = sorted([N, C, H, W], reverse=True)
-        if (stride_order == [C, H, W, N]):
-            memory_format = mkldnn.memory_format['chwn']
-        elif (stride_order == [N, C, H, W]):
-            memory_format = mkldnn.memory_format['nchw']
-    elif len(mkl_strides) == 2:
-        [N, C] = mkl_strides
-        stride_order = sorted([N, C], reverse=True)
-        if stride_order == [N, C]:
-            memory_format = mkldnn.memory_format['nc']
+    if False: # Let mkldnn_engine look for canned formats
+        if len(mkl_strides) == 4:
+            [N, C, H, W] = mkl_strides
+            stride_order = sorted([N, C, H, W], reverse=True)
+            if (stride_order == [C, H, W, N]):
+                memory_format = mkldnn.memory_format['chwn']
+            elif (stride_order == [N, C, H, W]):
+                memory_format = mkldnn.memory_format['nchw']
+        elif len(mkl_strides) == 2:
+            [N, C] = mkl_strides
+            stride_order = sorted([N, C], reverse=True)
+            if stride_order == [N, C]:
+                memory_format = mkldnn.memory_format['nc']
 
     native_layout = mkldnn.create_layout_md(
         mkldnn.mkldnn_engine,
@@ -502,11 +503,13 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(input))
         mkl_layout = self.get_exop(input).output_decls[arg_idx].tensor_view_decl.mkl_layout
         if mkl_layout:
+            # Keep the axes order so we propagate the layout instead of creating a new layout
             (_, input_axes) = mkl_layout
             mkl_order = get_order_from_axes(op.axes, input_axes)
         else:
             mkl_order = list(range(len(op.axes)))
         (input_shape, input_layout) = self.get_arg_shape_and_layout(op, input, mkl_order)
+        out_axes = get_axes_mkl_order(op.axes, mkl_order)
 
         input_size = np.prod(input.axes.lengths)
         op_id = len(self.mkldnn.kernels)
@@ -518,11 +521,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             data_type,
             self.mkldnn.kernels[op.name])
         
-        if mkl_layout:
-            self.set_mkl_layout(op, input_axes)
-        else:
-            out_axes = get_axes_mkl_order(op.axes, mkl_order)
-            self.set_mkl_layout(op, out_axes)
+        self.set_mkl_layout(op, out_axes)
         dbg_print_kernel(self.mkldnn, op, op_id)
 
     @visit.on_type(BpropReluOp)
@@ -588,15 +587,12 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.name] = self.mkldnn.create_empty_kernel(op_id)
-        # FIXME: cuurently input layout is causing issue, when the mkl_layout is in [C,N,H,W]
-        # even though get_rotate_layout sets the layout to [N, C, H, W].
-        # As work around setting input_layout=None.
         self.mkldnn.pool_fprop_kernel(
             self.mkldnn.mkldnn_engine,
             len(input_shape), len(output_shape),
             get_ctypes_arg(input_shape), get_ctypes_arg(kernel), get_ctypes_arg(output_shape),
             get_ctypes_arg(stride), get_ctypes_arg(pad), pool_type,
-            None, data_type, self.mkldnn.kernels[op.name])
+            input_layout, data_type, self.mkldnn.kernels[op.name])
 
 
         self.set_mkl_layout(op, out_axes)

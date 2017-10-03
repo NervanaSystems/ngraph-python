@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.transformer_dependent,
 
 rng = RandomTensorGenerator()
 rtol = 0
-atol = 1e-6
+atol = 1e-5
 recurrent_atol = 1e-5
 
 
