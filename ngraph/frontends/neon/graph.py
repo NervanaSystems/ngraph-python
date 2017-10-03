@@ -98,6 +98,8 @@ class ComputationalGraph(object):
         Methods:
             select: Select ops from the graph using css-like selectors.
         """
+        super(ComputationalGraph, self).__init__(**kwargs)
+
         if ops is None:
             ops = list()
             all_ops = ng.Op.get_all_ops()

@@ -28,7 +28,7 @@ class NestedLayer(Layer):
     def __init__(self, inner_layer=None, **kwargs):
         super(NestedLayer, self).__init__(**kwargs)
         if inner_layer is None:
-            inner_layer = SimpleLayer(inherit_scope=self.scope)
+            inner_layer = SimpleLayer()
         self.inner_layer = inner_layer
 
     @SubGraph.scope_op_creation
