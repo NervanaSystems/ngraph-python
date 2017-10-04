@@ -40,15 +40,17 @@ TAG_DIRECT = 44
 def setup_ipc_handle(op, comm, cmd, handle=None, dest=None):
     if cmd == 'send':
         for d in dest:
-            if op.metadata['device_id'] == int(d):
-                local = True
-                buf_ipc_hdl = int(handle)
-            else:
-                local = False
+            print('->', type(op.metadata['device_id']), op.metadata['device_id'], int(d))
+            if int(d) == 1:
+                # import rpdb; rpdb.set_trace()
                 buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
-            comm.send((local, buf_ipc_hdl), dest=int(d), tag=TAG_IPC)
+                print('comm.send((False, {}), dest={}, tag={})'.format(handle, d, TAG_IPC))
+                comm.send((False, buf_ipc_hdl), dest=int(d), tag=TAG_IPC)
+                print('comm.send finish')
     else:
+        print('(local, buf_ipc_hdl) = comm.recv(source=int({}), tag={})'.format(op.source_id, TAG_IPC))
         (local, buf_ipc_hdl) = comm.recv(source=int(op.source_id), tag=TAG_IPC)
+        print('finish recv', local)
         if local:
             return (buf_ipc_hdl)
         else:
@@ -320,23 +322,31 @@ class CudaScatterSendKernel(GPUKernel):
         self.comm = comm
 
     def bind_buffers(self):
+        print('scatter send bind_buffers')
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
         # if input buffer changes we need to make sure to set new ipc handle and
         # signal the recv kernel to get the new ipc handle.
         # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
+        print('ipc handle: {}'.format(self.tensor.tensor.gpudata))
+        self.op.ipc_handle = int(self.tensor.tensor.gpudata)
+        print('before scatter send setup ipc handle')
         setup_ipc_handle(
             op=self.op,
             comm=self.comm,
             handle=self.tensor.tensor.gpudata,
             cmd='send',
             dest=self.op.to_id)
+        print('after scatter send setup ipc handle')
 
     def execute(self):
         ready = True
         for i in self.op.to_id:
-            self.comm.send(ready, dest=int(i), tag=TAG_SCATTER)
+            print('s/s execute')
+            if int(i) != 0:
+                self.comm.send(ready, dest=int(i), tag=TAG_SCATTER)
+            print('s/s execute finish')
 
 
 class CudaScatterRecvKernel(GPUKernel):
@@ -356,13 +366,23 @@ class CudaScatterRecvKernel(GPUKernel):
         # since sender/recvr are in the same process in this case,
         # set_ipc_handle must be called before open_ipc_handle to avoid a hang,
         # hence doing set_ in bind_buffers and open_ in execute.
-        self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
+        print('scatter recv bind_buffers', self.op.metadata['device_id'])
+        if self.op.metadata['device_id'] == '0':
+            self.tnsr_ipc_hdl = int(self.tensor.tensor.gpudata) - 1024
+        else:
+            self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+        print('finishi scatter recv kernel')
 
     def execute(self):
-        ready = self.comm.recv(source=self.op.source_id, tag=TAG_SCATTER)
+        print('s/r execute')
+        if self.op.metadata['device_id'] == '0':
+            ready = True
+        else:
+            ready = self.comm.recv(source=self.op.source_id, tag=TAG_SCATTER)
+        print('s/r execute finish')
         if ready:
             drv.memcpy_dtod(
                 self.tensor.tensor.gpudata,
@@ -385,13 +405,18 @@ class CudaGatherSendKernel(GPUKernel):
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherSendKernel, self).bind_buffers()
+        print('gather send: ', self.tensor.tensor.gpudata)
 
     def execute(self):
         if self.recvr_buf is None:
             # set_ipc_handle must be called before open_ipc_handle in certain cases to avoid a
             # hang, hence calling set_ in bind_buffers and open_ in execute.
             # See corresponding comment in ScatterRecv kernel for details.
-            self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
+            print(self)
+            if self.op.metadata['device_id'] != '0':
+                self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
+            else:
+                self.tnsr_ipc_hdl = int(self.tensor.tensor.gpudata) + 1024
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
             self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
         # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
@@ -401,7 +426,12 @@ class CudaGatherSendKernel(GPUKernel):
             self.tensor.tensor.gpudata,
             self.tensor.tensor.size * self.op.dtype.itemsize)
         ready = True
-        self.comm.send(ready, dest=int(self.op.source_id), tag=TAG_GATHER)
+        print('g/s execute')
+        if self.op.metadata['device_id'] != '0':
+            print('gather send ---------')
+            self.comm.send(ready, dest=int(self.op.source_id), tag=TAG_GATHER)
+            print('gather send finish ---------')
+        print('g/s execute finish')
 
 
 class CudaGatherRecvKernel(GPUKernel):
@@ -425,7 +455,12 @@ class CudaGatherRecvKernel(GPUKernel):
 
     def execute(self):
         for i in self.op.from_id:
-            ready = self.comm.recv(source=int(i), tag=TAG_GATHER)
+            print('g/r execute')
+            if i == '0':
+                ready = True
+            else:
+                ready = self.comm.recv(source=int(i), tag=TAG_GATHER)
+            print('g/r execute finish')
             if not ready:
                 raise RuntimeError("Synchronization failed!")
 

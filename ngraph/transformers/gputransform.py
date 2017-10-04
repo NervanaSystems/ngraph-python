@@ -464,11 +464,9 @@ class GPUKernelGroup(object):
     @add_kernel.on_type(GPUCudaScatterSendOp)
     def add_kernel(self, op):
         self.kernels.append(CudaScatterSendKernel(self.transformer, self.comm, op))
-        print('add cuda scatter send op')
 
     @add_kernel.on_type(GPUCudaScatterRecvOp)
     def add_kernel(self, op):
-        print('add cuda scatter recv op')
         self.kernels.append(CudaScatterRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaGatherSendOp)
@@ -514,13 +512,15 @@ class GPUKernelGroup(object):
         first execution of each kernel.
         """
         for k in self.kernels:
-            print(k, k.buffers_bound)
-        for k in self.kernels:
+            print('kernel --> {}'.format(k))
             if not k.buffers_bound:
                 k.bind_buffers()
 
+        print('--------------')
+        print('finish kernel bind buffers, start execution')
+        print('--------------')
         for k in self.kernels:
-
+            print('kernel --> {}'.format(k))
             self.setup_kernel_execute(k)
             k.execute()
             self.after_kernel_execute(k)
