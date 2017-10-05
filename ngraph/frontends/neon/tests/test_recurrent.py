@@ -366,6 +366,8 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
             ng.testing.assert_allclose(output, h_ref_list[ii], rtol=fprop_rtol, atol=fprop_atol)
 
 
+# direct xfail - because of the very long time of execution
+@pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
 @pytest.config.flex_disabled(reason="BiRNN is not yet supported with Flex")
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
@@ -379,9 +381,6 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
 def test_birnn_deriv_numerical(sequence_length, input_size, hidden_size, batch_size,
                                return_sequence, weight_initializer, bias_initializer,
                                sum_out, concat_out):
-
-    # direct xfail - because of the very long time of execution
-    pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
 
     # Get input placeholder and numpy array
     input_placeholder, input_value = make_placeholder(input_size, sequence_length, batch_size)
