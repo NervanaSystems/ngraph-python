@@ -367,7 +367,7 @@ def test_birnn_fprop(sequence_length, input_size, hidden_size, batch_size, retur
 
 
 # direct xfail - because of the very long time of execution
-@pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
+@pytest.config.argon_skip(reason="Argon Transformer error")  # TODO triage
 @pytest.config.flex_disabled(reason="BiRNN is not yet supported with Flex")
 @pytest.mark.transformer_dependent
 @pytest.mark.parametrize("batch_size", [1])
