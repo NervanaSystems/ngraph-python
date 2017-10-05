@@ -23,8 +23,7 @@ from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import Layer
 from resnet import BuildResnet
 from contextlib import closing
-from ngraph.frontends.neon import ArrayIterator
-from ngraph.frontends.neon import CIFAR10
+
 
 # Result collector
 def loop_eval(dataset, computation, metric_names):
@@ -109,12 +108,8 @@ if __name__ == "__main__":
 # Set batch size
 ax.N.length = args.batch_size
 # Create training and validation set objects
-train_data, valid_data = CIFAR10(args.data_dir).load_data()
-train_set = ArrayIterator(train_data, args.batch_size, total_iterations=args.num_iterations)
-valid_set = ArrayIterator(valid_data, args.batch_size)
-#train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
-#                                         args.num_iterations, dataset=args.dataset)
-
+train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
+                                         args.num_iterations, dataset=args.dataset)
 print("Completed loading " + args.dataset + " dataset")
 # Randomize seed
 np.random.seed(args.rng_seed)
