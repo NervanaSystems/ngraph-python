@@ -112,5 +112,6 @@ class MPILauncher(object):
             self._tmpfile.close()
 
         os.killpg(os.getpgid(self.mpirun_proc.pid), signal.SIGTERM)
+        os.killpg(os.getpgid(self.mpirun_proc.pid), signal.SIGKILL)
         self.mpirun_proc.wait()
         self.mpirun_proc = None
