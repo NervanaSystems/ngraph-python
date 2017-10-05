@@ -190,13 +190,17 @@ mkldnn_reorder_axes(mkldnn_memory_desc_t *in_md, int* axis_order) {
     if (mkldnn_compare_memdesc(md, tmp_md)) {
         md->format = mkldnn_chwn;
     }
-    MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nChw8c));
-    if (mkldnn_compare_memdesc(md, tmp_md)) {
-        md->format = mkldnn_nChw8c;
+    if (md->dims[1] >= 8) {
+        MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nChw8c));
+        if (mkldnn_compare_memdesc(md, tmp_md)) {
+            md->format = mkldnn_nChw8c;
+        }
     }
-    MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nChw16c));
-    if (mkldnn_compare_memdesc(md, tmp_md)) {
-        md->format = mkldnn_nChw16c;
+    if (md->dims[1] >= 16) {
+        MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nChw16c));
+        if (mkldnn_compare_memdesc(md, tmp_md)) {
+            md->format = mkldnn_nChw16c;
+        }
     }
     free(tmp_md);
 
