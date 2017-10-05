@@ -17,27 +17,23 @@ from __future__ import division
 import numpy as np
 import mlsl
 from mpi4py import MPI
+import ctypes
 from ngraph.op_graph.comm_nodes import \
     CPUMlslGatherSendOp, CPUMlslScatterSendOp, \
     CPUMlslAllReduceStartOp, CPUMlslBroadcastSendOp
 import logging
-import atexit
 
 
-def exit_func():
-    mlsl_obj.finalize()
-
-
-atexit.register(exit_func)
 logger = logging.getLogger(__name__)
-mlsl_obj = mlsl.MLSL()
-mlsl_obj.init()
-process_count = mlsl_obj.get_process_count()
-process_idx = mlsl_obj.get_process_idx()
 USER_TAG = 1
 
 
 class HetrLocals(object):
+
+    mlsl_obj = mlsl.MLSL()
+    mlsl_obj.init()
+    process_count = mlsl_obj.get_process_count()
+    process_idx = mlsl_obj.get_process_idx()
 
     def __init__(self, send_nodes, recv_nodes,
                  scatter_send_nodes, scatter_recv_nodes,
@@ -56,13 +52,36 @@ class HetrLocals(object):
         self.broadcast_recv_nodes = broadcast_recv_nodes
 
         # MLSL-specific
-        self.distribution = mlsl_obj.create_distribution(process_count, 1)
+        self.distribution = self.mlsl_obj.create_distribution(self.process_count, 1)
 
         # MPI-specific
         self.comm = MPI.COMM_WORLD
 
     def close(self):
-        mlsl_obj.delete_distribution(self.distribution)
+        self.mlsl_obj.delete_distribution(self.distribution)
+
+    @staticmethod
+    def close_mlsl():
+        HetrLocals.mlsl_obj.finalize()
+        mlsl.close()
+
+    @staticmethod
+    def mlsl_alloc(element_count, alignment, dtype):
+        if dtype.name == 'float32':
+            c_type_name = 'c_float'
+        elif dtype.name == 'float64':
+            c_type_name = 'c_double'
+        else:
+            c_type_name = None
+        type_size = ctypes.sizeof(getattr(ctypes, c_type_name)(1))
+        mlsl_buf = HetrLocals.mlsl_obj.alloc(element_count * type_size, alignment)
+        array = ctypes.cast(mlsl_buf, ctypes.POINTER(getattr(ctypes, c_type_name) * element_count))
+        np_array = np.frombuffer(array.contents, dtype)
+        return np_array
+
+    @staticmethod
+    def mlsl_free(array):
+        HetrLocals.mlsl_obj.free(array.__array_interface__['data'][0])
 
     def mlsl_send(self, send_id, x_nparr):
         send_op = self.send_nodes[send_id]
@@ -79,7 +98,7 @@ class HetrLocals(object):
         # todo: get real root_idx
         root_idx = 0
 
-        if process_idx == root_idx:
+        if self.process_idx == root_idx:
             # todo: remove that workaround for non-symmetric case
             gather_send_op.arr = x_nparr
             logger.debug("gather_send_root: arr %s", x_nparr)
@@ -96,7 +115,7 @@ class HetrLocals(object):
                 req = self.distribution.gather(send_buf, send_count, recv_buf,
                                                mlsl.DataType.FLOAT, root_idx,
                                                mlsl.GroupType.DATA)
-            mlsl_obj.wait(req)
+            self.mlsl_obj.wait(req)
 
     def gather_recv_from_mlsl_gather_send(self, gather_recv_id, out):
         gather_recv_op = self.gather_recv_nodes[gather_recv_id]
@@ -105,7 +124,7 @@ class HetrLocals(object):
         root_idx = 0
 
         # todo: remove that workaround for non-symmetric case
-        if process_idx == root_idx:
+        if self.process_idx == root_idx:
             send_node = next(op for op in gather_recv_op.control_deps
                              if isinstance(op, CPUMlslGatherSendOp))
             send_buf = np.ctypeslib.as_ctypes(send_node.arr)
@@ -119,12 +138,12 @@ class HetrLocals(object):
                 req = self.distribution.gather(send_buf, send_count, recv_buf,
                                                mlsl.DataType.FLOAT, root_idx,
                                                mlsl.GroupType.DATA)
-            mlsl_obj.wait(req)
+            self.mlsl_obj.wait(req)
             logger.debug("gather_recv: out %s", out)
 
             # todo: replace by real reduce operation
             if gather_recv_op.use_reduce:
-                out /= process_count
+                out /= self.process_count
 
         return out
 
@@ -135,7 +154,7 @@ class HetrLocals(object):
         root_idx = 0
 
         # todo: remove that workaround for non-symmetric case
-        if process_idx == root_idx:
+        if self.process_idx == root_idx:
             scatter_send_op.arr = x_nparr
             logger.debug("scatter_send_root: arr %s", x_nparr)
 
@@ -147,7 +166,7 @@ class HetrLocals(object):
 
         # todo: remove that workaround for non-symmetric case
         send_buf = None
-        if process_idx == root_idx:
+        if self.process_idx == root_idx:
             send_node = next(op for op in scatter_recv_op.control_deps
                              if isinstance(op, CPUMlslScatterSendOp))
             send_buf = np.ctypeslib.as_ctypes(send_node.arr)
@@ -157,7 +176,7 @@ class HetrLocals(object):
         req = self.distribution.scatter(send_buf, recv_buf, recv_count,
                                         mlsl.DataType.FLOAT, root_idx,
                                         mlsl.GroupType.DATA)
-        mlsl_obj.wait(req)
+        self.mlsl_obj.wait(req)
         logger.debug("scatter_recv: out %s", out)
         return out
 
@@ -182,13 +201,13 @@ class HetrLocals(object):
         allreduce_op = self.allreduce_nodes[allreduce_id]
         start_node = next(op for op in allreduce_op.control_deps
                           if isinstance(op, CPUMlslAllReduceStartOp))
-        mlsl_obj.wait(start_node.req)
+        self.mlsl_obj.wait(start_node.req)
 
         if allreduce_op.reduce_func == 'sum':
             # sum reduction is performed inside MLSL
             pass
         elif allreduce_op.reduce_func == 'mean':
-            start_node.arr /= process_count
+            start_node.arr /= self.process_count
         else:
             raise RuntimeError('Reduce function {} is not supported.'
                                .format(allreduce_op.reduce_func))
@@ -200,7 +219,7 @@ class HetrLocals(object):
         root_idx = 0
 
         # todo: remove that workaround for non-symmetric case
-        if process_idx == root_idx:
+        if self.process_idx == root_idx:
             broadcast_send_op.arr = x_nparr
             logger.debug("bcast_send: arr %s, send_op %s", x_nparr, broadcast_send_op)
 
@@ -212,7 +231,7 @@ class HetrLocals(object):
 
         # todo: remove that workaround for non-symmetric case
         req = None
-        if process_idx == root_idx:
+        if self.process_idx == root_idx:
             send_buf = None
             send_node = next(op for op in broadcast_recv_op.control_deps
                              if isinstance(op, CPUMlslBroadcastSendOp))
@@ -229,6 +248,6 @@ class HetrLocals(object):
             req = self.distribution.bcast(recv_buf, count,
                                           mlsl.DataType.FLOAT, root_idx,
                                           mlsl.GroupType.DATA)
-        mlsl_obj.wait(req)
+        self.mlsl_obj.wait(req)
         logger.debug("bcast_recv: out %s", out)
         return out

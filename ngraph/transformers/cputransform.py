@@ -68,34 +68,13 @@ from ngraph.op_graph.comm_nodes import CPUMlslSendOp, CPUMlslRecvOp, \
 from ngraph.util.trace_events import is_tracing_enabled
 
 
-try:
-    import mlsl
-    import ctypes
-    import atexit
-    mlsl_obj = mlsl.MLSL()
-    mlsl_obj.init()
-
-    def exit_func():
-        mlsl_obj.finalize()
-    atexit.register(exit_func)
-    use_mlsl = True
-except ImportError:
-    use_mlsl = False
+use_mlsl = False
 
 
 def align_ndarray(element_count, alignment, dtype):
     if use_mlsl:
-        if dtype.name == 'float32':
-            c_type_name = 'c_float'
-        elif dtype.name == 'float64':
-            c_type_name = 'c_double'
-        else:
-            c_type_name = None
-        type_size = ctypes.sizeof(getattr(ctypes, c_type_name)(1))
-        mlsl_buf = mlsl_obj.alloc(element_count * type_size, alignment)
-        array = ctypes.cast(mlsl_buf, ctypes.POINTER(getattr(ctypes, c_type_name) * element_count))
-        np_array = np.frombuffer(array.contents, dtype)
-        return np_array
+        from ngraph.transformers.cpu.hetr import HetrLocals
+        return HetrLocals.mlsl_alloc(element_count, alignment, dtype)
     else:
         x = np.empty(element_count + (alignment - 1), dtype)
         offset = (x.ctypes.data % alignment) // dtype.itemsize
@@ -836,8 +815,14 @@ class CPUTransformer(ExecutionGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    def __init__(self, **kwargs):
+    def __init__(self, comm=None, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
+
+        # comm is not None in case of work under HetrTransformer
+        if comm is not None:
+            global use_mlsl
+            use_mlsl = True
+
         self.device_computation = None
         self.conv_engine = CPUConvEngine()
         self.init_code = CPUCodeGenerator(self)
@@ -926,13 +911,6 @@ self.__profiler_stop__  = list()
                     # TODO better way to deal with multiple values
                     self.exop_codegen.exop = exop
                     self.exop_codegen.allocate_op(exop.op, output_decl, *exop.input_decls)
-
-            self.exop_codegen.append("def close(self):")
-            with indenting(self.exop_codegen):
-                if use_mlsl:
-                    self.exop_codegen.append('HetrLocals.close(self)')
-                else:
-                    self.exop_codegen.append('pass')
 
         self.exop_codegen.indent(1)
         self.exop_codegen.append("def __call__(self):")
@@ -1024,10 +1002,6 @@ import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
 from monotonic import monotonic as monotonic
-try:
-    from ngraph.transformers.cpu.hetr import HetrLocals
-except ImportError:
-    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -1035,6 +1009,11 @@ from ngraph.transformers.cpu.cpuengine import ConvLocals
 from ngraph.transformers.cpu.ctc import ctc_cpu
 from ngraph.transformers.cputransform import align_ndarray
         """)
+
+        if use_mlsl:
+            module.execute("""
+from ngraph.transformers.cpu.hetr import HetrLocals
+            """)
 
         mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
@@ -1070,14 +1049,14 @@ from ngraph.transformers.cputransform import align_ndarray
                         comp_name = computation.computation_decl.computation_op.name
                         pool_name = comp_name + '_temporary_pool'
                         if pool_name in self.globals:
-                            mlsl_obj.free(self.globals[pool_name].__array_interface__['data'][0])
+                            computation.executor.mlsl_free(self.globals[pool_name])
                         pool_name = comp_name + '_persistent_pool'
                         if pool_name in self.globals:
-                            mlsl_obj.free(self.globals[pool_name].__array_interface__['data'][0])
+                            computation.executor.mlsl_free(self.globals[pool_name])
 
-                for computation in self.device_computations.values():
-                    if hasattr(computation, 'executor') and computation.executor is not None:
-                        computation.executor.close()
+                    for computation in self.device_computations.values():
+                        if hasattr(computation, 'executor') and computation.executor is not None:
+                            computation.executor.close()
 
             except TypeError:
                 pass

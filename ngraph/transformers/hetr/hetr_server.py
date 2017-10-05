@@ -14,20 +14,18 @@ import logging
 import os
 import fcntl
 import traceback
-import signal
-import sys
+
 
 try:
+    # The first "import mlsl" will create internal mlsl object and will init MLSL library.
+    # That object will be destroyed explicitly over HetrLocals.close_module()->mlsl.close().
     import mlsl  # noqa: F401
+    from ngraph.transformers.cpu.hetr import HetrLocals
+    use_mlsl = True
 except ImportError:
-    pass
+    use_mlsl = False
 
 
-def signal_handler(signum, frame):
-    sys.exit()
-
-
-signal.signal(signal.SIGTERM, signal_handler)
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 logger = logging.getLogger(__name__)
 
@@ -151,6 +149,8 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
 
     def Close(self, request, context):
         logger.info("server: close, self.transformer_type %s", self.transformer_type)
+        if use_mlsl:
+            HetrLocals.close_mlsl()
         self.server.stop(0)
         return hetr_pb2.CloseReply()
 
