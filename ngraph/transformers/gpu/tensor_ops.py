@@ -40,21 +40,26 @@ TAG_DIRECT = 44
 def setup_ipc_handle(op, comm, cmd, handle=None, dest=None):
     if cmd == 'send':
         for d in dest:
-            print('->', type(op.metadata['device_id']), op.metadata['device_id'], int(d))
-            if int(d) == 1:
+            if int(d) >= 1:
                 # import rpdb; rpdb.set_trace()
                 buf_ipc_hdl = drv.mem_get_ipc_handle(handle)
-                print('comm.send((False, {}), dest={}, tag={})'.format(handle, d, TAG_IPC))
                 comm.send((False, buf_ipc_hdl), dest=int(d), tag=TAG_IPC)
-                print('comm.send finish')
     else:
-        print('(local, buf_ipc_hdl) = comm.recv(source=int({}), tag={})'.format(op.source_id, TAG_IPC))
         (local, buf_ipc_hdl) = comm.recv(source=int(op.source_id), tag=TAG_IPC)
-        print('finish recv', local)
         if local:
             return (buf_ipc_hdl)
         else:
             return (drv.IPCMemoryHandle(buf_ipc_hdl))
+
+
+def send_ipc_handle(op, comm, handle, destination):
+    buffer_ipc_handle = drv.mem_get_ipc_handle(handle)
+    comm.send(buffer_ipc_handle, dest=int(destination), tag=TAG_IPC)
+
+
+def receive_ipc_handle(op, comm):
+    buffer_ipc_handle = comm.recv(source=int(op.source_id), tag=TAG_IPC)
+    return (drv.IPCMemoryHandle(buffer_ipc_handle))
 
 
 def _reduction_kernel(op):
@@ -322,31 +327,23 @@ class CudaScatterSendKernel(GPUKernel):
         self.comm = comm
 
     def bind_buffers(self):
-        print('scatter send bind_buffers')
-        if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor_view_from_td(self.tensor)
+        self.tensor = self.tensor_view_from_td(self.tensor)
         # if input buffer changes we need to make sure to set new ipc handle and
         # signal the recv kernel to get the new ipc handle.
         # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
-        print('ipc handle: {}'.format(self.tensor.tensor.gpudata))
         self.op.ipc_handle = int(self.tensor.tensor.gpudata)
-        print('before scatter send setup ipc handle')
-        setup_ipc_handle(
-            op=self.op,
-            comm=self.comm,
-            handle=self.tensor.tensor.gpudata,
-            cmd='send',
-            dest=self.op.to_id)
-        print('after scatter send setup ipc handle')
+        for dest in self.op.to_id:
+            if int(dest) == 0:
+                continue
+            else:
+                send_ipc_handle(self.op, self.comm, self.tensor.tensor.gpudata, int(dest))
 
     def execute(self):
         ready = True
         for i in self.op.to_id:
-            print('s/s execute')
             if int(i) != 0:
                 self.comm.send(ready, dest=int(i), tag=TAG_SCATTER)
-            print('s/s execute finish')
 
 
 class CudaScatterRecvKernel(GPUKernel):
@@ -354,23 +351,23 @@ class CudaScatterRecvKernel(GPUKernel):
     def __init__(self, transformer, comm, op):
         super(CudaScatterRecvKernel, self).__init__(transformer)
         self.op = op
+        self.send_op = op.send_node()
         self.tensor = op.tensor_description()
         self.comm = comm
 
     def bind_buffers(self):
-        if isinstance(self.tensor, TensorDescription):
-            self.tensor = self.tensor_view_from_td(self.tensor)
-        # get a handle to the send-buffer in our corresponding send-op using the shared queue
+        self.tensor = self.tensor_view_from_td(self.tensor)
+        # get a handle to the send-buffer in our corresponding send-op 
         # In the case where sender/recvr are in the same cpu process,
         # avoid IPC and pass the direct pointer through the shared q.
         # since sender/recvr are in the same process in this case,
         # set_ipc_handle must be called before open_ipc_handle to avoid a hang,
         # hence doing set_ in bind_buffers and open_ in execute.
-        print('scatter recv bind_buffers', self.op.metadata['device_id'])
         if self.op.metadata['device_id'] == '0':
-            self.tnsr_ipc_hdl = int(self.tensor.tensor.gpudata) - 1024
+            tensor = self.tensor_view_from_td(self.send_op.args[0].tensor_description())
+            self.tnsr_ipc_hdl = int(tensor.tensor.gpudata)
         else:
-            self.tnsr_ipc_hdl = setup_ipc_handle(op=self.op, comm=self.comm, cmd='recv')
+            self.tnsr_ipc_hdl = receive_ipc_handle(self.op, self.comm)
         super(CudaScatterRecvKernel, self).bind_buffers()
         chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
         self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
