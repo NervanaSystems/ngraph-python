@@ -102,6 +102,10 @@ class CommunicationOp(TensorOp):
     def has_side_effects(self):
         return True
 
+    @property
+    def is_root(self):
+        return self.metadata['device_id'] == '0'
+
 
 class SendOp(CommunicationOp):
     """
