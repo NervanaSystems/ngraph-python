@@ -720,7 +720,6 @@ def np_cross_entropy_multi(y, t, axis=None):
 
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
-# @pytest.config.argon_disabled  # TODO triage
 def test_softmax(input_tensor):
     """TODO."""
     p_x = input_tensor
@@ -1061,7 +1060,6 @@ def test_tensor_derivative():
         ng.deriv(p, p)
 
 
-# @pytest.config.argon_disabled  # TODO triage
 def test_mean(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1079,7 +1077,6 @@ def test_mean(input_tensor):
         ng.testing.assert_allclose(np_f_res, ng_f_res, atol=1e-4, rtol=1e-4)
 
 
-# @pytest.config.argon_disabled  # TODO triage
 def test_variance_wgrad(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
@@ -1102,7 +1099,6 @@ def test_variance_wgrad(input_tensor):
         ng.testing.assert_allclose(np_b_res, ng_b_res, atol=1e-4, rtol=1e-4)
 
 
-# @pytest.config.argon_disabled  # TODO triage
 def test_variance_sqrt_inverse(input_tensor):
     inputs = input_tensor
     targets = ng.placeholder(inputs.axes)
