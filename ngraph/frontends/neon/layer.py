@@ -1162,7 +1162,12 @@ class BatchNorm(Layer):
                                     metadata={"label": LABELS["bias"]}).named('beta')
             self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
 
+# <<<<<<< HEAD
         # in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
+#=======
+        in_obj = ng.flatten(ng.axes_with_order(in_obj, out_axes | red_axes),
+                            out_axes | red_axes.flatten(force=True))
+#>>>>>>> master
         xmean = ng.mean(in_obj, out_axes=out_axes)
         xvar = ng.variance(in_obj, out_axes=out_axes)
 

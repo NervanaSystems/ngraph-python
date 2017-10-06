@@ -335,6 +335,7 @@ class RMSProp(LearningRateOptimizer):
         epsilon=1e-6,
         gradient_clip_norm=None,
         gradient_clip_value=None,
+        weight_clip_value=None,
         wdecay = 0.0,
         **kwargs
     ):

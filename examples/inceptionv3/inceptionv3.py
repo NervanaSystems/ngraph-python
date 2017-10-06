@@ -147,7 +147,8 @@ else:
     raise NotImplementedError("Unrecognized Optimizer")
 
 # Build the main and auxiliary loss functions
-y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
+#y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
+y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))
 train_prob_main = ng.map_roles(train_prob_main, {"C": ax.Y.name})
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
@@ -164,7 +165,8 @@ batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
 #train_computation = ng.computation([batch_cost, gradient], 'all')
 train_computation = ng.computation([batch_cost], 'all')
-label_indices = inputs['label'][:, 0]
+#label_indices = inputs['label'][:, 0]
+label_indices = inputs['label']
 
 # Build the computations for inference (evaluation)
 with Layer.inference_mode_on():
@@ -200,7 +202,7 @@ with closing(ngt.make_transformer()) as transformer:
         data['iteration'] = iter_no
         # Scale the image to [0., .1]
         data['image'] = scale_set(data['image'])
-        data['label'] = data['label'].reshape((args.batch_size, 1))
+        #data['label'] = data['label'].reshape((args.batch_size, 1))
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         #output, grads = train_function(feed_dict=feed_dict)
         output = train_function(feed_dict=feed_dict)
