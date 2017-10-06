@@ -26,7 +26,7 @@ delta = 1e-3
 rtol = atol = 1e-2
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_expand_dims():
     """TODO."""
     C = ng.make_axis()
@@ -95,7 +95,7 @@ def test_expand_dims():
                     )
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_slice():
     """TODO."""
 
@@ -184,7 +184,7 @@ def test_reverse_slice():
         ng.set_item(x, [0, slice(None, None, -1)], 0)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="#2219 - ArgonSim ValueError: axes don't match array")
 @pytest.config.flex_disabled(reason="#1954 UnsliceOp (Slice deriv) - not yet supported")
 def test_multiple_slices():
     C = ng.make_axis(length=2)
@@ -227,7 +227,7 @@ def test_multiple_slices():
         ng.testing.assert_allclose(f2_num, f2_sym, rtol=rtol, atol=atol)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_padding():
     """TODO."""
     C = ng.make_axis()
@@ -293,7 +293,7 @@ def test_padding():
             ng.testing.assert_allclose(numeric_deriv, sym_deriv, rtol=rtol, atol=atol)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_cast_axes():
     C = ng.make_axis(length=2)
     D = ng.make_axis(length=3)
