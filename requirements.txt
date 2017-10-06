@@ -1,3 +1,10 @@
+# List requirements strictly here, so that a best known config can
+# always be reproduced for testing and development.
+#
+# Also add requirements to setup.py, but do not pin to a strict
+# version requirement there unless necessary.
+
+
 # These come over from neon
 numpy==1.13.1
 h5py==2.6.0
