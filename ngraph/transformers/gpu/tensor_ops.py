@@ -39,12 +39,12 @@ TAG_DIRECT = 44
 
 def send_ipc_handle(comm, handle, destination):
     buffer_ipc_handle = drv.mem_get_ipc_handle(handle)
-    comm.send(buffer_ipc_handle, dest=int(destination), tag=TAG_IPC)
+    comm.send(buffer_ipc_handle, dest=destination, tag=TAG_IPC)
 
 
 def receive_ipc_handle(source, comm):
     buffer_ipc_handle = comm.recv(source=source, tag=TAG_IPC)
-    return (drv.IPCMemoryHandle(buffer_ipc_handle))
+    return drv.IPCMemoryHandle(buffer_ipc_handle)
 
 
 def _reduction_kernel(op):
@@ -310,26 +310,18 @@ class CudaScatterSendKernel(GPUKernel):
         self.op = op
         self.tensor = op.args[0].tensor_description()
         self.comm = comm
+        self.destinations_other_then_root = [int(i) for i in self.op.to_id if int(i) != 0]
 
     def bind_buffers(self):
-        self.tensor = self.tensor_view_from_td(self.tensor)
         # if input buffer changes we need to make sure to set new ipc handle and
         # signal the recv kernel to get the new ipc handle.
         # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
-        self.op.ipc_handle = int(self.tensor.tensor.gpudata)
-        for dest in self.op.to_id:
-            if int(dest) == 0:
-                continue
-            else:
-                send_ipc_handle(self.comm, self.tensor.tensor.gpudata, int(dest))
+        for d in self.destinations_other_then_root:
+            send_ipc_handle(self.comm, self.pointer_from_td(self.tensor), d)
 
     def execute(self):
-        ready = True
-        for i in self.op.to_id:
-            if int(i) != 0:
-                self.comm.send(ready, dest=int(i), tag=TAG_SCATTER)
-
+        pass
 
 class CudaScatterRecvKernel(GPUKernel):
 
@@ -339,31 +331,26 @@ class CudaScatterRecvKernel(GPUKernel):
         self.send_op = op.send_node()
         self.tensor = op.tensor_description()
         self.comm = comm
+        self.sender_buf = None
 
     def bind_buffers(self):
         self.tensor = self.tensor_view_from_td(self.tensor)
-        # get a handle to the send-buffer in our corresponding send-op 
+        super(CudaScatterRecvKernel, self).bind_buffers()
+        # get a handle to the send-buffer in the corresponding send-op
         if self.op.is_root:
-            send_op_tensor = self.tensor_view_from_td(self.send_op.args[0].tensor_description())
-            self.tnsr_ipc_hdl = int(send_op_tensor.tensor.gpudata)
+            send_op_td = self.send_op.args[0].tensor_description()
+            self.sender_buf = self.pointer_from_td(send_op_td)
         else:
             self.tnsr_ipc_hdl = receive_ipc_handle(int(self.op.source_id), self.comm)
-        super(CudaScatterRecvKernel, self).bind_buffers()
-        chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-        self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+            chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+            self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
     def execute(self):
-        if self.op.is_root:
-            ready = True
-        else:
-            ready = self.comm.recv(source=self.op.source_id, tag=TAG_SCATTER)
-        if ready:
-            drv.memcpy_dtod(
-                self.tensor.tensor.gpudata,
-                self.sender_buf,
-                self.tensor.tensor.size * self.op.dtype.itemsize)
-        else:
-            raise RuntimeError("Synchronization failed!")
+        self.comm.barrier()
+        drv.memcpy_dtod(
+            self.tensor.tensor.gpudata,
+            self.sender_buf,
+            self.tensor.tensor.size * self.op.dtype.itemsize)
 
 
 class CudaGatherSendKernel(GPUKernel):
@@ -380,7 +367,7 @@ class CudaGatherSendKernel(GPUKernel):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherSendKernel, self).bind_buffers()
         # bind buffers for not root device
-        if self.recvr_buf is None and not self.op.is_root:
+        if not self.op.is_root:
             self.tnsr_ipc_hdl = receive_ipc_handle(int(self.op.source_id), self.comm)
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
             self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
@@ -393,8 +380,7 @@ class CudaGatherSendKernel(GPUKernel):
                 self.recvr_buf,
                 self.tensor.tensor.gpudata,
                 self.tensor.tensor.size * self.op.dtype.itemsize)
-            ready = True
-            self.comm.send(ready, dest=int(self.op.source_id), tag=TAG_GATHER)
+            self.comm.barrier()
 
 
 class CudaGatherRecvKernel(GPUKernel):
@@ -410,10 +396,10 @@ class CudaGatherRecvKernel(GPUKernel):
         super(CudaGatherRecvKernel, self).bind_buffers()
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
-        if not self.op.is_root:
-            for dest in self.op.from_id:
-                if int(dest) >= 1:
-                    send_ipc_handle(self.comm, self.tensor.tensor.gpudata, int(dest))
+ 
+        sources = [int(i) for i in self.op.from_id if int(i) != 0]
+        for s in sources:
+            send_ipc_handle(self.comm, self.tensor.tensor.gpudata, s)
 
     def execute(self):
         # gather send execution is done here
@@ -423,13 +409,7 @@ class CudaGatherRecvKernel(GPUKernel):
             self.tensor.tensor.gpudata,
             send_op_tensor.tensor.gpudata,
             send_op_tensor.tensor.size * self.send_op[0].dtype.itemsize)
-        for i in self.op.from_id:
-            if i == '0':
-                ready = True
-            else:
-                ready = self.comm.recv(source=int(i), tag=TAG_GATHER)
-            if not ready:
-                raise RuntimeError("Synchronization failed!")
+        self.comm.barrier()
 
 
 class CudaAllReduceKernel(GPUKernel):
