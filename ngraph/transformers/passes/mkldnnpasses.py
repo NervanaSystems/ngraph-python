@@ -55,7 +55,7 @@ def get_order_from_axes(axes, sub_axes):
                 found = True
                 continue
         if not found:
-            assert False, "Axis not found"
+            assert False, 'Axis {} not found'.format(a)
     return order
 
 
@@ -71,7 +71,7 @@ def get_strides_mkl_order(td, order):
     return [td.strides[index] for index in order]
 
 
-def get_native_layout(mkldnn, td, order, use_formats=False):
+def get_native_layout(mkldnn, td, order):
     '''
     Create an MKL layout object in transformer-visible layout
     :param td: tensor description of the op. Currently owns tensor layout info in graph
@@ -84,23 +84,11 @@ def get_native_layout(mkldnn, td, order, use_formats=False):
     elem_size = td.dtype.itemsize
     mkl_strides = [stride // elem_size for stride in get_strides_mkl_order(td, order)]
     # TODO(jbobba) - Handle views for tensors that are not fully materialized
+    assert all((stride != 0 or size == 1) for (size, stride) in zip(mkl_shape, mkl_strides)), \
+            '{} shape: {} strides: {} cannot be handled directly by \
+            MKLDNN kernels'.format(td, mkl_shape, mkl_strides)
     mkl_axes = [axis for axis in get_axes_mkl_order(op_axes, order)]
     memory_format = mkldnn.memory_format['blocked']
-
-    # Look for canned formats
-    if False: # Let mkldnn_engine look for canned formats
-        if len(mkl_strides) == 4:
-            [N, C, H, W] = mkl_strides
-            stride_order = sorted([N, C, H, W], reverse=True)
-            if (stride_order == [C, H, W, N]):
-                memory_format = mkldnn.memory_format['chwn']
-            elif (stride_order == [N, C, H, W]):
-                memory_format = mkldnn.memory_format['nchw']
-        elif len(mkl_strides) == 2:
-            [N, C] = mkl_strides
-            stride_order = sorted([N, C], reverse=True)
-            if stride_order == [N, C]:
-                memory_format = mkldnn.memory_format['nc']
 
     native_layout = mkldnn.create_layout_md(
         mkldnn.mkldnn_engine,
@@ -125,7 +113,7 @@ def get_flattened_axes(x):
     """
     Ordered list of axis visible to MKLDNN
     """
-    return [axis for axis in Axes.as_flattened_list(x) if axis.name != '__NG_DEPTH']
+    return Axes.as_flattened_list(x)
 
 
 def get_rotated_layout(mkldnn, in_layout, from_axes, to_axes):
@@ -141,7 +129,7 @@ def get_arg_output_idx(exop, arg_exop):
             if input_decl.exop == exop:
                 # Assumes only arg comes from arg_exop to exop
                 return i
-    # assert False
+    # TODO(jbobba): assert False?
     return 0
 
 

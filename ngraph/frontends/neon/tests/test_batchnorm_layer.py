@@ -27,6 +27,7 @@ pytestmark = [pytest.mark.transformer_dependent,
 
 rng = RandomTensorGenerator()
 rtol = 0
+# Lower precision tolerance to account for multiple backends
 atol = 1e-5
 recurrent_atol = 1e-5
 

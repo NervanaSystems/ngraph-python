@@ -1917,6 +1917,7 @@ class ExpandDims(IndexOp):
         """
         reduction_axes=delta.axes - x.axes
         assert len(reduction_axes)==1
+        # Optimize case where inserted axis is size 1
         if reduction_axes[0].length == 1:
             slices = []
             for axis in delta.axes:
@@ -2730,6 +2731,7 @@ class UnsliceOp(SequentialOp):
         super(UnsliceOp, self).__init__(**kwargs)
         self.x = x
         self.slices = slices
+        # Optimize case where we are unslicing axis of size 1
         if all(sl==0 or sl==slice(None) for sl in slices) and\
             len(axes - x.axes) == 1 and (axes-x.axes)[0].length == 1:
             # Add the missing dimension

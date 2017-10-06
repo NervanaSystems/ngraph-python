@@ -35,6 +35,10 @@ void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
 
+/** Check if strides are monotonically decreasing in an order
+ *  specified by 'perm'.
+ *  If true, perm[0] is outermost-dimension and perm[ndims-1] is innermost
+*/
 int check_axis_order(int ndims, const int *strides, const int *perm) 
 {
     for (int i = 1; i < ndims; i++) {
