@@ -25,15 +25,11 @@ import time
 import os
 import subprocess
 import tempfile
+import random
 
 
 pytestmark = pytest.mark.hetr_only
 STARTUP_TIME = 3
-
-
-def prepare_environment(hetr_device, num_device):
-    if hetr_device == 'gpu':
-        os.environ["HETR_SERVER_GPU_NUM"] = str(num_device)
 
 
 def test_singleton_device_id(hetr_device):
@@ -102,8 +98,6 @@ def test_distributed_plus_one(hetr_device, config):
     axes = config['axes']
     parallel_axis = config['parallel_axis']
 
-    prepare_environment(hetr_device, len(device_id))
-
     with ng.metadata(device=hetr_device):
         x = ng.placeholder(axes=axes)
         with ng.metadata(device_id=device_id, parallel=parallel_axis):
@@ -136,8 +130,6 @@ def test_distributed_dot(hetr_device, config):
     axes_x = config['axes_x']
     axes_w = config['axes_w']
     parallel_axis = config['parallel_axis']
-
-    prepare_environment(hetr_device, len(device_id))
 
     np_weight = np.ones(axes_w.lengths)
     with ng.metadata(device=hetr_device):
@@ -211,8 +203,6 @@ def test_distributed_plus_two(hetr_device, config):
     axes = config['axes']
     parallel_axis = config['parallel_axis']
 
-    prepare_environment(hetr_device, len(device_id))
-
     with ng.metadata(device=hetr_device):
         x = ng.placeholder(axes=axes)
         with ng.metadata(device_id=('0', '1'), parallel=parallel_axis):
@@ -227,44 +217,69 @@ def test_distributed_plus_two(hetr_device, config):
 
 
 @pytest.mark.multi_device
-def test_to_and_from_device(hetr_device):
-    prepare_environment(hetr_device, 2)
-
+@pytest.mark.parametrize('config', [
+    {
+        'axes': None,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+    },
+])
+def test_to_and_from_device(hetr_device, config):
+    axes = config['axes']
     with ng.metadata(device=hetr_device):
-        x = ng.placeholder(())
+        x = ng.placeholder(axes=axes) if axes else ng.placeholder(())
         with ng.metadata(device_id='1'):
             x_plus_one = x + 1
         x_plus_two = x_plus_one * 2
 
+    np_x = np.random.randint(100, size=axes.lengths) if axes else random.random()
     with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
         computation = transformer.computation([x_plus_one, x_plus_two], x)
-        assert computation(1) == (2, 4)
+        res = computation(np_x)
+        np.testing.assert_allclose(res[0], np_x + 1.0)
+        np.testing.assert_allclose(res[1], (np_x + 1.0) * 2.0)
 
 
 @pytest.mark.multi_device
-def test_computation_return_list(hetr_device):
-    prepare_environment(hetr_device, 4)
-
+@pytest.mark.parametrize('config', [
+    {
+        'axes': None,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+    },
+])
+def test_computation_return_list(hetr_device, config):
+    axes = config['axes']
     with ng.metadata(device=hetr_device):
-        x = ng.placeholder(())
+        x = ng.placeholder(axes=axes) if axes else ng.placeholder(())
 
         with ng.metadata(device_id='1'):
             x_plus_one = x + 1
         with ng.metadata(device_id='2'):
             x_plus_two = x_plus_one + 1
         with ng.metadata(device_id='3'):
-            x_plus_three = x_plus_two + 1
+            x_mul_two = x_plus_two * 2
 
+    np_x = np.random.randint(100, size=axes.lengths) if axes else random.random()
     with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
-        computation = transformer.computation([x_plus_one, x_plus_two, x_plus_three], x)
-        for i in [10, 20, 30]:
-            assert computation(i) == (i + 1, i + 2, i + 3)
+        computation = transformer.computation([x_plus_one, x_plus_two, x_mul_two], x)
+        res = computation(np_x)
+        np.testing.assert_allclose(res[0], np_x + 1)
+        np.testing.assert_allclose(res[1], np_x + 2)
+        np.testing.assert_allclose(res[2], (np_x + 2) * 2)
 
 
 @pytest.mark.hetr_gpu_only
 def test_gpu_send_and_recv(hetr_device):
     pytest.xfail("GitHub issue: #2007, Unknown error - investigation is needed")
-    prepare_environment(hetr_device, 1)
     # put x+1 on cpu numpy
     with ng.metadata(device='cpu'):
         x = ng.placeholder(())
