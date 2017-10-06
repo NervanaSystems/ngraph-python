@@ -17,8 +17,7 @@ Axes
 ****
 
 .. Note::
-   The API for axis type specification is still heavily under development. As such, this document
- represents both the current state of affairs and where the API is heading.
+   The API for axis type specification is still heavily under development. As such, this document represents both the current state of affairs and where the API is heading.
 
 Neon extends the implementation of ``Axes`` in Intel Nervana Graph by introducing the concept of axis types. Axis types allow the frontend to make assumptions about tensor dimensions that are not as strict as requiring a specific axis ordering in order to remove some of the specification burden from the user. Different layers require different sets of axis types from their inputs. For instance, a ``Convolution`` layer can only operate on inputs that contain 1 ``channel axis``, 1 to 3 ``spatial axes``, and 1 ``batch axis``. Similarly, an unrolled RNN can only operate on inputs that contain 1 ``recurrent axis``. Each axis type has a default name or set of names that can be used that are listed below. These default values can be overridden during a layer's ``__call__`` method, making it easy to use axis names that best fit the type of data being processed by the network.
 

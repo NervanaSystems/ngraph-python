@@ -40,7 +40,7 @@ def build_transformer(name, comm=None):
     :return: the dictionary of transformers, with names matching the graph node hints
     """
     if 'cpu' in name:
-        transformer = make_transformer_factory('cpu')()
+        transformer = make_transformer_factory('cpu', comm=comm)()
     elif 'gpu' in name:
         try:
             from ngraph.transformers.gputransform import GPUTransformer  # noqa

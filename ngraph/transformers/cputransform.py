@@ -68,23 +68,14 @@ from ngraph.op_graph.comm_nodes import CPUMlslSendOp, CPUMlslRecvOp, \
 from ngraph.util.trace_events import is_tracing_enabled
 
 
+use_mlsl = False
+
+
 def align_ndarray(element_count, alignment, dtype):
-    try:
-        import mlsl
-        import ctypes
-        mlsl_obj = mlsl.MLSL()
-        if dtype.name == 'float32':
-            c_type_name = 'c_float'
-        elif dtype.name == 'float64':
-            c_type_name = 'c_double'
-        else:
-            c_type_name = None
-        type_size = ctypes.sizeof(getattr(ctypes, c_type_name)(1))
-        mlsl_buf = mlsl_obj.alloc(element_count * type_size, alignment)
-        array = ctypes.cast(mlsl_buf, ctypes.POINTER(getattr(ctypes, c_type_name) * element_count))
-        np_array = np.frombuffer(array.contents, dtype)
-        return np_array
-    except ImportError:
+    if use_mlsl:
+        from ngraph.transformers.cpu.hetr import HetrLocals
+        return HetrLocals.mlsl_alloc(element_count, alignment, dtype)
+    else:
         x = np.empty(element_count + (alignment - 1), dtype)
         offset = (x.ctypes.data % alignment) // dtype.itemsize
         padding = 0 if offset == 0 else (alignment - offset)
@@ -241,29 +232,9 @@ class CPUDeviceTensor(DeviceTensor):
         self.transformer.allocate_storage_code.append("def {}():", self.alloc_name)
         with indenting(self.transformer.allocate_storage_code):
             elts = self.bytes // self.dtype.itemsize
-            if self.dtype.name == 'float32':
-                c_type_name = 'c_float'
-            elif self.dtype.name == 'float64':
-                c_type_name = 'c_double'
-            else:
-                c_type_name = None
-
-            if c_type_name is not None and self.transformer.use_mlsl:
-                self.transformer.allocate_storage_code.append(
-                    """try:
-    type_size = ctypes.sizeof(ctypes.{3}(1))
-    mlsl_buf_{0} = mlsl_obj.alloc({1} * type_size, 64)
-    array_{0} = ctypes.cast(mlsl_buf_{0}, ctypes.POINTER(ctypes.{3} * {1}))
-    np_array_{0} = np.frombuffer(array_{0}.contents, dtype=np.dtype('{2}'))
-    {0}(np_array_{0})
-except NameError as error:
-    print str(error)
-    {0}(np.empty({1}, dtype=np.dtype('{2}')))""",
-                    self.update_name, elts, self.dtype.name, c_type_name)
-            else:
-                self.transformer.allocate_storage_code.append(
-                    "{}(np.empty({}, dtype=np.dtype('{}')))",
-                    self.update_name, elts, self.dtype.name)
+            self.transformer.allocate_storage_code.append(
+                "{}(np.empty({}, dtype=np.dtype('{}')))",
+                self.update_name, elts, self.dtype.name)
 
             self.transformer.allocate_storage_code.endl()
 
@@ -844,15 +815,14 @@ class CPUTransformer(ExecutionGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    import imp
-    try:
-        imp.find_module('mlsl')
-        use_mlsl = True
-    except ImportError:
-        use_mlsl = False
-
-    def __init__(self, **kwargs):
+    def __init__(self, comm=None, **kwargs):
         super(CPUTransformer, self).__init__(**kwargs)
+
+        # comm is not None in case of work under HetrTransformer
+        if comm is not None:
+            global use_mlsl
+            use_mlsl = True
+
         self.device_computation = None
         self.conv_engine = CPUConvEngine()
         self.init_code = CPUCodeGenerator(self)
@@ -919,7 +889,7 @@ class CPUTransformer(ExecutionGraphTransformer):
 
     def start_define_computation(self, computation_decl):
 
-        if self.use_mlsl:
+        if use_mlsl:
             self.exop_codegen.append("class {}(HetrLocals, ConvLocals):",
                                      computation_decl.computation_op.name)
         else:
@@ -941,13 +911,6 @@ self.__profiler_stop__  = list()
                     # TODO better way to deal with multiple values
                     self.exop_codegen.exop = exop
                     self.exop_codegen.allocate_op(exop.op, output_decl, *exop.input_decls)
-
-            self.exop_codegen.append("def close(self):")
-            with indenting(self.exop_codegen):
-                if self.use_mlsl:
-                    self.exop_codegen.append('HetrLocals.close(self)')
-                else:
-                    self.exop_codegen.append('pass')
 
         self.exop_codegen.indent(1)
         self.exop_codegen.append("def __call__(self):")
@@ -1005,7 +968,7 @@ self.__profiler_stop__  = list()
                   'pool_params': device_computation.pool_params,
                   'conv_slices': device_computation.conv_slices,
                   'pool_slices': device_computation.pool_slices}
-        if self.use_mlsl:
+        if use_mlsl:
             params.update({'send_nodes': device_computation.send_nodes,
                            'recv_nodes': device_computation.recv_nodes,
                            'scatter_send_nodes': device_computation.scatter_send_nodes,
@@ -1039,12 +1002,6 @@ import ctypes as ct
 import numpy.ctypeslib as npct
 import itertools as itt
 from monotonic import monotonic as monotonic
-try:
-    import mlsl
-    import ctypes
-    from ngraph.transformers.cpu.hetr import HetrLocals
-except ImportError:
-    pass
 from ngraph.op_graph import axes
 from ngraph.transformers.cpu.cpuengine import fprop_lut, update_lut
 from ngraph.transformers.cpu.cpuengine import Mkldnn
@@ -1053,14 +1010,16 @@ from ngraph.transformers.cpu.ctc import ctc_cpu
 from ngraph.transformers.cputransform import align_ndarray
         """)
 
+        if use_mlsl:
+            module.execute("""
+from ngraph.transformers.cpu.hetr import HetrLocals
+            """)
+
         mkldnn_path = os.path.join(os.path.dirname(__file__), "..", "..")
         mkldnn_engine_path = os.path.join(mkldnn_path, 'mkldnn_engine.so')
-        module.execute("mkldnn = Mkldnn('{}')".format(mkldnn_engine_path))
+        module.execute("mkldnn = Mkldnn(r'{}')".format(mkldnn_engine_path))
         module.execute("mkldnn.open()")
         self.mkldnn = module['mkldnn']
-        if self.use_mlsl:
-            module.execute("mlsl_obj = mlsl.MLSL()")
-            module.execute("mlsl_obj.init()")
 
     def transform_allocate_ops(self, all_ops):
         def tensor_description_value(x):
@@ -1084,24 +1043,20 @@ from ngraph.transformers.cputransform import align_ndarray
             try:
                 if self.globals.get('mkldnn', None) is not None:
                     self.globals.execute('mkldnn.close()')
-                if self.globals.get('mlsl_obj', None) is not None:
+
+                if use_mlsl:
                     for computation in self.device_computations.values():
                         comp_name = computation.computation_decl.computation_op.name
-                        self.globals.execute("""
-t_pool_exists = '{cname}_temporary_pool' in locals() or '{cname}_temporary_pool' in globals()
-p_pool_exists = '{cname}_persistent_pool' in locals() or '{cname}_persistent_pool' in globals()
-if t_pool_exists:
-    mem_pool = {cname}_temporary_pool
-    p = mem_pool.__array_interface__['data'][0]
-    mlsl_obj.free(p)
-if p_pool_exists:
-    mem_pool = {cname}_persistent_pool
-    p = mem_pool.__array_interface__['data'][0]
-    mlsl_obj.free(p)""".format(cname=comp_name))
-                    self.globals.execute('mlsl_obj.finalize()')
-                for computation in self.device_computations.values():
-                    if hasattr(computation, 'executor') and computation.executor is not None:
-                        computation.executor.close()
+                        pool_name = comp_name + '_temporary_pool'
+                        if pool_name in self.globals:
+                            computation.executor.mlsl_free(self.globals[pool_name])
+                        pool_name = comp_name + '_persistent_pool'
+                        if pool_name in self.globals:
+                            computation.executor.mlsl_free(self.globals[pool_name])
+
+                    for computation in self.device_computations.values():
+                        if hasattr(computation, 'executor') and computation.executor is not None:
+                            computation.executor.close()
 
             except TypeError:
                 pass

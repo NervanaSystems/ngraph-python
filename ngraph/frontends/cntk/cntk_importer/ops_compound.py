@@ -112,12 +112,15 @@ class OpsCompound:
             for i in node.inputs:
                 if i.is_placeholder:
                     try:
-                        temp = next(iter([
-                            v for v in inputs if not isinstance(v, ng.AssignableTensorOp)
-                        ]))
+                        placeholder_name = next(iter(
+                            [mapping for mapping in cntk_op.block_arguments_mapping
+                             if mapping[0].uid == i.uid])
+                        )[1].uid
+                        temp = next(iter([substitute for substitute in inputs
+                                          if substitute.name in placeholder_name]))
                     except StopIteration:
                         temp = next(iter([
-                            v for v in inputs if v.is_placeholder
+                            v for v in inputs if not isinstance(v, ng.AssignableTensorOp)
                         ]))
                 elif i.is_output:
                     temp = imported_ops.get(i.owner.root_function.uid)
@@ -529,3 +532,46 @@ class OpsCompound:
             A ngraph Op.
         """
         return self._block_op_import(cntk_op, inputs, self._batch_norm_op)
+
+    def _softmax_op(self, cntk_op, inputs):
+        """
+        Returns softmax of inputs[0].
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        return ng.softmax(inputs[0]).named(cntk_op.uid)
+
+    def Softmax(self, cntk_op, inputs):
+        """
+        Import Softmax operation block.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return self._block_op_import(cntk_op, inputs, self._softmax_op)
+
+    def MultiAxisReduce(self, cntk_op, inputs):
+        """
+        Import MultiAxisReduce operation block.
+
+        Arguments:
+            cntk_op: CNTK operation to be imported.
+            inputs: List of inputs to this node.
+
+        Returns:
+            A ngraph Op.
+        """
+        assert len(inputs) == 1
+
+        return self._block_import(cntk_op, inputs).named(cntk_op.uid)
