@@ -72,6 +72,9 @@ from ngraph.transformers.gpu.gpulayout import gpu_layout_factory, GPUUnaryLayout
 import cachetools
 import numpy as np
 
+import logging
+logger = logging.getLogger(__name__)
+
 _none_slice = slice(None, None, None)
 
 
@@ -511,16 +514,15 @@ class GPUKernelGroup(object):
         we have to update GPU memory pointers in the arguments for each kernel on the
         first execution of each kernel.
         """
+        logger.debug('Start kernel.bind_buffers')
         for k in self.kernels:
-            print('kernel --> {}'.format(k))
+            logger.debug('kernel: {}'.format(k))
             if not k.buffers_bound:
                 k.bind_buffers()
 
-        print('--------------')
-        print('finish kernel bind buffers, start execution')
-        print('--------------')
+        logger.debug('Start kernel.execute')
         for k in self.kernels:
-            print('kernel --> {}'.format(k))
+            logger.debug('kernel: {}'.format(k))
             self.setup_kernel_execute(k)
             k.execute()
             self.after_kernel_execute(k)
