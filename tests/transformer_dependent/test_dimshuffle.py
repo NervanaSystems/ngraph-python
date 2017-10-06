@@ -45,7 +45,6 @@ def x(A, B):
 @pytest.mark.transformer_dependent
 class TestDimShuffleFpropBprop:
 
-    @pytest.config.argon_disabled  # TODO triage
     def test_dimshuffle_fprop(self, x, A, B):
         """
         dimshuffle a 2d array and make sure fprop works
@@ -63,7 +62,6 @@ class TestDimShuffleFpropBprop:
 
         ng.testing.assert_allclose(result, x_value.T)
 
-    @pytest.config.argon_disabled  # TODO triage
     def test_dimshuffle_bprop(self, x, A, B):
         """
         dimshuffle a 2d array and make sure bprop works
