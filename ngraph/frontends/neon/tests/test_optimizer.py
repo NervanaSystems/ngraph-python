@@ -19,12 +19,13 @@ Test of the optimizers
 import pytest
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import GradientDescentMomentum, RMSProp, Adam, LearningRateOptimizer
+from ngraph.frontends.neon import GradientDescentMomentum, RMSProp, Adam
+from ngraph.frontends.neon import LearningRateOptimizer, Adagrad
 from ngraph.testing.execution import ExecutorFactory
 
 pytestmark = pytest.mark.transformer_dependent
 
-
+optimizer_list = [GradientDescentMomentum, RMSProp, Adam, Adagrad]
 atol = rtol = 1e-5
 
 
@@ -122,6 +123,33 @@ class AdamReference(object):
         m_hat = self.m / (1 - self.beta_1 ** self.t)
         v_hat = self.v / (1 - self.beta_2 ** self.t)
         weights = weights - self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+        return weights
+
+
+class AdagradReference(object):
+    '''
+    Simple numpy reference for Adagrad
+    '''
+    def __init__(self, learning_rate, epsilon):
+        self.learning_rate = learning_rate
+        self.epsilon = epsilon
+        self.state = None
+
+    def __call__(self, input_data, weights):
+        '''
+        input_data in this case is a numpy array with batch_size on axis 1
+        and weights is a matrix with 1 column
+        '''
+        if self.state is None:
+            self.state = np.zeros_like(weights)
+
+        gradient = - input_data.mean(axis=1)
+
+        self.state[:] = self.state + np.square(gradient)
+
+        weights[:] = weights \
+            - gradient * self.learning_rate / (np.sqrt(self.state + self.epsilon))
 
         return weights
 
@@ -258,7 +286,7 @@ def random_beta_2():
     return np.random.uniform(low=0.0, high=1.0)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.config.flex_skip(reason="Usually all cases fail but very rarely some pass for flex - "
                                 "because of the random character of the parameters")
 @pytest.mark.parametrize("epsilon", [1e-8])
@@ -281,7 +309,24 @@ def test_adam(random_learning_rate, random_beta_1, random_beta_2, epsilon, selec
         compare_optimizer(adam, adam_reference)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.flex_disabled(reason="Results totally mismatch")
+@pytest.mark.parametrize("epsilon", [1e-6])
+@pytest.mark.parametrize("select_variables", [False, True])
+def test_adagrad(random_learning_rate, epsilon, select_variables):
+    adagrad_args = {'learning_rate': random_learning_rate,
+                    'epsilon': epsilon}
+
+    adagrad_ref = AdagradReference(**adagrad_args)
+    adagrad = Adagrad(**adagrad_args)
+
+    # test baseline against reference
+    if select_variables:
+        compare_optimizer_variable_select(adagrad, adagrad_ref)
+    else:
+        compare_optimizer(adagrad, adagrad_ref)
+
+
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.config.flex_disabled(reason="Unknown problem yet")
 def test_learning_policy_step():
     base_learning_rate = 1.0
@@ -332,7 +377,7 @@ def test_learning_policy_fixed_without_input():
         ng.testing.assert_allclose(baseline_value, base_learning_rate, rtol=1e-6)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.mark.parametrize("drop_factor", [0.1,
                                          [0.1, 0.2, 0.3, 0.4, 0.5]])
 def test_learning_policy_schedule(drop_factor):
@@ -365,9 +410,11 @@ def test_learning_policy_schedule(drop_factor):
 
 
 @pytest.mark.parametrize("w_clip", [0.001, 0.01, 0.1, 1])
-@pytest.mark.parametrize("optimizer", [RMSProp, Adam, GradientDescentMomentum])
+@pytest.mark.parametrize("optimizer", optimizer_list)
 def test_weight_clipping(w_clip, optimizer):
     opt_ng = optimizer(0.1, weight_clip_value=w_clip)
+    if isinstance(opt_ng, Adam):
+        pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
 
     # Set up data placeholders
     C = ng.make_axis(20)
@@ -407,3 +454,4 @@ if __name__ == '__main__':
     test_rmsprop(0.1, 0.95, 1e-6)
     test_gdm(0.1, 0.1, 0.1, False)
     test_adam(0.1, 0.5, 0.9, 1e-6, None)
+    test_adagrad(0.1, 1e-6)

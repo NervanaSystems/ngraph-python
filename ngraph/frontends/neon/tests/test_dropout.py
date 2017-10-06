@@ -28,7 +28,7 @@ pytestmark = pytest.mark.transformer_dependent
 atol, rtol = 0, 1e-6
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.75, 0.5])
 def test_dropout_train(nin, batch_size, keep):
@@ -83,7 +83,7 @@ def test_dropout_inference(nin, batch_size):
         ng.testing.assert_allclose(out1, out2, atol=atol, rtol=rtol)
 
 
-@pytest.config.argon_disabled  # TODO triage
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 @pytest.mark.parametrize("nin,batch_size", [(32, 2)])
 @pytest.mark.parametrize("keep", [1.0, 0.5])
 def test_dropout_bprop_single_comp(nin, batch_size, keep):
