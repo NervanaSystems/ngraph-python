@@ -37,14 +37,13 @@ TAG_SCATTER = 33
 TAG_DIRECT = 44
 
 
-def send_ipc_handle(comm, handle, destination):
-    buffer_ipc_handle = drv.mem_get_ipc_handle(handle)
-    comm.send(buffer_ipc_handle, dest=destination, tag=TAG_IPC)
-
-
-def receive_ipc_handle(source, comm):
-    buffer_ipc_handle = comm.recv(source=source, tag=TAG_IPC)
-    return drv.IPCMemoryHandle(buffer_ipc_handle)
+def bcast_ipc_handle(comm, handle=None):
+    if handle is not None:
+        buffer_ipc_handle = drv.mem_get_ipc_handle(handle)
+        return comm.bcast(buffer_ipc_handle)
+    else:
+        handle = comm.bcast(handle)
+        return drv.IPCMemoryHandle(handle)
 
 
 def _reduction_kernel(op):
@@ -310,18 +309,17 @@ class CudaScatterSendKernel(GPUKernel):
         self.op = op
         self.tensor = op.args[0].tensor_description()
         self.comm = comm
-        self.destinations_other_then_root = [int(i) for i in self.op.to_id if int(i) != 0]
 
     def bind_buffers(self):
         # if input buffer changes we need to make sure to set new ipc handle and
         # signal the recv kernel to get the new ipc handle.
         # Assuming bind_buffers() is called once and the tensor does not change
         super(CudaScatterSendKernel, self).bind_buffers()
-        for d in self.destinations_other_then_root:
-            send_ipc_handle(self.comm, self.pointer_from_td(self.tensor), d)
+        bcast_ipc_handle(self.comm, self.pointer_from_td(self.tensor))
 
     def execute(self):
         pass
+
 
 class CudaScatterRecvKernel(GPUKernel):
 
@@ -341,7 +339,7 @@ class CudaScatterRecvKernel(GPUKernel):
             send_op_td = self.send_op.args[0].tensor_description()
             self.sender_buf = self.pointer_from_td(send_op_td)
         else:
-            self.tnsr_ipc_hdl = receive_ipc_handle(int(self.op.source_id), self.comm)
+            self.tnsr_ipc_hdl = bcast_ipc_handle(self.comm)
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
             self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
@@ -368,7 +366,7 @@ class CudaGatherSendKernel(GPUKernel):
         super(CudaGatherSendKernel, self).bind_buffers()
         # bind buffers for not root device
         if not self.op.is_root:
-            self.tnsr_ipc_hdl = receive_ipc_handle(int(self.op.source_id), self.comm)
+            self.tnsr_ipc_hdl = bcast_ipc_handle(self.comm)
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
             self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
 
@@ -396,10 +394,7 @@ class CudaGatherRecvKernel(GPUKernel):
         super(CudaGatherRecvKernel, self).bind_buffers()
         if isinstance(self.tensor, TensorDescription):
             self.tensor = self.tensor_view_from_td(self.tensor)
- 
-        sources = [int(i) for i in self.op.from_id if int(i) != 0]
-        for s in sources:
-            send_ipc_handle(self.comm, self.tensor.tensor.gpudata, s)
+        bcast_ipc_handle(self.comm, self.tensor.tensor.gpudata)
 
     def execute(self):
         # gather send execution is done here
