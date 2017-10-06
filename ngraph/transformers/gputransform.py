@@ -814,14 +814,17 @@ class GPUDeviceTensor(DeviceTensor):
             value = np.float64(value)
         elif type(value) == int:
             value = np.int64(value)
-        elif isinstance(value, np.ndarray) and value.shape == ():
-            value = value[()]
+        elif isinstance(value, np.ndarray):
+            # handle 0-d and 1-d conversion to scalar
+            if value.shape == ():
+                value = value[()]
+            elif value.shape == (1,):
+                value = value[0]
+
         # flex: added astype to deal with GPUArray dtype int16
         # FLEX TODO: assumed same behavior for all cases
-        if type(value) == np.float32 or type(value) == np.float64 or \
-                type(value) == float:
-            sliced.fill(value.astype(sliced.dtype))
-        elif type(value) in (np.int32, np.int64, int, np.uint32):
+        if type(value) in (np.int32, np.int64, int, np.uint32,
+                           np.float32, np.float64):
             sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
             sliced.fill(value.astype(sliced.dtype))
