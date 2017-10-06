@@ -496,7 +496,7 @@ class SimplePrune(PeepholeGraphPass):
                 rep = x
         elif isinstance(y, ContiguousOp) and isinstance(self.op_arg(y, 0), BroadcastOp):
             y = self.op_arg(self.op_arg(y, 0), 0)
-            if y.is_scalar and y.is_constant and y.const==0:
+            if y.is_scalar and y.is_constant and y.const == 0:
                 rep = x
         if rep is not None:
             self.replace_op(op, rep)

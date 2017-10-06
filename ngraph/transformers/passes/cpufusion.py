@@ -6,7 +6,8 @@ from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
-from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorSliceOp, TensorValueOp, ExpandDims, ContiguousOp, ReorderAxes
+from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorSliceOp, TensorValueOp, \
+    ExpandDims, ContiguousOp, ReorderAxes
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
@@ -79,6 +80,12 @@ class CPUFusion(GraphRewritePass):
     def fuse_conv_and_bias_callback_update_conv(self, op, label_map_op_list):
         """
         """
+        def get_arg_depth(op, level, arg_idx=0):
+            if level == 0:
+                return self.op_arg(op, arg_idx)
+            else:
+                return get_arg_depth(op, level - 1, arg_idx)
+
         for (label_map, op) in label_map_op_list:
             if op.dbias is not None:
                 # Already fused.
@@ -99,11 +106,11 @@ class CPUFusion(GraphRewritePass):
             if dbias_exop is None:
                 # Look deeper in the graph
                 # -> ReorderAxes -> ExpandDims -> Add -> MapRoles -> update_conv
-                if isinstance(self.op_arg(op, 0), MapRolesOp) and\
-                    isinstance(self.op_arg(self.op_arg(op, 0), 0), Add) and\
-                    isinstance(self.op_arg(self.op_arg(self.op_arg(op, 0), 0), 0), ExpandDims) and \
-                    isinstance(self.op_arg(self.op_arg(self.op_arg(self.op_arg(op, 0), 0), 0), 0), ReorderAxes):
-                    delta_op = self.op_arg(self.op_arg(self.op_arg(self.op_arg(self.op_arg(op, 0), 0), 0), 0), 0)
+                if isinstance(get_arg_depth(op, 0), MapRolesOp) and\
+                    isinstance(get_arg_depth(op, 1), Add) and\
+                    isinstance(get_arg_depth(op, 2), ExpandDims) and\
+                        isinstance(get_arg_depth(op, 3), ReorderAxes):
+                    delta_op = get_arg_depth(op, 4)
                     delta_exop = self.op_accessor.computation_decl.get_exop(delta_op)
                     # Look for reorder->sum
                     for delta_child in delta_exop.output_decls[0].user_input_decls:
@@ -111,7 +118,7 @@ class CPUFusion(GraphRewritePass):
                             # Bias grad op is a sum op on non-channel axis
                             # It should also not claimed by a different convolution
                             if isinstance(delta_grandchild.exop.op, Sum) \
-                                and delta_grandchild.exop.op not in self.op_replacement_dict:
+                                    and delta_grandchild.exop.op not in self.op_replacement_dict:
                                 dbias_exop = delta_grandchild.exop
 
             if dbias_exop is None:
