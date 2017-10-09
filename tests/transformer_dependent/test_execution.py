@@ -140,7 +140,10 @@ def test_placeholder():
         ng.testing.assert_allclose(s[()], np.dot(u.flatten(), u.flatten()))
 
 
-@pytest.fixture(params=['sum', 'prod', 'max', 'min'])
+@pytest.fixture(params=['sum',
+                        pytest.config.argon_disabled(reson="Argon Transformer error")('prod'),
+                        'max',
+                        'min'])
 def reduction(request):
     return request.param
 
@@ -157,7 +160,6 @@ def sub_axes(request):
 
 
 # TODO this is a non-strict disable since not all parametrizations fail argon
-@pytest.config.argon_disabled(reson="Argon Transformer error")  # TODO Triage
 def test_reduction(reduction, sub_axes):
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=4),
