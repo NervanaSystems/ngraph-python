@@ -26,7 +26,6 @@ import ngraph as ng
 import ngraph.transformers as ngt
 import pytest
 import time
-import os
 
 
 ax_A = ng.make_axis(length=10, name='A')

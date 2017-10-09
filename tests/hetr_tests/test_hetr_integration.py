@@ -205,7 +205,7 @@ def test_distributed_plus_two(hetr_device, config):
 
     with ng.metadata(device=hetr_device):
         x = ng.placeholder(axes=axes)
-        with ng.metadata(device_id=('0', '1'), parallel=parallel_axis):
+        with ng.metadata(device_id=device_id, parallel=parallel_axis):
             x_plus_one = x + 1
         x_plus_two = x_plus_one + 1
 
