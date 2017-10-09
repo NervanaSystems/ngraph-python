@@ -109,6 +109,48 @@ def check_communication_pass(ops_to_transform, expected_recv_nodes):
             del op_list_instance_type[:]
 
 
+def test_singleton_device_id(hetr_device):
+    with ng.metadata(device_id=(['1'])):
+        x = ng.placeholder(())
+    graph_ops = OrderedSet([x])
+
+    graph_op_metadata = {op: list() for op in graph_ops}
+    graph_op_metadata[x] = [hetr_device, '1']
+
+    check_device_assign_pass(hetr_device, "0", graph_op_metadata, graph_ops)
+
+
+def test_scatter_gather_graph(hetr_device):
+    # Build the graph
+    W = ng.make_axis(length=6, name='width')
+
+    with ng.metadata(device=hetr_device, device_id='0'):
+        x = ng.placeholder(())
+        z = ng.placeholder(())
+
+    with ng.metadata(device=hetr_device, device_id=('0', '1'), parallel=W):
+        y = ng.placeholder(())
+
+    x_plus_z = x + z  # Does not create a recv node
+    x_plus_y = x + y  # creates a gather recv node
+
+    # Build the graph metadata
+    graph_ops = OrderedSet([x, y, z, x_plus_z, x_plus_y])
+
+    graph_op_metadata = {op: list() for op in graph_ops}
+    graph_op_metadata[x] = [hetr_device, '0']
+    graph_op_metadata[z] = [hetr_device, '0']
+    graph_op_metadata[y] = [hetr_device, ('0', '1')]
+    graph_op_metadata[x_plus_z] = [hetr_device, '0']
+    graph_op_metadata[x_plus_y] = [hetr_device, '0']
+
+    check_device_assign_pass(hetr_device, "0", graph_op_metadata, graph_ops)
+
+    check_communication_pass(
+        ops_to_transform=graph_ops,
+        expected_recv_nodes=[x_plus_y])
+
+
 def test_hetr_graph_passes():
 
     # Build the graph
