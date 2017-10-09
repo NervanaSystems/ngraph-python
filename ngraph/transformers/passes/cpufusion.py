@@ -6,7 +6,8 @@ from ngraph.op_graph.op_graph import Maximum, Minimum, NegativeOp, Sum
 from ngraph.op_graph.op_graph import ReciprocalOp, Subtract, SqrtOp
 from ngraph.op_graph.op_graph import PatternLabelOp, PatternSkipOp
 from ngraph.op_graph.op_graph import BroadcastOp, Flatten, Divide
-from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorValueOp, ContiguousOp
+from ngraph.op_graph.op_graph import DotOp, MapRolesOp, TensorSliceOp, TensorValueOp, \
+    ExpandDims, ContiguousOp, ReorderAxes
 from ngraph.op_graph.convolution import ConvolutionOp, update_conv
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
@@ -31,9 +32,12 @@ class CPUFusion(GraphRewritePass):
         bias = PatternSkipOp(bias_label_op,
                              (lambda op: isinstance(op, BroadcastOp)) or
                              (lambda op: isinstance(op, ContiguousOp)))
+        reorder_bias = PatternSkipOp(bias, lambda op: isinstance(op, ReorderAxes))
         map_roles = PatternLabelOp(self.map_roles_label,
                                    (lambda op: isinstance(op, MapRolesOp)))
-        add_op = Add(map_roles, bias)
+        tslice = PatternSkipOp(map_roles, lambda op: isinstance(op, TensorSliceOp))
+        reorder_conv = PatternSkipOp(tslice, lambda op: isinstance(op, ReorderAxes))
+        add_op = Add(reorder_conv, reorder_bias)
         return add_op
 
     def fuse_conv_and_bias_callback(self, op, label_map_op_list):
@@ -44,12 +48,27 @@ class CPUFusion(GraphRewritePass):
             map_roles = label_map[self.map_roles_label]
             conv_op = self.op_arg(map_roles, 0)
             bias = label_map[self.conv_bias_label]
+            new_op_map = {}
             if isinstance(conv_op, ConvolutionOp):
                 conv_new_op = ConvolutionOp(conv_op.conv_params, self.op_arg(conv_op, 0),
                                             self.op_arg(conv_op, 1), bias, axes=conv_op.axes)
-                map_roles_op = MapRolesOp(conv_new_op, map_roles.axes_map)
-                # replace conv_op explicitly so we update the forwarded pointer correctly
-                self.replace_op(op, map_roles_op)
+                new_op_map[conv_op] = conv_new_op
+                # Create ops that are downstream to convolution but still upstream of the add 'op'
+                prev_op = self.op_arg(op, 0)
+                upstream_ops = []
+                while prev_op != conv_op:
+                    upstream_ops.append(prev_op)
+                    prev_op = self.op_arg(prev_op, 0)
+                for old_op in reversed(upstream_ops):
+                    new_arg = new_op_map[self.op_arg(old_op, 0)]
+                    if isinstance(old_op, MapRolesOp):
+                        new_op_map[old_op] = MapRolesOp(new_arg, old_op.axes_map)
+                    elif isinstance(old_op, TensorSliceOp):
+                        new_op_map[old_op] = TensorSliceOp(new_arg, old_op.slices, old_op.axes)
+                    elif isinstance(old_op, ReorderAxes):
+                        new_op_map[old_op] = ReorderAxes(new_arg, old_op.axes)
+
+                self.replace_op(op, new_op_map[self.op_arg(op, 0)])
                 self.replace_op(conv_op, conv_new_op)
 
     def construct_conv_and_bias_pattern_update_conv(self):
@@ -61,6 +80,12 @@ class CPUFusion(GraphRewritePass):
     def fuse_conv_and_bias_callback_update_conv(self, op, label_map_op_list):
         """
         """
+        def get_arg_depth(op, level, arg_idx=0):
+            if level == 0:
+                return self.op_arg(op, arg_idx)
+            else:
+                return get_arg_depth(op, level - 1, arg_idx)
+
         for (label_map, op) in label_map_op_list:
             if op.dbias is not None:
                 # Already fused.
@@ -77,6 +102,24 @@ class CPUFusion(GraphRewritePass):
                 if isinstance(delta_child.exop.op, Sum)\
                         and delta_child.exop.op not in self.op_replacement_dict:
                     dbias_exop = delta_child.exop
+
+            if dbias_exop is None:
+                # Look deeper in the graph
+                # -> ReorderAxes -> ExpandDims -> Add -> MapRoles -> update_conv
+                if isinstance(get_arg_depth(op, 0), MapRolesOp) and\
+                    isinstance(get_arg_depth(op, 1), Add) and\
+                    isinstance(get_arg_depth(op, 2), ExpandDims) and\
+                        isinstance(get_arg_depth(op, 3), ReorderAxes):
+                    delta_op = get_arg_depth(op, 4)
+                    delta_exop = self.op_accessor.computation_decl.get_exop(delta_op)
+                    # Look for reorder->sum
+                    for delta_child in delta_exop.output_decls[0].user_input_decls:
+                        for delta_grandchild in delta_child.exop.output_decls[0].user_input_decls:
+                            # Bias grad op is a sum op on non-channel axis
+                            # It should also not claimed by a different convolution
+                            if isinstance(delta_grandchild.exop.op, Sum) \
+                                    and delta_grandchild.exop.op not in self.op_replacement_dict:
+                                dbias_exop = delta_grandchild.exop
 
             if dbias_exop is None:
                 continue
@@ -237,7 +280,7 @@ class CPUFusion(GraphRewritePass):
             inputs = self.op_arg(label_map[self.batchnorm_bprop_input_tensor], 0)
             delta = label_map[self.batchnorm_bprop_delta]
 
-            if len(inputs.axes) != 5 or inputs.axes[1].length != 1:
+            if len(inputs.axes) != 4:
                 return
             if op.dtype.name != 'float32':
                 return
@@ -436,8 +479,7 @@ class CPUFusion(GraphRewritePass):
             mean = label_map[self.batchnorm_fprop_mean_label]
             epsilon = self.op_arg(label_map[self.batchnorm_fprop_epsilon_label], 0).tensor.const
 
-            if len(inputs.axes) != 5 or inputs.axes[
-                    1].length != 1 or inputs.axes[0].length % 8 != 0:
+            if len(inputs.axes) != 4:
                 return
             if op.dtype.name != 'float32':
                 return

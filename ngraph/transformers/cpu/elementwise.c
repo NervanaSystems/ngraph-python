@@ -51,7 +51,8 @@ void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
   }
   MKL_CHECK(mkldnn_memory_primitive_desc_create(&pd2, &md2, engine));
 
-  const_mkldnn_primitive_desc_t input_pds[] = {pd1, pd2};
+  // Create sum in src1 layout
+  const_mkldnn_primitive_desc_t input_pds[] = {pd1, pd1};
 
   // create a Sum primitive descriptor
   double scale_vector[] = {1, 1};
@@ -92,7 +93,7 @@ void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
                                  &(opkernel->internal_inputs[1]));
     mkldnn_primitive_desc_t reorder_pd;
     MKL_CHECK(mkldnn_reorder_primitive_desc_create(
-        &reorder_pd, opkernel->inputs[1].desc, opkernel->inputs[1].desc));
+        &reorder_pd, opkernel->inputs[1].desc, opkernel->inputs[0].desc));
     mkldnn_primitive_at_t inputs[] = {
         mkldnn_primitive_at(opkernel->inputs[1].prim, 0)};
     const_mkldnn_primitive_t outputs[] = {opkernel->internal_inputs[1].prim};
