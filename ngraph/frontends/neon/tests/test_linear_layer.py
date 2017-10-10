@@ -145,17 +145,19 @@ def test_linear_invalid_batch_axes():
     with pytest.raises(ValueError):
         Linear(axes=ng.make_axis(1, name='N'), init=UniformInit(1.0, 1.0))
 
+
 def test_linear_keep_axes():
     feature_axis = ng.make_axis(1, name='A')
     batch_axis = ng.make_axis(2, name='N')
-    recurrent_axis = ng.make_axis(3, name='REC')
 
     x = ng.placeholder([batch_axis])
     linear = Linear(axes=feature_axis, keep_axes=[], init=UniformInit(1.0, 1.0))(x)
 
     assert linear.axes == ng.make_axes([feature_axis])
 
-def test_linear_keep_axes_ones(batch_axis, input_size, input_placeholder, output_size, transformer_factory):
+
+def test_linear_keep_axes_ones(batch_axis, input_size, input_placeholder, output_size,
+                               transformer_factory):
     # basic sanity check with all ones on the inputs and weights, check that
     # each row in output is the sum of the weights for that output this check
     # will confirm that the correct number of operations is being run
@@ -175,17 +177,19 @@ def test_linear_keep_axes_ones(batch_axis, input_size, input_placeholder, output
         atol=0.0, rtol=0.0
     )
 
+
 def test_linear_keep_batch_axis():
     feature_axis = ng.make_axis(1, name='A')
     batch_axis = ng.make_axis(2, name='N')
-    recurrent_axis = ng.make_axis(3, name='REC')
 
     x = ng.placeholder([batch_axis])
     linear = Linear(axes=feature_axis, keep_axes=[batch_axis], init=UniformInit(1.0, 1.0))(x)
 
     assert linear.axes == ng.make_axes([feature_axis, batch_axis])
 
-def test_linear_keep_batch_axes_ones(batch_axis, input_size, input_placeholder, output_size, transformer_factory):
+
+def test_linear_keep_batch_axes_ones(batch_axis, input_size, input_placeholder, output_size,
+                                     transformer_factory):
     # basic sanity check with all ones on the inputs and weights, check that
     # each row in output is the sum of the weights for that output this check
     # will confirm that the correct number of operations is being run

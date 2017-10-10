@@ -22,10 +22,12 @@ from contextlib import contextmanager
 import ngraph as ng
 from ngraph.frontends.common import utils
 from ngraph.frontends.common.utils import make_poolparams
-from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes, assert_no_shadow_axes
+from ngraph.frontends.neon.axis import shadow_axes_map, reorder_spatial_axes, assert_no_shadow_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
 from ngraph.frontends.neon.utils import get_function_or_class_name
+from ngraph.op_graph.axes import IncompatibleAxesError
+
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
