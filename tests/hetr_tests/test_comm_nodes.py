@@ -198,105 +198,48 @@ def test_broadcast_ops(config):
     np.testing.assert_array_equal(results, c['expected_results'])
 
 
+@pytest.mark.multi_device
 @pytest.mark.hetr_only
 @pytest.mark.parametrize('config', [
     {
         'input': 36,
-        'func': 'mean',
-        'device_id': (0, 1),
-        'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
-    },
-    {
-        'input': 36,
-        'func': 'sum',
-        'device_id': (0, 1),
-        'expected_result': [[[-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0], [-71.0, -71.0]]],
-    },
-    {
-        'input': 36,
-        'func': 'mean',
-        'device_id': (0, 1, 2, 3),
-        'expected_result': [[[-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0], [-35.0, -35.0]]],
-    },
-    {
-        'input': 25,
-        'func': 'sum',
-        'device_id': (0, 1, 2, 3),
-        'expected_result': [[[-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0], [-99.0, -99.0]]],
-    },
-])
-def test_allreduce_hint_cpu(config):
-    c = config
-    parallel_axis = ng.make_axis(name='axis_parallel', length=16)
-    with ng.metadata(device_id=c['device_id'], parallel=parallel_axis):
-        axis_A = ng.make_axis(length=4, name='axis_A')
-        axis_B = ng.make_axis(length=2, name='axis_B')
-        var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
-        var_B = ng.variable(initial_value=UniformInit(c['input'], c['input']),
-                            axes=[axis_B]).named('var_B')
-        var_B.metadata['reduce_func'] = c['func']
-        var_minus = (var_A - var_B).named('var_minus')
-    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-        out_comp = hetr.computation([var_minus]).named('out_comp')
-        result = out_comp()
-
-        np.testing.assert_array_equal(result, c['expected_result'])
-
-
-@pytest.mark.hetr_gpu_only
-@pytest.mark.parametrize('config', [
-    {
-        'input': 36,
-        'func': 'mean',
         'device_id': (0, 1),
         'expected_result': -35,
     },
     {
-        'input': 36,
-        'func': 'sum',
-        'device_id': (0, 1),
-        'expected_result': -71,
-    },
-    {
-        'input': 36,
-        'func': 'mean',
-        'device_id': (0, 1, 2, 3),
-        'expected_result': -35,
-    },
-    {
         'input': 25,
-        'func': 'sum',
         'device_id': (0, 1, 2, 3),
-        'expected_result': -99,
+        'expected_result': -24,
     },
 ])
-def test_allreduce_hint_gpu(config):
-    pytest.xfail("Multi-GPU testing not enabled yet")
+def test_allreduce_hint(hetr_device, config):
+    if hetr_device == 'gpu':
+        if 'gpu' not in ngt.transformer_choices():
+            pytest.skip("GPUTransformer not available")
+        pytest.xfail()
 
-    if 'gpu' not in ngt.transformer_choices():
-        pytest.skip("GPUTransformer not available")
-
-    c = config
-
-    ax_A_length = 32
-    ax_B_length = 16
-
-    np_result = [np.full((ax_A_length, ax_B_length), c['expected_result'], np.float32)]
+    input = config['input']
+    device_id = config['device_id']
+    axis_A = ng.make_axis(length=4, name='axis_A')
     parallel_axis = ng.make_axis(name='axis_parallel', length=16)
-    with ng.metadata(device_id=c['device_id'], parallel=parallel_axis):
-        axis_A = ng.make_axis(length=ax_A_length, name='axis_A')
-        axis_B = ng.make_axis(length=ax_B_length, name='axis_B')
-        var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1)).named('var_A')
-        var_B = ng.variable(initial_value=UniformInit(c['input'], c['input']),
-                            axes=[axis_B]).named('var_B')
-        var_B.metadata['reduce_func'] = c['func']
-        var_minus = (var_A - var_B).named('var_minus')
-    with closing(ngt.make_transformer_factory('hetr', device='gpu')()) as hetr:
-        out_comp = hetr.computation([var_minus]).named('out_comp')
+
+    with ng.metadata(device=hetr_device,
+                     device_id=device_id,
+                     parallel=parallel_axis):
+        var_A = ng.variable(axes=[axis_A], initial_value=UniformInit(1, 1))
+        var_B = ng.variable(axes=[axis_A], initial_value=UniformInit(input, input))
+        var_B.metadata['reduce_func'] = 'sum'
+        var_B_mean = var_B / len(device_id)
+        var_minus = (var_A - var_B_mean)
+
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as hetr:
+        out_comp = hetr.computation(var_minus)
         result = out_comp()
+        np_result = np.full((axis_A.length), config['expected_result'], np.float32)
         np.testing.assert_array_equal(result, np_result)
 
 
+@pytest.mark.multi_device
 @pytest.mark.hetr_only
 @pytest.mark.parametrize('config', [
     {
@@ -308,21 +251,26 @@ def test_allreduce_hint_gpu(config):
                        [2.0, 2.0, 2.0, 2.0]],
     },
 ])
-def test_multiple_gather_ops(config):
-    c = config
+def test_multiple_gather_ops(config, hetr_device):
+    if hetr_device == 'gpu':
+        if 'gpu' not in ngt.transformer_choices():
+            pytest.skip("GPUTransformer not available")
+        pytest.xfail()
+    input = config['input']
+    device_id = config['device_id']
 
     H = ng.make_axis(length=2, name='height')
     W = ng.make_axis(length=4, name='width')
     x = ng.placeholder(axes=[H, W])
-    with ng.metadata(device_id=c['device_id'], parallel=W):
+    with ng.metadata(device_id=device_id, parallel=W):
         x_plus_one = x + 1
         x_plus_two = x_plus_one + 2
-    with closing(ngt.make_transformer_factory('hetr')()) as hetr:
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as hetr:
         plus = hetr.computation([x_plus_two, x_plus_one], x)
-        result_two, result_one = plus(c['input'])
+        result_two, result_one = plus(input)
 
-        np.testing.assert_array_equal(result_two, c['result_two'])
-        np.testing.assert_array_equal(result_one, c['result_one'])
+        np.testing.assert_array_equal(result_two, config['result_two'])
+        np.testing.assert_array_equal(result_one, config['result_one'])
 
 
 @pytest.mark.hetr_gpu_only
