@@ -1890,12 +1890,17 @@ class ExpandDims(IndexOp):
     """
 
     def __init__(self, x, axis, dim, **kwargs):
+        self.dim = dim
+        self.axis = axis
         axes = []
         axes.extend(x.axes[:dim])
         axes.append(axis)
         axes.extend(x.axes[dim:])
         axes = make_axes(axes)
         super(ExpandDims, self).__init__(x, axes=axes, **kwargs)
+
+    def copy_with_new_args(self, args):
+        return type(self)(args[0], self.axis, self.dim)
 
     def transform_tensor_description(self, tensor_description):
         return tensor_description.broadcast(self.axes)
@@ -1910,10 +1915,22 @@ class ExpandDims(IndexOp):
         Returns:
           TODO
         """
-        x.generate_add_delta(
-            adjoints,
-            sum(delta, reduction_axes=delta.axes - x.axes)
-        )
+        reduction_axes = delta.axes - x.axes
+        assert len(reduction_axes) == 1
+        # Optimize case where inserted axis is size 1
+        if reduction_axes[0].length == 1:
+            slices = []
+            for axis in delta.axes:
+                slices.append(slice(None) if axis in x.axes else 0)
+            x.generate_add_delta(
+                adjoints,
+                tensor_slice(delta, slices, x.axes)
+            )
+        else:
+            x.generate_add_delta(
+                adjoints,
+                sum(delta, reduction_axes=delta.axes - x.axes)
+            )
 
 
 def expand_dims(x, axis, dim):
@@ -2714,12 +2731,21 @@ class UnsliceOp(SequentialOp):
         super(UnsliceOp, self).__init__(**kwargs)
         self.x = x
         self.slices = slices
-        temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
-        self.ops = [
-            Fill(temp, 0),
-            set_item(temp, slices, x),
-            temp
-        ]
+        # Optimize case where we are unslicing axis of size 1
+        if all(sl == 0 or sl == slice(None) for sl in slices) and \
+                len(axes - x.axes) == 1 and (axes - x.axes)[0].length == 1:
+            # Add the missing dimension
+            for i, s in enumerate(slices):
+                if s == 0:
+                    dim_idx = i
+            self.ops = [expand_dims(x, axes[dim_idx], dim_idx)]
+        else:
+            temp = temporary(axes=axes, dtype=x.dtype).named('unslice')
+            self.ops = [
+                Fill(temp, 0),
+                set_item(temp, slices, x),
+                temp
+            ]
 
         # Handle adjoint generation for the result
         self.value_tensor.deriv_handler = self
