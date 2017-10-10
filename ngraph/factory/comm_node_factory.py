@@ -18,10 +18,10 @@ from ngraph.op_graph.comm_nodes import \
     CPUMlslScatterSendOp, CPUMlslScatterRecvOp, \
     CPUMlslAllReduceStartOp, CPUMlslAllReduceWaitOp, \
     CPUMlslBroadcastSendOp, CPUMlslBroadcastRecvOp, \
-    GPUQueueSendOp, GPUQueueRecvOp, \
-    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaScatterSendOp, \
-    GPUCudaScatterRecvOp, GPUCudaAllReduceOp
-
+    GPUCudaSendOp, GPUCudaRecvOp, \
+    GPUCudaGatherSendOp, GPUCudaGatherRecvOp, \
+    GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
+    GPUCudaAllReduceOp
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
@@ -125,7 +125,8 @@ class CommNodePair(object):
             self.send_node = send_node_factory.build(
                 node_type='send',
                 comm_type=comm_type,
-                from_node=from_node)
+                from_node=from_node,
+                to_node=to_node)
             self.recv_node = recv_node_factory.build(
                 node_type='recv',
                 comm_type=comm_type,
@@ -170,8 +171,7 @@ class GPUCommNodeFactory(CommNodeFactory):
     def send_recv_types(self, location):
         types = [
             ('remote', 'mpi'),
-            ('local', 'cuda'),
-            ('local', 'queue')
+            ('local', 'cuda')
         ]
 
         send_recv_types = defaultdict(list)
@@ -182,12 +182,13 @@ class GPUCommNodeFactory(CommNodeFactory):
 
     def build(self, node_type, comm_type, from_node=None, to_node=None, send_node=None):
         if node_type == 'send':
-            if comm_type == 'queue':
-                return GPUQueueSendOp(
-                    from_node=from_node)
+            if comm_type == 'cuda':
+                return GPUCudaSendOp(
+                    from_node=from_node,
+                    to_node=to_node)
         elif node_type == 'recv':
-            if comm_type == 'queue':
-                return GPUQueueRecvOp(
+            if comm_type == 'cuda':
+                return GPUCudaRecvOp(
                     to_node=to_node,
                     send_node=send_node)
         elif node_type == 'scatter_send':

@@ -53,7 +53,8 @@ import ngraph.op_graph.serde.ops_pb2 as ops_pb
 
 
 # Attributes of an Op that are private but we want to serialize
-EXCEPTION_ATTRIBUTES = {'_axes', '_tensor', '_const', '_deriv_handler', '_has_side_effects'}
+EXCEPTION_ATTRIBUTES = {'_axes', '_tensor', '_const', '_deriv_handler', '_has_side_effects',
+                        '_send_node'}
 
 # Dict of Axis and Axes UUID to Axis to enable matching of deserialized axis
 GLOBAL_AXIS_REGISTRY = weakref.WeakValueDictionary()

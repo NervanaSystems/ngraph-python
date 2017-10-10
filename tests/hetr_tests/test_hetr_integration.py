@@ -16,41 +16,100 @@ import numpy as np
 import pytest
 from contextlib import closing
 from ngraph.testing import ExecutorFactory
-from orderedset import OrderedSet
-from test_hetr_passes import check_device_assign_pass, check_communication_pass
 import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.transformers.hetr.mpilauncher import MPILauncher
-from multiprocessing import active_children
 import time
 import os
 import subprocess
 import tempfile
+import random
 
 
 pytestmark = pytest.mark.hetr_only
 STARTUP_TIME = 3
 
 
-def test_distributed_graph_plus_one():
-    H = ng.make_axis(length=4, name='height')
-    W = ng.make_axis(length=6, name='width')
-    x = ng.placeholder(axes=[H, W])
-    with ng.metadata(device_id=('0', '1'), parallel=W):
-        x_plus_one = x + 1
+ax_A = ng.make_axis(4)
+ax_B = ng.make_axis(8)
+ax_C = ng.make_axis(12)
+ax_D = ng.make_axis(24)
 
-    np_x = np.random.randint(100, size=[H.length, W.length])
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_one, x)
+
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('0', '1', '2', '3'),
+        'parallel_axis': ax_A,
+    },
+])
+def test_distributed_plus_one(hetr_device, config):
+    device_id = config['device_id']
+    axes = config['axes']
+    parallel_axis = config['parallel_axis']
+
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=axes)
+        with ng.metadata(device_id=device_id, parallel=parallel_axis):
+            x_plus_one = x + 1
+
+    np_x = np.random.randint(100, size=axes.lengths)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(x_plus_one, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 1)
 
 
-def test_distributed_dot_parallel_first_axis():
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'axes_x': ng.make_axes([ax_B, ax_A]),
+        'axes_w': ng.make_axes([ax_A, ax_C]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_B,
+    },
+    {
+        'axes_x': ng.make_axes([ax_B, ax_A]),
+        'axes_w': ng.make_axes([ax_A, ax_C]),
+        'device_id': ('0', '1', '2', '3'),
+        'parallel_axis': ax_B,
+    },
+])
+def test_distributed_dot(hetr_device, config):
+    device_id = config['device_id']
+    axes_x = config['axes_x']
+    axes_w = config['axes_w']
+    parallel_axis = config['parallel_axis']
+
+    np_weight = np.ones(axes_w.lengths)
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=axes_x)
+        with ng.metadata(device_id=device_id, parallel=parallel_axis):
+            w = ng.variable(axes=axes_w, initial_value=np_weight)
+            dot = ng.dot(x, w)
+
+    np_x = np.random.randint(100, size=axes_x.lengths)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(dot, x)
+        res = computation(np_x)
+        np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
+
+
+@pytest.mark.multi_device
+def test_comm_broadcast_op(hetr_device):
+    if hetr_device == 'gpu':
+        pytest.skip('gpu communication broadcast op is not supported.')
     H = ng.make_axis(length=4, name='height')
     N = ng.make_axis(length=8, name='batch')
     weight = ng.make_axis(length=2, name='weight')
     x = ng.placeholder(axes=[N, H])
+    # w will be broadcasted to devices
     w = ng.placeholder(axes=[H, weight])
     with ng.metadata(device_id=('0', '1'), parallel=N):
         dot = ng.dot(x, w)
@@ -82,112 +141,100 @@ def test_distributed_dot_parallel_second_axis():
         np.testing.assert_array_equal(res, np.dot(np_weight, np_x))
 
 
-def test_distributed_graph_plus_two():
-    W = ng.make_axis(length=6, name='width')
-    H = ng.make_axis(length=4, name='height')
-    x = ng.placeholder(axes=[W, H])
-    with ng.metadata(device_id=('0', '1'), parallel=W):
-        x_plus_one = x + 1
-    x_plus_two = x_plus_one + 1
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+        'device_id': ('0', '1', '2', '3'),
+        'parallel_axis': ax_A,
+    },
+])
+def test_distributed_plus_two(hetr_device, config):
+    device_id = config['device_id']
+    axes = config['axes']
+    parallel_axis = config['parallel_axis']
 
-    np_x = np.random.randint(100, size=[W.length, H.length])
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_two, x)
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=axes)
+        with ng.metadata(device_id=device_id, parallel=parallel_axis):
+            x_plus_one = x + 1
+        x_plus_two = x_plus_one + 1
+
+    np_x = np.random.randint(100, size=axes.lengths)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(x_plus_two, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np_x + 2)
 
 
-def test_singleton_device_id():
-    with ng.metadata(device_id=(['1'])):
-        x = ng.placeholder(())
-    graph_ops = OrderedSet([x])
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'axes': None,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+    },
+])
+def test_to_and_from_device(hetr_device, config):
+    axes = config['axes']
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=axes) if axes else ng.placeholder(())
+        with ng.metadata(device_id='1'):
+            x_plus_one = x + 1
+        x_plus_two = x_plus_one * 2
 
-    graph_op_metadata = {op: list() for op in graph_ops}
-    graph_op_metadata[x] = ["cpu", '1']
-
-    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
-
-
-def test_from_device():
-    with ng.metadata(device_id='1'):
-        x = ng.placeholder(())
-    x_plus_one = x + 1
-
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_one, x)
-        for i in [10, 20, 30]:
-            assert computation(i) == i + 1
-
-
-def test_to_device():
-    x = ng.placeholder(())
-    with ng.metadata(device_id='1'):
-        x_plus_one = x + 1
-
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_one, x)
-        for i in [10, 20, 30]:
-            assert computation(i) == i + 1
+    np_x = np.random.randint(100, size=axes.lengths) if axes else random.random()
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation([x_plus_one, x_plus_two], x)
+        res = computation(np_x)
+        np.testing.assert_allclose(res[0], np_x + 1.0)
+        np.testing.assert_allclose(res[1], (np_x + 1.0) * 2.0)
 
 
-def test_to_and_from_device():
-    x = ng.placeholder(())
-    with ng.metadata(device_id='1'):
-        x_plus_one = x + 1
-    x_plus_two = x_plus_one + 1
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'axes': None,
+    },
+    {
+        'axes': ng.make_axes([ax_A]),
+    },
+    {
+        'axes': ng.make_axes([ax_A, ax_B]),
+    },
+])
+def test_computation_return_list(hetr_device, config):
+    axes = config['axes']
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=axes) if axes else ng.placeholder(())
 
-    with ExecutorFactory() as ex:
-        computation = ex.executor(x_plus_two, x)
-        for i in [10, 20, 30]:
-            assert computation(i) == i + 2
+        with ng.metadata(device_id='1'):
+            x_plus_one = x + 1
+        with ng.metadata(device_id='2'):
+            x_plus_two = x_plus_one + 1
+        with ng.metadata(device_id='3'):
+            x_mul_two = x_plus_two * 2
 
-
-def test_computation_return_list():
-    with ng.metadata(device_id='1'):
-        x = ng.placeholder(())
-    x_plus_one = x + 1
-    x_plus_two = x + 2
-    x_mul_three = x * 3
-
-    with ExecutorFactory() as ex:
-        computation = ex.executor([x_plus_one, x_plus_two, x_mul_three], x)
-        for i in [10, 20, 30]:
-            assert computation(i) == (i + 1, i + 2, i * 3)
-
-
-def test_scatter_gather_graph():
-    # Build the graph
-    W = ng.make_axis(length=6, name='width')
-
-    with ng.metadata(device_id='0'):
-        x = ng.placeholder(())
-        z = ng.placeholder(())
-
-    with ng.metadata(device_id=('1', '2'), parallel=W):
-        y = ng.placeholder(())
-
-    x_plus_z = x + z  # Does not create a recv node
-    x_plus_y = x + y  # creates a gather recv node
-
-    # Build the graph metadata
-    graph_ops = OrderedSet([x, y, z, x_plus_z, x_plus_y])
-
-    graph_op_metadata = {op: list() for op in graph_ops}
-    graph_op_metadata[x] = ["cpu", '0']
-    graph_op_metadata[z] = ["cpu", '0']
-    graph_op_metadata[y] = ["cpu", ('1', '2')]
-    graph_op_metadata[x_plus_z] = ["cpu", '0']
-    graph_op_metadata[x_plus_y] = ["cpu", '0']
-
-    check_device_assign_pass("cpu", "0", graph_op_metadata, graph_ops)
-
-    check_communication_pass(
-        ops_to_transform=graph_ops,
-        expected_recv_nodes=[x_plus_y])
+    np_x = np.random.randint(100, size=axes.lengths) if axes else random.random()
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation([x_plus_one, x_plus_two, x_mul_two], x)
+        res = computation(np_x)
+        np.testing.assert_allclose(res[0], np_x + 1)
+        np.testing.assert_allclose(res[1], np_x + 2)
+        np.testing.assert_allclose(res[2], (np_x + 2) * 2)
 
 
 @pytest.mark.hetr_gpu_only
-def test_gpu_send_and_recv():
+def test_gpu_send_and_recv(hetr_device):
     pytest.xfail("GitHub issue: #2007, Unknown error - investigation is needed")
     # put x+1 on cpu numpy
     with ng.metadata(device='cpu'):
@@ -328,126 +375,6 @@ def test_recvop_tensorupdate():
 
     np.testing.assert_array_equal(dot_val, [[8., 8., 8., 8.],
                                             [8., 8., 8., 8.]])
-
-
-def test_terminate_op():
-
-    class TerminateOp(ng.Op):
-
-        def __init__(self, **kwargs):
-            super(TerminateOp, self).__init__(**kwargs)
-
-        @property
-        def has_side_effects(self):
-            return True
-
-    baseline = active_children()
-    termOp = TerminateOp()
-    assert len(baseline) == 0
-    with ExecutorFactory() as ex:
-        with pytest.raises(RuntimeError) as excinfo:
-            ex.executor(termOp)
-        assert 'Cannot find op_type of TerminateOp in any ngraph.op_graph modules' \
-            in str(excinfo.value)
-        assert len(active_children()) == 0
-    assert len(active_children()) == len(baseline)
-
-
-def test_process_leak():
-    baseline = active_children()
-    with ng.metadata(device_id=('0')):
-        x = ng.constant(2)
-    assert len(active_children()) == 0
-    with ExecutorFactory() as ex:
-        comp = ex.executor(x)
-        assert len(active_children()) == 0
-        comp()
-        assert len(active_children()) == 0
-    assert len(active_children()) == len(baseline)
-
-
-ax_A = ng.make_axis(4)
-ax_B = ng.make_axis(6)
-ax_C = ng.make_axis(12)
-ax_D = ng.make_axis(24)
-
-
-@pytest.mark.hetr_gpu_only
-@pytest.mark.parametrize('config', [
-    {
-        'axes': ng.make_axes([ax_A]),
-        'device_id': ('0'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_B,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_A,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_B,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_C,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('0', '1'),
-        'parallel_axis': ax_B,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('0', '1', '2'),
-        'parallel_axis': ax_C,
-    },
-    {
-        'axes': ng.make_axes([ax_A, ax_B, ax_C, ax_D]),
-        'device_id': ('0', '1', '2'),
-        'parallel_axis': ax_D,
-    },
-])
-def test_gpu_graph(config):
-    pytest.xfail("Multi-GPU testing not enabled yet")
-
-    if 'gpu' not in ngt.transformer_choices():
-        pytest.skip('GPUTransformer not available!')
-
-    t = config
-    with ng.metadata(device='gpu'):
-        x = ng.placeholder(axes=t['axes'])
-
-    with ng.metadata(device='gpu', device_id=t['device_id'], parallel=t['parallel_axis']):
-        x_plus_one = x + 1
-
-    with ng.metadata(device='gpu'):
-        x_plus_two = x_plus_one + 1
-
-    os.environ["HETR_SERVER_NUM"] = str(len(t['device_id']))
-
-    np_x = np.random.randint(100, size=t['axes'].full_lengths)
-    with closing(ngt.make_transformer_factory('hetr')()) as transformer:
-        computation = transformer.computation(x_plus_two, x)
-        res = computation(np_x)
-        np.testing.assert_array_equal(res, np_x + 2)
 
 
 class ClosingHetrServers():

@@ -126,13 +126,11 @@ class DistributedPass(GraphBuildingPass):
                 # clone nodes for each device_id
                 replaced_send_ops = OrderedSet()
                 new_gather_send_nodes = OrderedSet()
-                for i, id in enumerate(op.from_id):
+                for id in op.from_id:
                     new_gather_send_op, new_sends, replaced_sends = clone_graph(
                         root=gather_send_op,
                         clone_id=id,
-                        shared_queues_idx=i,
-                        parallel_axis=self.parallel_axes,
-                        num_clones=len(op.from_id))
+                        parallel_axis=self.parallel_axes)
 
                     new_gather_send_nodes.add(new_gather_send_op)
 
