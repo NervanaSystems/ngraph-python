@@ -176,10 +176,14 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
 
     def set_mkl_layout(self, op, mkl_axes, index=0):
         exop = self.get_exop(op)
-        layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], index)
-        if layout:
+        mkl_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.name], index)
+        mkl_order = get_order_from_axes(op.axes, mkl_axes)
+        (native_layout, _) = get_native_layout(self.mkldnn, op.tensor_description(), mkl_order)
+        if not self.mkldnn.cmp_layouts(mkl_layout, native_layout):
             exop.output_decls[index].tensor_view_decl.mkl_layout = (
-                layout, mkl_axes)
+                mkl_layout, mkl_axes)
+        else:
+            print("MKL output in native format")
 
     def get_arg_mkl_layout(self, op, arg):
         arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(arg))

@@ -78,6 +78,9 @@ class Mkldnn(object):
             self.output_layout = self.mkllib.query_opkernel_layout
             self.output_layout.argtypes = [ct.c_void_p, ct.c_int]
             self.output_layout.restype = ct.c_void_p
+            self.cmp_layouts = self.mkllib.mkldnn_compare_memdesc
+            self.cmp_layouts.argtypes = [ct.c_void_p, ct.c_void_p]
+            self.cmp_layouts.restype = ct.c_int
 
             self.set_input_tensor = self.mkllib.set_input_tensor_data_handle
             self.set_input_tensor.argtypes = \
