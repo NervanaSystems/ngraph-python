@@ -25,7 +25,6 @@ from ngraph.transformers.base import ComputationGraphTransformer
 from ngraph.transformers.base import make_transformer_factory
 from ngraph.transformers.hetr.mpilauncher import MPILauncher
 from ngraph.transformers.hetr.hetr_utils import get_available_ports
-from ngraph.transformers.hetr.hetr_utils import update_ops_metadata
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import AxesUpdatePass
@@ -91,7 +90,6 @@ class HetrComputation(Computation):
         # Do Hetr passes
         pass_ops = new_returns | OrderedSet(self.computation_op.parameters)
         for graph_pass in self.transformer.graph_passes:
-            pass_ops_b4 = pass_ops.copy()
             pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
             graph_pass.do_pass(ops=pass_ops)
 
@@ -104,17 +102,18 @@ class HetrComputation(Computation):
         self.transformer.mpilauncher.launch(len(self.transformer.child_transformers))
         self.transformer.setup_child_transformers()
 
+        def is_my_op(op, name):
+            op_trans = op.metadata['transformer']
+            return name == op_trans or name in op_trans
+
         # simplify by already having asynctrans made by passes
         for idx, (t_name, trans) in enumerate(iteritems(self.transformer.child_transformers)):
-
-            update_ops_metadata(self.send_nodes | new_returns, idx)
             trans.build_transformer()
-
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation_op.parameters)
-                         if p.metadata['transformer'] == t_name]
+                         if is_my_op(p, t_name)]
             my_ops = [op for op in self.send_nodes | new_returns
-                      if op.metadata['transformer'] == t_name]
+                      if is_my_op(op, t_name)]
 
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
             trans.create_computation(transform_ops, tuple([p for pos, p in my_params]), idx)
@@ -172,8 +171,6 @@ class HetrTransformer(ComputationGraphTransformer):
     def __init__(self, device='gpu', num_devices=2, **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
-        # TUNDE TO DO: cleanup num_devices flag and set it appropiately
-        # To see the problem set the default value of num_devices parameter in the init function above to 1(one)
         if device == 'gpu':
             os.environ["HETR_SERVER_GPU_NUM"] = str(num_devices)
         self.my_pid = os.getpid()
@@ -185,12 +182,6 @@ class HetrTransformer(ComputationGraphTransformer):
                                               default_device_id=0),
                              CommunicationPass(self.send_nodes),
                              AxesUpdatePass()]
-
-        # # # import ngraph.transformers.passes.nviz
-        # # # nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
-                                                       # # # show_all_metadata=True,
-                                                       # # # subgraph_attr='device_id')
-        # # # self.graph_passes.insert(1, nviz)
 
         self.rpc_ports = get_available_ports()
         self.rpc_port_idx = 0

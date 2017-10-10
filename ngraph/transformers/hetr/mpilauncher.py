@@ -79,8 +79,9 @@ class MPILauncher(object):
                    # '--allow-run-as-root',
                    '-n', str(self._server_count_gpu)]
 
-            logger.info("mpilauncher: launch: hostfile %s, hosts %s, server_count_gpu %s, tmpfile %s",
-                        self._hostfile, self._hosts, self._server_count_gpu, self._tmpfile)
+            logger.info("mpilauncher: launch: hostfile %s, hosts %s, server_count_gpu %s",
+                        "tmpfile %s", self._hostfile, self._hosts, self._server_count_gpu,
+                        self._tmpfile)
         else:
             cmd = ['mpirun',
                    '-n', str(self._server_count),
@@ -102,9 +103,6 @@ class MPILauncher(object):
         elif (self._hosts is not None) and (self._server_count_gpu is None):
             hostlist = ",".join(self._hosts)
             cmd.extend(['-hosts', hostlist])
-        # # # else:
-            # # # assert False, "Specify hostfile or hosts"
-
         cmd.extend(['python', server_path, '-tf', self._tmpfile.name])
         if self._rpc_ports is not None:
             cmd.extend(['-p', self._rpc_ports])
@@ -115,8 +113,8 @@ class MPILauncher(object):
         logger.info("mpirun cmd: %s", cmd)
 
         try:
-            # self.mpirun_proc = subprocess.Popen(cmd)
-            self.mpirun_proc = subprocess.Popen(cmd, preexec_fn=os.setsid, env=mpirun_env)
+            self.mpirun_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                                preexec_fn=os.setsid, env=mpirun_env)
         except:
             raise RuntimeError("Process launch failed!")
 

@@ -104,13 +104,13 @@ def get_mini_resnet(inputs, dataset, device, device_id, stage_depth=1,
     return model_out
 
 
-def get_fake_data(dataset, batch_size, num__iterations, seed=-1):
+def get_fake_data(dataset, batch_size, num_iterations, seed=None):
     x_train, y_train = generate_data(dataset, batch_size, rand_seed=seed)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'H', 'W')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
-    train_set = ArrayIterator(train_data, batch_size, total_iterations=num__iterations)
+    train_set = ArrayIterator(train_data, batch_size, total_iterations=num_iterations)
     inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 

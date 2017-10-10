@@ -915,7 +915,8 @@ self.__profiler_stop__  = list()
         self.exop_codegen.indent(1)
         self.exop_codegen.append("def __call__(self):")
         self.exop_codegen.indent(1)
-        self.exop_codegen.append("self.create_distribution()")
+        if use_mlsl:
+            self.exop_codegen.append("self.create_distribution()")
         self.codegen_define_length = self.exop_codegen.code_length
 
     def generate_exop(self, exop):

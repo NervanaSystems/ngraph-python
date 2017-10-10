@@ -149,7 +149,8 @@ class DistributedPass(GraphBuildingPass):
 class AxesUpdatePass(GraphBuildingPass):
     """
     Description:
-        AxesUpdatePass updates the dimension of the parallel axis for ops in the subgraphs of which the root is a GatherSendOp
+        AxesUpdatePass updates the dimension of the parallel axis for ops in the
+        subgraphs of which the root is a GatherSendOp
     """
 
     def __init__(self, **kwargs):

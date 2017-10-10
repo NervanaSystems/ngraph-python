@@ -1200,6 +1200,7 @@ class TensorDescription(NameableValue):
         self.__is_input = is_input
         self.__is_placeholder = is_placeholder
         self.op = op
+        # TODO: Issue 2198 - Handle unicode in NameableValue
         if not isinstance(self.name, str):
             # If name is of type unicode, change to string
             try:

@@ -52,7 +52,6 @@ from ngraph.transformers.passes.passes import SimplePrune
 from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
-# from ngraph.transformers.passes.nviz import VizPass
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
@@ -811,7 +810,7 @@ class GPUDeviceTensor(DeviceTensor):
         # convert value to numpy
         if type(value) == float:
             value = np.float64(value)
-        elif type(value) == int or type(value) == long:
+        elif type(value) == int:
             value = np.int64(value)
         elif isinstance(value, np.ndarray):
             # handle 0-d and 1-d conversion to scalar
@@ -1058,11 +1057,6 @@ class GPUTransformer(ComputationGraphTransformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
-
-        import ngraph.transformers.passes.nviz
-        nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
-                                                       show_all_metadata=True,
-                                                       subgraph_attr='device_id')
 
         self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,

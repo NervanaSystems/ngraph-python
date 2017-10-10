@@ -7,7 +7,6 @@ from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, add_
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 from ngraph.op_graph.op_graph import Op
-from ngraph.transformers.hetr.hetr_utils import update_ops_metadata
 import logging
 
 
@@ -142,7 +141,6 @@ class RPCTransformerClient(object):
 
         def generate_messages(index):
             pb_ops, pb_edges = [], []
-            # update_ops_metadata(returns + list(placeholders), index)
             pb_returns, pb_placeholders = generate_returns_placeholders()
             ops = Op.all_op_references(returns + list(placeholders))
             for i, op in enumerate(ops):

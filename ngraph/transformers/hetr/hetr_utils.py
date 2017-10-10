@@ -14,14 +14,13 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-from ngraph.op_graph.axes import Axes, make_axis
 from ngraph.op_graph.comm_nodes import set_parallel_axes
-from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp, SequentialOp, ParallelOp
-from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterSendOp, ScatterRecvOp, \
-    GPUQueueRecvOp, CPUMlslSendOp, AllReduceOp, BroadcastRecvOp, GatherRecvOp
+from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp
+from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, \
+    AllReduceOp, BroadcastRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
-
+from ngraph.op_graph.axes import Axes
 import uuid
 import collections
 
@@ -52,8 +51,6 @@ def comm_path_exists(fro, to):
             return True
         if isinstance(v, RecvOp):
             visit |= get_iterable(v.send_node())
-        elif isinstance(v, (SequentialOp, ParallelOp)):
-            visit.update(v.control_deps)
         else:
             visit.update(v.args)
 
@@ -70,8 +67,6 @@ def find_recvs(fro):
         if isinstance(v, RecvOp):
             recvs.add(v)
             visit |= get_iterable(v.send_node())
-        elif isinstance(v, (SequentialOp, ParallelOp)):
-            visit.update(v.control_deps)
         else:
             if hasattr(v, 'args'):
                 visit.update(v.args)
@@ -130,7 +125,7 @@ def clone_graph(root, clone_id, parallel_axis):
     input:
     output: new_root of the cloned graph
     """
-    
+
     # clone nodes with GatherSendOp as root using serde
     ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
 
@@ -225,28 +220,6 @@ def update_parallel_axis(root, parallel_axis):
 
         if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
             op.tensor._axes = set_parallel_axes(op.tensor.axes, parallel_axis)
-
-
-def update_ops_metadata(ops, device_idx):
-    """
-    Description:
-        Since we no longer clone the graph,
-        We need to update the transformer and device_id metadata for the ops before they are distributed to each device
-        The transformer metadata is used to identify which computation ops are needed for each device
-        The device_id metadata is used as a parameter to identify each device when making mpi collective calls
-    Input: list of ops
-    Output:
-    """
-    
-    ops = OrderedSet(op.forwarded for op in ops)
-    for op in reversed(Op.ordered_ops(ops)):
-        if op.metadata.get('marker') == 'gather':
-            gather_send_op = op.send_nodes[0]
-
-            for _op in Op.ordered_ops([gather_send_op]):
-                _op.metadata['transformer'] = _op.metadata['device'] + str(op.from_id[device_idx])
-                _op.metadata['device_id'] = str(op.from_id[device_idx])
-                _op.idx = device_idx    # used by gpu in collective op kernels (tensor_ops.py)
 
 
 def get_available_ports():

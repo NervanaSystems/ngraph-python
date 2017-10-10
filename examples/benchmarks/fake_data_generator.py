@@ -18,9 +18,9 @@ import ngraph as ng
 import numpy as np
 
 
-def generate_data(dataset, batch_size, rand_seed=-1):
+def generate_data(dataset, batch_size, rand_seed=None):
     rand_state = np.random.RandomState()
-    if rand_seed > 0:
+    if rand_seed:
         rand_state.seed(rand_seed)
 
     if dataset == 'cifar10':

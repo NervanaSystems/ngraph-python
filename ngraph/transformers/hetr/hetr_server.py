@@ -14,16 +14,6 @@ from ngraph.transformers.hetrtransform import build_transformer
 import logging
 import os
 import fcntl
-import traceback
-
-# MLSL import creates a global MLSL obj
-# all processes in the communicator must import mlsl simultaneously
-# at least one time to create this obj and sync.
-# Subsequent imports will not sync or recreate.
-try:
-    import mlsl
-except ImportError:
-    pass
 
 try:
     # The first "import mlsl" will create internal mlsl object and will init MLSL library.

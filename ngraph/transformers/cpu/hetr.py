@@ -18,9 +18,7 @@ import numpy as np
 import mlsl
 from mpi4py import MPI
 import ctypes
-from ngraph.op_graph.comm_nodes import \
-    CPUMlslGatherSendOp, CPUMlslScatterSendOp, \
-    CPUMlslAllReduceStartOp, CPUMlslBroadcastSendOp
+from ngraph.op_graph.comm_nodes import CPUMlslAllReduceStartOp
 import logging
 
 
@@ -108,8 +106,8 @@ class HetrLocals(object):
 
         # todo: get real root_idx
         root_idx = 0
-
-        x_nparr = np.atleast_1d(x_nparr)     # np.atleast_1d is used in cases when we need to reduce to a scalar value
+        # np.atleast_1d is used in cases when we need to reduce to a scalar value
+        x_nparr = np.atleast_1d(x_nparr)
         if self.process_idx == root_idx:
             # todo: remove that workaround for non-symmetric case
             gather_send_op.arr = x_nparr
@@ -135,8 +133,7 @@ class HetrLocals(object):
 
         # todo: remove that workaround for non-symmetric case
         if self.process_idx == root_idx:
-            send_node = next(op for op in gather_recv_op.control_deps
-                             if isinstance(op, CPUMlslGatherSendOp))
+            send_node = gather_recv_op.send_nodes[0]
             send_buf = np.ctypeslib.as_ctypes(send_node.arr)
             send_count = send_node.arr.size
             recv_buf = np.ctypeslib.as_ctypes(np.atleast_1d(out))
@@ -176,8 +173,7 @@ class HetrLocals(object):
         # todo: remove that workaround for non-symmetric case
         send_buf = None
         if self.process_idx == root_idx:
-            send_node = next(op for op in scatter_recv_op.control_deps
-                             if isinstance(op, CPUMlslScatterSendOp))
+            send_node = scatter_recv_op.send_node()
             send_buf = np.ctypeslib.as_ctypes(send_node.arr)
         recv_buf = np.ctypeslib.as_ctypes(out)
         recv_count = out.size
@@ -240,8 +236,7 @@ class HetrLocals(object):
         req = None
         if self.process_idx == root_idx:
             send_buf = None
-            send_node = next(op for op in broadcast_recv_op.control_deps
-                             if isinstance(op, CPUMlslBroadcastSendOp))
+            send_node = broadcast_recv_op.send_node()
             send_buf = np.ctypeslib.as_ctypes(send_node.arr)
             count = send_node.arr.size
             req = self.distribution.bcast(send_buf, count,

@@ -244,6 +244,7 @@ def test_allreduce_hint(hetr_device, config):
 @pytest.mark.parametrize('config', [
     {
         'input': 1,
+        # TODO: Issue #2254 - Cleanup string device_id
         'device_id': ('0', '1'),
         'result_two': [[4.0, 4.0, 4.0, 4.0],
                        [4.0, 4.0, 4.0, 4.0]],

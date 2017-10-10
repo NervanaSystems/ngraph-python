@@ -37,7 +37,8 @@ TAG_SCATTER = 33
 TAG_DIRECT = 44
 
 # TUNDE TO DO: remove map function for converting strings and ints
-                # try to do this once in the ops from the metadata and set the value as a variable to the op
+# try to do this once in the ops from the metadata and set the value as a variable to the op
+
 
 def bcast_ipc_handle(comm, handle=None):
     if handle is not None:
