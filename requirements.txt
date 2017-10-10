@@ -1,5 +1,12 @@
+# List requirements strictly here, so that a best known config can
+# always be reproduced for testing and development.
+#
+# Also add requirements to setup.py, but do not pin to a strict
+# version requirement there unless necessary.
+
+
 # These come over from neon
-numpy==1.11.1
+numpy==1.13.1
 h5py==2.6.0
 appdirs==1.4.0
 
@@ -23,18 +30,15 @@ decorator==4.0.11
 pynvrtc==7.5
 # Python 2 and 3 compatible monotonic clock for tracing
 monotonic==1.3
-pillow==4.2.0
 
 # notebooks
 jupyter==1.0.0
 nbconvert==5.1.1
 nbformat==4.3.0
 
-# setuptools is autoflex's requirement, but it is here for now
-setuptools==18.5
-
 # cffi is required to wrap warp-ctc
 cffi>=1.0
 
 # neon frontend
 parsel==1.2.0
+pillow==4.2.0

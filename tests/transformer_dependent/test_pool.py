@@ -173,8 +173,7 @@ n2_c1_hw4_2x2_str2_avg = dict(
                          [pytest.config.flex_disabled(n4_c1_hw4_2x2_max,
                                                       reason='#1823 flex pool fail when stride=1'),
                           n2_c1_hw5_3x3_str2_max,
-                          pytest.config.argon_disabled(n2_c1_hw4_2x2_str2_avg,
-                                                       reason='TODO Triage')],
+                          n2_c1_hw4_2x2_str2_avg],
                          ids=['n4_c1_hw4_2x2_max',
                               'n2_c1_hw5_3x3_str2_max',
                               'n2_c1_hw4_2x2_str2_avg'])
