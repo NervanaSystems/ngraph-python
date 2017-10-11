@@ -81,10 +81,11 @@ class CPUFusion(GraphRewritePass):
         """
         """
         def get_arg_depth(op, level, arg_idx=0):
-            if level == 0:
-                return self.op_arg(op, arg_idx)
-            else:
-                return get_arg_depth(op, level - 1, arg_idx)
+            assert level >= 0
+            while level >=0:
+                op = self.op_arg(op, arg_idx)
+                level -= 1
+            return op
 
         for (label_map, op) in label_map_op_list:
             if op.dbias is not None:
