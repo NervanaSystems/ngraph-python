@@ -177,11 +177,8 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
     def set_mkl_layout(self, op, mkl_axes, index=0):
         exop = self.get_exop(op)
         mkl_layout = self.mkldnn.output_layout(self.mkldnn.kernels[op.safe_name], index)
-        mkl_order = get_order_from_axes(op.axes, mkl_axes)
-        (native_layout, _) = get_native_layout(self.mkldnn, op.tensor_description(), mkl_order)
-        if not self.mkldnn.cmp_layouts(mkl_layout, native_layout):
-            exop.output_decls[index].tensor_view_decl.mkl_layout = (
-                mkl_layout, mkl_axes)
+        exop.output_decls[index].tensor_view_decl.mkl_layout = (
+            mkl_layout, mkl_axes)
 
     def get_arg_mkl_layout(self, op, arg):
         arg_idx = get_arg_output_idx(self.get_exop(op), self.get_exop(arg))
@@ -948,11 +945,15 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         for arg in args:
             mkl_layout = self.get_arg_mkl_layout(op, arg)
             if mkl_layout is not None:
-                reorder_op = self.get_reorder_op(arg)
-                new_args.append(reorder_op)
-                replace = True
-            else:
-                new_args.append(arg)
+                (layout, mkl_axes) = mkl_layout
+                mkl_order = get_order_from_axes(arg.axes, mkl_axes)
+                (native_layout, _) = get_native_layout(self.mkldnn, arg.tensor_description(), mkl_order)
+                if not self.mkldnn.cmp_layouts(layout, native_layout):
+                    reorder_op = self.get_reorder_op(arg)
+                    new_args.append(reorder_op)
+                    replace = True
+                    continue
+            new_args.append(arg)
         if replace:
             new_op = op.copy_with_new_args(new_args)
             self.replace_op(op, new_op)
