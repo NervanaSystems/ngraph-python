@@ -32,9 +32,9 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import Layer
-from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum
+from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum, Adam
 from ngraph.util.names import name_scope
-from data import make_aeon_loaders
+from data import make_aeon_loaders, return_labels
 import inception
 
 def scale_set(image_set):
@@ -46,6 +46,8 @@ def scale_set(image_set):
     image_set: (batch_size, C, H, W)
     returns: scaled image_set (batch_size, C, H, W)
     """
+    # Means [123.68, 116.779, 103.939]
+    return 2.*((image_set / 255.) - 0.5) 
     means = np.mean(image_set, axis=(2,3))
     stds = np.std(image_set, axis=(2,3))
  
@@ -60,8 +62,10 @@ def scale_set(image_set):
     scale_factor = np.repeat(scale_factor, image_set.shape[3], axis=3) 
     scale_factor = (3*scale_factor + 1e-5)
 
-    scaled_image = (image_set - sub_factor)/ scale_factor
-    return scaled_image
+    scaled_image = (image_set - sub_factor)/ (scale_factor + 0.1)
+    scaled_image = scaled_image + 0.5
+    #return scaled_image
+    #return (image_set - sub_factor) / 255.
 
 def eval_loop(dataset, computation, metric_names):
     """
@@ -89,6 +93,8 @@ def eval_loop(dataset, computation, metric_names):
 
 
 parser = NgraphArgparser(description=__doc__)
+parser.add_argument('--debug', default=False, dest='debug', action='store_true',
+                    help='Saves additional variables for debugging')
 parser.add_argument('--mini', default=False, dest='mini', action='store_true',
                     help='If given, builds a mini version of Inceptionv3')
 parser.add_argument("--image_dir", default='/dataset/aeon/I1K/i1k-extracted/',
@@ -103,6 +109,8 @@ parser.add_argument('--grad_clip', type=float, default=1e9, help="Gradient Clip 
 parser.set_defaults(batch_size=8, num_iterations=10000000, iter_interval=2000)
 args = parser.parse_args()
 
+# Set the random seed
+np.random.seed(1)
 # Number of outputs of last layer.
 ax.Y.length = 1000
 ax.N.length = args.batch_size
@@ -140,9 +148,16 @@ elif args.optimizer_name == 'rmsprop':
                             'gamma': 0.94,
                             'base_lr': 0.01}
     optimizer = RMSProp(learning_rate=learning_rate_policy, 
-                        wdecay=4e-5, decay_rate=0.9,
+                        wdecay=4e-5, decay_rate=0.95,
                         gradient_clip_value=args.grad_clip, epsilon=1.)
 
+elif args.optimizer_name == 'adam': 
+    learning_rate_policy = {'name': 'schedule',
+                            'schedule': list(80000*np.arange(1, 10, 1)),
+                            'gamma': 0.94,
+                            'base_lr': 0.001}
+    optimizer = Adam(learning_rate=learning_rate_policy, 
+                     gradient_clip_value=args.grad_clip, epsilon=1.)
 else:
     raise NotImplementedError("Unrecognized Optimizer")
 
@@ -157,14 +172,20 @@ train_prob_aux = inception.seq_aux(inception.seq1(inputs['image']))
 train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot)
 
-# Compute the gradient of output to input
-#with name_scope(name="GradientPenalty"):
-#    gradient = ng.deriv(ng.sum(train_prob_main, out_axes=[]), inputs['image'])
-
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
-#train_computation = ng.computation([batch_cost, gradient], 'all')
-train_computation = ng.computation([batch_cost], 'all')
+if args.debug:
+    names_seq1, vars_seq1 = zip(*inception.seq1.variables.items())
+    names_seq2, vars_seq2 = zip(*inception.seq2.variables.items())
+    names_all = names_seq1 + names_seq2
+    vars_all = vars_seq1 + vars_seq2
+    #grad_computation = ng.computation([ng.deriv(train_prob_main, v) for v in vars_all])
+    vars_computation = ng.computation([v for v in vars_all])
+    train_computation = ng.computation([batch_cost], 'all')
+    grads_array = [1e9]*2*args.iter_interval
+    vars_array = [1e9]*2*args.iter_interval
+else:
+    train_computation = ng.computation([batch_cost], 'all')
 #label_indices = inputs['label'][:, 0]
 label_indices = inputs['label']
 
@@ -183,10 +204,12 @@ with Layer.inference_mode_on():
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
     eval_computation = ng.computation([eval_loss, errors, inference_prob], "all")
 
-#grads_array = [1e9]*2*args.iter_interval
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
     eval_function = transformer.add_computation(eval_computation)
+    if args.debug:
+        vars_function = transformer.add_computation(vars_computation)
+        #grads_function = transformer.add_computation(grad_computation)
 
     if args.no_progress_bar:
         ncols = 0
@@ -196,23 +219,46 @@ with closing(ngt.make_transformer()) as transformer:
     tpbar = tqdm(unit="batches", ncols=ncols, total=args.num_iterations)
     interval_cost = 0.0
     saved_losses = {'train_loss': [], 'eval_loss': [],
-                    'eval_misclass': [], 'iteration': [], 'grads': []}
+                    'eval_misclass': [], 'iteration': [], 'grads': [],
+                    'interval_loss': [], 'vars': []}
+
+    # Return class labels to double check aeon
+    # gt_labels = return_labels(args.train_manifest_file)
+
     for iter_no, data in enumerate(train_set):
         data = dict(data)
         data['iteration'] = iter_no
+       
+        """ 
+        # Double check aeon labels
+        aeon_good = list(data['label']) == gt_labels[iter_no*args.batch_size: (iter_no+1)*args.batch_size]
+        if not aeon_good:
+            import pdb; pdb.set_trace()
+        """
+
         # Scale the image to [0., .1]
+        
+        #from PIL import Image
+        #imgs = [Image.fromarray(data['image'][i].swapaxes(0,2)[:,:,[2,1,0]], 'RGB') for i in range(args.batch_size)]
+        #for i in range(len(imgs)): imgs[i].save('image%d.png' % i)
+        orig_image = np.copy(data['image'])
         data['image'] = scale_set(data['image'])
         #data['label'] = data['label'].reshape((args.batch_size, 1))
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
-        #output, grads = train_function(feed_dict=feed_dict)
-        output = train_function(feed_dict=feed_dict)
-        output = float(output[0])
-        """
-        # Mean grads over channel and batch axis
-        grads = np.mean(grads, axis=(0,1)).astype(np.float16)
-        grads_array.pop(2*args.iter_interval-1)
-        grads_array.insert(0, grads)
-        """
+        if args.debug:
+            output = train_function(feed_dict=feed_dict)
+            varx = vars_function(feed_dict=feed_dict)
+            output = float(output[0])
+            # Mean grads over channel and batch axis
+            #grads = np.mean(grads, axis=(0,1)).astype(np.float32)
+            #grads_array.pop(2*args.iter_interval-1)
+            #grads_array.insert(0, grads)
+            vars_array.pop(2*args.iter_interval-1)
+            vars_array.insert(0, varx)
+        else:
+            output = train_function(feed_dict=feed_dict)
+            output = float(output[0])
+
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output))
         interval_cost += output
@@ -230,15 +276,15 @@ with closing(ngt.make_transformer()) as transformer:
             # saved_losses['eval_misclass'].append(eval_losses['misclass'])
 
             # Save the training progression
-            saved_losses['train_loss'].append(interval_cost)
-            saved_losses['iteration'].append(iter_no)
-            #saved_losses['grads'] = grads_array
-            pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
-            interval_cost = 0.0
-
+            saved_losses['interval_loss'].append(interval_cost)
             # If training loss wildly increases in two past iterations, stop training
             if(iter_no > (2*args.iter_interval) ):
-                if ((saved_losses['train_loss'][-1] - .1) > saved_losses['train_loss'][-2]):
+                if ((saved_losses['interval_loss'][-1] - .1) > saved_losses['interval_loss'][-2]):
                     print('Train Loss increased significantly!')
+                    import pdb; pdb.set_trace()
+            #if args.debug:
+            #    saved_losses['grads'] = grads_array
+            pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
+            interval_cost = 0.0
 
 print('\n')
