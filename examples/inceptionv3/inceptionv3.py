@@ -179,7 +179,7 @@ if args.debug:
     names_seq2, vars_seq2 = zip(*inception.seq2.variables.items())
     names_all = names_seq1 + names_seq2
     vars_all = vars_seq1 + vars_seq2
-    #grad_computation = ng.computation([ng.deriv(train_prob_main, v) for v in vars_all])
+    #grad_computation = ng.computation([ng.deriv(train_loss_main, v) for v in vars_all])
     vars_computation = ng.computation([v for v in vars_all])
     train_computation = ng.computation([batch_cost], 'all')
     grads_array = [1e9]*2*args.iter_interval
