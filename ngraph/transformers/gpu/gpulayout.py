@@ -224,6 +224,9 @@ class GPULayoutAssignment(StridedLayoutAssignment):
         """
         parallel_axis = op.metadata['parallel']
         axes_list = Axes.as_flattened_list(op.axes)
+        if parallel_axis not in axes_list:
+            return GPULayoutAssignment.generate_default_layout(op.axes, max_out_axes)
+
         parallel_axis_index = axes_list.index(parallel_axis)
 
         if len(axes_list) > max_out_axes:

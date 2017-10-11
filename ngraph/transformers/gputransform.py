@@ -811,7 +811,7 @@ class GPUDeviceTensor(DeviceTensor):
         # convert value to numpy
         if type(value) == float:
             value = np.float64(value)
-        elif type(value) == int:
+        elif type(value) == int or type(value) == long:
             value = np.int64(value)
         elif isinstance(value, np.ndarray):
             # handle 0-d and 1-d conversion to scalar
@@ -919,7 +919,7 @@ class GPURuntime(object):
         except drv.LogicError:
             sys.exit(PYCUDA_LOGIC_ERROR_CODE)
 
-        self.device_id = device_id if device_id is not None else 0
+        self.device_id = int(device_id) if device_id is not None else 0
         # check compute capability
         self.compute_capability = drv.Device(self.device_id).compute_capability()
         if self.compute_capability[0] < 3:
@@ -1058,6 +1058,12 @@ class GPUTransformer(ComputationGraphTransformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
+
+        import ngraph.transformers.passes.nviz
+        nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
+                                                       show_all_metadata=True,
+                                                       subgraph_attr='device_id')
+
         self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass]  # , VizPass(show_metadata="layout")]

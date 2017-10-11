@@ -7,6 +7,7 @@ from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, add_
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 from ngraph.op_graph.op_graph import Op
+from ngraph.transformers.hetr.hetr_utils import update_ops_metadata
 import logging
 
 
@@ -115,7 +116,7 @@ class RPCTransformerClient(object):
             self.is_trans_built = False
             raise RuntimeError("RPC build_transformer request failed: {}".format(response.message))
 
-    def create_computation(self, returns, placeholders):
+    def create_computation(self, returns, placeholders, idx):
         logger.info("client: create_computation")
 
         def make_computation_request(pb_ops, pb_edges, pb_returns=None, pb_placeholders=None):
@@ -139,8 +140,9 @@ class RPCTransformerClient(object):
                 pb_placeholders.append(op_to_protobuf(op))
             return pb_returns, pb_placeholders
 
-        def generate_messages():
+        def generate_messages(index):
             pb_ops, pb_edges = [], []
+            # update_ops_metadata(returns + list(placeholders), index)
             pb_returns, pb_placeholders = generate_returns_placeholders()
             ops = Op.all_op_references(returns + list(placeholders))
             for i, op in enumerate(ops):
@@ -161,7 +163,7 @@ class RPCTransformerClient(object):
         update_comm_deps(returns)
 
         self.computation_response_future = self.RPC.Computation.future(
-            generate_messages(), _TIMEOUT_SECONDS)
+            generate_messages(idx), _TIMEOUT_SECONDS)
 
     def get_computation(self):
         logger.info("client: get_computation")

@@ -96,16 +96,16 @@ class mini_residual_network(Sequential):
         super(mini_residual_network, self).__init__(layers=layers)
 
 
-def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
-                    activation=True, preprocess=False):
+def get_mini_resnet(inputs, dataset, device, device_id, stage_depth=1,
+                    batch_norm=False, activation=True, preprocess=False):
     model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
-    with ng.metadata(device_id=device_id, parallel=ax.N):
+    with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
         model_out = model(inputs['image'])
     return model_out
 
 
-def get_fake_data(dataset, batch_size, num__iterations):
-    x_train, y_train = generate_data(dataset, batch_size)
+def get_fake_data(dataset, batch_size, num__iterations, seed=-1):
+    x_train, y_train = generate_data(dataset, batch_size, rand_seed=seed)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'H', 'W')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
@@ -121,11 +121,11 @@ def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
     inputs, data, train_set = get_fake_data(dataset, batch_size, num_iterations)
 
     # Running forward propagation
-    model_out = get_mini_resnet(inputs, dataset, device_id, batch_norm=batch_norm)
+    model_out = get_mini_resnet(inputs, dataset, device, device_id, batch_norm=batch_norm)
 
     # Running back propagation
     if bprop:
-        with ng.metadata(device_id=device_id, parallel=ax.N):
+        with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
             optimizer = GradientDescentMomentum(0.01, 0.9)
             train_loss = ng.cross_entropy_multi(model_out,
                                                 ng.one_hot(inputs['label'], axis=ax.Y))
@@ -133,14 +133,14 @@ def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
             batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
             batch_cost_computation_op = ng.computation(batch_cost, "all")
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
-                              transformer_type, device)
+                              transformer_type, device, len(device_id))
         Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
                                                          dataset + '_msra_bprop',
                                                          visualize, 'device_id'))
     else:
         fprop_computation_op = ng.computation(model_out, 'all')
         benchmark = Benchmark(fprop_computation_op, train_set, inputs,
-                              transformer_type, device)
+                              transformer_type, device, len(device_id))
         Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
                                                          dataset + '_msra_fprop',
                                                          visualize))

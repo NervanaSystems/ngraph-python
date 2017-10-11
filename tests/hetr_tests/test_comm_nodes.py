@@ -244,7 +244,7 @@ def test_allreduce_hint(hetr_device, config):
 @pytest.mark.parametrize('config', [
     {
         'input': 1,
-        'device_id': (0, 1),
+        'device_id': ('0', '1'),
         'result_two': [[4.0, 4.0, 4.0, 4.0],
                        [4.0, 4.0, 4.0, 4.0]],
         'result_one': [[2.0, 2.0, 2.0, 2.0],

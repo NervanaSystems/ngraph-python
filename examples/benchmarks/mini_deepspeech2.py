@@ -22,10 +22,10 @@ from fake_data_generator import generate_ds2_data
 
 
 def get_mini_ds2(inputs, nfilters, filter_width, str_w, nbands,
-                 depth, hidden_size, batch_norm, device_id):
+                 depth, hidden_size, batch_norm, device, device_id):
     model = Deepspeech(nfilters, filter_width, str_w, nbands, depth,
                        hidden_size, batch_norm=batch_norm, to_ctc=True)
-    with ng.metadata(device_id=device_id, parallel=ax.N):
+    with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
         model_out = model(inputs["audio"], spatial_axes={"H": "frequency", "W": "time"})
     return model_out
 
@@ -38,10 +38,11 @@ def run_mini_ds2_benchmark(args, **kwargs):
                                                     args.num_iterations)
 
     model_out = get_mini_ds2(inputs, args.nfilters, args.filter_width, args.str_w, args.nbands,
-                             args.depth, args.hidden_size, args.batch_norm, device_id)
+                             args.depth, args.hidden_size, args.batch_norm,
+                             args.hetr_device, device_id)
 
     if args.bprop:
-        with ng.metadata(device_id=device_id, parallel=ax.N):
+        with ng.metadata(device=args.hetr_device, device_id=device_id, parallel=ax.N):
             loss = ng.ctc(model_out,
                           ng.flatten(inputs["char_map"]),
                           inputs["audio_length"],
@@ -54,11 +55,10 @@ def run_mini_ds2_benchmark(args, **kwargs):
 
             updates = optimizer(loss)
             mean_cost = ng.sequential([updates, ng.mean(loss, out_axes=())])
-
             bprop_computation_op = ng.computation(mean_cost, "all")
 
         benchmark = Benchmark(bprop_computation_op, train_set, inputs, args.backend,
-                              args.hetr_device)
+                              args.hetr_device, len(device_id))
         Benchmark.print_benchmark_results(benchmark.time(args.num_iterations, args.skip_iter,
                                                          'ds2_bprop', args.visualize,
                                                          preprocess=True))
@@ -66,7 +66,7 @@ def run_mini_ds2_benchmark(args, **kwargs):
         fprop_computation_op = ng.computation(model_out, "all")
 
         benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, args.backend,
-                                    args.hetr_device)
+                                    args.hetr_device, len(device_id))
         Benchmark.print_benchmark_results(benchmark_fprop.time(args.num_iterations, args.skip_iter,
                                                                'ds2_fprop', args.visualize,
                                                                preprocess=True))
@@ -97,10 +97,10 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--skip_iter', type=int,
                         help='Number of iterations to skip',
                         default=1)
-    parser.add_argument('-n', '--num_devices', nargs='+', type=int,
+    parser.add_argument('-m', '--num_devices', nargs='+', type=int,
                         help="Number of devices to run the benchmark on",
                         default=[1])
-    parser.add_argument('-d', '--hetr_device', choices=['cpu', 'gpu'],
+    parser.add_argument('--hetr_device', choices=['cpu', 'gpu'],
                         help="Device to run HeTr",
                         default='cpu')
     parser.add_argument('--max_length', type=float,

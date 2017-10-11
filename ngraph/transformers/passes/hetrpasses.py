@@ -21,6 +21,7 @@ from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.transformers.hetr.hetr_utils import clone_graph
 from ngraph.transformers.passes.passes import GraphBuildingPass
 from ngraph.op_graph.axes import make_axis
+from ngraph.transformers.hetr.hetr_utils import update_parallel_axis
 
 
 class DeviceAssignPass(GraphBuildingPass):
@@ -133,7 +134,6 @@ class DistributedPass(GraphBuildingPass):
                         parallel_axis=self.parallel_axes)
 
                     new_gather_send_nodes.add(new_gather_send_op)
-
                     new_sends.add(new_gather_send_op)
                     for o in new_sends:
                         self.send_nodes.add(o)
@@ -141,7 +141,36 @@ class DistributedPass(GraphBuildingPass):
                     replaced_send_ops |= replaced_sends
 
                 op.send_nodes = new_gather_send_nodes
-
                 replaced_send_ops.add(gather_send_op)
                 for o in replaced_send_ops:
                     self.send_nodes.remove(o)
+
+
+class AxesUpdatePass(GraphBuildingPass):
+    """
+    Description:
+        AxesUpdatePass updates the dimension of the parallel axis for ops in the subgraphs of which the root is a GatherSendOp
+    """
+
+    def __init__(self, **kwargs):
+        super(AxesUpdatePass, self).__init__(**kwargs)
+        self.parallel_axes = None
+
+    def do_pass(self, ops, **kwargs):
+
+        ops = OrderedSet(op.forwarded for op in ops)
+        parallel_axis = None
+
+        for op in reversed(Op.ordered_ops(ops)):
+            if op.metadata.get('marker') == 'gather':
+                # op is GatherRecvOp
+                if parallel_axis is None:
+                    a = op.metadata['parallel']
+                    assert a.length % len(op.from_id) == 0, '{} can not be equally divided by {}'\
+                        .format(a, len(op.from_id))
+                    parallel_axis = make_axis(
+                        name=a.name,
+                        length=a.length // len(op.from_id),
+                        docstring='HeTr parallel axis')
+                gather_send_op = op.send_nodes[0]
+                update_parallel_axis(gather_send_op, parallel_axis)

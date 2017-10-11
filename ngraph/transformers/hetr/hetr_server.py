@@ -5,6 +5,7 @@ import socket
 import grpc
 import hetr_pb2
 import hetr_pb2_grpc
+import traceback
 from mpi4py import MPI
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, tensor_to_protobuf,\
@@ -15,6 +16,14 @@ import os
 import fcntl
 import traceback
 
+# MLSL import creates a global MLSL obj
+# all processes in the communicator must import mlsl simultaneously
+# at least one time to create this obj and sync.
+# Subsequent imports will not sync or recreate.
+try:
+    import mlsl
+except ImportError:
+    pass
 
 try:
     # The first "import mlsl" will create internal mlsl object and will init MLSL library.
@@ -27,6 +36,8 @@ except ImportError:
 
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
+logger = logging.getLogger(__name__)
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,6 +76,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                                              message="build transformer before computation")
         try:
             comp_id = self.new_comp_id()
+
             pb_ops, pb_edges = [], []
             returns, placeholders = [], []
             reconstructed_returns, reconstructed_placeholders = [], []
@@ -75,6 +87,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 placeholders.extend([protobuf_to_op(op) for op in request.placeholders])
 
             subgraph = _deserialize_graph_ops_edges(pb_ops, pb_edges)
+
             ops = Op.ordered_ops(subgraph)
             for r in returns:
                 for op in ops:

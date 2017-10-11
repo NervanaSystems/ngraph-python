@@ -148,6 +148,19 @@ class RecvOp(CommunicationOp):
     def send_node(self):
         return self._send_node
 
+    @property
+    def all_deps(self):
+        """
+        Returns:
+            All dependencies except the dependency on the send nodes
+        """
+        deps = super(RecvOp, self).all_deps
+        remove_deps = OrderedSet()
+        for dep in deps:
+            if isinstance(dep, SendOp):
+                remove_deps.add(dep)
+        return deps - remove_deps
+
 
 class ScatterSendOp(SendOp):
     """

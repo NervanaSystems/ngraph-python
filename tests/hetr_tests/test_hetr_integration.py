@@ -438,3 +438,113 @@ def test_mpilauncher():
 
     # Check if process has completed
     assert mpilauncher.mpirun_proc is None
+
+
+@pytest.mark.parametrize('config', [
+    {
+        'device': 'cpu',
+        'device_id': ('0', '1'),
+    },
+    {
+        'device': 'gpu',
+        'device_id': ('0', '1'),
+    },
+])
+def test_hetr_dist_pass(config):
+    from ngraph.frontends.neon import KaimingInit, ConstantInit, Softmax
+    from ngraph.frontends.neon import ax
+    from ngraph.frontends.neon import Affine
+    from examples.benchmarks.mini_resnet import get_fake_data
+
+    c = config
+    ax.Y.length = 10
+    inputs, data, train_set = get_fake_data('cifar10', 4, 1, 45)
+    model = Affine(axes=ax.Y, weight_init=ConstantInit(val=1.0),
+                                 batch_norm=False, activation=Softmax())
+    with ng.metadata(device=c['device'], device_id=c['device_id'], parallel=ax.N):
+        model_out = model(inputs['image'])
+
+    def fill_feed_dict(dataset, feed_inputs):
+        data = next(iter(dataset))
+        return {feed_inputs[k]: data[k] for k in feed_inputs.keys()}
+
+    with closing(ngt.make_transformer_factory('hetr', device=c['device'],
+                 num_devices=len(c['device_id']))()) as transformer:
+        # import ngraph.transformers.passes.nviz
+        # nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
+                                                       # show_all_metadata=True,
+                                                       # subgraph_attr='device_id')
+        # transformer.register_graph_pass(nviz)
+
+        # from ngraph.op_graph.tensorboard.tensorboardpass import TensorBoardPass
+        # transformer.register_graph_pass(TensorBoardPass('/tmp/hetr_tb'))
+
+        # from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
+        # tb = TensorBoard("/tmp/test_hetr_dist_pass")
+        # tb.add_graph(model_out)
+
+        model_out_computation = transformer.computation(model_out, 'all')
+        res = model_out_computation(feed_dict=fill_feed_dict(train_set, inputs))
+
+
+@pytest.mark.parametrize('config', [
+    # {
+        # 'dataset': 'cifar10',
+        # 'iter_count': 1,
+        # 'batchsize': 64,
+        # 'device_id': '0',
+        # 'device': 'cpu',
+        # 'hetr_device': 'cpu',
+        # 'bprop': True,
+        # 'batch_norm': False,
+    # },
+    # {
+        # 'dataset': 'cifar10',
+        # 'iter_count': 1,
+        # 'batchsize': 64,
+        # 'device_id': '0',
+        # 'device': 'gpu',
+        # 'hetr_device': 'gpu',
+        # 'bprop': True,
+        # 'batch_norm': False,
+    # },
+    {
+        'dataset': 'cifar10',
+        'iter_count': 1,
+        'batchsize': 64,
+        'device_id': ('0', '1'),
+        'device': 'hetr',
+        'hetr_device': 'cpu',
+        'bprop': True,
+        'batch_norm': False,
+    },
+    # {
+        # 'dataset': 'cifar10',
+        # 'iter_count': 1,
+        # 'batchsize': 64,
+        # 'device_id': ('0', '1'),
+        # 'device': 'hetr',
+        # 'hetr_device': 'gpu',
+        # 'bprop': True,
+        # 'batch_norm': False,
+    # },
+])
+def test_hetr_benchmark(config):
+    """
+    Description:
+        Test to ensure benchmarks are working.
+        Benchmark used for test is mini_resnet
+    """
+    from examples.benchmarks.mini_resnet import run_resnet_benchmark
+
+    c = config
+    run_resnet_benchmark(dataset=c['dataset'],
+                         num_iterations=c['iter_count'],
+                         n_skip=1,
+                         batch_size=c['batchsize'],
+                         device_id=c['device_id'],
+                         transformer_type=c['device'],
+                         device=c['hetr_device'],
+                         bprop=c['bprop'],
+                         batch_norm=c['batch_norm'],
+                         visualize=False)

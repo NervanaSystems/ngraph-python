@@ -15,10 +15,12 @@ class MPILauncher(object):
     execute mpirun cmd
     close process for mpirun
     """
-    def __init__(self):
+    def __init__(self, ports=None):
+        self.port_list = ports
         self.mpirun_proc = None
         self._hostfile = os.getenv('HETR_SERVER_HOSTFILE')
         self._server_count = os.getenv('HETR_SERVER_NUM')
+        self._server_count_gpu = os.getenv('HETR_SERVER_GPU_NUM')
         self._rpc_ports = os.getenv('HETR_SERVER_PORTS')
         current_dir = os.path.dirname(os.path.realpath(__file__))
         self._tmpfile = tempfile.NamedTemporaryFile(mode='r',
@@ -69,37 +71,51 @@ class MPILauncher(object):
         if self._server_count is None:
             self._server_count = server_count
 
-        logger.info("mpilauncher: launch: hostfile %s, hosts %s, server_count %s, tmpfile %s",
-                    self._hostfile, self._hosts, self._server_count, self._tmpfile)
-
         server_path = os.path.dirname(os.path.realpath(__file__)) + "/hetr_server.py"
-        cmd = ['mpirun',
-               '-n', str(self._server_count),
-               '-ppn', '1',
-               '-l']  # to print MPI rank index for each log line
+        mpirun_env = dict(os.environ)
 
-        if self._hostfile is not None:
-            cmd.extend(['-hostfile', self._hostfile])
-        elif self._hosts is not None:
-            hostlist = ",".join(self._hosts)
-            cmd.extend(['-hosts', hostlist])
+        if (self._server_count_gpu is not None):
+            cmd = ['mpirun',
+                   # '--allow-run-as-root',
+                   '-n', str(self._server_count_gpu)]
+
+            logger.info("mpilauncher: launch: hostfile %s, hosts %s, server_count_gpu %s, tmpfile %s",
+                        self._hostfile, self._hosts, self._server_count_gpu, self._tmpfile)
         else:
-            assert False, "Specify hostfile or hosts"
+            cmd = ['mpirun',
+                   '-n', str(self._server_count),
+                   '-ppn', '1',
+                   '-l']  # to print MPI rank index for each log line
 
-        cmd.extend(['python', server_path, '-tf', self._tmpfile.name])
-        if self._rpc_ports is not None:
-            cmd.extend(['-p', self._rpc_ports])
-            self._rpc_ports = None
-        logger.info("mpirun cmd: %s", cmd)
-
-        try:
-            mpirun_env = dict(os.environ)
             if 'MLSL_NUM_SERVERS' not in mpirun_env:
                 mpirun_env['MLSL_NUM_SERVERS'] = '0'
             if 'MLSL_LOG_LEVEL' not in mpirun_env:
                 mpirun_env['MLSL_LOG_LEVEL'] = '0'
             if 'MLSL_ALLOW_REINIT' not in mpirun_env:
                 mpirun_env['MLSL_ALLOW_REINIT'] = '1'
+
+            logger.info("mpilauncher: launch: hostfile %s, hosts %s, server_count %s, tmpfile %s",
+                        self._hostfile, self._hosts, self._server_count, self._tmpfile)
+
+        if self._hostfile is not None:
+            cmd.extend(['-hostfile', self._hostfile])
+        elif (self._hosts is not None) and (self._server_count_gpu is None):
+            hostlist = ",".join(self._hosts)
+            cmd.extend(['-hosts', hostlist])
+        # # # else:
+            # # # assert False, "Specify hostfile or hosts"
+
+        cmd.extend(['python', server_path, '-tf', self._tmpfile.name])
+        if self._rpc_ports is not None:
+            cmd.extend(['-p', self._rpc_ports])
+            self._rpc_ports = None
+        elif self.port_list is not None:
+            cmd.extend(['-p'])
+            cmd.extend(self.port_list)
+        logger.info("mpirun cmd: %s", cmd)
+
+        try:
+            # self.mpirun_proc = subprocess.Popen(cmd)
             self.mpirun_proc = subprocess.Popen(cmd, preexec_fn=os.setsid, env=mpirun_env)
         except:
             raise RuntimeError("Process launch failed!")
