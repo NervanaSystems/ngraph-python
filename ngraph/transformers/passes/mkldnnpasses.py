@@ -943,12 +943,13 @@ class MklAddLayoutConversions(PeepholeGraphPass):
         replace = False
         new_args = []
         for arg in args:
-            mkl_layout = self.get_arg_mkl_layout(op, arg)
-            if mkl_layout is not None:
-                (layout, mkl_axes) = mkl_layout
+            layout = self.get_arg_mkl_layout(op, arg)
+            if layout is not None:
+                (mkl_layout, mkl_axes) = layout
                 mkl_order = get_order_from_axes(arg.axes, mkl_axes)
-                (native_layout, _) = get_native_layout(self.mkldnn, arg.tensor_description(), mkl_order)
-                if not self.mkldnn.cmp_layouts(layout, native_layout):
+                (native_layout, _) = get_native_layout(
+                    self.mkldnn, arg.tensor_description(), mkl_order)
+                if not self.mkldnn.cmp_layouts(mkl_layout, native_layout):
                     reorder_op = self.get_reorder_op(arg)
                     new_args.append(reorder_op)
                     replace = True

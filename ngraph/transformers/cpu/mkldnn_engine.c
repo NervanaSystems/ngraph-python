@@ -408,12 +408,6 @@ mkldnn_memory_desc_t* query_opkernel_layout(mkldnn_opkernel_t opkernel,
   mkldnn_memory_desc_t* md =
       mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
   return md;
-  if (md->format == mkldnn_x || md->format == mkldnn_ihwo ||
-      md->format == mkldnn_chwn) { // Native formats
-    return NULL;
-  } else {
-    return md;
-  }
 }
 
 void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int *dims,

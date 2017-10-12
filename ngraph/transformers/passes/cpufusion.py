@@ -81,8 +81,7 @@ class CPUFusion(GraphRewritePass):
         """
         """
         def get_arg_depth(op, level, arg_idx=0):
-            assert level >= 0
-            while level >=0:
+            while level >= 0:
                 op = self.op_arg(op, arg_idx)
                 level -= 1
             return op
