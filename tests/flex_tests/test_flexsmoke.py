@@ -27,7 +27,7 @@ def test_if_mlp_network_is_trainable(script_path, description, misclass_threshol
     dir_path = ''
     BASE_DATA_DIR = os.getenv("BASE_DATA_DIR")
     if BASE_DATA_DIR is not None:
-        dir_path = " --data_dir " + BASE_DATA_DIR 
+        dir_path = " --data_dir " + BASE_DATA_DIR
 
     print("Description of test case: ", description)
     mlp_path = os.path.dirname(__file__) + "/../../" + script_path
