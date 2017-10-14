@@ -23,7 +23,7 @@ from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import Layer
 from resnet import BuildResnet
 from contextlib import closing
-
+from ngraph.frontends.neon import Saver
 
 # Result collector
 def loop_eval(dataset, computation, metric_names):
@@ -156,6 +156,10 @@ with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
     # Inference
     eval_function = transformer.add_computation(eval_computation)
+
+    # Set Saver for saving weights
+    weight_saver = Saver(Computation=train_computation)
+
     # Progress bar
     tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
     interval_cost = 0.0
@@ -193,3 +197,6 @@ with closing(ngt.make_transformer()) as transformer:
             wr.writerow(test_result)
             wr.writerow(err_result)
     print("\nTraining Completed")
+    
+    # Save weights at end of training
+    #weight_saver.save()
