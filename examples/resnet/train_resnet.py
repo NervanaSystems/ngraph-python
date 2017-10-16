@@ -213,7 +213,7 @@ with Layer.inference_mode_on():
 with closing(ngt.make_transformer()) as transformer:
     restore_eval_function = transformer.add_computation(restore_eval_computation)
     # Restore weight
-    weight_saver.restore(Transformer=transformer)
+    weight_saver.restore(Transformer=transformer, Computation=restore_eval_computation)
 
     restore_eval_losses = loop_eval(valid_set, restore_eval_function, restore_eval_loss_names)
     print("From restored weights: Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
