@@ -187,6 +187,7 @@ with closing(ngt.make_transformer()) as transformer:
                 test_result.append(eval_losses['cross_ent_loss'])
                 err_result.append(eval_losses['misclass'])
             interval_cost = 0.0
+    tpbar.close()
     # Writing to CSV
     if(args.name is not None):
         print("\nSaving results to csv file")
@@ -198,5 +199,23 @@ with closing(ngt.make_transformer()) as transformer:
             wr.writerow(err_result)
     print("\nTraining Completed")
     
+    print("\nTesting weight save/loading")
     # Save weights at end of training
-    #weight_saver.save()
+    weight_saver.save(Transformer=transformer)
+
+with Layer.inference_mode_on():
+    restore_inference_prob = resnet(input_ph['image'])
+    restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]), label_indices)
+    restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob, ng.one_hot(label_indices, axis=ax.Y))
+    restore_eval_loss_names = ['cross_ent_loss', 'misclass']
+    restore_eval_computation = ng.computation([restore_eval_loss, restore_errors], "all")
+
+with closing(ngt.make_transformer()) as transformer:
+    restore_eval_function = transformer.add_computation(restore_eval_computation)
+    # Restore weight
+    weight_saver.restore(Transformer=transformer)
+
+    restore_eval_losses = loop_eval(valid_set, restore_eval_function, restore_eval_loss_names)
+    print("From restored weights: Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
+                    cost=interval_cost / args.iter_interval, tcost=restore_eval_losses))
+    print("\nComplete: Testing weight save/loading")

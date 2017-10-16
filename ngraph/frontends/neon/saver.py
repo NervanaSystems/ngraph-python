@@ -25,7 +25,8 @@ class WeightVariablesPass(object):
         self.values = Computation.values
         self.count = 0
         super(WeightVariablesPass, self).__init__(**kwargs)
-          
+
+    # collect and return a dictionary of all AssignableTensorOp's      
     def do_pass(self):
         nodes = dict()
         frontier = set(self.values)
@@ -38,7 +39,7 @@ class WeightVariablesPass(object):
                 if isinstance(tensor, ng.AssignableTensorOp):
                     if tensor.is_persistent:
                         if tensor.is_trainable:
-                            print(tensor.name)
+                            #print(tensor.name)
                             nodes[tensor.name] = tensor
                             self.count = self.count + 1
 
@@ -52,7 +53,7 @@ class WeightVariablesPass(object):
             for arg in op.all_deps:
                 if arg not in visited:
                     frontier.add(arg)
-        print(self.count)
+        #print(self.count)
         return nodes
 
 
@@ -67,9 +68,10 @@ class Saver(object):
         # create save computations
         super(Saver, self).__init__(**kwargs)
         
-    def save(self):
-        for k, v in self.saveVariables:
-            print(k)
+    def save(self, Transformer=None):
+        pass
+        #for k, v in self.saveVariables:
+        #    print(k)
     
-    def restore(self):
+    def restore(self, Transformer=None):
         pass
