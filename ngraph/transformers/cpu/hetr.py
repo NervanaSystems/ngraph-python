@@ -17,6 +17,7 @@ from __future__ import division
 import numpy as np
 import mlsl
 from mpi4py import MPI
+import ctypes
 from ngraph.op_graph.comm_nodes import \
     CPUMlslGatherSendOp, CPUMlslScatterSendOp, \
     CPUMlslAllReduceStartOp, CPUMlslBroadcastSendOp
@@ -28,6 +29,11 @@ USER_TAG = 1
 
 
 class HetrLocals(object):
+
+    mlsl_obj = mlsl.MLSL()
+    mlsl_obj.init()
+    process_count = mlsl_obj.get_process_count()
+    process_idx = mlsl_obj.get_process_idx()
 
     def __init__(self, send_nodes, recv_nodes,
                  scatter_send_nodes, scatter_recv_nodes,
@@ -46,24 +52,36 @@ class HetrLocals(object):
         self.broadcast_recv_nodes = broadcast_recv_nodes
 
         # MLSL-specific
-        self.mlsl_obj = mlsl.MLSL()
-        self.mlsl_obj.init()
-        self.process_count = self.mlsl_obj.get_process_count()
-        self.process_idx = self.mlsl_obj.get_process_idx()
-        # data parallelism
         self.distribution = self.mlsl_obj.create_distribution(self.process_count, 1)
 
         # MPI-specific
         self.comm = MPI.COMM_WORLD
-        self.rank = self.comm.Get_rank()
 
     def close(self):
         self.mlsl_obj.delete_distribution(self.distribution)
-        self.mlsl_obj.finalize()
 
     @staticmethod
-    def close_module():
+    def close_mlsl():
+        HetrLocals.mlsl_obj.finalize()
         mlsl.close()
+
+    @staticmethod
+    def mlsl_alloc(element_count, alignment, dtype):
+        if dtype.name == 'float32':
+            c_type_name = 'c_float'
+        elif dtype.name == 'float64':
+            c_type_name = 'c_double'
+        else:
+            c_type_name = None
+        type_size = ctypes.sizeof(getattr(ctypes, c_type_name)(1))
+        mlsl_buf = HetrLocals.mlsl_obj.alloc(element_count * type_size, alignment)
+        array = ctypes.cast(mlsl_buf, ctypes.POINTER(getattr(ctypes, c_type_name) * element_count))
+        np_array = np.frombuffer(array.contents, dtype)
+        return np_array
+
+    @staticmethod
+    def mlsl_free(array):
+        HetrLocals.mlsl_obj.free(array.__array_interface__['data'][0])
 
     def mlsl_send(self, send_id, x_nparr):
         send_op = self.send_nodes[send_id]

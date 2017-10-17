@@ -10,11 +10,20 @@ from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, tensor_to_protobuf,\
     _deserialize_graph_ops_edges, assign_scalar, protobuf_scalar_to_python, is_scalar_type
 from ngraph.transformers.hetrtransform import build_transformer
-from ngraph.transformers.cpu.hetr import HetrLocals
 import logging
 import os
 import fcntl
 import traceback
+
+
+try:
+    # The first "import mlsl" will create internal mlsl object and will init MLSL library.
+    # That object will be destroyed explicitly over HetrLocals.close_module()->mlsl.close().
+    import mlsl  # noqa: F401
+    from ngraph.transformers.cpu.hetr import HetrLocals
+    use_mlsl = True
+except ImportError:
+    use_mlsl = False
 
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
@@ -140,8 +149,8 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
 
     def Close(self, request, context):
         logger.info("server: close, self.transformer_type %s", self.transformer_type)
-        if self.transformer_type == 'cpu':
-            HetrLocals.close_module()
+        if use_mlsl:
+            HetrLocals.close_mlsl()
         self.server.stop(0)
         return hetr_pb2.CloseReply()
 

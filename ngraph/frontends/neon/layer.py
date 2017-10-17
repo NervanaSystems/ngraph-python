@@ -22,10 +22,12 @@ from contextlib import contextmanager
 import ngraph as ng
 from ngraph.frontends.common import utils
 from ngraph.frontends.common.utils import make_poolparams
-from ngraph.frontends.neon.axis import shadow_axes_map, is_shadow_axis, reorder_spatial_axes
+from ngraph.frontends.neon.axis import shadow_axes_map, reorder_spatial_axes, assert_no_shadow_axes
 from ngraph.frontends.neon.graph import SubGraph
 from ngraph.frontends.neon.initializer import ConstantInit
 from ngraph.frontends.neon.utils import get_function_or_class_name
+from ngraph.op_graph.axes import IncompatibleAxesError
+
 
 # Labels should be added as metadata on specific ops and variables
 # Hopefully these can be used to efficiently display and filter the computational graph
@@ -140,45 +142,56 @@ def infer_axes(nout=None, axes=None):
 
 class Linear(Layer):
     """
-    TODO: Document
-    """
-    metadata = {'layer_type': 'linear'}
+    Linear layer that multiplies input tensor with a weight tensor.  This
+    layer provides a simple interface to select the axes that should be created
+    and the axes which should be preserved.
 
-    def __init__(self, init, nout=None, axes=None, **kwargs):
-        """
-        Args:
-            nout (int or iterable of ints, optional): length or lengths of
-                feature axes the Linear layer should output.  Must not be
-                provided in combination with axes.
-            axes (Axes, optional): axes of feature axes the Linear layer
-                should output.  Must not be provided in combination with nout.
-                Axes should not include recurrent or batch axes.
-        """
+    Args:
+        nout (int or iterable of ints, optional): length or lengths of
+            feature axes the Linear layer should output.  Must not be
+            provided in combination with axes.
+        axes (Axes, optional): axes of feature axes the Linear layer
+            should output.  Must not be provided in combination with nout.
+            Axes should not include recurrent or batch axes.
+        keep_axes (Axes, optional): in_obj axes which should be preserved.
+            Defaults to preserving batch and recurrent axes.
+    """
+    def __init__(self, init, nout=None, axes=None, keep_axes=None, **kwargs):
         super(Linear, self).__init__(**kwargs)
 
         # axes should not include recurrent or batch axes
         if axes is not None:
             axes = ng.make_axes(axes)
 
-            if axes.batch_axis() is not None:
+            assert_no_shadow_axes(axes, 'axes passed to Linear')
+
+        self.axes = infer_axes(nout, axes)
+        self.axes_map = shadow_axes_map(self.axes)
+
+        if keep_axes is not None:
+            self.keep_axes = ng.make_axes(keep_axes)
+
+            assert_no_shadow_axes(keep_axes, 'keep_axes passed to Linear')
+
+            common_axes = self.keep_axes & self.axes
+            if common_axes:
+                raise IncompatibleAxesError((
+                    'keep_axes and axes must not have any axes in common. '
+                    'found: {}'
+                ).format(common_axes))
+        else:
+            self.keep_axes = None
+
+            if self.axes.batch_axis() is not None:
                 raise ValueError((
                     'Axes passed to Linear layer should only be the output feature'
                     'axis.  A batch axis {} was included.'
-                ).format(axes.batch_axis()))
-            if axes.recurrent_axis() is not None:
+                ).format(self.axes.batch_axis()))
+            if self.axes.recurrent_axis() is not None:
                 raise ValueError((
                     'Axes passed to Linear layer should only be the output feature'
                     'axis.  A recurrent axis {} was included.'
-                ).format(axes.recurrent_axis()))
-            if any(is_shadow_axis(axis) for axis in axes):
-                raise ValueError((
-                    "Shadow Axes are not allowed in the output axes passed to "
-                    "Linear.  Found {}."
-                ).format([is_shadow_axis(axis) for axis in axes]))
-
-        self.input_axes = None
-        self.axes = infer_axes(nout, axes)
-        self.axes_map = shadow_axes_map(self.axes)
+                ).format(self.axes.recurrent_axis()))
 
         self.init = init
         self.W = None
@@ -187,8 +200,13 @@ class Linear(Layer):
     def __call__(self, in_obj, reuse=True, **kwargs):
 
         if not self.initialized:
-            self.W = ng.variable(axes=(ng.make_axes(self.axes_map.keys()) +
-                                       in_obj.axes.feature_axes()),
+            if self.keep_axes is not None:
+                w_in_axes = (in_obj.axes - self.keep_axes)
+            else:
+                w_in_axes = in_obj.axes.feature_axes()
+
+            w_out_axes = ng.make_axes(self.axes_map.keys())
+            self.W = ng.variable(axes=(w_out_axes + w_in_axes),
                                  initial_value=self.init,
                                  metadata={"label": LABELS["weight"]},
                                  ).named('W')

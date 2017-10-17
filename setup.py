@@ -59,6 +59,16 @@ if "MKLDNN_ROOT" in os.environ:
                                    'ngraph/transformers/cpu/pooling.c', \
                                    'ngraph/transformers/cpu/batchnorm.c']))
 
+"""
+List requirements here as loosely as possible but include known limitations.
+
+For example if we know that cffi <1.0 does not work, we list the min version here,
+but for other package where no known limitations exist we do not impose a restriction.
+
+This impacts external users who install ngraph via pip, and may install ngraph inside
+an environment where an existing version of these required packages exists and should
+not be upgraded/downgraded by our install unless absolutely necessary.
+"""
 requirements = [
     "numpy",
     "h5py",

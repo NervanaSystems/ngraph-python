@@ -13,7 +13,6 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division
-import multiprocessing
 import collections
 from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
@@ -102,6 +101,10 @@ class CommunicationOp(TensorOp):
     @property
     def has_side_effects(self):
         return True
+
+    @property
+    def is_root(self):
+        return self.metadata['device_id'] == '0'
 
 
 class SendOp(CommunicationOp):
@@ -261,38 +264,25 @@ class GatherRecvOp(RecvOp):
         return self.send_nodes
 
 
-class GPUQueueSendOp(MutateInsteadOfCopyWithNewArgsMixin, SendOp):
+class GPUCudaSendOp(MutateInsteadOfCopyWithNewArgsMixin, SendOp):
 
-    def __init__(self, from_node):
-        super(GPUQueueSendOp, self).__init__(from_node=from_node)
-        self._queue = multiprocessing.Queue()
-
-    @property
-    def queue(self):
-        return self._queue
+    def __init__(self, from_node, to_node):
+        super(GPUCudaSendOp, self).__init__(from_node=from_node)
+        self.dest_id = to_node.metadata['device_id']
 
 
-class GPUQueueRecvOp(RecvOp):
+class GPUCudaRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
-        super(GPUQueueRecvOp, self).__init__(to_node, send_node)
-        self._queue = send_node.queue
-
-    @property
-    def queue(self):
-        return self._queue
+        super(GPUCudaRecvOp, self).__init__(to_node, send_node)
+        self.source_id = send_node.metadata['device_id']
 
 
 class GPUCudaScatterSendOp(MutateInsteadOfCopyWithNewArgsMixin, ScatterSendOp):
 
     def __init__(self, from_node, to_node):
         super(GPUCudaScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
-        self._shared_queues = [multiprocessing.Queue() for i in to_node.metadata['device_id']]
         self.metadata['parallel'] = to_node.metadata['parallel']
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
 
 
 class GPUCudaScatterRecvOp(ScatterRecvOp):
@@ -300,11 +290,6 @@ class GPUCudaScatterRecvOp(ScatterRecvOp):
     def __init__(self, to_node, send_node):
         super(GPUCudaScatterRecvOp, self).__init__(to_node, send_node)
         self.idx = 0
-        self._shared_queues = send_node._shared_queues
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
 
 
 class GPUCudaGatherSendOp(MutateInsteadOfCopyWithNewArgsMixin, GatherSendOp):
@@ -312,23 +297,13 @@ class GPUCudaGatherSendOp(MutateInsteadOfCopyWithNewArgsMixin, GatherSendOp):
     def __init__(self, from_node):
         super(GPUCudaGatherSendOp, self).__init__(from_node=from_node)
         self.idx = 0
-        self._shared_queues = [multiprocessing.Queue() for i in from_node.metadata['device_id']]
         self.metadata['parallel'] = from_node.metadata['parallel']
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
 
 
 class GPUCudaGatherRecvOp(GatherRecvOp):
 
     def __init__(self, from_node, to_node, send_node):
         super(GPUCudaGatherRecvOp, self).__init__(from_node, to_node, send_node)
-        self._shared_queues = send_node._shared_queues
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
 
 
 class AllReduceOp(CommunicationOp):
@@ -368,12 +343,6 @@ class GPUCudaAllReduceOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
                                                  func=func)
         self.idx = 0
         self.device_ids = input_node.metadata['device_id']
-        self._shared_queues = \
-            {i: multiprocessing.Queue() for i in input_node.metadata['device_id']}
-
-    @property
-    def shared_queues(self):
-        return self._shared_queues
 
 
 class BroadcastSendOp(SendOp):

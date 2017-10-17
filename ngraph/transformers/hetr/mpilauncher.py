@@ -113,8 +113,5 @@ class MPILauncher(object):
 
         os.killpg(os.getpgid(self.mpirun_proc.pid), signal.SIGTERM)
         os.killpg(os.getpgid(self.mpirun_proc.pid), signal.SIGKILL)
-        if self.mpirun_proc.poll() is None:
-            logger.info("mpirun_proc isn't terminated")
-        else:
-            logger.info("mpirun_proc is terminated")
+        self.mpirun_proc.wait()
         self.mpirun_proc = None

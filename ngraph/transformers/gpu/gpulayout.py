@@ -22,7 +22,7 @@ from ngraph.op_graph.convolution import ConvolutionOp, update_conv, bprop_conv, 
 from ngraph.op_graph.pooling import PoolingOp, BpropPoolOp
 from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.lookuptable import LookupTableOp, update_lut, bprop_lut
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
+from ngraph.op_graph.comm_nodes import GPUCudaSendOp, GPUCudaRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherSendOp, \
     GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.ctc import CTCOp
@@ -904,7 +904,7 @@ def gpu_layout_factory(op):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, RngOp):
         return GPULayoutAssignment.generate_default_layout(op.tensor.axes, 3)
-    elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
+    elif isinstance(op, (GPUCudaSendOp, GPUCudaRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherRecvOp)):
         return GPULayoutAssignment.generate_comms_layout(op, 3)
@@ -963,7 +963,7 @@ def gpu_constraint_factory(op, arg):
         return GPULutLayoutConstraint(op, arg)
     elif isinstance(op, RngOp):
         return GPUBinaryLayoutConstraint(op, arg)
-    elif isinstance(op, (GPUQueueSendOp, GPUQueueRecvOp)):
+    elif isinstance(op, (GPUCudaSendOp, GPUCudaRecvOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
         return GPUCommsLayoutConstraint(op, arg)

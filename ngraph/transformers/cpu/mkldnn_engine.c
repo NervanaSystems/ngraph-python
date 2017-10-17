@@ -35,6 +35,20 @@ void destroy_mkldnn_engine(mkldnn_engine_t engine) {
   MKL_CHECK(mkldnn_engine_destroy(engine));
 }
 
+/** Check if strides are monotonically decreasing in an order
+ *  specified by 'perm'.
+ *  If true, perm[0] is outermost-dimension and perm[ndims-1] is innermost
+*/
+int check_axis_order(int ndims, const int *strides, const int *perm) 
+{
+    for (int i = 1; i < ndims; i++) {
+        if (strides[perm[i]] > strides[perm[i-1]]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 mkldnn_memory_desc_t*
 create_mkldnn_layout_descriptor(mkldnn_engine_t engine, int ndims,
                                 const int *dim_sizes, const int *dim_strides,
@@ -47,6 +61,31 @@ create_mkldnn_layout_descriptor(mkldnn_engine_t engine, int ndims,
   md->ndims = ndims;
   md->format = fmt;
   md->data_type = data_type;
+  int perm_nc[] = {0, 1};
+  int perm_nchw[] = {0, 1, 2, 3};
+  int perm_chwn[] = {1, 2, 3, 0};
+  switch (ndims) {
+  case 2:
+      if (check_axis_order(2, dim_strides, perm_nc)) {
+          if (fmt == mkldnn_blocked) {
+            fmt = mkldnn_nc;
+          }
+      }    
+      break;
+  case 4:
+      if (check_axis_order(4, dim_strides, perm_nchw)) {
+          if (fmt == mkldnn_blocked) {
+                fmt = mkldnn_nchw;
+          }
+      }    
+      if (check_axis_order(4, dim_strides, perm_chwn)) {
+          if (fmt == mkldnn_blocked) {
+              fmt = mkldnn_chwn;
+          }
+      }
+      break;
+  }
+
   switch (fmt) {
   case mkldnn_blocked:
     for (size_t i = 0; i < ndims; i++) {
@@ -108,6 +147,25 @@ mkldnn_flatten_axes(mkldnn_memory_desc_t* in_md, int* flatten_map) {
   return md;
 }
 
+int 
+mkldnn_compare_memdesc(mkldnn_memory_desc_t *lhs, mkldnn_memory_desc_t* rhs) {
+    if (lhs->primitive_kind != rhs->primitive_kind ||
+            lhs->ndims != rhs->ndims ||
+            lhs->data_type != rhs->data_type ||
+            lhs->layout_desc.blocking.offset_padding != rhs->layout_desc.blocking.offset_padding)
+        return 0;
+    for (size_t i = 0; i < lhs->ndims; i++) {
+        if (lhs->layout_desc.blocking.block_dims[i] != rhs->layout_desc.blocking.block_dims[i] || 
+                lhs->layout_desc.blocking.strides[1][i] != rhs->layout_desc.blocking.strides[1][i] ||
+                lhs->layout_desc.blocking.strides[0][i] != rhs->layout_desc.blocking.strides[0][i] ||
+                lhs->layout_desc.blocking.padding_dims[i] != rhs->layout_desc.blocking.padding_dims[i] ||
+                lhs->layout_desc.blocking.offset_padding_to_data[i] != rhs->layout_desc.blocking.offset_padding_to_data[i] ||
+                lhs->dims[i] != rhs->dims[i])
+            return 0;
+    }
+    return 1;
+}
+
 mkldnn_memory_desc_t*
 mkldnn_reorder_axes(mkldnn_memory_desc_t *in_md, int* axis_order) {
   mkldnn_memory_desc_t* md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
@@ -125,6 +183,33 @@ mkldnn_reorder_axes(mkldnn_memory_desc_t *in_md, int* axis_order) {
       md->dims[i] = in_md->dims[axis_order[i]];
   }
   md->layout_desc.blocking.offset_padding = 0;
+  // Check if new md belongs to a canned format.
+  if (md->ndims == 4) {
+    mkldnn_memory_desc_t* tmp_md = (mkldnn_memory_desc_t *)malloc(sizeof(mkldnn_memory_desc_t));
+    MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nchw));
+    if (mkldnn_compare_memdesc(md, tmp_md)) {
+        md->format = mkldnn_nchw;
+    }
+    MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_chwn));
+    if (mkldnn_compare_memdesc(md, tmp_md)) {
+        md->format = mkldnn_chwn;
+    }
+    if (md->dims[1] >= 8) {
+        MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nChw8c));
+        if (mkldnn_compare_memdesc(md, tmp_md)) {
+            md->format = mkldnn_nChw8c;
+        }
+    }
+    if (md->dims[1] >= 16) {
+        MKL_CHECK(mkldnn_memory_desc_init(tmp_md, md->ndims, md->dims, md->data_type, mkldnn_nChw16c));
+        if (mkldnn_compare_memdesc(md, tmp_md)) {
+            md->format = mkldnn_nChw16c;
+        }
+    }
+    free(tmp_md);
+
+  }
+
   return md;
 }
 
@@ -322,12 +407,7 @@ mkldnn_memory_desc_t* query_opkernel_layout(mkldnn_opkernel_t opkernel,
   assert(index < opkernel->num_outputs);
   mkldnn_memory_desc_t* md =
       mkldnn_primitive_desc_query_memory_d(opkernel->outputs[index].desc);
-  if (md->format == mkldnn_x || md->format == mkldnn_ihwo ||
-      md->format == mkldnn_chwn) { // Native formats
-    return NULL;
-  } else {
-    return md;
-  }
+  return md;
 }
 
 void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int *dims,

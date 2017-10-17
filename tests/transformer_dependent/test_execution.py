@@ -156,9 +156,9 @@ def sub_axes(request):
     return request.param
 
 
-# TODO this is a non-strict disable since not all parametrizations fail argon
-@pytest.config.argon_disabled(reson="Argon Transformer error")  # TODO Triage
 def test_reduction(reduction, sub_axes):
+    if reduction == 'prod':
+        pytest.config.argon_skip_now("Argon Transformer error")  # TODO triage
     axes = ng.make_axes([ng.make_axis(length=4),
                          ng.make_axis(length=4),
                          ng.make_axis(length=4)])

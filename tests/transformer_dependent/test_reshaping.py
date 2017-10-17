@@ -324,6 +324,7 @@ def test_cast_axes():
         ng.testing.assert_allclose(deriv_num, deriv_sym, rtol=rtol, atol=atol)
 
 
+@pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
 def test_shuffled_deriv():
     # This gets the axes of a delta in a generate_add_delta in a different order than the
     # value being updated

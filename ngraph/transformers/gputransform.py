@@ -38,7 +38,7 @@ from ngraph.op_graph.op_graph import Argmax, Argmin, Op, \
     ExpOp, Greater, GreaterEqual, Less, LessEqual, LogOp, Maximum, Minimum, \
     Multiply, NegativeOp, NotEqual, ReciprocalOp, SignOp, SinOp, SqrtOp, SquareOp, \
     Subtract, TanhOp, Prod, DotOp, TensorOp, SigmoidAtomicOp
-from ngraph.op_graph.comm_nodes import GPUQueueSendOp, GPUQueueRecvOp, \
+from ngraph.op_graph.comm_nodes import GPUCudaSendOp, GPUCudaRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp, GPUCudaAllReduceOp
 from ngraph.op_graph.convolution import ConvolutionOp, bprop_conv, update_conv, \
@@ -53,7 +53,6 @@ from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
 # from ngraph.transformers.passes.nviz import VizPass
-
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
@@ -62,7 +61,7 @@ from ngraph.transformers.gpu.pool import PoolFpropKernel, PoolBpropKernel
 from ngraph.transformers.gpu.lut import LUTBpropKernel
 from ngraph.transformers.gpu.ctc import CTCKernel
 from ngraph.transformers.gpu.tensor_ops import DimShuffleKernel, FillKernel, \
-    RngFillKernel, QueueSendKernel, QueueRecvKernel, CudaScatterSendKernel, \
+    RngFillKernel, CudaSendKernel, CudaRecvKernel, CudaScatterSendKernel, \
     CudaScatterRecvKernel, CudaGatherSendKernel, CudaGatherRecvKernel, CudaAllReduceKernel
 from ngraph.transformers.gpu.kernels.cuda.copy_transpose import _get_copy_transpose_kernel
 from ngraph.transformers.gpu.util import _get_events, _get_scratch_data, _reset_scratch_data, \
@@ -72,6 +71,7 @@ from ngraph.transformers.gpu.gpulayout import gpu_layout_factory, GPUUnaryLayout
 
 import cachetools
 import numpy as np
+
 
 _none_slice = slice(None, None, None)
 
@@ -454,13 +454,13 @@ class GPUKernelGroup(object):
     def add_kernel(self, op):
         self.kernels.append(CTCKernel(self.transformer, op))
 
-    @add_kernel.on_type(GPUQueueSendOp)
+    @add_kernel.on_type(GPUCudaSendOp)
     def add_kernel(self, op):
-        self.kernels.append(QueueSendKernel(self.transformer, op))
+        self.kernels.append(CudaSendKernel(self.transformer, self.comm, op))
 
-    @add_kernel.on_type(GPUQueueRecvOp)
+    @add_kernel.on_type(GPUCudaRecvOp)
     def add_kernel(self, op):
-        self.kernels.append(QueueRecvKernel(self.transformer, op))
+        self.kernels.append(CudaRecvKernel(self.transformer, self.comm, op))
 
     @add_kernel.on_type(GPUCudaScatterSendOp)
     def add_kernel(self, op):
@@ -517,7 +517,6 @@ class GPUKernelGroup(object):
                 k.bind_buffers()
 
         for k in self.kernels:
-
             self.setup_kernel_execute(k)
             k.execute()
             self.after_kernel_execute(k)
@@ -814,14 +813,17 @@ class GPUDeviceTensor(DeviceTensor):
             value = np.float64(value)
         elif type(value) == int:
             value = np.int64(value)
-        elif isinstance(value, np.ndarray) and value.shape == ():
-            value = value[()]
+        elif isinstance(value, np.ndarray):
+            # handle 0-d and 1-d conversion to scalar
+            if value.shape == ():
+                value = value[()]
+            elif value.shape == (1,):
+                value = value[0]
+
         # flex: added astype to deal with GPUArray dtype int16
         # FLEX TODO: assumed same behavior for all cases
-        if type(value) == np.float32 or type(value) == np.float64 or \
-                type(value) == float:
-            sliced.fill(value.astype(sliced.dtype))
-        elif type(value) in (np.int32, np.int64, int, np.uint32):
+        if type(value) in (np.int32, np.int64, int, np.uint32,
+                           np.float32, np.float64):
             sliced.fill(value.astype(sliced.dtype))
         elif self.tensor.shape == () or np.prod(self.tensor.shape) == 1:
             sliced.fill(value.astype(sliced.dtype))
