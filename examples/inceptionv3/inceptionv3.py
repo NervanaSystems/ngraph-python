@@ -140,7 +140,7 @@ if args.optimizer_name == 'sgd':
                             'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                        momentum_coef=0.5,
+                                        momentum_coef=0.85,
                                         gradient_clip_norm=args.grad_clip,
                                         wdecay=4e-5,
                                         iteration=inputs['iteration'])
@@ -165,13 +165,13 @@ else:
 
 # Build the main and auxiliary loss functions
 #y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
-y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)
-train_prob_main = inception.seq2(inception.seq1(inputs['image']))
+y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)[:,:,0]
+train_prob_main = inception.seq2(inception.seq1(inputs['image']))[:,:,0,0]
 train_prob_main = ng.map_roles(train_prob_main, {"C": ax.Y.name})
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
 
 train_prob_aux = inception.seq_aux(inception.seq1(inputs['image']))
-train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})
+train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})[:,:,0,0]
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot)
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
