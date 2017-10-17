@@ -338,14 +338,14 @@ class Inception(object):
                                Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
                                Dropout(keep=0.8),
                                Convolution(name='main_final_conv1x1', **conv_params(filter_shape=(1, 1, 1000),
-                                                         activation=Softmax()))])
+                                                         activation=Softmax(), batch_norm=False))])
 
             # Auxiliary classifier
             seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
                                   Convolution(name='aux_conv1x1_v1',**conv_params(filter_shape=(1, 1, 128))),
                                   Convolution(name='aux_conv5x5',**conv_params(filter_shape=(5, 5, 768))),
                                   Convolution(name='aux_conv1x1_v2',**conv_params(filter_shape=(1, 1, 1000),
-                                                            activation=Softmax()))])
+                                                            activation=Softmax(), batch_norm=False))])
 
         self.seq1 = seq1
         self.seq2 = seq2
