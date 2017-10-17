@@ -22,6 +22,7 @@ import onnx.mapping
 from onnx import onnx_pb2
 from functools import lru_cache
 from ngraph.frontends.onnx.onnx_importer.ops_bridge import OpsBridge
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 
 
 class WrapperBaseClass:
@@ -49,7 +50,7 @@ class ModelWrapper(WrapperBaseClass):
 
 class GraphWrapper(WrapperBaseClass):
 
-    def __init__(self, onnx_proto_instance):
+    def __init__(self, onnx_proto_instance):  # type: (google.protobuf.message.Message) -> None
         super(GraphWrapper, self).__init__(onnx_proto_instance, self)
         self._ng_node_cache = {}
         self.node = [NodeWrapper(node, self) for node in self._proto.node]
@@ -102,16 +103,14 @@ class ValueInfoWrapper(WrapperBaseClass):
         if self.type.sparse_tensor_type.elem_type != onnx_pb2.TensorProto.UNDEFINED:
             raise NotImplementedError('Sparse tensors (SparseTensorTypeProto) not supported yet.')
 
-        axes = []
+        shape = []
         for dim in self.type.tensor_type.shape.dim:
             if dim.dim_param:
                 raise NotImplementedError('Symbolic variable representation of '
                                           'tensor shape (dim_param) not supported yet.')
+            shape.append(dim.dim_value)
 
-            if dim.dim_value > 1:
-                axes.append(ng.make_axis(length=dim.dim_value))
-
-        return ng.make_axes(axes=axes)
+        return ng.make_axes(axes=make_pos_axes(shape))
 
     def get_dtype(self):
         if self.type.sparse_tensor_type.elem_type != onnx_pb2.TensorProto.UNDEFINED:
@@ -170,6 +169,7 @@ class NodeWrapper(WrapperBaseClass):
         super(NodeWrapper, self).__init__(onnx_proto_instance, graph)
         self.input = [self._graph.get_input(input_name) for input_name in self._proto.input]
         self.output = [self._graph.get_input(output_name) for output_name in self._proto.output]
+        self.attribute = [AttributeWrapper(attr, self._graph) for attr in self._proto.attribute]
 
     def __repr__(self):
         name = getattr(self._proto, 'name', None)
@@ -177,6 +177,15 @@ class NodeWrapper(WrapperBaseClass):
         if name:
             return "<{}({}): {}>".format(self.__class__.__name__, op_type, name)
         return "<{}({})>".format(self.__class__.__name__, op_type)
+
+    def get_attribute(self, attribute_name):
+        return next((attr for attr in self.attribute if attr.name == attribute_name), None)
+
+    def get_attribute_value(self, attribute_name, default=None):
+        attribute = self.get_attribute(attribute_name)
+        if attribute:
+            return attribute.get_value()
+        return default
 
     def get_ng_inputs(self):
         return [self._graph.ng_node_cache_get(input_name) for input_name in self._proto.input]
@@ -193,3 +202,27 @@ class NodeWrapper(WrapperBaseClass):
 
             output_nodes_dict.update({output_name: ng_node})
         return output_nodes_dict
+
+
+class AttributeWrapper(WrapperBaseClass):
+
+    def get_value(self):
+        attr = self._proto
+        if attr.HasField("f"):
+            return attr.f
+        elif attr.HasField("i"):
+            return attr.i
+        elif attr.HasField("s"):
+            return attr.s.decode("utf-8")
+        elif attr.HasField("t"):
+            return TensorWrapper(attr.t, self._graph)
+        elif attr.floats:
+            return list(attr.floats)
+        elif attr.ints:
+            return list(attr.ints)
+        elif attr.strings:
+            return [string.decode("utf-8") for string in attr.strings]
+        elif attr.tensors:
+            return [TensorWrapper(t, self._graph) for t in attr.tensors]
+        else:
+            raise TypeError('Could not parse value for attribute %s', self.name)

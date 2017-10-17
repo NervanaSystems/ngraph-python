@@ -17,6 +17,8 @@ from __future__ import print_function
 from __future__ import division
 
 import ngraph as ng
+from ngraph.frontends.onnx.onnx_importer.utils import verify_axes_binary_broadcast_compatible, \
+    make_reduction_op
 
 
 class OpsBridge:
@@ -25,6 +27,7 @@ class OpsBridge:
     """
 
     def get_ng_node(self, onnx_node):
+        # type: (NodeWrapper) -> Op
         op_type = onnx_node.op_type
         ng_node_factory = getattr(self, op_type, None)
         ng_inputs = onnx_node.get_ng_inputs()
@@ -34,11 +37,48 @@ class OpsBridge:
 
         return ng_node_factory(onnx_node, ng_inputs)
 
-    def Abs(self, onnx_node, ng_inputs):
+    # Unary Ops
+    def Abs(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
         return ng.absolute(ng_inputs[0])
 
-    def Add(self, onnx_node, ng_inputs):
+    def Relu(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        return ng.maximum(ng_inputs[0], 0.)
+
+    # Reduction Ops
+    def ReduceSum(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        return make_reduction_op(ng.sum, onnx_node, ng_inputs)
+
+    def ReduceMax(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        return make_reduction_op(ng.max, onnx_node, ng_inputs)
+
+    def ReduceMin(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        return make_reduction_op(ng.min, onnx_node, ng_inputs)
+
+    def ReduceLogSumExp(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        op = ng.exp(ng_inputs[0])
+        op = make_reduction_op(ng.sum, onnx_node, [op])
+        op = ng.log(op)
+        return op
+
+    def ReduceMean(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        return make_reduction_op(ng.mean, onnx_node, ng_inputs)
+
+    def ReduceProd(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        return make_reduction_op(ng.prod, onnx_node, ng_inputs)
+
+    # Binary Ops
+    def Add(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
         return ng.add(ng_inputs[0], ng_inputs[1])
 
-    def Relu(self, onnx_node, ng_inputs):
-        return ng.maximum(ng_inputs[0], 0.)
+    def Sub(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
+        return ng.subtract(ng_inputs[0], ng_inputs[1])
+
+    def Mul(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
+        return ng.multiply(ng_inputs[0], ng_inputs[1])
+
+    def Div(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+        verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
+        return ng.divide(ng_inputs[0], ng_inputs[1])

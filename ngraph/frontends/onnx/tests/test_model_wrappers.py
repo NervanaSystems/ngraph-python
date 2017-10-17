@@ -78,8 +78,8 @@ def test_value_info_wrapper(onnx_model):
     assert np.all(initializer.to_array() == np.array([[1., 1.]], dtype=np.float32))
 
     axes = wrapped_value_info.get_ng_axes()
-    assert len(axes) == 1
-    assert axes[0].length == 2
+    assert len(axes) == 2
+    assert axes[1].length == 2
 
     placeholder = wrapped_value_info.get_ng_placeholder()
     assert placeholder.__class__ == ng.op_graph.op_graph.AssignableTensorOp
@@ -108,3 +108,23 @@ def test_node_wrapper(onnx_model):
     assert ng_outputs['Y'].__class__ == ng.op_graph.op_graph.AbsoluteOp
 
 
+def test_attribute_wrapper():
+    def attribute_value_test(attribute_value):
+        node = make_node("Abs", ["X"], [], name="test_node", test_attribute=attribute_value)
+        model = make_model(make_graph([node], "test_graph", [
+            make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 2])
+        ], []), producer_name="ngraph")
+        wrapped_attribute = ModelWrapper(model).graph.node[0].get_attribute('test_attribute')
+        return wrapped_attribute.get_value()
+
+    tensor = make_tensor('test_tensor', onnx.TensorProto.FLOAT, [1], [1])
+
+    assert attribute_value_test(1) is 1
+    assert attribute_value_test(1.0) is 1.0
+    assert attribute_value_test('test') == 'test'
+    assert attribute_value_test(tensor)._proto == tensor
+
+    assert attribute_value_test([1, 2, 3]) == [1, 2, 3]
+    assert attribute_value_test([1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0]
+    assert attribute_value_test(['test1', 'test2']) == ['test1', 'test2']
+    assert attribute_value_test([tensor, tensor])[1]._proto == tensor
