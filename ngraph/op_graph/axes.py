@@ -694,12 +694,7 @@ class Axes(object):
             bool, true if other is superset of self
         """
         return set(self.names).issuperset(set(make_axes(other).names))
-        """
-        <<<<<<< HEAD
-                # return not self.is_sub_set(other)
-        =======
-        >>>>>>> master
-        """
+
     def is_equal_set(self, other):
         """
         Returns true if other has the same set of Axis names as self
