@@ -95,6 +95,8 @@ def eval_loop(dataset, computation, metric_names):
 parser = NgraphArgparser(description=__doc__)
 parser.add_argument('--debug', default=False, dest='debug', action='store_true',
                     help='Saves additional variables for debugging')
+parser.add_argument('--save_grads', default=False, dest='save_grads', action='store_true',
+                    help='Saves gradients for debugging')
 parser.add_argument('--mini', default=False, dest='mini', action='store_true',
                     help='If given, builds a mini version of Inceptionv3')
 parser.add_argument("--image_dir", default='/dataset/aeon/I1K/i1k-extracted/',
@@ -138,8 +140,8 @@ if args.optimizer_name == 'sgd':
                             'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                        momentum_coef=0.9,
-                                        gradient_clip_value=args.grad_clip,
+                                        momentum_coef=0.5,
+                                        gradient_clip_norm=args.grad_clip,
                                         wdecay=4e-5,
                                         iteration=inputs['iteration'])
 elif args.optimizer_name == 'rmsprop': 
@@ -149,7 +151,7 @@ elif args.optimizer_name == 'rmsprop':
                             'base_lr': 0.01}
     optimizer = RMSProp(learning_rate=learning_rate_policy, 
                         wdecay=4e-5, decay_rate=0.95,
-                        gradient_clip_value=args.grad_clip, epsilon=1.)
+                        gradient_clip_norm=args.grad_clip, epsilon=1.)
 
 elif args.optimizer_name == 'adam': 
     learning_rate_policy = {'name': 'schedule',
@@ -157,7 +159,7 @@ elif args.optimizer_name == 'adam':
                             'gamma': 0.94,
                             'base_lr': 0.001}
     optimizer = Adam(learning_rate=learning_rate_policy, 
-                     gradient_clip_value=args.grad_clip, epsilon=1.)
+                     gradient_clip_norm=args.grad_clip, epsilon=1.)
 else:
     raise NotImplementedError("Unrecognized Optimizer")
 
@@ -177,13 +179,21 @@ batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
 if args.debug:
     names_seq1, vars_seq1 = zip(*inception.seq1.variables.items())
     names_seq2, vars_seq2 = zip(*inception.seq2.variables.items())
-    names_all = names_seq1 + names_seq2
-    vars_all = vars_seq1 + vars_seq2
-    #grad_computation = ng.computation([ng.deriv(train_loss_main, v) for v in vars_all])
+    names_seqaux, vars_seqaux = zip(*inception.seq_aux.variables.items())
+    names_all = names_seq1 + names_seq2 + names_seqaux
+    vars_all = vars_seq1 + vars_seq2 + vars_seqaux
     vars_computation = ng.computation([v for v in vars_all])
-    train_computation = ng.computation([batch_cost], 'all')
-    grads_array = [1e9]*2*args.iter_interval
+    train_computation = ng.computation([batch_cost, train_prob_main, train_prob_aux], 'all')
     vars_array = [1e9]*2*args.iter_interval
+    if args.save_grads:
+        saved_grad_idx = range(len(vars_seq1)+len(vars_seq2)-8, len(vars_seq1)+len(vars_seq2))
+        saved_grads = [vars_all[i] for i in saved_grad_idx] 
+        derivs = [ng.deriv(ng.sum(train_loss_main,out_axes=()), v) for v in saved_grads]
+        grad_names = [names_all[i] for i in saved_grad_idx]
+        grad_computation = ng.computation(derivs,"all")
+        grads_array = [1e9]*2*args.iter_interval
+    train_main_outs = [1e9]*2*args.iter_interval
+    train_aux_outs = [1e9]*2*args.iter_interval
 else:
     train_computation = ng.computation([batch_cost], 'all')
 #label_indices = inputs['label'][:, 0]
@@ -209,7 +219,8 @@ with closing(ngt.make_transformer()) as transformer:
     eval_function = transformer.add_computation(eval_computation)
     if args.debug:
         vars_function = transformer.add_computation(vars_computation)
-        #grads_function = transformer.add_computation(grad_computation)
+        if args.save_grads:
+            grads_function = transformer.add_computation(grad_computation)
 
     if args.no_progress_bar:
         ncols = 0
@@ -246,15 +257,21 @@ with closing(ngt.make_transformer()) as transformer:
         #data['label'] = data['label'].reshape((args.batch_size, 1))
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         if args.debug:
-            output = train_function(feed_dict=feed_dict)
+            output, main_out, aux_out = train_function(feed_dict=feed_dict)
             varx = vars_function(feed_dict=feed_dict)
-            output = float(output[0])
+            output = float(output)
             # Mean grads over channel and batch axis
             #grads = np.mean(grads, axis=(0,1)).astype(np.float32)
-            #grads_array.pop(2*args.iter_interval-1)
-            #grads_array.insert(0, grads)
+            if args.save_grads:
+                grads = grads_function(feed_dict=feed_dict)
+                grads_array.pop(2*args.iter_interval-1)
+                grads_array.insert(0, grads)
             vars_array.pop(2*args.iter_interval-1)
             vars_array.insert(0, varx)
+            train_main_outs.pop(2*args.iter_interval-1)
+            train_main_outs.insert(0, main_out)
+            train_aux_outs.pop(2*args.iter_interval-1)
+            train_aux_outs.insert(0, aux_out)
         else:
             output = train_function(feed_dict=feed_dict)
             output = float(output[0])
@@ -262,6 +279,28 @@ with closing(ngt.make_transformer()) as transformer:
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output))
         interval_cost += output
+        # Save the training progression
+        saved_losses['train_loss'].append(output)
+        saved_losses['iteration'].append(iter_no)
+
+        # If training loss wildly increases, stop training
+        if(iter_no > 1):
+            if (saved_losses['train_loss'][-1] > 12):
+                #Dump the weights in the last iter_interval iterations
+                for iterx in range(len(vars_array)/2):
+                    with open('./debug/weights_%d.txt' % iterx,'a') as f_handle:
+                     for wx in range(len(vars_array[0])):
+                      np.savetxt(f_handle, vars_array[iterx][wx].flatten(), fmt='%.3f', newline=' ', header=names_all[wx])
+                      f_handle.write('\n')
+                #Dump the grads in the last iter_interval iterations
+                for iterx in range(len(grads_array)/2):
+                    with open('./debug/grads_%d.txt' % iterx,'a') as f_handle:
+                     for wx in range(len(grads_array[0])):
+                      np.savetxt(f_handle, grads_array[iterx][wx].flatten(), fmt='%.3f', newline=' ', header=grad_names[wx])
+                      f_handle.write('\n')
+                print('Train Loss increased significantly!')
+                import pdb; pdb.set_trace()
+
         if (iter_no + 1) % args.iter_interval == 0 and iter_no > 0:
             interval_cost = interval_cost / args.iter_interval
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
@@ -277,11 +316,6 @@ with closing(ngt.make_transformer()) as transformer:
 
             # Save the training progression
             saved_losses['interval_loss'].append(interval_cost)
-            # If training loss wildly increases in two past iterations, stop training
-            if(iter_no > (2*args.iter_interval) ):
-                if ((saved_losses['interval_loss'][-1] - .1) > saved_losses['interval_loss'][-2]):
-                    print('Train Loss increased significantly!')
-                    import pdb; pdb.set_trace()
             #if args.debug:
             #    saved_losses['grads'] = grads_array
             pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))

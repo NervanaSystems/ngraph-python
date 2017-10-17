@@ -257,19 +257,19 @@ class Inception(object):
             This is the mini model with reduced number of filters in each layer
             """
             # Root branch of the tree
-            seq1 = Sequential([Convolution(**conv_params(filter_shape=(3, 3, 32),
+            seq1 = Sequential([Convolution(name='conv_1a_3x3', **conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(**conv_params(filter_shape=(3, 3, 16), padding=0)),
+                               Convolution(name='conv_2a_3x3',**conv_params(filter_shape=(3, 3, 16), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(**conv_params(filter_shape=(3, 3, 16), padding=1)),
+                               Convolution(name='conv_2b_3x3',**conv_params(filter_shape=(3, 3, 16), padding=1)),
                                # conv2d_2b_3x3
-                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
-                               Convolution(**conv_params(filter_shape=(1, 1, 16))),
+                               Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
+                               Convolution(name='conv_3b_1x1', **conv_params(filter_shape=(1, 1, 16))),
                                # conv2d_3b_1x1
-                               Convolution(**conv_params(filter_shape=(3, 3, 32), padding=1)),
+                               Convolution(name='conv_4a_3x3',**conv_params(filter_shape=(3, 3, 32), padding=1)),
                                # conv2d_4a_3x3
-                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
+                               Pooling(name='pool_2_3x3',pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )], name='mixed_5b'),
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )], name='mixed_5c'),
                                Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )], name=' mixed_5d'),
@@ -292,60 +292,59 @@ class Inception(object):
                                Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
                                Dropout(keep=0.8),
                                Convolution(name='main_final_conv1x1', **conv_params(filter_shape=(1, 1, 1000),
-                                                         activation=Softmax()))])
+                                                         activation=Softmax(), batch_norm=False))])
 
             # Auxiliary classifier
             seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
                                   Convolution(name='aux_conv1x1_v1',**conv_params(filter_shape=(1, 1, 32))),
                                   Convolution(name='aux_conv5x5',**conv_params(filter_shape=(5, 5, 32))),
                                   Convolution(name='aux_conv1x1_v2',**conv_params(filter_shape=(1, 1, 1000),
-                                                            activation=Softmax()))])
+                                                            activation=Softmax(), batch_norm=False))])
 
         else:
-            seq1 = Sequential([Convolution(**conv_params(filter_shape=(3, 3, 32),
+            # Root branch of the tree
+            seq1 = Sequential([Convolution(name='conv_1a_3x3', **conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(**conv_params(filter_shape=(3, 3, 32), padding=0)),
+                               Convolution(name='conv_2a_3x3',**conv_params(filter_shape=(3, 3, 32), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(**conv_params(filter_shape=(3, 3, 64), padding=1)),
+                               Convolution(name='conv_2b_3x3',**conv_params(filter_shape=(3, 3, 64), padding=1)),
                                # conv2d_2b_3x3
-                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
-
-                               Convolution(**conv_params(filter_shape=(1, 1, 80))),
+                               Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
+                               Convolution(name='conv_3b_1x1', **conv_params(filter_shape=(1, 1, 80))),
                                # conv2d_3b_1x1
-                               Convolution(**conv_params(filter_shape=(3, 3, 192), padding=0)),
+                               Convolution(name='conv_4a_3x3',**conv_params(filter_shape=(3, 3, 192), padding=1)),
                                # conv2d_4a_3x3
-                               Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
-
-                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (32, )]),  # mixed_5b
-                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5c
-                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )]),  # mixed_5d
-                               Inceptionv3_b2([(384,), (64, 96, 96)]),  # mixed_6a
+                               Pooling(name='pool_2_3x3',pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (32, )], name='mixed_5b'),
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )], name='mixed_5c'),
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )], name=' mixed_5d'),
+                               Inceptionv3_b2([(384,), (64, 96, 96)], name=' mixed_6a'),
                                Inceptionv3_b3([(192,), (128, 128, 192),
-                                               (128, 128, 128, 128, 192), (192,)]),  # mixed_6b
+                                               (128, 128, 128, 128, 192), (192,)], name='mixed_6b'),
                                Inceptionv3_b3([(192,), (160, 160, 192),
-                                               (160, 160, 160, 160, 192), (192,)]),  # mixed_6c
+                                               (160, 160, 160, 160, 192), (192,)], name='mixed_6c'),
                                Inceptionv3_b3([(192,), (160, 160, 192),
-                                               (160, 160, 160, 160, 192), (192,)]),  # mixed_6d
+                                               (160, 160, 160, 160, 192), (192,)], name= 'mixed_6d'),
                                Inceptionv3_b3([(192,), (192, 192, 192),
-                                               (192, 192, 192, 192, 192), (192,)])])  # mixed_6e
+                                               (192, 192, 192, 192, 192), (192,)], name='mixed_6e')])
 
             # Branch of main classifier
-            seq2 = Sequential([Inceptionv3_b4([(192, 320), (192, 192, 192, 192)]),  # mixed_7a
+            seq2 = Sequential([Inceptionv3_b4([(192, 320), (192, 192, 192, 192)],name='mixed_7a'),
                                Inceptionv3_b5([(320,), (384, 384, 384),
-                                               (448, 384, 384, 384), (192,)]),  # mixed_7b
+                                               (448, 384, 384, 384), (192,)],name='mixed_7b'),
                                Inceptionv3_b5([(320,), (384, 384, 384),
-                                               (448, 384, 384, 384), (192,)]),  # mixed_7c
-                               Pooling(pool_fshape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
+                                               (448, 384, 384, 384), (192,)],name='mixed_7c'),
+                               Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
                                Dropout(keep=0.8),
-                               Convolution(**conv_params(filter_shape=(1, 1, 1000),
+                               Convolution(name='main_final_conv1x1', **conv_params(filter_shape=(1, 1, 1000),
                                                          activation=Softmax()))])
 
             # Auxiliary classifier
             seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
-                                  Convolution(**conv_params(filter_shape=(1, 1, 128))),
-                                  Convolution(**conv_params(filter_shape=(5, 5, 768))),
-                                  Convolution(**conv_params(filter_shape=(1, 1, 1000),
+                                  Convolution(name='aux_conv1x1_v1',**conv_params(filter_shape=(1, 1, 128))),
+                                  Convolution(name='aux_conv5x5',**conv_params(filter_shape=(5, 5, 768))),
+                                  Convolution(name='aux_conv1x1_v2',**conv_params(filter_shape=(1, 1, 1000),
                                                             activation=Softmax()))])
 
         self.seq1 = seq1
