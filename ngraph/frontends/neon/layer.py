@@ -1153,7 +1153,7 @@ class BatchNorm(Layer):
 
         if not self.initialized:
             self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=0.1).named("gvar")
-            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.5).named("gmean")
+            self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0).named("gmean")
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,
                                      metadata={"label": LABELS["weight"]}).named('gamma')
@@ -1162,12 +1162,8 @@ class BatchNorm(Layer):
                                     metadata={"label": LABELS["bias"]}).named('beta')
             self.rho = ng.persistent_tensor(axes=(), initial_value=self.init_rho).named('rho')
 
-# <<<<<<< HEAD
-        # in_obj = ng.flatten(in_obj, out_axes | red_axes.flatten(force=True))
-#=======
         in_obj = ng.flatten(ng.axes_with_order(in_obj, out_axes | red_axes),
                             out_axes | red_axes.flatten(force=True))
-#>>>>>>> master
         xmean = ng.mean(in_obj, out_axes=out_axes)
         xvar = ng.variance(in_obj, out_axes=out_axes)
 
