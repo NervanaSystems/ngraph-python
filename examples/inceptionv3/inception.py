@@ -20,7 +20,7 @@ from ngraph.frontends.neon import Rectlin, Softmax, Dropout, Explin
 
 def conv_params(filter_shape, strides=1, batch_norm=True, activation=Rectlin(),
                 bias_init=None,
-                filter_init=UniformInit(low=-0.3, high=0.3), padding=0):
+                filter_init=XavierInit(), padding=0):
     return dict(filter_shape=filter_shape,
                 strides=strides,
                 padding=padding,

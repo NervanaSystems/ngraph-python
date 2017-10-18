@@ -107,7 +107,7 @@ parser.add_argument("--valid_manifest_file", default='val-index-tabbed.csv',
                     help="Name of tab separated Aeon validation manifest file")
 parser.add_argument("--optimizer_name", default='rmsprop',
                     help="Name of optimizer (rmsprop or sgd)")
-parser.add_argument('--grad_clip', type=float, default=1e9, help="Gradient Clip Value")
+parser.add_argument('--grad_clip', type=float, default=None, help="Gradient Clip Value")
 parser.set_defaults(batch_size=8, num_iterations=10000000, iter_interval=2000)
 args = parser.parse_args()
 
@@ -140,7 +140,7 @@ if args.optimizer_name == 'sgd':
                             'base_lr': 0.1}
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                        momentum_coef=0.85,
+                                        momentum_coef=0.2,
                                         gradient_clip_norm=args.grad_clip,
                                         wdecay=4e-5,
                                         iteration=inputs['iteration'])
@@ -150,7 +150,7 @@ elif args.optimizer_name == 'rmsprop':
                             'gamma': 0.94,
                             'base_lr': 0.01}
     optimizer = RMSProp(learning_rate=learning_rate_policy, 
-                        wdecay=4e-5, decay_rate=0.95,
+                        wdecay=4e-5, decay_rate=0.9,
                         gradient_clip_norm=args.grad_clip, epsilon=1.)
 
 elif args.optimizer_name == 'adam': 
