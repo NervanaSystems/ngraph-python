@@ -23,11 +23,13 @@ from ngraph.frontends.onnx.onnx_importer.utils import verify_axes_binary_broadca
 
 class OpsBridge:
     """
-    Bridging op between ONNX and ngraph.
+    Bridging ops between ONNX and ngraph.
     """
 
-    def get_ng_node(self, onnx_node):
-        # type: (NodeWrapper) -> Op
+    def get_ng_node(self, onnx_node):  # type: (NodeWrapper) -> Op
+        """
+        Create an ngraph Op from an ONNX node definition.
+        """
         op_type = onnx_node.op_type
         ng_node_factory = getattr(self, op_type, None)
         ng_inputs = onnx_node.get_ng_inputs()
@@ -46,25 +48,25 @@ class OpsBridge:
 
     # Reduction Ops
     def ReduceSum(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-        return make_reduction_op(ng.sum, onnx_node, ng_inputs)
+        return make_reduction_op(ng.sum, onnx_node, ng_inputs[0])
 
     def ReduceMax(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-        return make_reduction_op(ng.max, onnx_node, ng_inputs)
+        return make_reduction_op(ng.max, onnx_node, ng_inputs[0])
 
     def ReduceMin(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-        return make_reduction_op(ng.min, onnx_node, ng_inputs)
+        return make_reduction_op(ng.min, onnx_node, ng_inputs[0])
 
     def ReduceLogSumExp(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
         op = ng.exp(ng_inputs[0])
-        op = make_reduction_op(ng.sum, onnx_node, [op])
+        op = make_reduction_op(ng.sum, onnx_node, op)
         op = ng.log(op)
         return op
 
     def ReduceMean(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-        return make_reduction_op(ng.mean, onnx_node, ng_inputs)
+        return make_reduction_op(ng.mean, onnx_node, ng_inputs[0])
 
     def ReduceProd(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-        return make_reduction_op(ng.prod, onnx_node, ng_inputs)
+        return make_reduction_op(ng.prod, onnx_node, ng_inputs[0])
 
     # Binary Ops
     def Add(self, onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op

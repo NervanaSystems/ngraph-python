@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 def verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs):
     # type: (NodeWrapper, List[TensorOp]) -> bool
-
+    """
+    Check if two ngraph input nodes have shapes compatible for an element-wise binary operation.
+    """
     shape_left = tuple(axis.length for axis in ng_inputs[0].shape)
     shape_right = tuple(axis.length for axis in ng_inputs[1].shape)
     dimensions_identical = shape_left == shape_right
@@ -34,7 +36,7 @@ def verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs):
     broadcast_attribute = onnx_node.get_attribute('broadcast')
     broadcast_flag_set = broadcast_attribute and broadcast_attribute.get_value() == 1
     if not dimensions_identical and not broadcast_flag_set:
-        logger.warning('%s node (%s): operands have different dimensions, while "broadcast"'
+        logger.warning('%s node (%s): operands have different dimensions, and "broadcast"'
                        ' attribute is not set. ', onnx_node.op_type, onnx_node.name)
 
     axis_attribute = onnx_node.get_attribute('axis')
@@ -45,10 +47,15 @@ def verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs):
     if not dimensions_identical and not is_compatible_broadcast_shape(shape_right, shape_left):
         logger.error('%s node (%s): operands have shapes incompatible for broadcasting.',
                      onnx_node.op_type, onnx_node.name)
+        return False
+    return True
 
 
-def get_reduction_axes(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Axes
-    input_tensor = ng_inputs[0]
+def get_reduction_axes(onnx_node):  # type: (NodeWrapper) -> Axes
+    """
+    Create an ngraph Axes object for a subset of axes to be used in a reduction operation.
+    """
+    input_tensor = onnx_node.get_ng_inputs()[0]
     axes_attribute = onnx_node.get_attribute('axes')
 
     if axes_attribute is None:
@@ -60,14 +67,21 @@ def get_reduction_axes(onnx_node, ng_inputs):  # type: (NodeWrapper, List[Tensor
     return ng_reduction_axes
 
 
-def make_reduction_op(ng_op_type, onnx_node, ng_inputs):
-    # type: (Callable, NodeWrapper, List[TensorOp]) -> Op
-    reduction_ng_axes = get_reduction_axes(onnx_node, ng_inputs)
-    op = ng_op_type(ng_inputs[0], reduction_axes=reduction_ng_axes)
+def make_reduction_op(ng_op_type, onnx_node, ng_input):
+    # type: (Callable, NodeWrapper, TensorOp) -> Op
+    """
+    Create an ngraph Op node for a reduction operation (min, max, sum, etc.)
+
+    :param ng_op_type: an ngraph reduction factory function such as ng.max, etc.
+    :param onnx_node: wrapped ONNX node
+    :param ng_input: ngraph Op to be used as input to the reduction node
+    """
+    reduction_ng_axes = get_reduction_axes(onnx_node)
+    op = ng_op_type(ng_input, reduction_axes=reduction_ng_axes)
 
     if onnx_node.get_attribute_value('keepdims', default=1):
         for axis in reduction_ng_axes:
-            pos = ng_inputs[0].axes.index(axis)
+            pos = ng_input.axes.index(axis)
             new_axis = ng.make_axis(length=1, name=axis.name)
             op = ng.expand_dims(op, new_axis, pos)
 
