@@ -147,7 +147,19 @@ class lr_policy_sigmoid(lr_policy):
         return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iteration - self.step_size))))
 
 
+class lr_policy_dynamic():
+    req_args = {'name', 'lr_placeholder'}
+
+    def __init__(self, params):
+        self.name = params['name']
+        self.base_lr = params['lr_placeholder']
+
+    def __call__(self, iteration):
+        return self.base_lr
+
+
 lr_policies = {
+    'dynamic': {'args': lr_policy_dynamic.req_args, 'obj': lr_policy_dynamic},
     'fixed': {'args': lr_policy_fixed.req_args, 'obj': lr_policy_fixed},
     'step': {'args': lr_policy_step.req_args, 'obj': lr_policy_step},
     'schedule': {'args': lr_policy_schedule.req_args, 'obj': lr_policy_schedule},

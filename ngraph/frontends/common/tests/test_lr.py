@@ -38,6 +38,26 @@ def max_iter():
     return 20
 
 
+def test_dynamic_lr(iter_buf, max_iter, base_lr):
+    # setup
+    name = 'dynamic'
+    params = {'name': name,
+              'lr_placeholder': iter_buf}
+    gamma = 0.1
+    learning_schedule = [0., 0.09, 0.18, 0.27, 0.36, 0.45, 0.54, 0.63, 0.72, 0.81, 0.9, 0.99,
+                         1.08, 1.17, 1.26, 1.35, 1.44, 1.53, 1.62, 1.71]
+
+    # execute
+    naive_lr = base_lr * gamma * (np.arange(max_iter))
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
+    with ExecutorFactory() as ex:
+        compute_lr = ex.executor(lr_op, iter_buf)
+        ng_lr = [compute_lr(learning_schedule[i]).item(0) for i in range(max_iter)]
+
+        # compare
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=1e-4, rtol=1e-3)
+
+
 def test_fixed_lr(iter_buf, max_iter, base_lr):
     # set up
     name = 'fixed'
