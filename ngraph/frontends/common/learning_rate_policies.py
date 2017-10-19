@@ -65,6 +65,18 @@ class lr_policy_step(lr_policy):
 
 
 class lr_policy_schedule(lr_policy):
+    """
+    This learning policy allows you to provide a learning rate schedule, gamma and
+    base learning rate.
+    Learning rate drops at the provided iteration by multiplying with the gamma.
+
+    Example:
+    # Learning Rate Policy
+    learning_rate_policy = {'name': 'schedule',
+                            'schedule': [1000, 2000],
+                            'gamma': 0.1,
+                            'base_lr': 0.1}
+    """
     req_args = ('name', 'base_lr', 'gamma', 'schedule')
 
     def __init__(self, params):
@@ -147,7 +159,21 @@ class lr_policy_sigmoid(lr_policy):
         return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iteration - self.step_size))))
 
 
-class lr_policy_dynamic():
+class lr_policy_provided():
+    """
+    This learning policy allows providing learning rate to the graph as a placeholder.
+    Arguments:
+        lr_placeholder: Placeholder which is used for providing learning rate
+
+    Example:
+    .. code-block:: python
+    # Learning Rate Placeholder
+    lr_ph = ng.placeholder(axes=(), initial_value=base_lr)
+
+    # Optimizer
+    learning_rate_policy = {'name': 'dynamic',
+                            'lr_placeholder': lr_ph}
+    """
     req_args = {'name', 'lr_placeholder'}
 
     def __init__(self, params):
@@ -159,7 +185,7 @@ class lr_policy_dynamic():
 
 
 lr_policies = {
-    'dynamic': {'args': lr_policy_dynamic.req_args, 'obj': lr_policy_dynamic},
+    'provided': {'args': lr_policy_provided.req_args, 'obj': lr_policy_provided},
     'fixed': {'args': lr_policy_fixed.req_args, 'obj': lr_policy_fixed},
     'step': {'args': lr_policy_step.req_args, 'obj': lr_policy_step},
     'schedule': {'args': lr_policy_schedule.req_args, 'obj': lr_policy_schedule},
