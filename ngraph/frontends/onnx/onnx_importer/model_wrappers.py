@@ -20,12 +20,12 @@ import onnx
 import onnx.numpy_helper
 import onnx.mapping
 from onnx import onnx_pb2
-from functools import lru_cache
+from cachetools.func import lru_cache
 from ngraph.frontends.onnx.onnx_importer.ops_bridge import OpsBridge
 from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 
 
-class WrapperBaseClass:
+class WrapperBaseClass(object):
     """
     Base class for wrappers, which add ngraph import functionality to ONNX protobuf objects.
     """

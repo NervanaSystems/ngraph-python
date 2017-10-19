@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function, division
-from functools import lru_cache
+from cachetools.func import lru_cache
 
 import onnx
 import pytest

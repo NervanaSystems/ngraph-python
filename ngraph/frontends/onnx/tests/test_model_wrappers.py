@@ -119,8 +119,10 @@ def test_attribute_wrapper():
 
     tensor = make_tensor('test_tensor', onnx.TensorProto.FLOAT, [1], [1])
 
-    assert attribute_value_test(1) is 1
+    assert attribute_value_test(1) == 1
+    assert type(attribute_value_test(1)) == np.long
     assert attribute_value_test(1.0) is 1.0
+    assert type(attribute_value_test(1.0)) == np.float
     assert attribute_value_test('test') == 'test'
     assert attribute_value_test(tensor)._proto == tensor
 
