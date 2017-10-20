@@ -32,7 +32,7 @@ def return_labels(train_manifest):
     return labels
 
 def make_aeon_loaders(train_manifest, valid_manifest,
-                      batch_size, train_iterations, datadir, random_seed=0,
+                      batch_size, train_iterations, datadir, random_seed=1,
                       dataset="i1k"):
     """
     datadir is the path for the images

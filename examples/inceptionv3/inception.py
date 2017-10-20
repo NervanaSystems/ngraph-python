@@ -16,11 +16,11 @@
 from ngraph.frontends.neon import XavierInit, UniformInit
 from ngraph.frontends.neon import Convolution, Pooling, Sequential, Parallel
 from ngraph.frontends.neon import Rectlin, Softmax, Dropout, Explin
-
+import numpy as np
 
 def conv_params(filter_shape, strides=1, batch_norm=True, activation=Rectlin(),
                 bias_init=None,
-                filter_init=XavierInit(), padding=0):
+                filter_init=UniformInit(), padding=0):
     return dict(filter_shape=filter_shape,
                 strides=strides,
                 padding=padding,
@@ -250,7 +250,7 @@ class Inception(object):
         """
         Builds an Inception model
         """
-
+        np.random.seed(1)
         # Input size is 299 x 299 x 3
         if mini:
             """
@@ -338,14 +338,14 @@ class Inception(object):
                                Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
                                Dropout(keep=0.8),
                                Convolution(name='main_final_conv1x1', **conv_params(filter_shape=(1, 1, 1000),
-                                                         activation=Softmax(), batch_norm=False))])
+                                                         activation=Softmax(enable_softmax_opt=False), batch_norm=False))])
 
             # Auxiliary classifier
             seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
                                   Convolution(name='aux_conv1x1_v1',**conv_params(filter_shape=(1, 1, 128))),
                                   Convolution(name='aux_conv5x5',**conv_params(filter_shape=(5, 5, 768))),
                                   Convolution(name='aux_conv1x1_v2',**conv_params(filter_shape=(1, 1, 1000),
-                                                            activation=Softmax(), batch_norm=False))])
+                                                            activation=Softmax(enable_softmax_opt=False), batch_norm=False))])
 
         self.seq1 = seq1
         self.seq2 = seq2

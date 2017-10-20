@@ -168,11 +168,11 @@ else:
 y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)[:,:,0]
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))[:,:,0,0]
 train_prob_main = ng.map_roles(train_prob_main, {"C": ax.Y.name})
-train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot)
+train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot, enable_softmax_opt=False)
 
 train_prob_aux = inception.seq_aux(inception.seq1(inputs['image']))
 train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})[:,:,0,0]
-train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot)
+train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot, enable_softmax_opt=False)
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
@@ -210,7 +210,7 @@ with Layer.inference_mode_on():
                                   axes=y_onehot.axes)
     """
     errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
-    eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot)
+    eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot, enable_softmax_opt=False)
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
     eval_computation = ng.computation([eval_loss, errors, inference_prob], "all")
 
@@ -298,15 +298,15 @@ with closing(ngt.make_transformer()) as transformer:
 
             # Save the training progression
             saved_losses['interval_loss'].append(interval_cost)
-            #if args.debug:
-            #    saved_losses['grads'] = grads_array
             pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0
 
         # If training loss wildly increases, stop training
         if( (iter_no/args.iter_interval) > 1):
+            # Check if the interval loss increases significantly
             stop_condition = saved_losses['interval_loss'][-1] > saved_losses['interval_loss'][-2] + .1 
-            stop_condition = np.sum(saved_losses['train_loss'][-10:] + np.log(1./1000)) < .01 
+            # Check if the past 100 iterations are very close to random guess loss
+            stop_condition = np.sum(np.abs(saved_losses['train_loss'][-50:] + np.log(1./1000))) < .01 
             if (stop_condition):
                 #Dump the weights in the last iter_interval iterations
                 for iterx in range(len(vars_array)/2):
