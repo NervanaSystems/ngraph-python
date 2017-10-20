@@ -71,6 +71,7 @@ class lr_policy_schedule(lr_policy):
     Learning rate drops at the provided iteration by multiplying with the gamma.
 
     Example:
+    .. code-block:: python
     # Learning Rate Policy
     learning_rate_policy = {'name': 'schedule',
                             'schedule': [1000, 2000],
@@ -159,7 +160,7 @@ class lr_policy_sigmoid(lr_policy):
         return self.base_lr * (1 / (1 + ng.exp(-self.gamma * (iteration - self.step_size))))
 
 
-class lr_policy_provided():
+class lr_policy_provided(object):
     """
     This learning policy allows providing learning rate to the graph as a placeholder.
     Arguments:
@@ -171,7 +172,7 @@ class lr_policy_provided():
     lr_ph = ng.placeholder(axes=(), initial_value=base_lr)
 
     # Optimizer
-    learning_rate_policy = {'name': 'dynamic',
+    learning_rate_policy = {'name': 'provided',
                             'lr_placeholder': lr_ph}
     """
     req_args = {'name', 'lr_placeholder'}
