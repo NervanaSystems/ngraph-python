@@ -25,12 +25,11 @@ import ngraph.transformers as ngt
 class WeightVariablesPass(object):
     def __init__(self, Computation, **kwargs):
         self.values = Computation.values
-        self.count = 0
         super(WeightVariablesPass, self).__init__(**kwargs)
 
     # collect and return a set of all AssignableTensorOp's      
     def do_pass(self):
-        nodes = set()
+        nodes = dict()
         frontier = set(self.values)
         visited = set()
 
@@ -40,10 +39,25 @@ class WeightVariablesPass(object):
                 tensor = op.tensor
                 if isinstance(tensor, ng.AssignableTensorOp):
                     if tensor.is_persistent:
-                        if tensor.is_trainable:
+                        if tensor.is_constant:
+                            pass
+                        elif tensor.is_placeholder:
+                            pass
+                        else:
                             #print(tensor.name)
-                            nodes.add(tensor)
-                            self.count = self.count + 1
+                            #print(type(tensor.name))
+                            #len_before = len(nodes)
+                            try:
+                                prev_op = nodes[tensor.name]
+                            except KeyError:
+                                prev_op = tensor
+                                nodes[tensor.name] = tensor
+                            assert prev_op == tensor
+                            #len_after = len(nodes)
+                            #if len_before == len_after:
+                            #    print("Rejected " + tensor.name)
+                            #else:
+                            #    print("Added " + tensor.name)
 
         while len(frontier) > 0:
             op = frontier.pop()
@@ -55,7 +69,6 @@ class WeightVariablesPass(object):
             for arg in op.all_deps:
                 if arg not in visited:
                     frontier.add(arg)
-        #print(self.count)
         return nodes
 
 
@@ -68,13 +81,21 @@ class Saver(object):
         weight_pass = WeightVariablesPass(Computation = self.Computation)
         self.saveVariables = weight_pass.do_pass()
         self.count = len(self.saveVariables)
+        #print(self.count)
+        #for name, op in self.saveVariables.items():
+        #    print(name)
         self.tensors = dict()
         # create save computations
         super(Saver, self).__init__(**kwargs)
         
     def save(self, Transformer=None):
-        for op in self.saveVariables:
-            self.tensors[op.name] = Transformer.computation(op)()
+        self.tensors = dict()
+        #print()
+        for name, op in self.saveVariables.items():
+            tensor = Transformer.computation(op)().copy()
+            self.tensors[name]=tensor
+            #print(name)
+            #print(tensor)
     
     def restore(self, Transformer=None, Computation=None):
         def find_ops(tensors, values):
@@ -87,9 +108,17 @@ class Saver(object):
                     tensor = op.tensor
                     if isinstance(tensor, ng.AssignableTensorOp):
                         if tensor.is_persistent:
-                            if tensor.is_trainable:
+                            if tensor.is_constant:
+                                pass
+                            elif tensor.is_placeholder:
+                                pass
+                            else:
                                 #print(tensor.name)
-                                nodes[op] = tensors[tensor.name]
+                                try:
+                                    nodes[tensor] = tensors[tensor.name]
+                                except KeyError:
+                                    print("Missing key: "+tensor.name)
+                                    pass
             while len(frontier) > 0:
                 op = frontier.pop()
                 add_op(op)
@@ -101,8 +130,10 @@ class Saver(object):
                     if arg not in visited:
                         frontier.add(arg)
             #print(self.count)
-            assert len(nodes) == self.count
+            #len(nodes) == self.count
             return nodes
         nodes = find_ops(self.tensors, Computation.values)
         for op, value in nodes.items():
+            #print(op)
+            #print(value)
             Transformer.computation(ng.AssignOp(op, value))()
