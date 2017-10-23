@@ -17,14 +17,12 @@ import os
 
 from orderedset import OrderedSet
 from six import itervalues, iteritems
-
 from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.transformers.base import Computation
 from ngraph.transformers.base import ComputationGraphTransformer
 from ngraph.transformers.base import make_transformer_factory
 from ngraph.transformers.hetr.mpilauncher import MPILauncher
-from ngraph.transformers.hetr.hetr_utils import get_available_ports
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import AxesUpdatePass
@@ -99,15 +97,19 @@ class HetrComputation(Computation):
             if isinstance(p, TensorValueOp):
                 p.metadata.update(p.states_read[0].metadata)
 
-        self.transformer.mpilauncher.launch(len(self.transformer.child_transformers))
-        self.transformer.setup_child_transformers()
+        # assume all children are the same type
+        # and all GPUs are in one chassis
+        num_process = len(self.transformer.child_transformers)
+        ppn = 1 if self.transformer.default_device == 'cpu' else num_process
+        self.transformer.mpilauncher.launch(num_process, ppn)
+        self.transformer.setup_child_transformers(num_process)
 
         def is_my_op(op, name):
             op_trans = op.metadata['transformer']
             return name == op_trans or name in op_trans
 
         # simplify by already having asynctrans made by passes
-        for idx, (t_name, trans) in enumerate(iteritems(self.transformer.child_transformers)):
+        for t_name, trans in iteritems(self.transformer.child_transformers):
             trans.build_transformer()
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation_op.parameters)
@@ -116,7 +118,7 @@ class HetrComputation(Computation):
                       if is_my_op(op, t_name)]
 
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
-            trans.create_computation(transform_ops, tuple([p for pos, p in my_params]), idx)
+            trans.create_computation(transform_ops, tuple([p for pos, p in my_params]))
             comp = trans.get_computation()
             comp.param_idx = [g_pos for g_pos, p in my_params]
 
@@ -168,11 +170,10 @@ class HetrTransformer(ComputationGraphTransformer):
     default_rtol = 1e-05
     default_atol = 1e-08
 
-    def __init__(self, device='gpu', num_devices=2, **kwargs):
+    def __init__(self, device='cpu', **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
-        if device == 'gpu':
-            os.environ["HETR_SERVER_GPU_NUM"] = str(num_devices)
+        self.default_device = device
         self.my_pid = os.getpid()
         self.is_closed = False
         self.child_transformers = dict()
@@ -182,10 +183,7 @@ class HetrTransformer(ComputationGraphTransformer):
                                               default_device_id=0),
                              CommunicationPass(self.send_nodes),
                              AxesUpdatePass()]
-
-        self.rpc_ports = get_available_ports()
-        self.rpc_port_idx = 0
-        self.mpilauncher = MPILauncher(self.rpc_ports)
+        self.mpilauncher = MPILauncher()
 
     def close(self):
         if self.is_closed:
@@ -212,11 +210,11 @@ class HetrTransformer(ComputationGraphTransformer):
                 trans_client = RPCTransformerClient(tname)
             self.child_transformers[tname] = trans_client
 
-    def setup_child_transformers(self):
+    def setup_child_transformers(self, num_servers):
         # expect that all child transformers have been already registered
         for tname, trans in iteritems(self.child_transformers):
             dev_id = int(tname[3:])
-            server_address = self.mpilauncher.get_address_by_rank(dev_id)
+            server_address = self.mpilauncher.get_address_by_rank(dev_id, num_servers)
             trans.set_server_address(server_address)
             logger.info("setup_child_transformers: dev_id %d, server_address %s",
                         dev_id, server_address)

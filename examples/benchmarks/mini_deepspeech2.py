@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import os
 import ngraph as ng
 from benchmark import Benchmark
 from examples.deepspeech.deepspeech import Deepspeech
@@ -58,7 +57,7 @@ def run_mini_ds2_benchmark(args, **kwargs):
             bprop_computation_op = ng.computation(mean_cost, "all")
 
         benchmark = Benchmark(bprop_computation_op, train_set, inputs, args.backend,
-                              args.hetr_device, len(device_id))
+                              args.hetr_device)
         Benchmark.print_benchmark_results(benchmark.time(args.num_iterations, args.skip_iter,
                                                          'ds2_bprop', args.visualize,
                                                          preprocess=True))
@@ -66,7 +65,7 @@ def run_mini_ds2_benchmark(args, **kwargs):
         fprop_computation_op = ng.computation(model_out, "all")
 
         benchmark_fprop = Benchmark(fprop_computation_op, train_set, inputs, args.backend,
-                                    args.hetr_device, len(device_id))
+                                    args.hetr_device)
         Benchmark.print_benchmark_results(benchmark_fprop.time(args.num_iterations, args.skip_iter,
                                                                'ds2_fprop', args.visualize,
                                                                preprocess=True))
@@ -115,8 +114,6 @@ if __name__ == "__main__":
 
     device_ids = [[str(device) for device in range(num_devices)]
                   for num_devices in args.num_devices]
-    if args.hetr_device == 'gpu':
-        os.environ["HETR_SERVER_NUM"] = str(len(device_ids[0]))
 
     ax.Y.length = args.nout
     ax.Y.name = "characters"

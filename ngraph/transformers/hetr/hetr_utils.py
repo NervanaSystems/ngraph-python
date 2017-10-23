@@ -220,11 +220,3 @@ def update_parallel_axis(root, parallel_axis):
 
         if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
             op.tensor._axes = set_parallel_axes(op.tensor.axes, parallel_axis)
-
-
-def get_available_ports():
-    import os
-    if "HETR_SERVER_PORTS" in os.environ:
-        return os.getenv("HETR_SERVER_PORTS")
-    else:
-        return ['52051', '52052', '52053', '52054', '52055', '52056', '52057', '52058']

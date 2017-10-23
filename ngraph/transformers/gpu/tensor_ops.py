@@ -28,6 +28,8 @@ import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 from pycuda.driver import event_flags
 
+import logging
+logger = logging.getLogger(__name__)
 
 SLEEP_S = 0.1
 ITEMS_PER_THREAD = 32
@@ -35,9 +37,6 @@ TAG_IPC = 11
 TAG_GATHER = 22
 TAG_SCATTER = 33
 TAG_DIRECT = 44
-
-# TUNDE TO DO: remove map function for converting strings and ints
-# try to do this once in the ops from the metadata and set the value as a variable to the op
 
 
 def bcast_ipc_handle(comm, handle=None):
@@ -338,13 +337,13 @@ class CudaScatterRecvKernel(GPUKernel):
         self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaScatterRecvKernel, self).bind_buffers()
         # get a handle to the send-buffer in the corresponding send-op
-        if self.op.is_root:
+        if self.comm.Get_rank() == 0:
             send_op_td = self.send_op.args[0].tensor_description()
             self.sender_buf = self.pointer_from_td(send_op_td)
         else:
             self.tnsr_ipc_hdl = bcast_ipc_handle(self.comm)
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-            self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+            self.sender_buf = int(self.tnsr_ipc_hdl) + self.comm.Get_rank() * chunk_size
 
     def execute(self):
         self.comm.barrier()
@@ -368,15 +367,18 @@ class CudaGatherSendKernel(GPUKernel):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherSendKernel, self).bind_buffers()
         # bind buffers for not root device
-        if not self.op.is_root:
+        if self.comm.Get_rank() > 0:
             self.tnsr_ipc_hdl = bcast_ipc_handle(self.comm)
-            chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-            self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+            if self.op.use_reduce:
+                self.recvr_buf = self.tnsr_ipc_hdl
+            else:
+                chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+                self.recvr_buf = int(self.tnsr_ipc_hdl) + self.comm.Get_rank() * chunk_size
 
     def execute(self):
         # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
         # is least contiguous.
-        if not self.op.is_root:
+        if self.comm.Get_rank() > 0:
             drv.memcpy_dtod(
                 self.recvr_buf,
                 self.tensor.tensor.gpudata,
@@ -428,7 +430,8 @@ class CudaAllReduceKernel(GPUKernel):
         super(CudaAllReduceKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
-        self.device_id = transformer.device_id
+        self.device_id = int(transformer.device_id)
+        self.device_ids = list(map(int, self.op.device_ids))
         self.event = drv.Event(flags=event_flags.INTERPROCESS | event_flags.DISABLE_TIMING)
         self.stream = drv.Stream()
         self.output_buff_dict = {}
@@ -459,13 +462,15 @@ class CudaAllReduceKernel(GPUKernel):
 
         # Broadcast handles to others
         msg = (self.device_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl)
-        self.comm.bcast(msg, root=self.device_id)
+        for i in self.device_ids:
+            if i == self.device_id:
+                self.comm.bcast(msg, root=i)
+            else:
+                (peer_id,
+                 output_ipc_hdl,
+                 scratch_ipc_hdl,
+                 event_ipc_hdl) = self.comm.bcast(None, root=i)
 
-        # Get handles from others
-        for i in map(int, self.op.device_ids):
-            if i != self.device_id:
-                (peer_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl) =\
-                    self.comm.bcast(msg, root=i)
                 output_hdl = drv.IPCMemoryHandle(output_ipc_hdl)
                 scratch_hdl = drv.IPCMemoryHandle(scratch_ipc_hdl)
                 event_hdl = drv.Event.from_ipc_handle(event_ipc_hdl)
@@ -480,7 +485,7 @@ class CudaAllReduceKernel(GPUKernel):
         self.input_tensor = self.tensor_view_from_td(self.op.args[0].tensor_description())
 
     def execute(self):
-        n_devs = len(self.op.device_ids)
+        n_devs = len(self.device_ids)
         size = self.input_tensor.tensor.size
         dtype = self.input_tensor.dtype
         segment_size = calculate_segment_size(size, n_devs)
@@ -497,8 +502,8 @@ class CudaAllReduceKernel(GPUKernel):
             size * dtype.itemsize)
 
         # Send each GPU its assigned segment
-        device_idx = self.op.device_ids.index(str(self.device_id))
-        for peer_idx, peer_id in enumerate(map(int, self.op.device_ids)):
+        device_idx = self.device_ids.index(self.device_id)
+        for peer_idx, peer_id in enumerate(self.device_ids):
             if (peer_id == self.device_id):
                 continue
 
@@ -535,7 +540,7 @@ class CudaAllReduceKernel(GPUKernel):
         self.comm.Barrier()
 
         # Wait for other GPUs events
-        for peer_id in map(int, self.op.device_ids):
+        for peer_id in self.device_ids:
             if (peer_id == self.device_id):
                 continue
             self.stream.wait_for_event(self.event_buff_dict[peer_id])
@@ -565,7 +570,7 @@ class CudaAllReduceKernel(GPUKernel):
                 kernel.prepared_async_call(grid_dim, block_dim, self.stream, *params)
 
                 # Send other GPUs this GPU's assigned segment
-                for peer_id in map(int, self.op.device_ids):
+                for peer_id in self.device_ids:
                     if (peer_id == self.device_id):
                         continue
 
@@ -581,7 +586,7 @@ class CudaAllReduceKernel(GPUKernel):
             self.comm.Barrier()
 
             # Wait for other GPUs events
-            for peer_id in map(int, self.op.device_ids):
+            for peer_id in self.device_ids:
                 if (peer_id == self.device_id):
                     continue
                 self.event_buff_dict[peer_id].synchronize()
@@ -605,7 +610,7 @@ class CudaAllReduceKernel(GPUKernel):
             self.comm.Barrier()
 
             # Wait for other GPUs events
-            for peer_id in map(int, self.op.device_ids):
+            for peer_id in self.device_ids:
                 if (peer_id == self.device_id):
                     continue
                 self.event_buff_dict[peer_id].synchronize()

@@ -216,7 +216,6 @@ def test_allreduce_hint(hetr_device, config):
     if hetr_device == 'gpu':
         if 'gpu' not in ngt.transformer_choices():
             pytest.skip("GPUTransformer not available")
-        pytest.xfail()
 
     input = config['input']
     device_id = config['device_id']
@@ -241,37 +240,27 @@ def test_allreduce_hint(hetr_device, config):
 
 @pytest.mark.multi_device
 @pytest.mark.hetr_only
-@pytest.mark.parametrize('config', [
-    {
-        'input': 1,
-        # TODO: Issue #2254 - Cleanup string device_id
-        'device_id': ('0', '1'),
-        'result_two': [[4.0, 4.0, 4.0, 4.0],
-                       [4.0, 4.0, 4.0, 4.0]],
-        'result_one': [[2.0, 2.0, 2.0, 2.0],
-                       [2.0, 2.0, 2.0, 2.0]],
-    },
-])
-def test_multiple_gather_ops(config, hetr_device):
+def test_multiple_gather_ops(hetr_device):
     if hetr_device == 'gpu':
         if 'gpu' not in ngt.transformer_choices():
             pytest.skip("GPUTransformer not available")
-        pytest.xfail()
-    input = config['input']
-    device_id = config['device_id']
+        pytest.xfail("Failure due to gather recv tensor being returned in wrong shape, "
+                     " possible mismatch between op layout and op.tensor layout")
 
     H = ng.make_axis(length=2, name='height')
     W = ng.make_axis(length=4, name='width')
     x = ng.placeholder(axes=[H, W])
-    with ng.metadata(device_id=device_id, parallel=W):
+    with ng.metadata(device_id=('0', '1'), parallel=W):
         x_plus_one = x + 1
-        x_plus_two = x_plus_one + 2
-    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as hetr:
-        plus = hetr.computation([x_plus_two, x_plus_one], x)
-        result_two, result_one = plus(input)
+        x_mul_two = x_plus_one * 2
 
-        np.testing.assert_array_equal(result_two, config['result_two'])
-        np.testing.assert_array_equal(result_one, config['result_one'])
+    input = np.random.randint(100, size=x.axes.lengths)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as hetr:
+        plus = hetr.computation([x_mul_two, x_plus_one], x)
+        result_mul_two, result_plus_one = plus(input)
+
+        np.testing.assert_array_equal(result_plus_one, input + 1)
+        np.testing.assert_array_equal(result_mul_two, (input + 1) * 2)
 
 
 @pytest.mark.hetr_gpu_only

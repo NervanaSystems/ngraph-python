@@ -115,6 +115,8 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 if self.transformer.runtime and \
                    not self.transformer.runtime.ctx == drv.Context.get_current():
                     self.transformer.runtime.ctx.push()
+                # TODO figure out doc for rpdb to pass in port
+                # give unique port per device (4444 + device_id)
                 outputs = computation(*values)
                 self.transformer.runtime.ctx.pop()
             else:

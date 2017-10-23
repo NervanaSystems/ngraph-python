@@ -47,13 +47,12 @@ class Benchmark(object):
 
     marker = Mark()
 
-    def __init__(self, computation, train_set, inputs, transformer, device, num_devices):
+    def __init__(self, computation, train_set, inputs, transformer, device):
         self.computation = computation
         self.train_set = train_set
         self.inputs = inputs
         self.transformer = transformer
         self.device = device
-        self.num_devices = num_devices
 
     def fill_feed_dict(self, dataset, feed_inputs, preprocess=False):
         data = next(iter(dataset))
@@ -90,7 +89,6 @@ class Benchmark(object):
         t_args = {}
         if self.transformer == 'hetr':
             t_args['device'] = self.device
-            t_args['num_devices'] = self.num_devices
         with closing(ngt.make_transformer_factory(self.transformer, **t_args)()) as transformer:
             if visualize:
                 nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,

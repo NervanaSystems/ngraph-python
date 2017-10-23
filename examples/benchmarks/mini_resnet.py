@@ -19,8 +19,8 @@ python examples/benchmarks/mini_resnet.py -data cifar10 -b hetr -d cpu -m 2 -z 6
 """
 from __future__ import division
 from __future__ import print_function
-from benchmark import Benchmark
-from fake_data_generator import generate_data
+from .benchmark import Benchmark
+from .fake_data_generator import generate_data
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
@@ -133,14 +133,14 @@ def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
             batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
             batch_cost_computation_op = ng.computation(batch_cost, "all")
         benchmark = Benchmark(batch_cost_computation_op, train_set, inputs,
-                              transformer_type, device, len(device_id))
+                              transformer_type, device)
         Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
                                                          dataset + '_msra_bprop',
                                                          visualize, 'device_id'))
     else:
         fprop_computation_op = ng.computation(model_out, 'all')
         benchmark = Benchmark(fprop_computation_op, train_set, inputs,
-                              transformer_type, device, len(device_id))
+                              transformer_type, device)
         Benchmark.print_benchmark_results(benchmark.time(num_iterations, n_skip,
                                                          dataset + '_msra_fprop',
                                                          visualize))
