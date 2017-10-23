@@ -73,9 +73,8 @@ class Saver(object):
         super(Saver, self).__init__(**kwargs)
         
     def save(self, Transformer=None):
-        with closing(ngt.make_transformer()) as transformer:
-            for op in self.saveVariables:
-                self.tensors[op.name] = transformer.computation(op)()
+        for op in self.saveVariables:
+            self.tensors[op.name] = Transformer.computation(op)()
     
     def restore(self, Transformer=None, Computation=None):
         def find_ops(tensors, values):
@@ -104,7 +103,6 @@ class Saver(object):
             #print(self.count)
             assert len(nodes) == self.count
             return nodes
-        with closing(ngt.make_transformer()) as transformer:
-            nodes = find_ops(self.tensors, Computation.values)
-            for op, value in nodes.items():
-                transformer.computation(ng.AssignOp(op, value))()
+        nodes = find_ops(self.tensors, Computation.values)
+        for op, value in nodes.items():
+            Transformer.computation(ng.AssignOp(op, value))()
