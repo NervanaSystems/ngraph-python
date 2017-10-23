@@ -153,10 +153,10 @@ class HetrComputation(Computation):
             return_vals.update(child.get_results())
         if isinstance(self.computation_op.returns, Op):
             return return_vals[self.computation_op.returns]
+        elif isinstance(self.computation_op.returns, (collections.Sequence, OrderedSet)):
+            return tuple(return_vals[op] for op in self.computation_op.returns)
         elif isinstance(self.computation_op.returns, collections.Set):
             return return_vals
-        elif isinstance(self.computation_op.returns, collections.Sequence):
-            return tuple(return_vals[op] for op in self.computation_op.returns)
         else:
             return None
 
