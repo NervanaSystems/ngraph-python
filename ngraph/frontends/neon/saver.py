@@ -14,20 +14,17 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 from __future__ import division, print_function, absolute_import
-import six
-from contextlib import contextmanager
-from contextlib import closing
 
 import ngraph as ng
-import ngraph.transformers as ngt
 from ngraph.frontends.neon.saverfile import SaverFile
+
 
 class WeightVariablesPass(object):
     def __init__(self, Computation, **kwargs):
         self.values = Computation.values
         super(WeightVariablesPass, self).__init__(**kwargs)
 
-    # collect and return a set of all AssignableTensorOp's      
+    # collect and return a set of all AssignableTensorOp's
     def do_pass(self):
         nodes = dict()
         frontier = set(self.values)
@@ -64,30 +61,31 @@ class WeightVariablesPass(object):
 
 
 class Saver(object):
-    def __init__(self, Computation=None, Ops=None,**kwargs):
+    def __init__(self, Computation=None, Ops=None, **kwargs):
         self.Computation = Computation
         self.Ops = Ops
         # Traverse computation graph and extract persistent tensors and unique op instance name
-        weight_pass = WeightVariablesPass(Computation = self.Computation)
+        weight_pass = WeightVariablesPass(Computation=self.Computation)
         self.saveVariables = weight_pass.do_pass()
         self.count = len(self.saveVariables)
         # create save computations
         super(Saver, self).__init__(**kwargs)
-        
+
     def save(self, Transformer=None, Name="weights"):
         tensors = dict()
         for name, op in self.saveVariables.items():
             tensor = Transformer.computation(op)().copy()
-            tensors[name]=tensor
+            tensors[name] = tensor
         # write dictionary to file
         savefile = SaverFile(Name)
         savefile.write_values(tensors)
-    
+
     def restore(self, Transformer=None, Computation=None, Name="weights"):
         def find_ops(tensors, values):
             nodes = dict()
             frontier = set(values)
             visited = set()
+
             # gather presistent and trainable AssignableTensorOp's
             def add_op(op):
                 if isinstance(op, ng.TensorValueOp):
@@ -102,7 +100,7 @@ class Saver(object):
                                 try:
                                     nodes[tensor] = tensors[tensor.name]
                                 except KeyError:
-                                    print("Warning: Missing weight in save file: "+tensor.name)
+                                    print("Warning: Missing weight in save file: " + tensor.name)
                                     pass
             while len(frontier) > 0:
                 op = frontier.pop()

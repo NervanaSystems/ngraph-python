@@ -25,6 +25,7 @@ from resnet import BuildResnet
 from contextlib import closing
 from ngraph.frontends.neon import Saver
 
+
 # Result collector
 def loop_eval(dataset, computation, metric_names):
     dataset.reset()
@@ -198,15 +199,17 @@ with closing(ngt.make_transformer()) as transformer:
             wr.writerow(test_result)
             wr.writerow(err_result)
     print("\nTraining Completed")
-    
+
     print("\nTesting weight save/loading")
     # Save weights at end of training
     weight_saver.save(Transformer=transformer)
 
 with Layer.inference_mode_on():
     restore_inference_prob = resnet(input_ph['image'])
-    restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]), label_indices)
-    restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob, ng.one_hot(label_indices, axis=ax.Y))
+    restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]),
+                                  label_indices)
+    restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob,
+                                               ng.one_hot(label_indices, axis=ax.Y))
     restore_eval_loss_names = ['cross_ent_loss', 'misclass']
     restore_eval_computation = ng.computation([restore_eval_loss, restore_errors], "all")
 

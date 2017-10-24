@@ -13,24 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-import os
 import numpy as np
+
 
 class SaverFile(object):
     def __init__(self, Name="weights"):
         self.Name = Name
         super(SaverFile, self).__init__()
-    
+
     def write_values(self, tensors):
         np.savez(self.Name, **tensors)
 
     def read_values(self):
         tensors = dict()
-        filename = self.Name+".npz"
+        filename = self.Name + ".npz"
         with np.load(filename) as npzfile:
             for file in npzfile.files:
                 tensors[file] = npzfile[file]
         return tensors
-
-
-        
