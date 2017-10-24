@@ -20,7 +20,7 @@ from contextlib import closing
 
 import ngraph as ng
 import ngraph.transformers as ngt
-#import SaverFile as sf
+from ngraph.frontends.neon.saverfile import SaverFile
 
 class WeightVariablesPass(object):
     def __init__(self, Computation, **kwargs):
@@ -44,21 +44,12 @@ class WeightVariablesPass(object):
                         elif tensor.is_placeholder:
                             pass
                         else:
-                            #print(tensor.name)
-                            #print(type(tensor.name))
-                            #len_before = len(nodes)
                             try:
                                 prev_op = nodes[tensor.name]
                             except KeyError:
                                 prev_op = tensor
                                 nodes[tensor.name] = tensor
                             assert prev_op == tensor
-                            #len_after = len(nodes)
-                            #if len_before == len_after:
-                            #    print("Rejected " + tensor.name)
-                            #else:
-                            #    print("Added " + tensor.name)
-
         while len(frontier) > 0:
             op = frontier.pop()
             add_op(op)
@@ -73,31 +64,26 @@ class WeightVariablesPass(object):
 
 
 class Saver(object):
-    def __init__(self, Name="Weights", Computation=None, Ops=None,**kwargs):
-        self.Name = Name
+    def __init__(self, Computation=None, Ops=None,**kwargs):
         self.Computation = Computation
         self.Ops = Ops
         # Traverse computation graph and extract persistent tensors and unique op instance name
         weight_pass = WeightVariablesPass(Computation = self.Computation)
         self.saveVariables = weight_pass.do_pass()
         self.count = len(self.saveVariables)
-        #print(self.count)
-        #for name, op in self.saveVariables.items():
-        #    print(name)
-        self.tensors = dict()
         # create save computations
         super(Saver, self).__init__(**kwargs)
         
-    def save(self, Transformer=None):
-        self.tensors = dict()
-        #print()
+    def save(self, Transformer=None, Name="weights"):
+        tensors = dict()
         for name, op in self.saveVariables.items():
             tensor = Transformer.computation(op)().copy()
-            self.tensors[name]=tensor
-            #print(name)
-            #print(tensor)
+            tensors[name]=tensor
+        # write dictionary to file
+        savefile = SaverFile(Name)
+        savefile.write_values(tensors)
     
-    def restore(self, Transformer=None, Computation=None):
+    def restore(self, Transformer=None, Computation=None, Name="weights"):
         def find_ops(tensors, values):
             nodes = dict()
             frontier = set(values)
@@ -113,11 +99,10 @@ class Saver(object):
                             elif tensor.is_placeholder:
                                 pass
                             else:
-                                #print(tensor.name)
                                 try:
                                     nodes[tensor] = tensors[tensor.name]
                                 except KeyError:
-                                    print("Missing key: "+tensor.name)
+                                    print("Warning: Missing weight in save file: "+tensor.name)
                                     pass
             while len(frontier) > 0:
                 op = frontier.pop()
@@ -129,11 +114,10 @@ class Saver(object):
                 for arg in op.all_deps:
                     if arg not in visited:
                         frontier.add(arg)
-            #print(self.count)
-            #len(nodes) == self.count
             return nodes
-        nodes = find_ops(self.tensors, Computation.values)
+        # load weight from file to tensors
+        savefile = SaverFile(Name)
+        tensors = savefile.read_values()
+        nodes = find_ops(tensors, Computation.values)
         for op, value in nodes.items():
-            #print(op)
-            #print(value)
             Transformer.computation(ng.AssignOp(op, value))()
