@@ -193,7 +193,7 @@ def serve():
     comm = MPI.COMM_WORLD
 
     options = [('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)]
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10), options=options)
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=options)
     hetr_pb2_grpc.add_HetrServicer_to_server(HetrServer(comm, server), server)
     logger.info("server: rank %d, tmpfile %s, ports %s",
                 comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
