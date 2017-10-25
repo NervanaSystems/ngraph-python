@@ -16,7 +16,7 @@
 
 """
 Usage:
-export CUDA_VISIBLE_DEVICES=3; python ./inceptionv3.py -b gpu --mini -z 8 --optimizer_name rmsprop
+python ./inceptionv3.py -b gpu --mini --optimizer_name rmsprop
 
 Inception v3 network based on:
 https://github.com/tensorflow/models/blob/master/slim/nets/inception_v3.py
@@ -39,33 +39,12 @@ import inception
 
 def scale_set(image_set):
     """
-    Given a batch of images, normalizes each image by subtracting the mean
-    And dividing by the standard deviation
-    Mean/Std is calculated for each image separately, among its pixels
-    Mean/Std is calculated for each channel separately
+    Given a batch of images, normalizes each image by converting pixels to [-1, +1]
     image_set: (batch_size, C, H, W)
     returns: scaled image_set (batch_size, C, H, W)
     """
-    # Means [123.68, 116.779, 103.939]
+    # Global means of imagenet channels [123.68, 116.779, 103.939]
     return 2.*((image_set / 255.) - 0.5) 
-    means = np.mean(image_set, axis=(2,3))
-    stds = np.std(image_set, axis=(2,3))
- 
-    # Matrix that contains per channel means 
-    sub_factor = means.reshape(image_set.shape[0],image_set.shape[1],1,1)
-    sub_factor = np.repeat(sub_factor, image_set.shape[2], axis=2) 
-    sub_factor = np.repeat(sub_factor, image_set.shape[3], axis=3) 
-
-    # Matrix that contains per channel stds
-    scale_factor = stds.reshape(image_set.shape[0],image_set.shape[1],1,1)
-    scale_factor = np.repeat(scale_factor, image_set.shape[2], axis=2) 
-    scale_factor = np.repeat(scale_factor, image_set.shape[3], axis=3) 
-    scale_factor = (3*scale_factor + 1e-5)
-
-    scaled_image = (image_set - sub_factor)/ (scale_factor)
-    #scaled_image = scaled_image + 0.5
-    #return scaled_image
-    #return (image_set - sub_factor) / 255.
 
 def eval_loop(dataset, computation, metric_names):
     """
@@ -93,10 +72,6 @@ def eval_loop(dataset, computation, metric_names):
 
 
 parser = NgraphArgparser(description=__doc__)
-parser.add_argument('--debug', default=False, dest='debug', action='store_true',
-                    help='Saves additional variables for debugging')
-parser.add_argument('--save_grads', default=False, dest='save_grads', action='store_true',
-                    help='Saves gradients for debugging')
 parser.add_argument('--mini', default=False, dest='mini', action='store_true',
                     help='If given, builds a mini version of Inceptionv3')
 parser.add_argument("--image_dir", default='/dataset/aeon/I1K/i1k-extracted/',
@@ -107,7 +82,6 @@ parser.add_argument("--valid_manifest_file", default='val-index-tabbed.csv',
                     help="Name of tab separated Aeon validation manifest file")
 parser.add_argument("--optimizer_name", default='rmsprop',
                     help="Name of optimizer (rmsprop or sgd)")
-parser.add_argument('--grad_clip', type=float, default=None, help="Gradient Clip Value")
 parser.set_defaults(batch_size=4, num_iterations=10000000, iter_interval=2000)
 args = parser.parse_args()
 
@@ -141,7 +115,6 @@ if args.optimizer_name == 'sgd':
 
     optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                         momentum_coef=0.5,
-                                        gradient_clip_norm=args.grad_clip,
                                         wdecay=4e-5,
                                         iteration=inputs['iteration'])
 elif args.optimizer_name == 'rmsprop': 
@@ -151,20 +124,11 @@ elif args.optimizer_name == 'rmsprop':
                             'base_lr': 0.01}
     optimizer = RMSProp(learning_rate=learning_rate_policy, 
                         wdecay=4e-5, decay_rate=0.9, momentum_coef = 0.9,
-                        gradient_clip_norm=args.grad_clip, epsilon=1., iteration=inputs['iteration'])
-
-elif args.optimizer_name == 'adam': 
-    learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(80000*np.arange(1, 10, 1)),
-                            'gamma': 0.94,
-                            'base_lr': 0.001}
-    optimizer = Adam(learning_rate=learning_rate_policy, 
-                     gradient_clip_norm=args.grad_clip, epsilon=1., iteration=inputs['iteration'])
+                        epsilon=1., iteration=inputs['iteration'])
 else:
     raise NotImplementedError("Unrecognized Optimizer")
 
 # Build the main and auxiliary loss functions
-#y_onehot = ng.one_hot(inputs['label'][:, 0], axis=ax.Y)
 y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)[:,:,0]
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))[:,:,0,0]
 train_prob_main = ng.map_roles(train_prob_main, {"C": ax.Y.name})
@@ -176,27 +140,8 @@ train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot, enable_softmax
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
-if args.debug:
-    names_seq1, vars_seq1 = zip(*inception.seq1.variables.items())
-    names_seq2, vars_seq2 = zip(*inception.seq2.variables.items())
-    names_seqaux, vars_seqaux = zip(*inception.seq_aux.variables.items())
-    names_all = names_seq1 + names_seq2 + names_seqaux
-    vars_all = vars_seq1 + vars_seq2 + vars_seqaux
-    vars_computation = ng.computation([v for v in vars_all])
-    train_computation = ng.computation([batch_cost, train_prob_main, train_prob_aux], 'all')
-    vars_array = [1e9]*2*args.iter_interval
-    if args.save_grads:
-        saved_grad_idx = range(len(vars_seq1)+len(vars_seq2)-8, len(vars_seq1)+len(vars_seq2))
-        saved_grads = [vars_all[i] for i in saved_grad_idx] 
-        derivs = [ng.deriv(ng.sum(train_loss_main,out_axes=()), v) for v in saved_grads]
-        grad_names = [names_all[i] for i in saved_grad_idx]
-        grad_computation = ng.computation(derivs,"all")
-        grads_array = [1e9]*2*args.iter_interval
-    train_main_outs = [1e9]*2*args.iter_interval
-    train_aux_outs = [1e9]*2*args.iter_interval
-else:
-    train_computation = ng.computation([batch_cost], 'all')
-#label_indices = inputs['label'][:, 0]
+
+train_computation = ng.computation([batch_cost], 'all')
 label_indices = inputs['label']
 
 # Build the computations for inference (evaluation)
@@ -205,10 +150,6 @@ with Layer.inference_mode_on():
     slices = [0 if cx.name in ("H", "W") else slice(None) for cx in inference_prob.axes]
     inference_prob = ng.tensor_slice(inference_prob, slices)
     inference_prob = ng.map_roles(inference_prob, {"C": "Y"})
-    """
-    inference_prob = ng.cast_role(inception.seq2(inception.seq1(inputs['image']))[:, 0, 0, 0, :],
-                                  axes=y_onehot.axes)
-    """
     errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
     eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot, enable_softmax_opt=False)
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
@@ -217,10 +158,6 @@ with Layer.inference_mode_on():
 with closing(ngt.make_transformer()) as transformer:
     train_function = transformer.add_computation(train_computation)
     eval_function = transformer.add_computation(eval_computation)
-    if args.debug:
-        vars_function = transformer.add_computation(vars_computation)
-        if args.save_grads:
-            grads_function = transformer.add_computation(grad_computation)
 
     if args.no_progress_bar:
         ncols = 0
@@ -233,48 +170,16 @@ with closing(ngt.make_transformer()) as transformer:
                     'eval_misclass': [], 'iteration': [], 'grads': [],
                     'interval_loss': [], 'vars': []}
 
-    # Return class labels to double check aeon
-    # gt_labels = return_labels(args.train_manifest_file)
-
     for iter_no, data in enumerate(train_set):
         data = dict(data)
         data['iteration'] = iter_no
        
-        """ 
-        # Double check aeon labels
-        aeon_good = list(data['label']) == gt_labels[iter_no*args.batch_size: (iter_no+1)*args.batch_size]
-        if not aeon_good:
-            import pdb; pdb.set_trace()
-        """
-
-        # Scale the image to [0., .1]
-        
-        #from PIL import Image
-        #imgs = [Image.fromarray(data['image'][i].swapaxes(0,2)[:,:,[2,1,0]], 'RGB') for i in range(args.batch_size)]
-        #for i in range(len(imgs)): imgs[i].save('image%d.png' % i)
+        # Scale the image to [-1., .1]
         orig_image = np.copy(data['image'])
         data['image'] = scale_set(data['image'])
-        #data['label'] = data['label'].reshape((args.batch_size, 1))
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
-        if args.debug:
-            output, main_out, aux_out = train_function(feed_dict=feed_dict)
-            varx = vars_function(feed_dict=feed_dict)
-            output = float(output)
-            # Mean grads over channel and batch axis
-            #grads = np.mean(grads, axis=(0,1)).astype(np.float32)
-            if args.save_grads:
-                grads = grads_function(feed_dict=feed_dict)
-                grads_array.pop(2*args.iter_interval-1)
-                grads_array.insert(0, grads)
-            vars_array.pop(2*args.iter_interval-1)
-            vars_array.insert(0, varx)
-            train_main_outs.pop(2*args.iter_interval-1)
-            train_main_outs.insert(0, main_out)
-            train_aux_outs.pop(2*args.iter_interval-1)
-            train_aux_outs.insert(0, aux_out)
-        else:
-            output = train_function(feed_dict=feed_dict)
-            output = float(output[0])
+        output = train_function(feed_dict=feed_dict)
+        output = float(output[0])
 
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output))
@@ -291,37 +196,12 @@ with closing(ngt.make_transformer()) as transformer:
                            iteration=iter_no,
                            cost=interval_cost))
             # Calculate inference on the evaluation set
-            # all_results, eval_losses = eval_loop(valid_set, eval_function, eval_loss_names)
-            # predictions = all_results['predictions']
-            # saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
-            # saved_losses['eval_misclass'].append(eval_losses['misclass'])
+            all_results, eval_losses = eval_loop(valid_set, eval_function, eval_loss_names)
+            predictions = all_results['predictions']
+            saved_losses['eval_loss'].append(eval_losses['cross_ent_loss'])
+            saved_losses['eval_misclass'].append(eval_losses['misclass'])
 
             # Save the training progression
             saved_losses['interval_loss'].append(interval_cost)
             pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0
-
-        # If training loss wildly increases, stop training
-        if( (iter_no/args.iter_interval) > 1):
-            # Check if the interval loss increases significantly
-            stop_condition = saved_losses['interval_loss'][-1] > saved_losses['interval_loss'][-2] + .1 
-            # Check if the past 100 iterations are very close to random guess loss
-            stop_condition = np.sum(np.abs(saved_losses['train_loss'][-50:] + np.log(1./1000))) < .01 
-            if (stop_condition):
-                #Dump the weights in the last iter_interval iterations
-                for iterx in range(len(vars_array)/2):
-                    with open('./debug/weights_%d.txt' % iterx,'a') as f_handle:
-                     for wx in range(len(vars_array[0])):
-                      np.savetxt(f_handle, vars_array[iterx][wx].flatten(), fmt='%.3f', newline=' ', header=names_all[wx])
-                      f_handle.write('\n')
-                #Dump the grads in the last iter_interval iterations
-                for iterx in range(len(grads_array)/2):
-                    with open('./debug/grads_%d.txt' % iterx,'a') as f_handle:
-                     for wx in range(len(grads_array[0])):
-                      np.savetxt(f_handle, grads_array[iterx][wx].flatten(), fmt='%.3f', newline=' ', header=grad_names[wx])
-                      f_handle.write('\n')
-                print('Train Loss increased significantly!')
-                import pdb; pdb.set_trace()
-
-
-print('\n')
