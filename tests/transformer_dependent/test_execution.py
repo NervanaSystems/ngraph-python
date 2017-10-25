@@ -467,11 +467,7 @@ def test_elementwise_unary_ops_matched_args(elementwise_unary_op, symmetric_tens
         ng.testing.assert_allclose(dudunum, dudut, atol=1e-3, rtol=1e-3)
 
 
-def test_elementwise_ops_unmatched_args(
-    transformer_factory,
-    elementwise_binary_op,
-    batch_axis
-):
+def test_elementwise_ops_unmatched_args(elementwise_binary_op, batch_axis):
     """TODO."""
     W = ng.make_axis(length=5)
     H = ng.make_axis(length=5)
