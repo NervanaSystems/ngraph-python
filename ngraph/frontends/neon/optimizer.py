@@ -337,7 +337,7 @@ class RMSProp(LearningRateOptimizer):
         gradient_clip_value=None,
         weight_clip_value=None,
         wdecay=0.0,
-        momentum_coef=0.0, 
+        momentum_coef=0.0,
         **kwargs
     ):
         super(RMSProp, self).__init__(learning_rate=learning_rate,
@@ -362,7 +362,7 @@ class RMSProp(LearningRateOptimizer):
         updates = ng.sequential([
             ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
             ng.assign(velocity, velocity * self.momentum +
-                                (self.lrate * scale_factor * grad / ng.sqrt(state + epsilon))),
+                      (self.lrate * scale_factor * grad / ng.sqrt(state + epsilon))),
             ng.assign(variable, variable - self.lrate * self.wdecay * variable - velocity)
         ])
         return updates

@@ -37,6 +37,7 @@ from ngraph.util.names import name_scope
 from data import make_aeon_loaders, return_labels
 import inception
 
+
 def scale_set(image_set):
     """
     Given a batch of images, normalizes each image by converting pixels to [-1, +1]
@@ -44,7 +45,8 @@ def scale_set(image_set):
     returns: scaled image_set (batch_size, C, H, W)
     """
     # Global means of imagenet channels [123.68, 116.779, 103.939]
-    return 2.*((image_set / 255.) - 0.5) 
+    return 2. * ((image_set / 255.) - 0.5)
+
 
 def eval_loop(dataset, computation, metric_names):
     """
@@ -109,7 +111,7 @@ inception = inception.Inception(mini=args.mini)
 # Declare the optimizer
 if args.optimizer_name == 'sgd':
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(7000*np.arange(1, 10, 1)),
+                            'schedule': list(7000 * np.arange(1, 10, 1)),
                             'gamma': 0.7,
                             'base_lr': 0.1}
 
@@ -117,25 +119,25 @@ if args.optimizer_name == 'sgd':
                                         momentum_coef=0.5,
                                         wdecay=4e-5,
                                         iteration=inputs['iteration'])
-elif args.optimizer_name == 'rmsprop': 
+elif args.optimizer_name == 'rmsprop':
     learning_rate_policy = {'name': 'schedule',
-                            'schedule': list(80000*np.arange(1, 10, 1)),
+                            'schedule': list(80000 * np.arange(1, 10, 1)),
                             'gamma': 0.94,
                             'base_lr': 0.01}
-    optimizer = RMSProp(learning_rate=learning_rate_policy, 
-                        wdecay=4e-5, decay_rate=0.9, momentum_coef = 0.9,
+    optimizer = RMSProp(learning_rate=learning_rate_policy,
+                        wdecay=4e-5, decay_rate=0.9, momentum_coef=0.9,
                         epsilon=1., iteration=inputs['iteration'])
 else:
     raise NotImplementedError("Unrecognized Optimizer")
 
 # Build the main and auxiliary loss functions
-y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)[:,:,0]
-train_prob_main = inception.seq2(inception.seq1(inputs['image']))[:,:,0,0]
+y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)[:, :, 0]
+train_prob_main = inception.seq2(inception.seq1(inputs['image']))[:, :, 0, 0]
 train_prob_main = ng.map_roles(train_prob_main, {"C": ax.Y.name})
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot, enable_softmax_opt=False)
 
 train_prob_aux = inception.seq_aux(inception.seq1(inputs['image']))
-train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})[:,:,0,0]
+train_prob_aux = ng.map_roles(train_prob_aux, {"C": ax.Y.name})[:, :, 0, 0]
 train_loss_aux = ng.cross_entropy_multi(train_prob_aux, y_onehot, enable_softmax_opt=False)
 
 batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
@@ -173,10 +175,11 @@ with closing(ngt.make_transformer()) as transformer:
     for iter_no, data in enumerate(train_set):
         data = dict(data)
         data['iteration'] = iter_no
-       
+
         # Scale the image to [-1., .1]
         orig_image = np.copy(data['image'])
         data['image'] = scale_set(data['image'])
+        data['label'] = data['label'].reshape((args.batch_size, 1))
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output = train_function(feed_dict=feed_dict)
         output = float(output[0])
@@ -203,5 +206,8 @@ with closing(ngt.make_transformer()) as transformer:
 
             # Save the training progression
             saved_losses['interval_loss'].append(interval_cost)
-            pickle.dump(saved_losses, open("losses_%s_%s.pkl" % (args.optimizer_name, args.backend), "wb"))
+            pickle.dump(
+                saved_losses, open(
+                    "losses_%s_%s.pkl" %
+                    (args.optimizer_name, args.backend), "wb"))
             interval_cost = 0.0

@@ -29,10 +29,10 @@ from __future__ import print_function
 from contextlib import closing
 import numpy as np
 import ngraph as ng
-from ngraph.frontends.neon import Layer, Affine, Preprocess, Sequential, Softmax, Convolution
+from ngraph.frontends.neon import Layer, Affine, Preprocess, Sequential
 from ngraph.frontends.neon import GaussianInit, Rectlin, Logistic, GradientDescentMomentum
 from ngraph.frontends.neon import ax, loop_train, make_bound_computation, make_default_callbacks
-from ngraph.frontends.neon import NgraphArgparser, Pooling
+from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 
 from ngraph.frontends.neon import MNIST
@@ -51,42 +51,38 @@ valid_set = ArrayIterator(valid_data, args.batch_size)
 inputs = train_set.make_placeholders()
 ax.Y.length = 10
 
-np.random.seed(1)
+
 ######################
 # Model specification
 seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
-                   Convolution(filter_shape=(3, 3, 15), padding = 1, batch_norm=True, filter_init=GaussianInit(), activation=Rectlin()),
-                   Pooling(pool_shape=(4, 4), padding=0, strides=4, pool_type='avg'),
-                   Convolution(filter_shape=(3, 3, 15), padding = 1, batch_norm=False, filter_init=GaussianInit(), activation=Rectlin()),
-                   Pooling(pool_shape=(7, 7), padding=0, pool_type='avg'),
-                   Convolution(filter_shape=(1, 1, 10), padding = 0, filter_init=GaussianInit(), activation=Softmax())])
+                   Affine(nout=100, weight_init=GaussianInit(), activation=Rectlin()),
+                   Affine(axes=ax.Y, weight_init=GaussianInit(), activation=Logistic())])
 
 optimizer = GradientDescentMomentum(0.1, 0.9)
 train_prob = seq1(inputs['image'])
-train_prob= train_prob[:,:,0,0]
-train_prob = ng.map_roles(train_prob, {"C": ax.Y.name})
-train_loss = ng.cross_entropy_multi(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+train_loss = ng.cross_entropy_binary(train_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_outputs = dict(batch_cost=batch_cost)
 
 with Layer.inference_mode_on():
-    inference_prob = seq1(inputs['image'])[:,:,0,0]
-inference_prob = ng.map_roles(inference_prob, {"C": ax.Y.name})
+    inference_prob = seq1(inputs['image'])
 errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), inputs['label'])
-eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y))
+eval_loss = ng.cross_entropy_binary(inference_prob, ng.one_hot(inputs['label'], axis=ax.Y))
 eval_outputs = dict(cross_ent_loss=eval_loss, misclass_pct=errors)
 
 # Now bind the computations we are interested in
 with closing(ngt.make_transformer()) as transformer:
     train_computation = make_bound_computation(transformer, train_outputs, inputs)
     loss_computation = make_bound_computation(transformer, eval_outputs, inputs)
-    
-    interval_cost = 0.
-    for iter_no, data in enumerate(train_set):
-        iter_cost = train_computation(data)
-        interval_cost += iter_cost['batch_cost']
-        if (iter_no+1) % args.iter_interval == 0:
-            interval_cost = interval_cost / args.iter_interval
-            print("Iteration:%d, Interval Cost: %.5e" % (iter_no, interval_cost))
-            interval_cost = 0.
+
+    cbs = make_default_callbacks(transformer=transformer,
+                                 output_file=args.output_file,
+                                 frequency=args.iter_interval,
+                                 train_computation=train_computation,
+                                 total_iterations=args.num_iterations,
+                                 eval_set=valid_set,
+                                 loss_computation=loss_computation,
+                                 use_progress_bar=args.progress_bar)
+
+    loop_train(train_set, train_computation, cbs)

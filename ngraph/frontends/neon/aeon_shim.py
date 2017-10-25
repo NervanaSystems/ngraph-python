@@ -38,6 +38,7 @@ NAME_MAP = {"channels": "C",
             "width": "W"}
 """Converts aeon axis names to canonical ngraph axis types."""
 
+
 class AeonDataLoader(object):
 
     def __init__(self, config, *args, **kwargs):

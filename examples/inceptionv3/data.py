@@ -14,22 +14,7 @@
 # ----------------------------------------------------------------------------
 from ngraph.frontends.neon.aeon_shim import AeonDataLoader
 from ngraph.util.persist import get_data_cache_or_nothing
-import re
 
-def return_labels(train_manifest):
-    # Read the training manifest file
-    filename = train_manifest 
-    with open(filename) as f:
-        content = f.readlines()
-    # Get rid of carriage return at the end of each line
-    content = [x.strip() for x in content] 
-
-    # Get class labels
-    # Discard first line since it is pre-amble 
-    pat = re.compile('.+/(\d+).txt')
-
-    labels = [int(re.findall(pat, x)[0]) for x in content[1:]]
-    return labels
 
 def make_aeon_loaders(train_manifest, valid_manifest,
                       batch_size, train_iterations, datadir, random_seed=1,
@@ -59,7 +44,6 @@ def make_aeon_loaders(train_manifest, valid_manifest,
                             "binary": False}
 
             augmentation = {"type": "image",
-                            #"padding": 4,
                             "flip_enable": True}
 
             return {'manifest_filename': manifest_file,

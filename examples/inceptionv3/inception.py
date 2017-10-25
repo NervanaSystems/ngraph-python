@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.frontends.neon import XavierInit, UniformInit
+from ngraph.frontends.neon import UniformInit
 from ngraph.frontends.neon import Convolution, Pooling, Sequential, Parallel
-from ngraph.frontends.neon import Rectlin, Softmax, Dropout, Explin
-import numpy as np
+from ngraph.frontends.neon import Rectlin, Softmax, Dropout
+
 
 def conv_params(filter_shape, strides=1, batch_norm=True, activation=Rectlin(),
                 bias_init=None,
@@ -33,7 +33,6 @@ def conv_params(filter_shape, strides=1, batch_norm=True, activation=Rectlin(),
 class Inceptionv3_b1(object):
 
     def __init__(self, branch_units=[(64,), (48, 64), (64, 96, 96), (64,)], name=None):
-
         """
         First inception block with four branches, concatenated in the end
             1. 1x1 conv
@@ -45,18 +44,20 @@ class Inceptionv3_b1(object):
         """
         (p1, p2, p3, p4) = branch_units
 
-        branch1 = Convolution(name=name + '_br1_1x1conv',**conv_params(filter_shape=(1, 1, p1[0])))
+        branch1 = Convolution(name=name + '_br1_1x1conv', **
+                              conv_params(filter_shape=(1, 1, p1[0])))
 
-        branch2 = Sequential([Convolution(name=name + '_br2_1x1conv', **conv_params(filter_shape=(1, 1, p2[0]))
-                                                        ),
-                              Convolution(name=name + '_br2_5x5conv', **conv_params(filter_shape=(5, 5, p2[1]),
-                                                        padding=2))])
+        branch2 = Sequential([Convolution(name=name + '_br2_1x1conv',
+                                          **conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(name=name + '_br2_5x5conv',
+                                          **conv_params(filter_shape=(5, 5, p2[1]), padding=2))])
 
-        branch3 = Sequential([Convolution(name = name + '_br3_1x1conv', **conv_params(filter_shape=(1, 1, p3[0]))),
-                              Convolution(name=name + '_br3_3x3conv1', **conv_params(filter_shape=(3, 3, p3[1]),
-                                                        padding=1)), 
-                              Convolution(name=name + '_br3_3x3conv2',**conv_params(filter_shape=(3, 3, p3[2]),
-                                                        padding=1))])
+        branch3 = Sequential([Convolution(name=name + '_br3_1x1conv',
+                                          **conv_params(filter_shape=(1, 1, p3[0]))),
+                              Convolution(name=name + '_br3_3x3conv1',
+                                          **conv_params(filter_shape=(3, 3, p3[1]), padding=1)),
+                              Convolution(name=name + '_br3_3x3conv2',
+                                          **conv_params(filter_shape=(3, 3, p3[2]), padding=1))])
 
         branch4 = Sequential([Pooling(name=name + '_br4_avgpool', pool_shape=(3, 3),
                                       padding=1, strides=1, pool_type="avg"),
@@ -72,7 +73,6 @@ class Inceptionv3_b1(object):
 class Inceptionv3_b2(object):
 
     def __init__(self, branch_units=[(384,), (64, 96, 96)], name=None):
-
         """
         Second inception block with three branches, concatenated in the end
             1. 3x3 conv (stride = 2, valid)
@@ -87,14 +87,16 @@ class Inceptionv3_b2(object):
                               **conv_params(filter_shape=(3, 3, p1[0]),
                                             strides=2, padding=0))
 
-        branch2 = Sequential([Convolution(name= name + '_br2_1x1conv', **conv_params(filter_shape=(1, 1, p2[0]))),
-                              Convolution(name= name + '_br2_3x3conv1', **conv_params(filter_shape=(3, 3, p2[1]),
-                                                        padding=1)),
-                              Convolution(name= name + '_br2_3x3conv2', **conv_params(filter_shape=(3, 3, p2[2]),
+        branch2 = Sequential([Convolution(name=name + '_br2_1x1conv',
+                                          **conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(name=name + '_br2_3x3conv1',
+                                          **conv_params(filter_shape=(3, 3, p2[1]), padding=1)),
+                              Convolution(name=name + '_br2_3x3conv2',
+                                          **conv_params(filter_shape=(3, 3, p2[2]),
                                                         strides=2, padding=0))])
 
         branch3 = Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type="max",
-                          name=name+'_br3_maxpool')
+                          name=name + '_br3_maxpool')
 
         self.model = Parallel([branch1, branch2, branch3])
 
@@ -104,8 +106,8 @@ class Inceptionv3_b2(object):
 
 class Inceptionv3_b3(object):
 
-    def __init__(self, branch_units=[(192), (160, 160, 192), (160, 160, 160, 160, 192), (192,)], name=None):
-
+    def __init__(self, branch_units=[(192), (160, 160, 192),
+                                     (160, 160, 160, 160, 192), (192,)], name=None):
         """
         Third inception block with four branches, concatenated in the end
             1. 1x1 conv
@@ -116,39 +118,41 @@ class Inceptionv3_b3(object):
         Mixed_6b, Mixed_6c, Mixed_6c, Mixed_6d, Mixed_6e layers
         """
         (p1, p2, p3, p4) = branch_units
-        branch1 = Convolution(name=name+'_br1_1x1conv',
+        branch1 = Convolution(name=name + '_br1_1x1conv',
                               **conv_params(filter_shape=(1, 1, p1[0])))
 
-        branch2 = Sequential([Convolution(name=name+'_br2_1x1conv',**conv_params(filter_shape=(1, 1, p2[0]))),
-                              Convolution(name=name+'_br2_1x7conv',**conv_params(filter_shape=(1, 7, p2[1]),
+        branch2 = Sequential([Convolution(name=name + '_br2_1x1conv',
+                                          **conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(name=name + '_br2_1x7conv',
+                                          **conv_params(filter_shape=(1, 7, p2[1]),
                                                         padding={'H': 0,
                                                                  'W': 3,
                                                                  'D': 0})),
-                              Convolution(name=name+'_br27x1conv',**conv_params(filter_shape=(7, 1, p2[2]),
+                              Convolution(name=name + '_br27x1conv',
+                                          **conv_params(filter_shape=(7, 1, p2[2]),
                                                         padding={'H': 3,
                                                                  'W': 0,
                                                                  'D': 0}))])
 
-        branch3 = Sequential([Convolution(name=name+'_br3_1x1conv',**conv_params(filter_shape=(1, 1, p3[0]))),
-                              Convolution(name=name+'_br3_7x1conv1',**conv_params(filter_shape=(7, 1, p3[1]),
-                                                        padding={'H': 3,
-                                                                 'W': 0,
-                                                                 'D': 0})),
-                              Convolution(name=name+'_br3_1x7conv1',**conv_params(filter_shape=(1, 7, p3[2]),
-                                                        padding={'H': 0,
-                                                                 'W': 3,
-                                                                 'D': 0})),
-                              Convolution(name=name+'_br3_7x1conv2',**conv_params(filter_shape=(7, 1, p3[3]),
-                                                        padding={'H': 3,
-                                                                 'W': 0,
-                                                                 'D': 0})),
-                              Convolution(name=name+'_br3_1x7conv2',**conv_params(filter_shape=(1, 7, p3[4]),
-                                                        padding={'H': 0,
-                                                                 'W': 3,
-                                                                 'D': 0}))])
+        branch3 = Sequential([Convolution(name=name + '_br3_1x1conv',
+                                          **conv_params(filter_shape=(1, 1, p3[0]))),
+                              Convolution(name=name + '_br3_7x1conv1',
+                                          **conv_params(filter_shape=(7, 1, p3[1]),
+                                                        padding={'H': 3, 'W': 0, 'D': 0})),
+                              Convolution(name=name + '_br3_1x7conv1',
+                                          **conv_params(filter_shape=(1, 7, p3[2]),
+                                                        padding={'H': 0, 'W': 3, 'D': 0})),
+                              Convolution(name=name + '_br3_7x1conv2',
+                                          **conv_params(filter_shape=(7, 1, p3[3]),
+                                                        padding={'H': 3, 'W': 0, 'D': 0})),
+                              Convolution(name=name + '_br3_1x7conv2',
+                                          **conv_params(filter_shape=(1, 7, p3[4]),
+                                                        padding={'H': 0, 'W': 3, 'D': 0}))])
 
-        branch4 = Sequential([Pooling(name=name+'_br4_avgpool', pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
-                              Convolution(name=name+'_br4_1x1conv',**conv_params(filter_shape=(1, 1, p4[0])))])
+        branch4 = Sequential([Pooling(name=name + '_br4_avgpool',
+                                      pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
+                              Convolution(name=name + '_br4_1x1conv',
+                                          **conv_params(filter_shape=(1, 1, p4[0])))])
 
         self.model = Parallel([branch1, branch2, branch3, branch4])
 
@@ -159,7 +163,6 @@ class Inceptionv3_b3(object):
 class Inceptionv3_b4(object):
 
     def __init__(self, branch_units=[(192, 320), (192, 192, 192, 192)], name=None):
-
         """
         Fourth inception block with three branches, concatenated in the end
             1. 1x1 conv, 3x3 conv (stride=2, valid)
@@ -169,23 +172,33 @@ class Inceptionv3_b4(object):
         Mixed_7a layer
         """
         (p1, p2) = branch_units
-        branch1 = Sequential([Convolution(name=name+'_br1_conv1x1',**conv_params(filter_shape=(1, 1, p1[0]))),
-                              Convolution(name=name+'_br1_conv3x3',**conv_params(filter_shape=(3, 3, p1[1]),
+        branch1 = Sequential([Convolution(name=name + '_br1_conv1x1',
+                                          **conv_params(filter_shape=(1, 1, p1[0]))),
+                              Convolution(name=name + '_br1_conv3x3',
+                                          **conv_params(filter_shape=(3, 3, p1[1]),
                                                         strides=2, padding=0))])
 
-        branch2 = Sequential([Convolution(name=name+'_br2_conv1x1',**conv_params(filter_shape=(1, 1, p2[0]))),
-                              Convolution(name=name+'_br2_conv1x7',**conv_params(filter_shape=(1, 7, p2[1]),
-                                                        padding={'H': 0,
-                                                                 'W': 3,
-                                                                 'D': 0})),
-                              Convolution(name=name+'_br2_conv7x1',**conv_params(filter_shape=(7, 1, p2[2]),
-                                                        padding={'H': 3,
-                                                                 'W': 0,
-                                                                 'D': 0})),
-                              Convolution(name=name+'_br2_conv3x3',**conv_params(filter_shape=(3, 3, p2[3]),
+        branch2 = Sequential([Convolution(name=name + '_br2_conv1x1',
+                                          **conv_params(filter_shape=(1, 1, p2[0]))),
+                              Convolution(name=name + '_br2_conv1x7',
+                                          **conv_params(filter_shape=(1, 7, p2[1]),
+                                                        padding={'H': 0, 'W': 3, 'D': 0})),
+                              Convolution(name=name + '_br2_conv7x1',
+                                          **conv_params(filter_shape=(7, 1, p2[2]),
+                                                        padding={'H': 3, 'W': 0, 'D': 0})),
+                              Convolution(name=name + '_br2_conv3x3',
+                                          **conv_params(filter_shape=(3, 3, p2[3]),
                                                         strides=2, padding=0))])
 
-        branch3 = Pooling(name=name+'_br3_maxpool',pool_shape=(3, 3), padding=0, strides=2, pool_type="max")
+        branch3 = Pooling(
+            name=name +
+            '_br3_maxpool',
+            pool_shape=(
+                3,
+                3),
+            padding=0,
+            strides=2,
+            pool_type="max")
         self.model = Parallel([branch1, branch2, branch3])
 
     def __call__(self, in_obj):
@@ -194,8 +207,8 @@ class Inceptionv3_b4(object):
 
 class Inceptionv3_b5(object):
 
-    def __init__(self, branch_units=[(320,), (384, 384, 384), (448, 384, 384, 384), (192,)], name=None):
-
+    def __init__(self, branch_units=[(320,), (384, 384, 384),
+                                     (448, 384, 384, 384), (192,)], name=None):
         """
         Fifth inception block with four branches, concatenated in the end
             1. 1x1 conv
@@ -208,7 +221,8 @@ class Inceptionv3_b5(object):
         (p1, p2, p3, p4) = branch_units
 
         # Branch 1
-        branch1 = Convolution(name=name+'_br1_conv1x1',**conv_params(filter_shape=(1, 1, p1[0])))
+        branch1 = Convolution(name=name + '_br1_conv1x1', **
+                              conv_params(filter_shape=(1, 1, p1[0])))
 
         # Branch 2
         branch2a1_params = conv_params(filter_shape=(1, 3, p2[1]),
@@ -216,26 +230,33 @@ class Inceptionv3_b5(object):
         branch2a2_params = conv_params(filter_shape=(3, 1, p2[2]),
                                        padding={'H': 1, 'W': 0, 'D': 0})
         # This is the sub-branch with two parallel branches of 1x3 and 3x1
-        branch2a = Parallel([Convolution(name=name+'_br2a_conv1x3',**branch2a1_params),
-                             Convolution(name=name+'_br2a_conv3x1',**branch2a2_params)])
-        branch2 = Sequential([Convolution(name=name+'_br2_conv1x1',**conv_params(filter_shape=(1, 1, p2[0]))),
-                              branch2a])
+        branch2a = Parallel([Convolution(name=name + '_br2a_conv1x3', **branch2a1_params),
+                             Convolution(name=name + '_br2a_conv3x1', **branch2a2_params)])
+        branch2 = Sequential([Convolution(name=name + '_br2_conv1x1', **
+                                          conv_params(filter_shape=(1, 1, p2[0]))), branch2a])
 
         # Branch 3
         branch3a1_params = conv_params(filter_shape=(1, 3, p3[2]),
                                        padding={'H': 0, 'W': 1, 'D': 0})
         branch3a2_params = conv_params(filter_shape=(3, 1, p3[3]),
                                        padding={'H': 1, 'W': 0, 'D': 0})
-        branch3a = Parallel([Convolution(name=name+'_br3_conv1x3',**branch3a1_params),
-                             Convolution(name=name+'_br3_conv3x1',**branch3a2_params)])
-        branch3 = Sequential([Convolution(name=name+'_br3_conv1x1',**conv_params(filter_shape=(1, 1, p3[0]))),
-                              Convolution(name=name+'_br3_conv3x3',**conv_params(filter_shape=(3, 3, p3[1]),
+        branch3a = Parallel([Convolution(name=name + '_br3_conv1x3', **branch3a1_params),
+                             Convolution(name=name + '_br3_conv3x1', **branch3a2_params)])
+        branch3 = Sequential([Convolution(name=name + '_br3_conv1x1',
+                                          **conv_params(filter_shape=(1, 1, p3[0]))),
+                              Convolution(name=name + '_br3_conv3x3',
+                                          **conv_params(filter_shape=(3, 3, p3[1]),
                                                         padding=1)),
                               branch3a])
 
         # Branch 4
-        branch4 = Sequential([Pooling(name=name+'_br4_avgpool',pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
-                              Convolution(name=name+'_br4_conv1x1',**conv_params(filter_shape=(1, 1, p4[0])))])
+        branch4 = Sequential([Pooling(name=name + '_br4_avgpool',
+                                      pool_shape=(3, 3),
+                                      padding=1,
+                                      strides=1,
+                                      pool_type="avg"),
+                              Convolution(name=name + '_br4_conv1x1',
+                                          **conv_params(filter_shape=(1, 1, p4[0])))])
 
         # Combine branches
         self.model = Parallel([branch1, branch2, branch3, branch4])
@@ -245,107 +266,146 @@ class Inceptionv3_b5(object):
 
 
 class Inception(object):
-    def __init__(self, mini=False):
 
+    def __init__(self, mini=False):
         """
-        Builds an Inception model
+        Builds Inception model
         """
-        np.random.seed(1)
         # Input size is 299 x 299 x 3
         if mini:
             """
             This is the mini model with reduced number of filters in each layer
             """
             # Root branch of the tree
-            seq1 = Sequential([Convolution(name='conv_1a_3x3', **conv_params(filter_shape=(3, 3, 32),
+            seq1 = Sequential([Convolution(name='conv_1a_3x3',
+                                           **conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(name='conv_2a_3x3',**conv_params(filter_shape=(3, 3, 16), padding=0)),
+                               Convolution(name='conv_2a_3x3', **
+                                           conv_params(filter_shape=(3, 3, 16), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(name='conv_2b_3x3',**conv_params(filter_shape=(3, 3, 16), padding=1)),
+                               Convolution(name='conv_2b_3x3', **
+                                           conv_params(filter_shape=(3, 3, 16), padding=1)),
                                # conv2d_2b_3x3
-                               Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
-                               Convolution(name='conv_3b_1x1', **conv_params(filter_shape=(1, 1, 16))),
+                               Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0,
+                                       strides=2, pool_type='max'),  # maxpool_3a_3x3
+                               Convolution(name='conv_3b_1x1', **
+                                           conv_params(filter_shape=(1, 1, 16))),
                                # conv2d_3b_1x1
-                               Convolution(name='conv_4a_3x3',**conv_params(filter_shape=(3, 3, 32), padding=1)),
+                               Convolution(name='conv_4a_3x3', **
+                                           conv_params(filter_shape=(3, 3, 32), padding=1)),
                                # conv2d_4a_3x3
-                               Pooling(name='pool_2_3x3',pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
-                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )], name='mixed_5b'),
-                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )], name='mixed_5c'),
-                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32), (32, )], name=' mixed_5d'),
+                               Pooling(name='pool_2_3x3', pool_shape=(3, 3), padding=0,
+                                       strides=2, pool_type='max'),  # maxpool_5a_3x3
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32),
+                                               (32, )], name='mixed_5b'),
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32),
+                                               (32, )], name='mixed_5c'),
+                               Inceptionv3_b1([(32,), (32, 32), (32, 32, 32),
+                                               (32, )], name=' mixed_5d'),
                                Inceptionv3_b2([(32,), (32, 32, 32)], name=' mixed_6a'),
                                Inceptionv3_b3([(32,), (32, 32, 32),
                                                (32, 32, 32, 32, 32), (32,)], name='mixed_6b'),
                                Inceptionv3_b3([(32,), (32, 32, 32),
                                                (32, 32, 32, 32, 32), (32,)], name='mixed_6c'),
                                Inceptionv3_b3([(32,), (32, 32, 32),
-                                               (32, 32, 32, 32, 32), (32,)], name= 'mixed_6d'),
+                                               (32, 32, 32, 32, 32), (32,)], name='mixed_6d'),
                                Inceptionv3_b3([(32,), (32, 32, 32),
                                                (32, 32, 32, 32, 32), (32,)], name='mixed_6e')])
 
             # Branch of main classifier
-            seq2 = Sequential([Inceptionv3_b4([(32, 32), (32, 32, 32, 32)],name='mixed_7a'),
+            seq2 = Sequential([Inceptionv3_b4([(32, 32), (32, 32, 32, 32)], name='mixed_7a'),
                                Inceptionv3_b5([(32,), (32, 32, 32),
-                                               (32, 32, 32, 32), (32,)],name='mixed_7b'),
+                                               (32, 32, 32, 32), (32,)], name='mixed_7b'),
                                Inceptionv3_b5([(32,), (32, 32, 32),
-                                               (32, 32, 32, 32), (32,)],name='mixed_7c'),
-                               Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
+                                               (32, 32, 32, 32), (32,)], name='mixed_7c'),
+                               Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),
+                               # Last Avg Pool
                                Dropout(keep=0.8),
-                               Convolution(name='main_final_conv1x1', **conv_params(filter_shape=(1, 1, 1000),
-                                                         activation=Softmax(), batch_norm=False))])
+                               Convolution(name='main_final_conv1x1',
+                                           **conv_params(filter_shape=(1, 1, 1000),
+                                                         activation=Softmax(),
+                                                         batch_norm=False))])
 
             # Auxiliary classifier
-            seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
-                                  Convolution(name='aux_conv1x1_v1',**conv_params(filter_shape=(1, 1, 32))),
-                                  Convolution(name='aux_conv5x5',**conv_params(filter_shape=(5, 5, 32))),
-                                  Convolution(name='aux_conv1x1_v2',**conv_params(filter_shape=(1, 1, 1000),
-                                                            activation=Softmax(), batch_norm=False))])
+            seq_aux = Sequential([Pooling(pool_shape=(5, 5),
+                                          padding=0, strides=3, pool_type='avg'),
+                                  Convolution(name='aux_conv1x1_v1',
+                                              **conv_params(filter_shape=(1, 1, 32))),
+                                  Convolution(name='aux_conv5x5',
+                                              **conv_params(filter_shape=(5, 5, 32))),
+                                  Convolution(name='aux_conv1x1_v2',
+                                              **conv_params(filter_shape=(1, 1, 1000),
+                                                            activation=Softmax(),
+                                                            batch_norm=False))])
 
         else:
             # Root branch of the tree
-            seq1 = Sequential([Convolution(name='conv_1a_3x3', **conv_params(filter_shape=(3, 3, 32),
+            seq1 = Sequential([Convolution(name='conv_1a_3x3',
+                                           **conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(name='conv_2a_3x3',**conv_params(filter_shape=(3, 3, 32), padding=0)),
+                               Convolution(name='conv_2a_3x3', **
+                                           conv_params(filter_shape=(3, 3, 32), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(name='conv_2b_3x3',**conv_params(filter_shape=(3, 3, 64), padding=1)),
+                               Convolution(name='conv_2b_3x3', **
+                                           conv_params(filter_shape=(3, 3, 64), padding=1)),
                                # conv2d_2b_3x3
-                               Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_3a_3x3
-                               Convolution(name='conv_3b_1x1', **conv_params(filter_shape=(1, 1, 80))),
+                               Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0,
+                                       strides=2, pool_type='max'),  # maxpool_3a_3x3
+                               Convolution(name='conv_3b_1x1', **
+                                           conv_params(filter_shape=(1, 1, 80))),
                                # conv2d_3b_1x1
-                               Convolution(name='conv_4a_3x3',**conv_params(filter_shape=(3, 3, 192), padding=1)),
+                               Convolution(name='conv_4a_3x3', **
+                                           conv_params(filter_shape=(3, 3, 192), padding=1)),
                                # conv2d_4a_3x3
-                               Pooling(name='pool_2_3x3',pool_shape=(3, 3), padding=0, strides=2, pool_type='max'),  # maxpool_5a_3x3
-                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (32, )], name='mixed_5b'),
-                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )], name='mixed_5c'),
-                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96), (64, )], name=' mixed_5d'),
-                               Inceptionv3_b2([(384,), (64, 96, 96)], name=' mixed_6a'),
+                               Pooling(name='pool_2_3x3', pool_shape=(3, 3), padding=0,
+                                       strides=2, pool_type='max'),  # maxpool_5a_3x3
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96),
+                                               (32, )], name='mixed_5b'),
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96),
+                                               (64, )], name='mixed_5c'),
+                               Inceptionv3_b1([(64,), (48, 64), (64, 96, 96),
+                                               (64, )], name=' mixed_5d'),
+                               Inceptionv3_b2([(384,), (64, 96, 96)],
+                                              name=' mixed_6a'),
                                Inceptionv3_b3([(192,), (128, 128, 192),
-                                               (128, 128, 128, 128, 192), (192,)], name='mixed_6b'),
+                                               (128, 128, 128, 128, 192), (192,)],
+                                              name='mixed_6b'),
                                Inceptionv3_b3([(192,), (160, 160, 192),
-                                               (160, 160, 160, 160, 192), (192,)], name='mixed_6c'),
+                                               (160, 160, 160, 160, 192), (192,)],
+                                              name='mixed_6c'),
                                Inceptionv3_b3([(192,), (160, 160, 192),
-                                               (160, 160, 160, 160, 192), (192,)], name= 'mixed_6d'),
+                                               (160, 160, 160, 160, 192), (192,)],
+                                              name='mixed_6d'),
                                Inceptionv3_b3([(192,), (192, 192, 192),
-                                               (192, 192, 192, 192, 192), (192,)], name='mixed_6e')])
+                                               (192, 192, 192, 192, 192), (192,)],
+                                              name='mixed_6e')])
 
             # Branch of main classifier
-            seq2 = Sequential([Inceptionv3_b4([(192, 320), (192, 192, 192, 192)],name='mixed_7a'),
-                               Inceptionv3_b5([(320,), (384, 384, 384),
-                                               (448, 384, 384, 384), (192,)],name='mixed_7b'),
-                               Inceptionv3_b5([(320,), (384, 384, 384),
-                                               (448, 384, 384, 384), (192,)],name='mixed_7c'),
-                               Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),  # Last Avg Pool
-                               Dropout(keep=0.8),
-                               Convolution(name='main_final_conv1x1', **conv_params(filter_shape=(1, 1, 1000),
-                                                         activation=Softmax(enable_softmax_opt=False), batch_norm=False))])
+            seq2 = [Inceptionv3_b4([(192, 320), (192, 192, 192, 192)], name='mixed_7a'),
+                    Inceptionv3_b5([(320,), (384, 384, 384),
+                                    (448, 384, 384, 384), (192,)], name='mixed_7b'),
+                    Inceptionv3_b5([(320,), (384, 384, 384),
+                                    (448, 384, 384, 384), (192,)], name='mixed_7c'),
+                    Pooling(pool_shape=(8, 8), padding=0, strides=2, pool_type='avg'),
+                    # Last Avg Pool
+                    Dropout(keep=0.8),
+                    Convolution(name='main_final_conv1x1',
+                                **conv_params(filter_shape=(1, 1, 1000),
+                                              activation=Softmax(),
+                                              batch_norm=False))]
+            seq2 = Sequential(seq2)
 
             # Auxiliary classifier
-            seq_aux = Sequential([Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
-                                  Convolution(name='aux_conv1x1_v1',**conv_params(filter_shape=(1, 1, 128))),
-                                  Convolution(name='aux_conv5x5',**conv_params(filter_shape=(5, 5, 768))),
-                                  Convolution(name='aux_conv1x1_v2',**conv_params(filter_shape=(1, 1, 1000),
-                                                            activation=Softmax(enable_softmax_opt=False), batch_norm=False))])
+            my_seq = [Pooling(pool_shape=(5, 5), padding=0, strides=3, pool_type='avg'),
+                      Convolution(name='aux_conv1x1_v1', **conv_params(filter_shape=(1, 1, 128))),
+                      Convolution(name='aux_conv5x5', **conv_params(filter_shape=(5, 5, 768))),
+                      Convolution(name='aux_conv1x1_v2',
+                                  **conv_params(filter_shape=(1, 1, 1000),
+                                                activation=Softmax(),
+                                                batch_norm=False))]
+            seq_aux = Sequential(my_seq)
 
         self.seq1 = seq1
         self.seq2 = seq2
