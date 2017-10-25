@@ -32,9 +32,8 @@ import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import Layer
-from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum, Adam
-from ngraph.util.names import name_scope
-from data import make_aeon_loaders, return_labels
+from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum
+from data import make_aeon_loaders
 import inception
 
 
