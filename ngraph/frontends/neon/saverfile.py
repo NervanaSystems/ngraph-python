@@ -18,13 +18,35 @@ import numpy as np
 
 class SaverFile(object):
     def __init__(self, Name="weights"):
+        """
+        A class that write and read dictionary of numpy.ndarray's with Op name as key to file
+
+        Arguments:
+            Name (string): Name of file used for saving.
+
+        Methods:
+            write_values: write dictionary of numpy.ndarray's with Op name as key to file
+            read_values: read and return dictionary of numpy.ndrarry's with Op name as key
+        """
         self.Name = Name
         super(SaverFile, self).__init__()
 
     def write_values(self, tensors):
+        """
+        write dictionary of numpy.ndarray's with Op name as key to file
+
+        Arguments:
+            tensors (dict): A dictionary of numpy.ndarray's with Op name as key
+        """
         np.savez(self.Name, **tensors)
 
     def read_values(self):
+        """
+        read and return dictionary of numpy.ndrarry's with Op name as key
+
+        Returns:
+            dictionary of numpy.ndrarry's with Op name as key
+        """
         tensors = dict()
         filename = self.Name + ".npz"
         with np.load(filename) as npzfile:
