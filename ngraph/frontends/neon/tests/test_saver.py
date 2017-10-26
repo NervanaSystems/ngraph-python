@@ -13,13 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-This test trains weight for a simple model on cifar10 and saves the trained weights 
+This test trains weight for a simple model on cifar10 and saves the trained weights
 to a file. And the the weights are loaded in to fresh inference problem
 built from the same model. Classification error on validation set should match end of
 training result.
 """
-import pytest
-
 import os
 import numpy as np
 import ngraph as ng
@@ -33,9 +31,7 @@ from contextlib import closing
 from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import Layer
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import ax, NgraphArgparser
 from tqdm import tqdm
-
 
 
 # Result collector
@@ -58,7 +54,8 @@ def loop_eval(dataset, computation, metric_names, input_ph):
 def test_saver():
 
     # Load CIFAR10
-    train_data, valid_data = CIFAR10(os.path.join(os.path.join(os.path.expanduser('~'), 'nervana'), 'data')).load_data()
+    train_data, valid_data = CIFAR10(os.path.join(
+        os.path.join(os.path.expanduser('~'), 'nervana'), 'data')).load_data()
     train_set = ArrayIterator(train_data, 128, total_iterations=2000)
     valid_set = ArrayIterator(valid_data, 128)
     # Num Classes
@@ -66,9 +63,10 @@ def test_saver():
     # Make placeholder
     input_ph = train_set.make_placeholders(include_iteration=True)
     # Network
-    layers = [Convolution((3, 3, 8), strides=2, padding=3, batch_norm=True, activation=Rectlin(), filter_init=KaimingInit()),
+    layers = [Convolution((3, 3, 8), strides=2, padding=3, batch_norm=True,
+              activation=Rectlin(), filter_init=KaimingInit()),
               Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=True, activation=Softmax())]
-    
+
     model = Sequential(layers)
     # Optimizer
     optimizer = GradientDescentMomentum(learning_rate=0.01)
@@ -109,30 +107,34 @@ def test_saver():
             if (step + 1) % 200 == 0 and step > 0:
                 eval_losses = loop_eval(valid_set, eval_function, eval_loss_names, input_ph)
                 tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                        "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
-                            interval=step // 200,
-                            iteration=step,
-                            cost=interval_cost / 200, tcost=eval_losses))
+                           "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
+                               interval=step // 200,
+                               iteration=step,
+                               cost=interval_cost / 200, tcost=eval_losses))
 
         tpbar.close()
         print("\nTraining Completed")
         print("\nTesting weight save/loading")
         # Save weights at end of training
         weight_saver.save(Transformer=transformer)
-    
+
     # Read file
     # Do weight restore
     # Do inference
     with Layer.inference_mode_on():
         restore_inference_prob = model(input_ph['image'])
-        restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]), label_indices)
-        restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob, ng.one_hot(label_indices, axis=ax.Y))
+        restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]),
+                                      label_indices)
+        restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob,
+                                                   ng.one_hot(label_indices, axis=ax.Y))
         restore_eval_loss_names = ['cross_ent_loss', 'misclass']
         restore_eval_computation = ng.computation([restore_eval_loss, restore_errors], "all")
 
     with closing(ngt.make_transformer()) as transformer:
         restore_eval_function = transformer.add_computation(restore_eval_computation)
         weight_saver.restore(Transformer=transformer, Computation=restore_eval_computation)
-        restore_eval_losses = loop_eval(valid_set, restore_eval_function, restore_eval_loss_names, input_ph)
-    
-    assert abs((restore_eval_losses['misclass'] - eval_losses['misclass']) / eval_losses['misclass']) < 0.01
+        restore_eval_losses = loop_eval(valid_set, restore_eval_function,
+                                        restore_eval_loss_names, input_ph)
+
+    assert abs((restore_eval_losses['misclass'] - eval_losses['misclass']) /
+               eval_losses['misclass']) < 0.01
