@@ -21,7 +21,8 @@ import onnx.numpy_helper
 import onnx.mapping
 from onnx import onnx_pb2
 from cachetools.func import lru_cache
-from ngraph.frontends.onnx.onnx_importer.ops_bridge import OpsBridge
+
+from ngraph.frontends.onnx.onnx_importer.ops_bridge import make_ng_node
 from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 
 
@@ -57,6 +58,8 @@ class ModelWrapper(WrapperBaseClass):
 class GraphWrapper(WrapperBaseClass):
     """
     Wrapper for ONNX GraphProto objects.
+
+    Transforms objects defined in an ONNX graph to ngraph tensors and nodes.
     """
     def __init__(self, onnx_proto_instance):  # type: (GraphProto) -> None
         super(GraphWrapper, self).__init__(onnx_proto_instance, self)
@@ -147,6 +150,8 @@ class GraphWrapper(WrapperBaseClass):
 class ValueInfoWrapper(WrapperBaseClass):
     """
     Wrapper for ONNX ValueInfoProto objects.
+
+    Transforms values defined in an ONNX model to ngraph tensor ops.
     """
 
     @lru_cache(maxsize=1)
@@ -294,12 +299,11 @@ class NodeWrapper(WrapperBaseClass):
         :return: dict {output_name: ng_node}
         """
         output_nodes_dict = {}
-        ops_bridge = OpsBridge()
 
         for output_name in self._proto.output:
             ng_node = self._graph.ng_node_cache_get(output_name)
             if not ng_node:
-                ng_node = ops_bridge.get_ng_node(self).named(output_name)
+                ng_node = make_ng_node(self).named(output_name)
                 self._graph.ng_node_cache_set(output_name, ng_node)
 
             output_nodes_dict.update({output_name: ng_node})
