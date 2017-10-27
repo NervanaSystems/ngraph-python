@@ -863,7 +863,33 @@ class Bias(Layer):
 
 class Affine(Layer):
     """
-    TODO: Document, bias should not be used when batch norm is
+    Affine (fully connected) layer that applies a linear transform of its input
+    This layer can optionally add a bias to the transform
+    Optionally, it can apply batch normalization after the linear transform
+    If batch normalization is used, bias is not used (ignored)
+    Output of the the previous steps is passed through the given activation function
+    Arguments:
+        weight_init (function): Initialization function for the weights
+        nout (int): Number of neurons in the layer
+        bias_init (function, optional): The bias initialization function. If bias_init is None,
+            then no bias is applied. If batch normalization is used, bias_init is ignored.
+        activation (function, optional): Activation function to be applied to the output. The
+            default uses the identity function.
+        batch_norm (bool, optional):
+            Whether or not to apply batch normalization
+            If set to True, initializes a BatchNorm layer with default parameters
+
+    Attributes:
+        linear (Layer): The `Linear` layer that performs the linear transform
+        bias (Layer): The `Bias` layer that performs bias addition
+        batch_norm_layer (Layer): The `BatchNorm` layer that performs batch normalization
+        activation_layer (Layer): The `Activation` layer to transform the output
+
+    Examples:
+        .. code-block:: python
+           # Create an Affine layer with batch normalization and a ReLU activation
+           affine = Affine(nout=50, activation=Rectlin(), batch_norm=True)
+           output = affine(input)
     """
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
                  batch_norm=False, axes=None, **kwargs):
@@ -915,8 +941,11 @@ class Convolution(SubGraph):
             then no bias is applied. If batch normalization is used, bias_init should be None.
         activation (function, optional): Activation function to be applied to the output. The
             default uses the identity function.
-        batch_norm (bool, optional): Whether or not to apply batch normalization. Batch
+        batch_norm (bool or layer of type BatchNorm, optional):
+            Whether or not to apply batch normalization. Batch
             normalization contains its own bias, so if True, bias_init should not be supplied.
+            If set to True, initializes a BatchNorm layer with default parameters
+            Alternatively, you can pass in an initialized BatchNorm layer with desired parameters
 
     Attributes:
         conv (Layer): The `ConvBase` layer that performs the convolution
@@ -934,9 +963,17 @@ class Convolution(SubGraph):
 
     Examples:
         .. code-block:: python
-           # Create a 5x5 convolutional layer with batch normalization and a ReLU activation
+           # Create a 5x5 convolutional layer with batch normalization (default parameters)
+           #  and a ReLU activation
            conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
                               activation=Rectlin(), batch_norm=True)
+           output = conv(input)
+
+        .. code-block:: python
+           # Create a 5x5 convolutional layer with batch normalization (non-default parameters)
+           # and a ReLU activation
+           conv = Convolution((5, 5, 16), filter_init=UniformInit(-.5, .5), padding="same",
+                              activation=Rectlin(), batch_norm=BatchNorm(rho=0.999, eps=1e-2))
            output = conv(input)
 
         .. code-block:: python
@@ -954,12 +991,20 @@ class Convolution(SubGraph):
     def __init__(self, filter_shape, filter_init, strides=1, padding=0, dilation=1, bias_init=None,
                  activation=None, batch_norm=False, **kwargs):
         super(Convolution, self).__init__(**kwargs)
-        if batch_norm and (bias_init is not None):
+        bn_layer = type(batch_norm) == ng.frontends.neon.layer.BatchNorm
+        bn_boolean = type(batch_norm) == bool
+        if (bn_layer or bn_boolean) and (bias_init is not None):
             raise ValueError("If batch normalization is used, bias_init should be None.")
 
         self._make_conv_layer(filter_shape, filter_init, strides, padding, dilation, **kwargs)
         self.bias = Bias(init=bias_init) if bias_init is not None else None
-        self.batch_norm = BatchNorm() if batch_norm else None
+        if bn_layer:
+            self.batch_norm = batch_norm
+        elif batch_norm:
+            self.batch_norm = BatchNorm()
+        else:
+            self.batch_norm = None
+
         self.activation = Activation(transform=activation)
 
     def _make_conv_layer(self, filter_shape, filter_init, strides, padding, dilation, **kwargs):
@@ -1127,7 +1172,7 @@ class BatchNorm(Layer):
     .. [Ioffe2015] http://arxiv.org/abs/1502.03167
     .. [Laurent2016] https://arxiv.org/abs/1510.01378
     """
-    def __init__(self, rho=0.999, eps=1e-3, init_gamma=1.0, init_beta=0.0,
+    def __init__(self, rho=0.9, eps=1e-3, init_gamma=1.0, init_beta=0.0,
                  **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
         self.eps = eps
@@ -1152,7 +1197,7 @@ class BatchNorm(Layer):
         out_axes = in_axes - red_axes
 
         if not self.initialized:
-            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=0.1).named("gvar")
+            self.gvar = ng.persistent_tensor(axes=out_axes, initial_value=1.0).named("gvar")
             self.gmean = ng.persistent_tensor(axes=out_axes, initial_value=0.0).named("gmean")
             self.gamma = ng.variable(axes=out_axes,
                                      initial_value=self.init_gamma,

@@ -19,7 +19,8 @@ Usage:
 python ./inceptionv3.py -b gpu --mini --optimizer_name rmsprop
 
 Inception v3 network based on:
-https://github.com/tensorflow/models/blob/master/slim/nets/inception_v3.py
+https://github.com/tensorflow/models/blob/master/research/slim/nets/inception_v3.py
+https://arxiv.org/pdf/1512.00567.pdf
 
 Imagenet data needs to be downloaded and extracted from:
 http://www.image-net.org/
@@ -179,6 +180,8 @@ with closing(ngt.make_transformer()) as transformer:
         orig_image = np.copy(data['image'])
         data['image'] = scale_set(data['image'])
         data['label'] = data['label'].reshape((args.batch_size, 1))
+
+        # Train
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
         output = train_function(feed_dict=feed_dict)
         output = float(output[0])
@@ -205,8 +208,6 @@ with closing(ngt.make_transformer()) as transformer:
 
             # Save the training progression
             saved_losses['interval_loss'].append(interval_cost)
-            pickle.dump(
-                saved_losses, open(
-                    "losses_%s_%s.pkl" %
-                    (args.optimizer_name, args.backend), "wb"))
+            savefile_name = "losses_%s_%s.pkl" % (args.optimizer_name, args.backend)
+            pickle.dump(saved_losses, open(savefile_name, "wb"))
             interval_cost = 0.0

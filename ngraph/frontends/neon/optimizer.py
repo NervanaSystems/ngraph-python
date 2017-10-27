@@ -326,6 +326,8 @@ class RMSProp(LearningRateOptimizer):
                                                Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
                                              applied, symmetric around 0. Default: no clipping
+        wdecay (float, optional): Amount of weight decay (L2) penalty. Default: 0
+        momentum_coef (float, optional): Coefficient of momentum. Default: 0
     """
 
     def __init__(
@@ -348,8 +350,6 @@ class RMSProp(LearningRateOptimizer):
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
-        self.gradient_clip_norm = gradient_clip_norm
-        self.gradient_clip_value = gradient_clip_value
         self.wdecay = wdecay
         self.momentum = momentum_coef
 

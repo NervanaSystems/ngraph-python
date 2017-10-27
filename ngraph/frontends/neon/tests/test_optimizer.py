@@ -66,11 +66,14 @@ class RMSPropReference(object):
     Simple numpy reference for RMSprop
     '''
 
-    def __init__(self, decay_rate, learning_rate, epsilon):
+    def __init__(self, decay_rate, learning_rate, epsilon, wdecay, momentum_coef):
         self.learning_rate = learning_rate
         self.epsilon = epsilon
         self.decay_rate = decay_rate
         self.state = None
+        self.velocity = None
+        self.wdecay = wdecay
+        self.momentum = momentum_coef
 
     def __call__(self, input_data, weights):
         '''
@@ -78,16 +81,21 @@ class RMSPropReference(object):
         and weights is a matrix with 1 column
         '''
         if self.state is None:
-            self.state = np.zeros_like(weights)
+            self.state = np.ones_like(weights)
+
+        if self.velocity is None:
+            self.velocity = np.zeros_like(weights)
 
         gradient = - input_data.mean(axis=1)
 
         self.state[:] = self.decay_rate * self.state + \
             (1.0 - self.decay_rate) * np.square(gradient)
 
+        self.velocity = self.velocity * self.momentum + \
+            self.learning_rate * gradient / np.sqrt(self.state + self.epsilon)
+
         weights[:] = weights \
-            - gradient * self.learning_rate / (np.sqrt(self.state + self.epsilon)
-                                               + self.epsilon)
+            - self.learning_rate * self.wdecay * weights - self.velocity
 
         return weights
 
@@ -259,10 +267,14 @@ def test_gdm(random_learning_rate, random_momentum_coef, wdecay, nesterov,
 
 @pytest.config.flex_disabled(reason="Results totally mismatch")
 @pytest.mark.parametrize("decay_rate", [0.95, 1])
+@pytest.mark.parametrize("wdecay", [0.0005, 0.000, 0.001, 0.1])
 @pytest.mark.parametrize("epsilon", [1e-6])
 @pytest.mark.parametrize("select_variables", [False, True])
-def test_rmsprop(random_learning_rate, decay_rate, epsilon, select_variables):
+def test_rmsprop(random_learning_rate, decay_rate, epsilon, random_momentum_coef,
+                 wdecay, select_variables):
     rmsprop_args = {'learning_rate': random_learning_rate,
+                    'momentum_coef': random_momentum_coef,
+                    'wdecay': wdecay,
                     'epsilon': epsilon,
                     'decay_rate': decay_rate}
 

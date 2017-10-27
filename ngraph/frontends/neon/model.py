@@ -21,23 +21,49 @@ import ngraph as ng
 
 class Parallel(SubGraph):
     """
-    Class that consists of branches that operate on the same input
+    Parallel is a container of layers. each of which operates on the same input
     Output of each branch is concatenated to form a larger tensor
-    Future Work: option to sum the outputs of branches rather than concatenate
+
+    Arguments:
+        branches: List of layers that will operate on the same input
+        name: name to be used with selector
+
+    Example:
+    .. code-block:: python
+        branches = [Convolution(name='br1', filter_shape=(3, 3, 16)),
+                    Convolution(name='br2', filter_shape=(3, 3, 32))]
+        par1 = Parallel(branches, concat_axis=branches[0].axes.channel_axis())
+        output = par1(input)
+
+    The above code is equivalent of doing
+        br1 = Convolution(name='br1', filter_shape=(3, 3, 16)
+        br2 = Convolution(name='br2', filter_shape=(3, 3, 32)
+        br1_out = br1(input)
+        br2_out = br2(input)
+        output = [br1_out, br2_out]
+        output = ng.concat_along_axis(output, br1_out.axes.channel_axis())
+
     """
-    def __init__(self, branches, name=None, **kwargs):
+    # TODO: option to sum the outputs of branches rather than concatenate
+    def __init__(self, branches, name=None, mode='concat', **kwargs):
         super(Parallel, self).__init__(name=name, **kwargs)
         self.branches = branches
+        self.mode = mode
 
     @SubGraph.scope_op_creation
-    def __call__(self, in_obj, concat_axis=None, mode='concat'):
+    def __call__(self, in_obj, merge_axis=None):
         outputs = [branch(in_obj) for branch in self.branches]
-        if mode == 'concat':
-            if concat_axis is None:
-                concat_axis = outputs[0].axes.channel_axis()
+        if (type(merge_axis) == str):
+            merge_axis = ng.make_axis(name=merge_axis)
 
-            outputs = ng.concat_along_axis(outputs, concat_axis)
-
+        if self.mode == 'concat':
+            # Concatenate along the given axis
+            if merge_axis is None:
+                merge_axis = outputs[0].axes.channel_axis()
+            outputs = ng.concat_along_axis(outputs, merge_axis)
+        elif self.mode is None:
+            # Return the output list directly
+            outputs = outputs
         return outputs
 
 

@@ -13,12 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
-from ngraph.frontends.neon import UniformInit
+
+"""
+    This file contains the building blocks of the inceptionv3 network
+    Network architecture follows from https://arxiv.org/pdf/1512.00567.pdf
+    and https://github.com/tensorflow/models/blob/master/research/slim/nets/inception_v3.py
+"""
+from ngraph.frontends.neon import UniformInit, BatchNorm
 from ngraph.frontends.neon import Convolution, Pooling, Sequential, Parallel
 from ngraph.frontends.neon import Rectlin, Softmax, Dropout
 
 
-def conv_params(filter_shape, strides=1, batch_norm=True, activation=Rectlin(),
+def conv_params(filter_shape, strides=1, batch_norm=BatchNorm(rho=0.999), activation=Rectlin(),
                 bias_init=None,
                 filter_init=UniformInit(), padding=0):
     return dict(filter_shape=filter_shape,
@@ -269,7 +275,8 @@ class Inception(object):
 
     def __init__(self, mini=False):
         """
-        Builds Inception model
+        Builds Inception model based on:
+        https://github.com/tensorflow/models/blob/master/research/slim/nets/inception_v3.py
         """
         # Input size is 299 x 299 x 3
         if mini:
