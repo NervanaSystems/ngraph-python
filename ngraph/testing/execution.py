@@ -163,10 +163,8 @@ def executor(results, *parameters):
     Returns:
       Function of placeholders in parameters
     """
-    ex = ExecutorFactory()
-    ex.__enter__()
-    yield ex.executor(results, *parameters)
-    ex.__exit__()
+    with ExecutorFactory() as ex:
+        yield ex.executor(results, *parameters)
 
 
 def numeric_derivative(f, x, dx):
