@@ -15,6 +15,12 @@ RUN apt-get update && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
+# install ONNX dependencies 
+RUN apt-get update && \
+    apt-get install -y protobuf-compiler libprotobuf-dev && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
+
 WORKDIR /usr/src/gtest
 RUN cmake CMakeLists.txt
 RUN make
