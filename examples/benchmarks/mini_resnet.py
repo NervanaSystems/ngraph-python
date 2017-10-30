@@ -21,13 +21,10 @@ from __future__ import division
 from __future__ import print_function
 from .benchmark import Benchmark
 from .fake_data_generator import generate_data
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
-from ngraph.frontends.neon import Sequential
-from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
+from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
-from examples.cifar10.cifar10_msra import cifar_mean_subtract, conv_params
 from examples.resnet.resnet import BuildResnet
 
 
@@ -41,7 +38,7 @@ def get_mini_resnet(inputs, dataset, device, device_id, stage_depth=1,
             en_bottleneck = True
     if dataset == 'cifar10':
         ax.Y.length = 10
-        num_resnet_mods = (stage_depth - 2) //  6
+        num_resnet_mods = (stage_depth - 2) // 6
     model = BuildResnet(dataset, stage_depth, en_bottleneck, num_resnet_mods,
                         batch_norm=batch_norm)
     with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
