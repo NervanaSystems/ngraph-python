@@ -80,7 +80,7 @@ class BuildResnet(Sequential):
                 # Subtracting mean as suggested in paper
                 Preprocess(functor=cifar10_mean_subtract),
                 # First Conv with 3x3 and stride=1
-                Convolution(**conv_params(3, 16))]
+                Convolution(**conv_params(3, 16, batch_norm=batch_norm))]
             first_resmod = True  # Indicates the first residual module
             # Loop 3 times for each filter.
             for fil in range(3):
