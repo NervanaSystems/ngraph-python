@@ -19,6 +19,7 @@ built from the same model. Classification error on validation set should match e
 training result.
 """
 import os
+from contextlib import closing
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import ArrayIterator  # noqa
@@ -27,7 +28,6 @@ from ngraph.frontends.neon import Affine, Convolution, Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax
 from ngraph.frontends.neon import ax
 from ngraph.frontends.neon import Saver
-from contextlib import closing
 from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import Layer
 import ngraph.transformers as ngt
@@ -51,7 +51,7 @@ def loop_eval(dataset, computation, metric_names, input_ph):
     return reduced_results
 
 
-def test_saver():
+def old_saver():
 
     # Load CIFAR10
     train_data, valid_data = CIFAR10(os.path.join(
@@ -91,7 +91,7 @@ def test_saver():
         # Inference
         eval_function = transformer.add_computation(eval_computation)
         # Set Saver for saving weights
-        weight_saver = Saver(Computation=train_computation)
+        weight_saver = Saver(computation=train_computation)
 
         # Progress bar
         tpbar = tqdm(unit="batches", ncols=100, total=2000)
@@ -116,7 +116,7 @@ def test_saver():
         print("\nTraining Completed")
         print("\nTesting weight save/loading")
         # Save weights at end of training
-        weight_saver.save(Transformer=transformer)
+        weight_saver.save(transformer=transformer, filename="weights")
 
     # Read file
     # Do weight restore
@@ -132,9 +132,22 @@ def test_saver():
 
     with closing(ngt.make_transformer()) as transformer:
         restore_eval_function = transformer.add_computation(restore_eval_computation)
-        weight_saver.restore(Transformer=transformer, Computation=restore_eval_computation)
+        weight_saver.restore(transformer=transformer,
+                             computation=restore_eval_computation, filename="weights")
         restore_eval_losses = loop_eval(valid_set, restore_eval_function,
                                         restore_eval_loss_names, input_ph)
 
     assert abs((restore_eval_losses['misclass'] - eval_losses['misclass']) /
                eval_losses['misclass']) < 0.01
+
+
+def test_persistent_tensor():
+    pass
+
+
+def test_variable():
+    pass
+
+
+def test_affine_with_batch_norm():
+    pass

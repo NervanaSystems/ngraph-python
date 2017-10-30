@@ -20,18 +20,17 @@ from ngraph.frontends.neon.saverfile import SaverFile
 
 
 class WeightVariablesPass(object):
-    def __init__(self, Computation, **kwargs):
+    def __init__(self, computation):
         """
         A class that defines a pass to collect all weights from a ComputationOp
 
         Arguments:
-            Computation (ComputationOp): A ComputationOp of interest.
+            computation (ComputationOp): A ComputationOp of interest.
 
         Methods:
-            do_pass: returns a dictionary of Ops corrensponing to weights.
+            do_pass: returns a dictionary of Ops corresponding to weights.
         """
-        self.values = Computation.values
-        super(WeightVariablesPass, self).__init__(**kwargs)
+        self.values = computation.values
 
     # collect and return a set of all AssignableTensorOp's
     def do_pass(self):
@@ -42,10 +41,10 @@ class WeightVariablesPass(object):
         frontier = set(self.values)
         visited = set()
 
-        # gather presistent and trainable AssignableTensorOp's
-        def add_op(op):
-            if isinstance(op, ng.TensorValueOp):
-                tensor = op.tensor
+        # gather persistent and trainable AssignableTensorOp's
+        def add_op(op_to_add):
+            if isinstance(op_to_add, ng.TensorValueOp):
+                tensor = op_to_add.tensor
                 if isinstance(tensor, ng.AssignableTensorOp):
                     if tensor.is_persistent:
                         if tensor.is_constant:
@@ -60,20 +59,20 @@ class WeightVariablesPass(object):
                                 nodes[tensor.name] = tensor
                             assert prev_op == tensor
         while len(frontier) > 0:
-            op = frontier.pop()
-            add_op(op)
-            visited.add(op)
-            for arg in op.args:
+            op_to_visit = frontier.pop()
+            add_op(op_to_visit)
+            visited.add(op_to_visit)
+            for arg in op_to_visit.args:
                 if arg not in visited:
                     frontier.add(arg)
-            for arg in op.all_deps:
+            for arg in op_to_visit.all_deps:
                 if arg not in visited:
                     frontier.add(arg)
         return nodes
 
 
 class Saver(object):
-    def __init__(self, Computation=None, Ops=None, **kwargs):
+    def __init__(self, computation):
         """
         A class that defines a pass to collect all weights from a ComputationOp
 
@@ -85,51 +84,49 @@ class Saver(object):
             save: saves weight values to named file
             restore: load weight values from named file to matching AssignableTensorOp
         """
-        self.Computation = Computation
-        self.Ops = Ops
+        self.computation = computation
         # Traverse computation graph and extract persistent tensors and unique op instance name
-        weight_pass = WeightVariablesPass(Computation=self.Computation)
-        self.saveVariables = weight_pass.do_pass()
-        self.count = len(self.saveVariables)
-        # create save computations
-        super(Saver, self).__init__(**kwargs)
+        weight_pass = WeightVariablesPass(computation=self.computation)
+        self.save_variables = weight_pass.do_pass()
 
-    def save(self, Transformer=None, Name="weights"):
+    def save(self, transformer, filename, compress=False):
         """
         Save weight values to named file
 
         Arguments:
-            Transformer (ngraph.transformers): transformer that was used to create
-                                               the ComputationOp of interest.
-            Name: name of file to be used for saving weights
+            transformer : transformer where the weights are stored
+            name: name of file to be used for saving weights
         """
         tensors = dict()
-        for name, op in self.saveVariables.items():
-            tensor = Transformer.computation(op)().copy()
-            tensors[name] = tensor
+        # for op_name, op_to_save in self.save_variables.items():
+        #    tensor = transformer.computation(op_to_save)().copy()
+        #    tensors[op_name] = tensor
+        names, ops = zip(*self.save_variables.items())
+        tensors = {name: tensor.copy() for name, tensor in zip(names, 
+                                                               transformer.computation(ops)())}
+        
         # write dictionary to file
-        savefile = SaverFile(Name)
-        savefile.write_values(tensors)
+        savefile = SaverFile(filename)
+        savefile.write_values(tensors, compress)
 
-    def restore(self, Transformer=None, Computation=None, Name="weights"):
+    def restore(self, transformer, computation, filename):
         """
         load weight values from named file to matching AssignableTensorOp
 
         Arguments:
-            Transformer (ngraph.transformers): transformer that was used to create
-                                               the ComputationOp of interest.
-            Computation (ComputationOp): A ComputationOp of interest.
-            Name: name of file with saved weights
+            transformer : transformer where the weights will be restored
+            computation (ComputationOp): A ComputationOp of interest.
+            name: name of file with saved weights
         """
         def find_ops(tensors, values):
             nodes = dict()
             frontier = set(values)
             visited = set()
 
-            # gather presistent and trainable AssignableTensorOp's
-            def add_op(op):
-                if isinstance(op, ng.TensorValueOp):
-                    tensor = op.tensor
+            # gather persistent and trainable AssignableTensorOp's
+            def add_op(op_to_add):
+                if isinstance(op_to_add, ng.TensorValueOp):
+                    tensor = op_to_add.tensor
                     if isinstance(tensor, ng.AssignableTensorOp):
                         if tensor.is_persistent:
                             if tensor.is_constant:
@@ -141,21 +138,20 @@ class Saver(object):
                                     nodes[tensor] = tensors[tensor.name]
                                 except KeyError:
                                     print("Warning: Missing weight in save file: " + tensor.name)
-                                    pass
             while len(frontier) > 0:
-                op = frontier.pop()
-                add_op(op)
-                visited.add(op)
-                for arg in op.args:
+                op_to_visit = frontier.pop()
+                add_op(op_to_visit)
+                visited.add(op_to_visit)
+                for arg in op_to_visit.args:
                     if arg not in visited:
                         frontier.add(arg)
-                for arg in op.all_deps:
+                for arg in op_to_visit.all_deps:
                     if arg not in visited:
                         frontier.add(arg)
             return nodes
         # load weight from file to tensors
-        savefile = SaverFile(Name)
+        savefile = SaverFile(filename)
         tensors = savefile.read_values()
-        nodes = find_ops(tensors, Computation.values)
-        for op, value in nodes.items():
-            Transformer.computation(ng.AssignOp(op, value))()
+        nodes = find_ops(tensors, computation.values)
+        for op_to_save, op_value in nodes.items():
+            transformer.computation(ng.AssignOp(op_to_save, op_value))()
