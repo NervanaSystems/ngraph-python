@@ -4,18 +4,21 @@ FROM ngraph_base_cpu
 # python-dev and python-pip are installed in ngraph_base_cpu image
 # for the appropriate python2 or python3 version
 WORKDIR /root
-RUN apt-get update
-
-RUN apt-get install -y cmake
+RUN apt-get update && \
+    apt-get install -y cmake && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
 
 # install aeon dependencies
-RUN apt-get install -y clang libcurl4-openssl-dev libopencv-dev libsox-dev libgtest-dev
+RUN apt-get update && \
+    apt-get install -y clang libcurl4-openssl-dev libopencv-dev libsox-dev libgtest-dev && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
 
 # install ONNX dependencies
-RUN apt-get install -y protobuf-compiler libprotobuf-dev
-
-# Clean up after install
-RUN apt-get clean autoclean && \
+RUN apt-get update && \
+    apt-get install -y protobuf-compiler libprotobuf-dev && \
+    apt-get clean autoclean && \
     apt-get autoremove -y
 
 WORKDIR /usr/src/gtest
