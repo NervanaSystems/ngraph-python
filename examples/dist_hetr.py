@@ -32,16 +32,19 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--iter_count", "-i", type=int, default=5, help="num iterations to run")
 parser.add_argument("--visualize", "-v", action="store_true", help="enable graph visualization")
+parser.add_argument("--hetr_device", default="cpu",
+                    choices=["cpu", "gpu"], help="device to run HeTr")
 args = parser.parse_args()
 
 # Build the graph
 H = ng.make_axis(length=4, name='height')
 N = ng.make_axis(length=8, name='batch')
 weight = ng.make_axis(length=2, name='weight')
-
+np_weight = weight.length
 x = ng.placeholder(axes=[H, N])
-w = ng.placeholder(axes=[weight, H])
+
 with ng.metadata(device_id=('0', '1'), parallel=N):
+    w = ng.variable(axes=[weight, H], initial_value=np_weight)
     dot = ng.dot(w, x)
 
 # Select a transformer
