@@ -103,8 +103,8 @@ class CommunicationOp(TensorOp):
         return True
 
     @property
-    def is_root(self):
-        return self.metadata['device_id'] == '0'
+    def is_persistent(self):
+        return True
 
 
 class SendOp(CommunicationOp):
@@ -147,6 +147,19 @@ class RecvOp(CommunicationOp):
 
     def send_node(self):
         return self._send_node
+
+    @property
+    def all_deps(self):
+        """
+        Returns:
+            All dependencies except the dependency on the send nodes
+        """
+        deps = super(RecvOp, self).all_deps
+        remove_deps = OrderedSet()
+        for dep in deps:
+            if isinstance(dep, SendOp):
+                remove_deps.add(dep)
+        return deps - remove_deps
 
 
 class ScatterSendOp(SendOp):
@@ -372,7 +385,7 @@ class BroadcastRecvOp(RecvOp):
         super(BroadcastRecvOp, self).__init__(to_node, send_node)
 
 
-class CPUMlslSendOp(SendOp):
+class CPUMlslSendOp(MutateInsteadOfCopyWithNewArgsMixin, SendOp):
 
     def __init__(self, from_node):
         super(CPUMlslSendOp, self).__init__(from_node=from_node)
@@ -384,10 +397,10 @@ class CPUMlslRecvOp(RecvOp):
         super(CPUMlslRecvOp, self).__init__(to_node, send_node)
 
 
-class CPUMlslScatterSendOp(ScatterSendOp):
+class CPUMlslScatterSendOp(MutateInsteadOfCopyWithNewArgsMixin, ScatterSendOp):
 
     def __init__(self, from_node, to_node):
-        super(CPUMlslScatterSendOp, self).__init__(from_node, to_node)
+        super(CPUMlslScatterSendOp, self).__init__(from_node=from_node, to_node=to_node)
         self.arr = None
 
 
@@ -397,10 +410,10 @@ class CPUMlslScatterRecvOp(ScatterRecvOp):
         super(CPUMlslScatterRecvOp, self).__init__(to_node, send_node)
 
 
-class CPUMlslGatherSendOp(GatherSendOp):
+class CPUMlslGatherSendOp(MutateInsteadOfCopyWithNewArgsMixin, GatherSendOp):
 
     def __init__(self, from_node):
-        super(CPUMlslGatherSendOp, self).__init__(from_node)
+        super(CPUMlslGatherSendOp, self).__init__(from_node=from_node)
         self.arr = None
 
 
@@ -410,7 +423,7 @@ class CPUMlslGatherRecvOp(GatherRecvOp):
         super(CPUMlslGatherRecvOp, self).__init__(from_node, to_node, send_node)
 
 
-class CPUMlslAllReduceStartOp(AllReduceOp):
+class CPUMlslAllReduceStartOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
     """
     Represents CPU-based implementation for AllReduce op over async MLSL::AllReduce.
     Start async communication.
