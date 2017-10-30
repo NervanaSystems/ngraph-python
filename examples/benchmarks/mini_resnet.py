@@ -15,7 +15,7 @@
 """
 Run it using
 
-python examples/benchmarks/mini_resnet.py -data cifar10 -b hetr -d cpu -m 2 -z 64 -t 2 -s 1 --bprop
+python -m examples.benchmarks.mini_resnet -data cifar10 -b hetr -d cpu -m 2 -z 64 -t 2 -s 1 --bprop
 """
 from __future__ import division
 from __future__ import print_function
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_batch_norm', action='store_true',
                         help='whether to use batch normalization')
     parser.add_argument('--graph_vis', action="store_true", help="enable graph visualization")
-    parser.add_argument('--size', type=int, default=18, help="Enter size of resnet")
+    parser.add_argument('--size', type=int, default=8, help="Enter size of resnet")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
