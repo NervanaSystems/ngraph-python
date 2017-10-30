@@ -34,113 +34,6 @@ import ngraph.transformers as ngt
 from tqdm import tqdm
 
 
-# Result collector
-def loop_eval(dataset, computation, metric_names, input_ph):
-    dataset.reset()
-    all_results = None
-    for data in dataset:
-        feed_dict = {input_ph[k]: data[k] for k in data.keys()}
-        results = computation(feed_dict=feed_dict)
-        if all_results is None:
-            all_results = {name: list(res) for name, res in zip(metric_names, results)}
-        else:
-            for name, res in zip(metric_names, results):
-                all_results[name].extend(list(res))
-    ndata = dataset.ndata
-    reduced_results = {k: np.mean(v[:ndata]) for k, v in all_results.items()}
-    return reduced_results
-
-
-def old_saver():
-
-    # Load CIFAR10
-    train_data, valid_data = CIFAR10(os.path.join(
-        os.path.join(os.path.expanduser('~'), 'nervana'), 'data')).load_data()
-    train_set = ArrayIterator(train_data, 128, total_iterations=2000)
-    valid_set = ArrayIterator(valid_data, 128)
-    # Num Classes
-    ax.Y.length = 10
-    # Make placeholder
-    input_ph = train_set.make_placeholders(include_iteration=True)
-    # Network
-    layers = [Convolution((3, 3, 8), strides=2, padding=3, batch_norm=True,
-              activation=Rectlin(), filter_init=KaimingInit()),
-              Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=True, activation=Softmax())]
-
-    model = Sequential(layers)
-    # Optimizer
-    optimizer = GradientDescentMomentum(learning_rate=0.01)
-
-    label_indices = input_ph['label']
-    prediction = model(input_ph['image'])
-    train_loss = ng.cross_entropy_multi(prediction, ng.one_hot(label_indices, axis=ax.Y))
-    batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-    train_computation = ng.computation(batch_cost, "all")
-
-    # Inference Parameters
-    with Layer.inference_mode_on():
-        inference_prob = model(input_ph['image'])
-        errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
-        eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(label_indices, axis=ax.Y))
-        eval_loss_names = ['cross_ent_loss', 'misclass']
-        eval_computation = ng.computation([eval_loss, errors], "all")
-
-    with closing(ngt.make_transformer()) as transformer:
-        # Trainer
-        train_function = transformer.add_computation(train_computation)
-        # Inference
-        eval_function = transformer.add_computation(eval_computation)
-        # Set Saver for saving weights
-        weight_saver = Saver(computation=train_computation)
-
-        # Progress bar
-        tpbar = tqdm(unit="batches", ncols=100, total=2000)
-        interval_cost = 0.0
-
-        for step, data in enumerate(train_set):
-            data['iteration'] = step
-            feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-            output = train_function(feed_dict=feed_dict)
-            tpbar.update(1)
-            tpbar.set_description("Training {:0.4f}".format(output[()]))
-            interval_cost += output[()]
-            if (step + 1) % 200 == 0 and step > 0:
-                eval_losses = loop_eval(valid_set, eval_function, eval_loss_names, input_ph)
-                tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                           "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
-                               interval=step // 200,
-                               iteration=step,
-                               cost=interval_cost / 200, tcost=eval_losses))
-
-        tpbar.close()
-        print("\nTraining Completed")
-        print("\nTesting weight save/loading")
-        # Save weights at end of training
-        weight_saver.save(transformer=transformer, filename="weights")
-
-    # Read file
-    # Do weight restore
-    # Do inference
-    with Layer.inference_mode_on():
-        restore_inference_prob = model(input_ph['image'])
-        restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]),
-                                      label_indices)
-        restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob,
-                                                   ng.one_hot(label_indices, axis=ax.Y))
-        restore_eval_loss_names = ['cross_ent_loss', 'misclass']
-        restore_eval_computation = ng.computation([restore_eval_loss, restore_errors], "all")
-
-    with closing(ngt.make_transformer()) as transformer:
-        restore_eval_function = transformer.add_computation(restore_eval_computation)
-        weight_saver.restore(transformer=transformer,
-                             computation=restore_eval_computation, filename="weights")
-        restore_eval_losses = loop_eval(valid_set, restore_eval_function,
-                                        restore_eval_loss_names, input_ph)
-
-    assert abs((restore_eval_losses['misclass'] - eval_losses['misclass']) /
-               eval_losses['misclass']) < 0.01
-
-
 def test_persistent_tensor():
     input_axes = ng.make_axes([
         ng.make_axis(10),
@@ -152,15 +45,17 @@ def test_persistent_tensor():
     bgr_comp = ng.computation(bgr, "all")
 
     results = dict()
+    weight_saver = Saver()
     with closing(ngt.make_transformer()) as transformer:
         bgr_func = transformer.add_computation(bgr_comp)
-        weight_saver = Saver(bgr_comp)
+        weight_saver.setup_save(transformer=transformer, computation=bgr_comp)
         results['saved'] = bgr_func()
-        weight_saver.save(transformer=transformer, filename="test_persistent_tensor")
+        weight_saver.save(filename="test_persistent_tensor")
     with closing(ngt.make_transformer()) as restore_transformer:
         bgr_refunc = restore_transformer.add_computation(bgr_comp)
-        weight_saver.restore(transformer=restore_transformer,
-                             computation=bgr_comp, filename="test_persistent_tensor")
+        weight_saver.setup_restore(transformer=restore_transformer, computation=bgr_comp,
+                                   filename="test_persistent_tensor")
+        weight_saver.restore()
         results['restored'] = bgr_refunc()
     assert np.allclose(results['saved'], results['restored'], atol=0)
 
@@ -174,18 +69,20 @@ def test_variable():
     var_read = ng.computation(var, "all")
     var_comp = ng.computation(ng.AssignOp(tensor=var, val=np.array([113.9, 123.0, 125.3])), "all")
     results = dict()
+    weight_saver = Saver()
     with closing(ngt.make_transformer()) as transformer:
         var_func = transformer.add_computation(var_comp)
-        weight_saver = Saver(var_comp)
+        weight_saver.setup_save(transformer=transformer, computation=var_comp)
         results['saved'] = var_func()
-        weight_saver.save(transformer=transformer, filename="test_variable")
+        weight_saver.save(filename="test_variable")
     with closing(ngt.make_transformer()) as restore_transformer:
         var_readfunc = restore_transformer.add_computation(var_read)
-        weight_saver.restore(transformer=restore_transformer,
-                             computation=var_read, filename="test_variable")
+        weight_saver.setup_restore(transformer=restore_transformer, computation=var_read,
+                                   filename="test_variable")
+        weight_saver.restore()
         results['restored'] = var_readfunc()
     assert np.allclose(results['saved'], results['restored'], atol=0)
 
 
-def test_affine_with_batch_norm():
+def haha_test_affine_with_batch_norm():
     pass
