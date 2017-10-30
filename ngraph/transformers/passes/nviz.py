@@ -192,8 +192,8 @@ class VizPass(GraphPass):
 
         tmp_dir = tempfile.mkdtemp()
         vg.render(directory=tmp_dir, view=self.view, cleanup=True)
-        if not self.view:
-            logging.info("VizPass graph rendered to {}", tmp_dir)
+        logging.info("VizPass graph rendered to {}", tmp_dir)
+
         # Cleanup
         self.uuid_lookup_table.clear()
 

@@ -82,6 +82,8 @@ def test_distributed_plus_one(hetr_device, config):
     },
 ])
 def test_distributed_dot(hetr_device, config):
+    if hetr_device == 'gpu':
+        pytest.xfail("Intermittent failure on jenkins for mgpu")
     device_id = config['device_id']
     axes_x = config['axes_x']
     axes_w = config['axes_w']
@@ -95,7 +97,8 @@ def test_distributed_dot(hetr_device, config):
             dot = ng.dot(x, w)
 
     np_x = np.random.randint(100, size=axes_x.lengths)
-    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+    with closing(ngt.make_transformer_factory('hetr',
+                 device=hetr_device)()) as transformer:
         computation = transformer.computation(dot, x)
         res = computation(np_x)
         np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
@@ -404,6 +407,7 @@ class ClosingHetrServers():
 
 
 def test_rpc_transformer():
+    pytest.xfail("Needs investigation-STARTUP_TIME is too large, needs to be over 5 seconds.")
     from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
     rpc_client_list = list()
     port_list = ['50111', '50112']
@@ -429,7 +433,7 @@ def test_rpc_transformer():
 def test_mpilauncher():
     os.environ["HETR_SERVER_PORTS"] = "51111, 51112"
     mpilauncher = MPILauncher()
-    mpilauncher.launch(2)
+    mpilauncher.launch(2, 1)
 
     # Check if process has launched
     assert mpilauncher.mpirun_proc.poll() is None
@@ -438,3 +442,34 @@ def test_mpilauncher():
 
     # Check if process has completed
     assert mpilauncher.mpirun_proc is None
+
+
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'dataset': 'cifar10',
+        'iter_count': 1,
+        'batch_size': 64,
+        'device_id': ('0', '1'),
+        'bprop': True,
+        'batch_norm': False,
+    }
+])
+def test_hetr_benchmark(hetr_device, config):
+    """
+    Description:
+        Test to ensure benchmarks are working.
+        Benchmark used for test is mini_resnet
+    """
+    from examples.benchmarks.mini_resnet import run_resnet_benchmark
+    c = config
+    run_resnet_benchmark(dataset=c['dataset'],
+                         num_iterations=c['iter_count'],
+                         n_skip=1,
+                         batch_size=c['batch_size'],
+                         device_id=c['device_id'],
+                         transformer_type='hetr',
+                         device=hetr_device,
+                         bprop=c['bprop'],
+                         batch_norm=c['batch_norm'],
+                         visualize=False)

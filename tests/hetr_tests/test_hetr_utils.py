@@ -115,9 +115,9 @@ def test_update_comm_deps_scatter_gather():
     update_comm_deps((scatter_send_x, gather_send_x_plus_one_a, z_a))
     update_comm_deps((gather_send_x_plus_one_b,))
 
-    assert set([scatter_send_x]) == set(scatter_recv_a.all_deps)
+    assert set([scatter_send_x]) == set(scatter_recv_a.control_deps)
     assert set([scatter_send_x, gather_send_x_plus_one_a]) == \
-        set(gather_recv_x_plus_one_a.all_deps)
+        set(gather_recv_x_plus_one_a.control_deps)
 
 
 def assert_axes_eq_len(expected_axes, actual_axes):
