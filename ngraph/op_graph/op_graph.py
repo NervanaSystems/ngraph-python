@@ -993,6 +993,7 @@ class ComputationOp(ParallelOp):
         args = tuple(as_op(arg) for arg in args)
         arg_tensors = set(arg.tensor for arg in args)
         missing_tensors = [t for t in placeholders - arg_tensors]
+
         if len(missing_tensors) > 0:
             raise ValueError(("All used placeholders must be supplied to a "
                               "computation. Currently missed {}."
