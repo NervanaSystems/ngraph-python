@@ -14,14 +14,13 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 
-from ngraph.op_graph.axes import Axes
 from ngraph.op_graph.comm_nodes import set_parallel_axes
 from ngraph.op_graph.op_graph import Op, DotOp, TensorValueOp
 from ngraph.op_graph.comm_nodes import GatherSendOp, RecvOp, ScatterRecvOp, \
     AllReduceOp, BroadcastRecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.serde.serde import serialize_graph, deserialize_graph
-
+from ngraph.op_graph.axes import Axes
 import uuid
 import collections
 
@@ -126,14 +125,13 @@ def clone_graph(root, clone_id, parallel_axis):
     input:
     output: new_root of the cloned graph
     """
+
     # clone nodes with GatherSendOp as root using serde
     ser_cloned_nodes = deserialize_graph(serialize_graph([root]))
 
     new_root = next((o for o in ser_cloned_nodes if o.uuid == root.uuid), None)
 
     orig_ops = {op.uuid: op for op in Op.ordered_ops([root])}
-    # Prune ops that are not control_deps of new_gather_send_op
-    # deserialize includes extra referenced nodes
     cloned_graph = Op.ordered_ops([new_root])
 
     new_send_nodes = OrderedSet()
@@ -180,6 +178,7 @@ def clone_graph(root, clone_id, parallel_axis):
                        orig_ops[arg_op.uuid].metadata['clones'].get(str(clone_id)):
                         args_list[arg_idx] = \
                             orig_ops[arg_op.uuid].metadata['clones'].get(str(clone_id))
+
             op.invalidate_property_cache('all_deps')
             op._args = tuple(args_list)
             if op != new_root:
@@ -191,4 +190,33 @@ def clone_graph(root, clone_id, parallel_axis):
 
             op.uuid = uuid.uuid4()
 
+    # create new uuids for all the ops that have references to the new root
+    for _op in Op.all_op_references([new_root]):
+        _op.uuid = uuid.uuid4()
+
     return new_root, new_send_nodes, replaced_send_nodes
+
+
+def update_parallel_axis(root, parallel_axis):
+    for op in Op.ordered_ops([root]):
+
+        if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
+            op.reduction_axes = set_parallel_axes(op.reduction_axes, parallel_axis)
+
+        if getattr(op, 'axes', None) is not None \
+                and parallel_axis in Axes.as_flattened_list(op.axes):
+            # if parallel_axis in Axes.as_flattened_list(op.axes):
+            op._axes = set_parallel_axes(op.axes, parallel_axis)
+            if isinstance(op, DotOp):
+                if parallel_axis in op.x_out_axes:
+                    op.x_out_axes = set_parallel_axes(op.x_out_axes,
+                                                      parallel_axis)
+                elif parallel_axis in op.y_out_axes:
+                    op.y_out_axes = set_parallel_axes(op.y_out_axes,
+                                                      parallel_axis)
+                else:
+                    raise ValueError("Missing parallel_axis in Op's "
+                                     "x_out_axes or y_out_axes")
+
+        if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
+            op.tensor._axes = set_parallel_axes(op.tensor.axes, parallel_axis)

@@ -52,7 +52,6 @@ from ngraph.transformers.passes.passes import SimplePrune
 from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
-# from ngraph.transformers.passes.nviz import VizPass
 from ngraph.transformers.gpu.float_ew2 import _prepare_compound_kernel, CudaSourceFile
 from ngraph.transformers.gpu.kernel import GPUKernel
 from ngraph.transformers.gpu.gemm import GEMMKernel
@@ -919,7 +918,7 @@ class GPURuntime(object):
         except drv.LogicError:
             sys.exit(PYCUDA_LOGIC_ERROR_CODE)
 
-        self.device_id = device_id if device_id is not None else 0
+        self.device_id = int(device_id) if device_id is not None else 0
         # check compute capability
         self.compute_capability = drv.Device(self.device_id).compute_capability()
         if self.compute_capability[0] < 3:
@@ -1058,6 +1057,7 @@ class GPUTransformer(ComputationGraphTransformer):
         layout_constraints_pass = GenerateLayoutConstraints(self)
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
+
         self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass]  # , VizPass(show_metadata="layout")]

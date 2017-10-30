@@ -1,7 +1,7 @@
 FROM ngraph_base
 
 # install dependencies
-# python-dev and python-pip are installed in ngraph_base image 
+# python-dev and python-pip are installed in ngraph_base image
 # for the appropriate python2 or python3 version
 WORKDIR /root
 RUN apt-get update && \
@@ -12,6 +12,12 @@ RUN apt-get update && \
 # install aeon dependencies
 RUN apt-get update && \
     apt-get install -y clang libcurl4-openssl-dev libopencv-dev libsox-dev libgtest-dev && \
+    apt-get clean autoclean && \
+    apt-get autoremove -y
+
+# install ONNX dependencies
+RUN apt-get update && \
+    apt-get install -y protobuf-compiler libprotobuf-dev && \
     apt-get clean autoclean && \
     apt-get autoremove -y
 
@@ -32,14 +38,14 @@ ADD . /root/ngraph-test
 # This disables a warning from opencv from a defunct driver
 RUN ln /dev/null /dev/raw1394
 
-# build Baidu's Warp-CTC 
+# build Baidu's Warp-CTC
 # dependencies for deepspeech example
 WORKDIR /root
-RUN git clone https://github.com/baidu-research/warp-ctc.git 
+RUN git clone https://github.com/baidu-research/warp-ctc.git
 RUN cd warp-ctc
 ADD . /root/warp-ctc
-WORKDIR /root/warp-ctc 
-RUN mkdir -p build 
+WORKDIR /root/warp-ctc
+RUN mkdir -p build
 RUN cd build && cmake ../ && make && cd ../..
 ENV WARP_CTC_PATH=/root/warp-ctc/build
 ENV WARP_CTC_LIB=$WARP_CTC_PATH/libwarpctc.so
