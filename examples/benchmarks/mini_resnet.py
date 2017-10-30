@@ -19,8 +19,8 @@ python examples/benchmarks/mini_resnet.py -data cifar10 -b hetr -d cpu -m 2 -z 6
 """
 from __future__ import division
 from __future__ import print_function
-from benchmark import Benchmark
-from fake_data_generator import generate_data
+from .benchmark import Benchmark
+from .fake_data_generator import generate_data
 from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
 from ngraph.frontends.neon import Sequential
 from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
@@ -96,21 +96,21 @@ class mini_residual_network(Sequential):
         super(mini_residual_network, self).__init__(layers=layers)
 
 
-def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
-                    activation=True, preprocess=False):
+def get_mini_resnet(inputs, dataset, device, device_id, stage_depth=1,
+                    batch_norm=False, activation=True, preprocess=False):
     model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
-    with ng.metadata(device_id=device_id, parallel=ax.N):
+    with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
         model_out = model(inputs['image'])
     return model_out
 
 
-def get_fake_data(dataset, batch_size, num__iterations):
-    x_train, y_train = generate_data(dataset, batch_size)
+def get_fake_data(dataset, batch_size, num_iterations, seed=None):
+    x_train, y_train = generate_data(dataset, batch_size, rand_seed=seed)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'H', 'W')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
-    train_set = ArrayIterator(train_data, batch_size, total_iterations=num__iterations)
+    train_set = ArrayIterator(train_data, batch_size, total_iterations=num_iterations)
     inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 
@@ -121,11 +121,11 @@ def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
     inputs, data, train_set = get_fake_data(dataset, batch_size, num_iterations)
 
     # Running forward propagation
-    model_out = get_mini_resnet(inputs, dataset, device_id, batch_norm=batch_norm)
+    model_out = get_mini_resnet(inputs, dataset, device, device_id, batch_norm=batch_norm)
 
     # Running back propagation
     if bprop:
-        with ng.metadata(device_id=device_id, parallel=ax.N):
+        with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
             optimizer = GradientDescentMomentum(0.01, 0.9)
             train_loss = ng.cross_entropy_multi(model_out,
                                                 ng.one_hot(inputs['label'], axis=ax.Y))
