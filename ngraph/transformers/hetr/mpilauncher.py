@@ -18,8 +18,10 @@ class MPILauncher(object):
     def __init__(self):
         self.mpirun_proc = None
         self._hostfile = os.getenv('HETR_SERVER_HOSTFILE')
-        self._server_count = os.getenv('HETR_SERVER_NUM')
+        # TODO add handling/error message for improperly formatted var
         self._rpc_ports = os.getenv('HETR_SERVER_PORTS')
+        if self._rpc_ports:
+            self._rpc_ports = self._rpc_ports.split(',')
         current_dir = os.path.dirname(os.path.realpath(__file__))
         self._tmpfile = tempfile.NamedTemporaryFile(mode='r',
                                                     dir=current_dir,
@@ -32,7 +34,7 @@ class MPILauncher(object):
     def get_host_by_rank(self, rank):
         return self._hosts[rank % len(self._hosts)]
 
-    def get_rpc_port_by_rank(self, rank):
+    def get_rpc_port_by_rank(self, rank, num_servers):
         if self.mpirun_proc is None:
             raise RuntimeError("Launch mpirun_proc before reading of rpc ports")
 
@@ -46,7 +48,7 @@ class MPILauncher(object):
             self._tmpfile.seek(0)
             fcntl.flock(self._tmpfile, fcntl.LOCK_UN)
 
-            if line_count == self._server_count:
+            if line_count == num_servers:
                 break
             else:
                 time.sleep(0.05)
@@ -58,49 +60,47 @@ class MPILauncher(object):
         self._tmpfile.close()
         return self._rpc_ports[rank]
 
-    def get_address_by_rank(self, rank):
-        return '{}:{}'.format(self.get_host_by_rank(rank), self.get_rpc_port_by_rank(rank))
+    def get_address_by_rank(self, rank, num_servers):
+        return '{}:{}'.format(self.get_host_by_rank(rank),
+                              self.get_rpc_port_by_rank(rank, num_servers))
 
-    def launch(self, server_count):
+    def launch(self, num_servers, process_per_node):
         if self.mpirun_proc is not None:
             logger.info("mpirun_proc is already launched")
             return
-
-        if self._server_count is None:
-            self._server_count = server_count
-
-        logger.info("mpilauncher: launch: hostfile %s, hosts %s, server_count %s, tmpfile %s",
-                    self._hostfile, self._hosts, self._server_count, self._tmpfile)
-
         server_path = os.path.dirname(os.path.realpath(__file__)) + "/hetr_server.py"
+        mpirun_env = dict(os.environ)
+
         cmd = ['mpirun',
-               '-n', str(self._server_count),
-               '-ppn', '1',
+               '-n', str(num_servers),
+               '-ppn', str(process_per_node),
                '-l']  # to print MPI rank index for each log line
+        if 'MLSL_NUM_SERVERS' not in mpirun_env:
+            mpirun_env['MLSL_NUM_SERVERS'] = '0'
+        if 'MLSL_LOG_LEVEL' not in mpirun_env:
+            mpirun_env['MLSL_LOG_LEVEL'] = '0'
+        if 'MLSL_ALLOW_REINIT' not in mpirun_env:
+            mpirun_env['MLSL_ALLOW_REINIT'] = '1'
+
+        logger.info("mpilauncher: launch: hostfile %s, hosts %s, num_servers %s, tmpfile %s",
+                    self._hostfile, self._hosts, num_servers, self._tmpfile)
 
         if self._hostfile is not None:
             cmd.extend(['-hostfile', self._hostfile])
-        elif self._hosts is not None:
+        elif (self._hosts is not None):
             hostlist = ",".join(self._hosts)
             cmd.extend(['-hosts', hostlist])
         else:
             assert False, "Specify hostfile or hosts"
-
         cmd.extend(['python', server_path, '-tf', self._tmpfile.name])
         if self._rpc_ports is not None:
-            cmd.extend(['-p', self._rpc_ports])
+            cmd.extend(['-p'] + self._rpc_ports)
             self._rpc_ports = None
         logger.info("mpirun cmd: %s", cmd)
 
         try:
-            mpirun_env = dict(os.environ)
-            if 'MLSL_NUM_SERVERS' not in mpirun_env:
-                mpirun_env['MLSL_NUM_SERVERS'] = '0'
-            if 'MLSL_LOG_LEVEL' not in mpirun_env:
-                mpirun_env['MLSL_LOG_LEVEL'] = '0'
-            if 'MLSL_ALLOW_REINIT' not in mpirun_env:
-                mpirun_env['MLSL_ALLOW_REINIT'] = '1'
-            self.mpirun_proc = subprocess.Popen(cmd, preexec_fn=os.setsid, env=mpirun_env)
+            self.mpirun_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                                preexec_fn=os.setsid, env=mpirun_env)
         except:
             raise RuntimeError("Process launch failed!")
 
