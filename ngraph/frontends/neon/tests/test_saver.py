@@ -142,11 +142,49 @@ def old_saver():
 
 
 def test_persistent_tensor():
-    pass
+    input_axes = ng.make_axes([
+        ng.make_axis(10),
+        ng.make_axis(3)
+    ])
+    bgr = ng.persistent_tensor(
+        axes=input_axes,
+        initial_value=np.array([113.9, 123.0, 125.3]))
+    bgr_comp = ng.computation(bgr, "all")
+
+    results = dict()
+    with closing(ngt.make_transformer()) as transformer:
+        bgr_func = transformer.add_computation(bgr_comp)
+        weight_saver = Saver(bgr_comp)
+        results['saved'] = bgr_func()
+        weight_saver.save(transformer=transformer, filename="test_persistent_tensor")
+    with closing(ngt.make_transformer()) as restore_transformer:
+        bgr_refunc = restore_transformer.add_computation(bgr_comp)
+        weight_saver.restore(transformer=restore_transformer,
+                             computation=bgr_comp, filename="test_persistent_tensor")
+        results['restored'] = bgr_refunc()
+    assert np.allclose(results['saved'], results['restored'], atol=0)
 
 
 def test_variable():
-    pass
+    input_axes = ng.make_axes([
+        ng.make_axis(10),
+        ng.make_axis(3)
+    ])
+    var = ng.variable(axes=input_axes)
+    var_read = ng.computation(var, "all")
+    var_comp = ng.computation(ng.AssignOp(tensor=var, val=np.array([113.9, 123.0, 125.3])), "all")
+    results = dict()
+    with closing(ngt.make_transformer()) as transformer:
+        var_func = transformer.add_computation(var_comp)
+        weight_saver = Saver(var_comp)
+        results['saved'] = var_func()
+        weight_saver.save(transformer=transformer, filename="test_variable")
+    with closing(ngt.make_transformer()) as restore_transformer:
+        var_readfunc = restore_transformer.add_computation(var_read)
+        weight_saver.restore(transformer=restore_transformer,
+                             computation=var_read, filename="test_variable")
+        results['restored'] = var_readfunc()
+    assert np.allclose(results['saved'], results['restored'], atol=0)
 
 
 def test_affine_with_batch_norm():
