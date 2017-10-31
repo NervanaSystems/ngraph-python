@@ -115,49 +115,32 @@ class RPCTransformerClient(object):
             self.is_trans_built = False
             raise RuntimeError("RPC build_transformer request failed: {}".format(response.message))
 
-    def create_computation(self, returns, placeholders):
-        logger.info("client: create_computation")
+    def create_computation(self, pb_ops, pb_edges, returns, placeholders):
+        logger.debug("client: create_computation")
+
+        def ops_to_protobuf(ops):
+            return [op_to_protobuf(o) for o in ops]
 
         def make_computation_request(pb_ops, pb_edges, pb_returns=None, pb_placeholders=None):
-            if pb_returns or pb_placeholders:
-                return hetr_pb2.ComputationRequest(
-                    ops=pb_ops,
-                    edges=pb_edges,
-                    returns=pb_returns,
-                    placeholders=pb_placeholders)
-            else:
-                return hetr_pb2.ComputationRequest(
-                    ops=pb_ops,
-                    edges=pb_edges)
-
-        def generate_returns_placeholders():
-            pb_returns = []
-            pb_placeholders = []
-            for op in returns:
-                pb_returns.append(op_to_protobuf(op))
-            for op in placeholders:
-                pb_placeholders.append(op_to_protobuf(op))
-            return pb_returns, pb_placeholders
+            return hetr_pb2.ComputationRequest(
+                ops=pb_ops,
+                edges=pb_edges,
+                returns=pb_returns,
+                placeholders=pb_placeholders)
 
         def generate_messages():
-            pb_ops, pb_edges = [], []
-            pb_returns, pb_placeholders = generate_returns_placeholders()
-            ops = Op.all_op_references(returns + list(placeholders))
-            for i, op in enumerate(ops):
-                pb_ops.append(op_to_protobuf(op))
-                add_edges(pb_edges, pb_ops, op)
-                if (i != 0 and i % _OPS_PER_MSG == 0) or (i == len(ops) - 1):
-                    msg = make_computation_request(pb_ops,
-                                                   pb_edges,
-                                                   pb_returns,
-                                                   pb_placeholders)
-                    yield msg
+            pb_returns = ops_to_protobuf(returns)
+            pb_placeholders = ops_to_protobuf(placeholders)
 
-                    pb_ops, pb_edges = [], []
-                    pb_returns, pb_placeholders = [], []
+            ops = Op.all_op_references(returns + list(placeholders))
+            yield make_computation_request(pb_ops,
+                                           pb_edges,
+                                           pb_returns,
+                                           pb_placeholders)
 
         if not self.is_trans_built:
             raise RuntimeError("call build_transformer before create_computation")
+
         update_comm_deps(returns)
 
         self.computation_response_future = self.RPC.Computation.future(
