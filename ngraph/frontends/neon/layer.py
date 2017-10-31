@@ -903,21 +903,11 @@ class Affine(Layer):
            output = affine(input)
 
         .. code-block:: python
-            # Create output feature axis - classify into F_out classes
-            F_out = 10
-            fout_axis = ng.make_axis(length=F_out, name='F_out')
-
-            # Create placeholder for inputs and outputs
-            in_holder= ng.placeholder([batch_axis, input_feature_axis])
-            # Output for each sample is a single integer in range [0, F_out)
-            out_holder = ng.placeholder([batch_axis])
-
-            # Model specification
-            # Note that we want to set the axes for the second second Affine
-            seq1 = Sequential([Preprocess(functor=lambda x: x / 255.),
-                               Affine(nout=100, weight_init=GaussianInit(), activation=Rectlin()),
-                               Affine(axes=fout_axis, weight_init=GaussianInit(),
-                                      activation=Logistic())])
+           # Get the feature axes from the sample target
+           output_axes = target.feature_axes()
+           # Create an affine layer with the same output feature axes
+           affine = Affine(weight_init=GaussianInit(), activation=Softmax(), axes=output_axes)
+           output = affine(input)
     """
     def __init__(self, weight_init, nout=None, bias_init=None, activation=None,
                  batch_norm=False, axes=None, **kwargs):

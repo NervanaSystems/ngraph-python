@@ -50,6 +50,8 @@ class Parallel(SubGraph):
         super(Parallel, self).__init__(name=name, **kwargs)
         self.branches = branches
         self.mode = mode
+        if not ((self.mode is None) or (self.mode == 'concat')):
+            raise NotImplementedError("Unrecognized mode:{}".format(str(self.mode)))
 
     @SubGraph.scope_op_creation
     def __call__(self, in_obj, merge_axis=None):
@@ -66,7 +68,7 @@ class Parallel(SubGraph):
             # Return the output list directly
             pass
         else:
-            raise NotImplementedError("Unrecognized mode:%s" % str(self.mode))
+            pass
         return outputs
 
 
