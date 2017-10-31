@@ -1,3 +1,11 @@
+# Important Note
+
+We are currently transitioning the Intel® Nervana™ graph codebase from Python to C++.
+ 
+As a result, most work in this repository is now focused on the higher levels of the neon™ framework. Additional work is ongoing in internal repositories for both the core C++ Intel Nervana graph as well as framework bridges from Intel Nervana graph to TensorFlow*/XLA and MXNet*. We are also continuing support for neon, which will retain its Python interface. 
+ 
+We will release the C++ implementations of Intel Nervana graph publically when they are more mature.  
+
 # Nervana Graph
 
 Nervana graph is Nervana's library for developing frameworks that can efficiently run deep
