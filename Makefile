@@ -146,7 +146,7 @@ test_mkldnn: multinode_prepare test_prepare clean
 test_mkldnn:
 	@echo Running unit tests for core and cpu transformer tests...
 	py.test -m "transformer_dependent and not hetr_only and not flex_only" --boxed \
-	--junit-xml=testout_test_cpu_$(PY).xml \
+	--junit-xml=testout_test_mkldnn_cpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS)
 	@echo Running unit tests for hetr dependent transformer tests...
 	unset http_proxy && \
@@ -154,10 +154,10 @@ test_mkldnn:
 	unset HTTP_PROXY && \
 	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
-	--junit-xml=testout_test_hetr_$(PY).xml \
+	--junit-xml=testout_test_mkldnn_hetr_$(PY).xml \
 	--cov-append \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
-	coverage xml -i -o coverage_test_cpu_$(PY).xml
+	coverage xml -i -o coverage_test_mkldnn_$(PY).xml
 
 test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
 test_cpu: export PYTHONHASHSEED=0
@@ -209,9 +209,9 @@ test_mgpu: multinode_prepare test_prepare clean
 	unset HTTP_PROXY && \
 	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m multi_device --hetr_device gpu --boxed \
-	--junit-xml=testout_test_hetr_$(PY).xml \
+	--junit-xml=testout_test_mgpu_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
-	coverage xml -i -o coverage_test_hetr_$(PY).xml
+	coverage xml -i -o coverage_test_mgpu_$(PY).xml
 
 test_mxnet: test_prepare clean
 	echo Running unit tests for mxnet frontend...
@@ -222,17 +222,17 @@ test_mxnet: test_prepare clean
 
 test_cntk: test_prepare clean
 	echo Running unit tests for cntk frontend...
-	py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
-	coverage xml -i
+	py.test --cov=ngraph --junit-xml=testout_test_cntk_$(PY).xml $(TEST_OPTS) $(TEST_DIRS_CNTK)
+	coverage xml -i -o coverage_test_cntk_$(PY).xml
 
 test_caffe2: test_prepare clean
 	echo Running unit tests for caffe2 frontend...
-	py.test --cov=ngraph --junit-xml=testout.xml $(TEST_OPTS) $(TEST_DIRS_CAFFE2)
-	coverage xml -i
+	py.test --cov=ngraph --junit-xml=testout_test_caffe2_$(PY).xml $(TEST_OPTS) $(TEST_DIRS_CAFFE2)
+	coverage xml -i -o coverage_test_caffe2_$(PY).xml
 
 test_integration: test_prepare clean
 	echo Running integration tests...
-	py.test --junit-xml=testout_test_integration__$(PY).xml \
+	py.test --junit-xml=testout_test_integration_$(PY).xml \
 	$(TEST_OPTS) $(TEST_DIRS_INTEGRATION)
 	coverage xml -i coverage_test_integration_$(PY).xml
 
