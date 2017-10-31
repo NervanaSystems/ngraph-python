@@ -49,14 +49,14 @@ def test_persistent_tensor():
     with closing(ngt.make_transformer()) as transformer:
         bgr_func = transformer.add_computation(bgr_comp)
         weight_saver.setup_save(transformer=transformer, computation=bgr_comp)
-        results['saved'] = bgr_func()
+        results['saved'] = bgr_func().copy()
         weight_saver.save(filename="test_persistent_tensor")
     with closing(ngt.make_transformer()) as restore_transformer:
         bgr_refunc = restore_transformer.add_computation(bgr_comp)
         weight_saver.setup_restore(transformer=restore_transformer, computation=bgr_comp,
                                    filename="test_persistent_tensor")
         weight_saver.restore()
-        results['restored'] = bgr_refunc()
+        results['restored'] = bgr_refunc().copy()
     assert np.allclose(results['saved'], results['restored'], atol=0)
 
 
@@ -66,23 +66,37 @@ def test_variable():
         ng.make_axis(3)
     ])
     var = ng.variable(axes=input_axes)
-    var_read = ng.computation(var, "all")
-    var_comp = ng.computation(ng.AssignOp(tensor=var, val=np.array([113.9, 123.0, 125.3])), "all")
+    assign_val = np.random.rand(10, 3)
+    var_assign = ng.AssignOp(tensor=var, val=assign_val)
+    var_seq = ng.sequential([var_assign, var])
+    var_comp = ng.computation(var_seq, "all")
     results = dict()
     weight_saver = Saver()
     with closing(ngt.make_transformer()) as transformer:
         var_func = transformer.add_computation(var_comp)
         weight_saver.setup_save(transformer=transformer, computation=var_comp)
-        results['saved'] = var_func()
+        results['saved'] = var_func().copy()
         weight_saver.save(filename="test_variable")
+
+    reassign_val = np.random.rand(10, 3)
+    var_reassign = ng.AssignOp(tensor=var, val=reassign_val)
+    
+    var_recomp = ng.computation(var_reassign, "all")
+    var_read = ng.computation(var, "all")
     with closing(ngt.make_transformer()) as restore_transformer:
-        var_readfunc = restore_transformer.add_computation(var_read)
-        weight_saver.setup_restore(transformer=restore_transformer, computation=var_read,
+        var_recompfunc = restore_transformer.add_computation(var_recomp)
+        weight_saver.setup_restore(transformer=restore_transformer, computation=var_recomp,
                                    filename="test_variable")
+        var_readfunc = restore_transformer.add_computation(var_read)
+        var_recompfunc()
+        results['reassigned'] = var_readfunc().copy()
         weight_saver.restore()
-        results['restored'] = var_readfunc()
+        results['restored'] = var_readfunc().copy()
+
+    assert np.allclose(results['saved'], assign_val, atol=0)
+    assert np.allclose(results['reassigned'], reassign_val, atol=0)
     assert np.allclose(results['saved'], results['restored'], atol=0)
 
 
-def haha_test_affine_with_batch_norm():
+def test_affine_with_batch_norm():
     pass
