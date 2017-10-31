@@ -26,39 +26,18 @@ from contextlib import closing
 from ngraph.frontends.neon import Saver
 
 
-# Calculate metrics over given dataset
-def loop_eval(dataset, input_ph, metric_name, computation, en_top5=False):
-    # Reset test set
+# Result collector
+def loop_eval(dataset, computation, metric_names):
     dataset.reset()
     all_results = None
-    # Iterating over the dataset
     for data in dataset:
         feed_dict = {input_ph[k]: data[k] for k in data.keys()}
-        # Tuple of results from computation
         results = computation(feed_dict=feed_dict)
-        # Seperate Results
-        results_miss_loss = results[1]
-        results_inference = results[0]
-        # Collect top5 and top1 results
-        top5 = np.argsort(results_inference, axis=0)[-5:]
-        top1 = top5[-1:]
-        # Get ground truth labels
-        correct_label = data['label'].T
-        # Compare if any of the top5 matches with labels
-        top5_results = np.any(np.equal(correct_label, top5), axis=0)
-        # Invert for mis-classification
-        top5_results = np.invert(top5_results)
-        # Compare which are not equal 
-        top1_results = np.not_equal(correct_label, top1)
-        # Make a list of results
-        total_results = [results_miss_loss, top5_results, top1_results] if en_top5 else [results_miss_loss, top1_results]
-        # Accumulate results
         if all_results is None:
-            all_results = {name: list(res) for name, res in zip(metric_names, total_results)}
+            all_results = {name: list(res) for name, res in zip(metric_names, results)}
         else:
-            for name, res in zip(metric_names, total_results):
+            for name, res in zip(metric_names, results):
                 all_results[name].extend(list(res))
-    # Take mean of results
     ndata = dataset.ndata
     reduced_results = {k: np.mean(v[:ndata]) for k, v in all_results.items()}
     return reduced_results
@@ -77,7 +56,7 @@ if __name__ == "__main__":
     print("Learning Rate:     " + str(base_lr))
     print("Momentum:          " + str(momentum_coef))
     print("Weight Decay:      " + str(wdecay))
-    print("Nesterov:          " + str(nesterov))
+    print("Nesterov           " + str(nesterov))
 
     # Command Line Parser
     parser = NgraphArgparser(description="Resnet for Imagenet and Cifar10")
@@ -92,8 +71,6 @@ if __name__ == "__main__":
     cifar_sizes = [8, 20, 32, 44, 56, 110]
     i1k_sizes = [18, 34, 50, 101, 152]
     if args.dataset == 'cifar10':
-        metric_names = ['Cross_Ent_Loss', 'Misclass']
-        en_top5 = False
         dataset_sizes = cifar_sizes
         if args.size in dataset_sizes:
             # Num of resnet modules required for cifar10
@@ -109,8 +86,6 @@ if __name__ == "__main__":
         else:
             raise ValueError("Invalid CIFAR10 size. Select from " + str(dataset_sizes))
     elif args.dataset == 'i1k':
-        metric_names = ['Cross_Ent_Loss', 'Top5_Err', 'Top1_Err'] 
-        en_top5 = True
         dataset_sizes = i1k_sizes
         if args.size in dataset_sizes:
             # Enable or disable bottleneck depending on resnet size
@@ -119,9 +94,11 @@ if __name__ == "__main__":
             else:
                 en_bottleneck = True
             # Change iter_interval to print every epoch. TODO
-            args.iter_interval = 1301000 // args.batch_size
-            learning_schedule = [30 * args.iter_interval, 60 * args.iter_interval]
+            args.iter_interval = 1281216 // args.batch_size
+            learning_schedule = [84 * args.iter_interval, 124 * args.iter_interval]
             print("Learning Schedule: " + str(learning_schedule))
+            # For now 200 to prints often will change later
+            args.iter_interval = 200
             num_resnet_mods = 0
             # of Classes
             ax.Y.length = 1000
@@ -149,13 +126,11 @@ if(args.tb):
     tb = TensorBoard("/tmp/")
     tb.add_graph(train)
     exit()
-
-# Learning Rate Placeholder
-lr_ph = ng.placeholder(axes=(), initial_value=base_lr)
-
 # Optimizer
-learning_rate_policy = {'name': 'dynamic',
-                        'lr_placeholder': lr_ph}
+learning_rate_policy = {'name': 'schedule',
+                        'schedule': learning_schedule,
+                        'gamma': gamma,
+                        'base_lr': base_lr}
 
 optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                     momentum_coef=momentum_coef,
@@ -163,21 +138,18 @@ optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
                                     nesterov=False,
                                     iteration=input_ph['iteration'])
 label_indices = input_ph['label']
-# Make a prediction
 prediction = resnet(input_ph['image'])
-# Calculate loss
 train_loss = ng.cross_entropy_multi(prediction, ng.one_hot(label_indices, axis=ax.Y))
-# Average loss over the batch
 batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
 train_computation = ng.computation(batch_cost, "all")
 
-# Inference 
+# Inference Parameters
 with Layer.inference_mode_on():
-    # Doing inference
     inference_prob = resnet(input_ph['image'])
+    errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label_indices)
     eval_loss = ng.cross_entropy_multi(inference_prob, ng.one_hot(label_indices, axis=ax.Y))
-    # Computation for inference
-    eval_computation = ng.computation([inference_prob, eval_loss], "all")
+    eval_loss_names = ['cross_ent_loss', 'misclass']
+    eval_computation = ng.computation([eval_loss, errors], "all")
 
 weight_saver = Saver()
 # Training the network by calling transformer
@@ -192,48 +164,30 @@ with closing(ngt.make_transformer()) as transformer:
 
     # Progress bar
     tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
-    # Set interval cost to 0.0
     interval_cost = 0.0
-    # Declare lists for logging metrics
     if(args.name is not None):
         train_result = []
         test_result = []
         err_result = []
-    # Iterating over the training set
     for step, data in enumerate(train_set):
         data['iteration'] = step
-        # Dictionary for training
         feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
-        # Learning Schedule
-        feed_dict[lr_ph] = base_lr
-        if((step >= learning_schedule[0]) and (step < learning_schedule[1])):
-            feed_dict[lr_ph] = base_lr * gamma
-        if(step >= learning_schedule[1]):
-            feed_dict[lr_ph] = base_lr * gamma * gamma
-        # Mean batch cost
         output = train_function(feed_dict=feed_dict)
-        # Update progress bar
         tpbar.update(1)
         tpbar.set_description("Training {:0.4f}".format(output[()]))
         interval_cost += output[()]
-        # Every epoch print test set metrics
         if (step + 1) % args.iter_interval == 0 and step > 0:
-            # Call loop_eval to calculate metric over test set
-            eval_losses = loop_eval(valid_set, input_ph, metric_names, eval_function, en_top5)
+            eval_losses = loop_eval(valid_set, eval_function, eval_loss_names)
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
-                       "Avg Train Cost {cost:0.4f} Test Metrics:{tcost}".format(
+                       "Avg Train Cost {cost:0.4f} Test Avg loss:{tcost}".format(
                            interval=step // args.iter_interval,
                            iteration=step,
                            cost=interval_cost / args.iter_interval, tcost=eval_losses))
-            # Log metrics to list
             if(args.name is not None):
                 # For storing to csv
                 train_result.append(interval_cost / args.iter_interval)
-                test_result.append(eval_losses['Cross_Ent_Loss'])
-                if args.dataset == 'cifar10':
-                    err_result.append(eval_losses['Misclass'])
-                if args.dataset == 'i1k':
-                    err_result.append(eval_losses['Top5_Err'])
+                test_result.append(eval_losses['cross_ent_loss'])
+                err_result.append(eval_losses['misclass'])
             interval_cost = 0.0
     tpbar.close()
     # Writing to CSV
@@ -254,16 +208,18 @@ with closing(ngt.make_transformer()) as transformer:
 with Layer.inference_mode_on():
     # Doing inference post weight restore
     restore_inference_prob = resnet(input_ph['image'])
+    restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]), label_indices)
     restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob, ng.one_hot(label_indices, axis=ax.Y))
+    restore_eval_loss_names = ['cross_ent_loss', 'misclass']
     # Computation for inference
-    restore_eval_computation = ng.computation([restore_inference_prob, restore_eval_loss], "all")
+    restore_eval_computation = ng.computation([restore_eval_loss, restore_errors], "all")
 
 with closing(ngt.make_transformer()) as transformer:
     restore_eval_function = transformer.add_computation(restore_eval_computation)
     # Restore weight
-    weight_saver.setup_restore(transformer=transformer, vomputation=restore_eval_computation)
+    weight_saver.setup_restore(transformer=transformer, computation=restore_eval_computation)
     weight_saver.restore()
 
-    restore_eval_losses = loop_eval(valid_set, input_ph, metric_names, restore_eval_function, en_top5)
+    restore_eval_losses = loop_eval(valid_set, restore_eval_function, restore_eval_loss_names)
     print("From restored weights: Test Avg loss:{tcost}".format(tcost=restore_eval_losses))
     print("\nComplete: Testing weight save/loading")
