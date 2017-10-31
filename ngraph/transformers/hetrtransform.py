@@ -109,14 +109,13 @@ class HetrComputation(Computation):
             op_trans = op.metadata['transformer']
             return name == op_trans or name in op_trans
 
-        t_name = self.transformer.default_device + '0'
         placeholders = [p for p in self.computation_op.parameters]
-        my_ops = [op for op in self.send_nodes | new_returns if is_my_op(op, t_name)]
-        transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
-        total_ops = Op.all_op_references(transform_ops + placeholders)
+        all_returns = [o for o in self.send_nodes | new_returns]
+        transform_ops = [o.args[0] if isinstance(o, ResultOp) else o for o in all_returns]
+        whole_graph = Op.all_op_references(transform_ops + placeholders)
 
         pb_ops, pb_edges = [], []
-        for o in total_ops:
+        for o in whole_graph:
             pb_ops.append(op_to_protobuf(o))
             add_edges(pb_edges, pb_ops, o)
 
@@ -132,7 +131,6 @@ class HetrComputation(Computation):
 
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
             placeholders = [p for _, p in my_params]
-            tmp_total_ops = Op.all_op_references(transform_ops + placeholders)
             trans.create_computation(pb_ops, pb_edges, transform_ops, placeholders)
             comp = trans.get_computation()
             comp.param_idx = [g_pos for g_pos, p in my_params]
