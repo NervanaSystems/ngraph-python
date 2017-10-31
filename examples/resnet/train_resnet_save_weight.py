@@ -179,6 +179,7 @@ with Layer.inference_mode_on():
     # Computation for inference
     eval_computation = ng.computation([inference_prob, eval_loss], "all")
 
+weight_saver = Saver()
 # Training the network by calling transformer
 with closing(ngt.make_transformer()) as transformer:
     # Trainer
@@ -187,7 +188,7 @@ with closing(ngt.make_transformer()) as transformer:
     eval_function = transformer.add_computation(eval_computation)
 
     # Set Saver for saving weights
-    weight_saver = Saver(Computation=train_computation)
+    weight_saver.setup_save(transformer=transformer, computation=train_computation)
 
     # Progress bar
     tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
@@ -248,7 +249,7 @@ with closing(ngt.make_transformer()) as transformer:
 
     print("\nTesting weight save/loading")
     # Save weights at end of training
-    weight_saver.save(Transformer=transformer)
+    weight_saver.save(filename="weights")
 
 with Layer.inference_mode_on():
     # Doing inference post weight restore
@@ -260,7 +261,8 @@ with Layer.inference_mode_on():
 with closing(ngt.make_transformer()) as transformer:
     restore_eval_function = transformer.add_computation(restore_eval_computation)
     # Restore weight
-    weight_saver.restore(Transformer=transformer, Computation=restore_eval_computation)
+    weight_saver.setup_restore(transformer=transformer, vomputation=restore_eval_computation)
+    weight_saver.restore()
 
     restore_eval_losses = loop_eval(valid_set, input_ph, metric_names, restore_eval_function, en_top5)
     print("From restored weights: Test Avg loss:{tcost}".format(tcost=restore_eval_losses))
