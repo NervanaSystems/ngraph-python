@@ -36,7 +36,7 @@ def conv_params(filter_shape, strides=1, batch_norm=BatchNorm(rho=0.999), activa
                 bias_init=bias_init)
 
 
-class Inceptionv3_b1(object):
+class Inceptionv3_b1(Parallel):
 
     def __init__(self, branch_units=[(64,), (48, 64), (64, 96, 96), (64,)], name=None):
         """
@@ -70,13 +70,11 @@ class Inceptionv3_b1(object):
                               Convolution(name=name + '_br4_conv1x1',
                                           **conv_params(filter_shape=(1, 1, p4[0])))])
 
-        self.model = Parallel([branch1, branch2, branch3, branch4])
-
-    def __call__(self, in_obj):
-        return self.model(in_obj)
+        branches = [branch1, branch2, branch3, branch4]
+        super(Inceptionv3_b1, self).__init__(name=name, branches=branches, mode='concat')
 
 
-class Inceptionv3_b2(object):
+class Inceptionv3_b2(Parallel):
 
     def __init__(self, branch_units=[(384,), (64, 96, 96)], name=None):
         """
@@ -104,13 +102,11 @@ class Inceptionv3_b2(object):
         branch3 = Pooling(pool_shape=(3, 3), padding=0, strides=2, pool_type="max",
                           name=name + '_br3_maxpool')
 
-        self.model = Parallel([branch1, branch2, branch3])
-
-    def __call__(self, in_obj):
-        return self.model(in_obj)
+        branches = [branch1, branch2, branch3]
+        super(Inceptionv3_b2, self).__init__(name=name, branches=branches, mode='concat')
 
 
-class Inceptionv3_b3(object):
+class Inceptionv3_b3(Parallel):
 
     def __init__(self, branch_units=[(192), (160, 160, 192),
                                      (160, 160, 160, 160, 192), (192,)], name=None):
@@ -159,14 +155,11 @@ class Inceptionv3_b3(object):
                                       pool_shape=(3, 3), padding=1, strides=1, pool_type="avg"),
                               Convolution(name=name + '_br4_1x1conv',
                                           **conv_params(filter_shape=(1, 1, p4[0])))])
-
-        self.model = Parallel([branch1, branch2, branch3, branch4])
-
-    def __call__(self, in_obj):
-        return self.model(in_obj)
+        branches = [branch1, branch2, branch3, branch4]
+        super(Inceptionv3_b3, self).__init__(name=name, branches=branches, mode='concat')
 
 
-class Inceptionv3_b4(object):
+class Inceptionv3_b4(Parallel):
 
     def __init__(self, branch_units=[(192, 320), (192, 192, 192, 192)], name=None):
         """
@@ -196,22 +189,13 @@ class Inceptionv3_b4(object):
                                           **conv_params(filter_shape=(3, 3, p2[3]),
                                                         strides=2, padding=0))])
 
-        branch3 = Pooling(
-            name=name +
-            '_br3_maxpool',
-            pool_shape=(
-                3,
-                3),
-            padding=0,
-            strides=2,
-            pool_type="max")
-        self.model = Parallel([branch1, branch2, branch3])
-
-    def __call__(self, in_obj):
-        return self.model(in_obj)
+        branch3 = Pooling(name=name + '_br3_maxpool', pool_shape=(3, 3),
+                          padding=0, strides=2, pool_type="max")
+        branches = [branch1, branch2, branch3]
+        super(Inceptionv3_b4, self).__init__(name=name, branches=branches, mode='concat')
 
 
-class Inceptionv3_b5(object):
+class Inceptionv3_b5(Parallel):
 
     def __init__(self, branch_units=[(320,), (384, 384, 384),
                                      (448, 384, 384, 384), (192,)], name=None):
@@ -265,10 +249,8 @@ class Inceptionv3_b5(object):
                                           **conv_params(filter_shape=(1, 1, p4[0])))])
 
         # Combine branches
-        self.model = Parallel([branch1, branch2, branch3, branch4])
-
-    def __call__(self, in_obj):
-        return self.model(in_obj)
+        branches = [branch1, branch2, branch3, branch4]
+        super(Inceptionv3_b5, self).__init__(name=name, branches=branches, mode='concat')
 
 
 class Inception(object):

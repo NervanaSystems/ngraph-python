@@ -36,6 +36,7 @@ class Parallel(SubGraph):
         output = par1(input)
 
     The above code is equivalent of doing
+    .. code-block:: python
         br1 = Convolution(name='br1', filter_shape=(3, 3, 16)
         br2 = Convolution(name='br2', filter_shape=(3, 3, 32)
         br1_out = br1(input)
@@ -63,7 +64,9 @@ class Parallel(SubGraph):
             outputs = ng.concat_along_axis(outputs, merge_axis)
         elif self.mode is None:
             # Return the output list directly
-            outputs = outputs
+            pass
+        else:
+            raise NotImplementedError("Unrecognized mode:%s" % str(self.mode))
         return outputs
 
 
