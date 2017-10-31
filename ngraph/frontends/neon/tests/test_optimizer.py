@@ -92,10 +92,10 @@ class RMSPropReference(object):
             (1.0 - self.decay_rate) * np.square(gradient)
 
         self.velocity = self.velocity * self.momentum + \
-            self.learning_rate * gradient / np.sqrt(self.state + self.epsilon)
+            self.learning_rate * gradient / np.sqrt(self.state + self.epsilon) + \
+            self.learning_rate * self.wdecay * weights
 
-        weights[:] = weights \
-            - self.learning_rate * self.wdecay * weights - self.velocity
+        weights[:] = weights - self.velocity
 
         return weights
 
