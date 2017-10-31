@@ -111,7 +111,7 @@ class HetrComputation(Computation):
 
         t_name = self.transformer.default_device + '0'
         placeholders = [p for p in self.computation_op.parameters]
-        my_ops = [op for op in self.send_nodes | new_returns if is_my_op(p, t_name)]
+        my_ops = [op for op in self.send_nodes | new_returns if is_my_op(op, t_name)]
         transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
         total_ops = Op.all_op_references(transform_ops + placeholders)
 
