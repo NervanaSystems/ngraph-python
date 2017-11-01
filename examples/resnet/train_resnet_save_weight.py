@@ -217,7 +217,7 @@ with Layer.inference_mode_on():
 with closing(ngt.make_transformer()) as transformer:
     restore_eval_function = transformer.add_computation(restore_eval_computation)
     # Restore weight
-    weight_saver.setup_restore(transformer=transformer, computation=restore_eval_computation)
+    weight_saver.setup_restore(transformer=transformer, computation=restore_eval_computation, filename="weights")
     weight_saver.restore()
 
     restore_eval_losses = loop_eval(valid_set, restore_eval_function, restore_eval_loss_names)
