@@ -27,7 +27,7 @@ class RPCComputationClient(object):
         self.feed_input_response_future = None
 
     def feed_input(self, values):
-        logger.info("client: feed input")
+        logger.debug("client: feed input")
         pb_values = []
         for v in values:
             pb_val = hetr_pb2.Value()
@@ -43,7 +43,7 @@ class RPCComputationClient(object):
             _TIMEOUT_SECONDS)
 
     def get_results(self):
-        logger.info("client: get results")
+        logger.debug("client: get results")
         if self.feed_input_response_future is None:
             raise RuntimeError("call feed_input before get_results")
         response = self.feed_input_response_future.result()
@@ -69,7 +69,7 @@ class RPCComputationClient(object):
 class RPCTransformerClient(object):
 
     def __init__(self, transformer_type, server_address='localhost'):
-        logger.info("client: init, transformer: %s, server_address: %s",
+        logger.debug("client: init, transformer: %s, server_address: %s",
                     transformer_type, server_address)
         self.transformer_type = transformer_type
         self.server_address = server_address
@@ -82,15 +82,15 @@ class RPCTransformerClient(object):
 
     def set_server_address(self, address):
         if self.is_trans_built:
-            logger.info("client: set_server_address: transformer is already built, \
+            logger.debug("client: set_server_address: transformer is already built, \
                         skip server address")
             return
         self.server_address = address
 
     def build_transformer(self):
-        logger.info("client: build_transformer, server address: %s", self.server_address)
+        logger.debug("client: build_transformer, server address: %s", self.server_address)
         if self.is_trans_built:
-            logger.info("client: build_transformer: transformer is already built")
+            logger.debug("client: build_transformer: transformer is already built")
             return
         options = [('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)]
         channel = grpc.insecure_channel(self.server_address, options=options)
@@ -144,7 +144,7 @@ class RPCTransformerClient(object):
             generate_messages(), _TIMEOUT_SECONDS)
 
     def get_computation(self):
-        logger.info("client: get_computation")
+        logger.debug("client: get_computation")
         if self.computation_response_future is None:
             raise RuntimeError("call create_computation before get_computation")
         response = self.computation_response_future.result()
@@ -156,14 +156,14 @@ class RPCTransformerClient(object):
             raise RuntimeError("RPC computation request failed: {}".format(response.message))
 
     def close_transformer(self):
-        logger.info("client: close_transformer")
+        logger.debug("client: close_transformer")
         if self.is_trans_built:
             self.close_transformer_response_future = self.RPC.CloseTransformer.future(
                 hetr_pb2.CloseTransformerRequest(),
                 _TIMEOUT_SECONDS)
 
     def close(self):
-        logger.info("client: close")
+        logger.debug("client: close")
         if self.close_transformer_response_future is not None:
             response = self.close_transformer_response_future.result()
             if not response.status:

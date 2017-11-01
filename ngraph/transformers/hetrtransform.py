@@ -143,6 +143,7 @@ class HetrComputation(Computation):
                 elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
                     comp.returns[op.metadata['replaces_op']] = i
             self.child_computations[t_name] = comp
+        logger.info('Finished preparing the distributed graph.'),
 
     def __call__(self, *args, **kwargs):
         """
@@ -219,7 +220,7 @@ class HetrTransformer(ComputationGraphTransformer):
                 from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
                 # TODO: use dev_id from tuple
                 dev_id = int(tname[3:])
-                logger.info("register_transformer: dev_id %d", dev_id)
+                logger.debug("register_transformer: dev_id %d", dev_id)
                 trans_client = RPCTransformerClient(tname)
             self.child_transformers[tname] = trans_client
 
@@ -229,7 +230,7 @@ class HetrTransformer(ComputationGraphTransformer):
             dev_id = int(tname[3:])
             server_address = self.mpilauncher.get_address_by_rank(dev_id, num_servers)
             trans.set_server_address(server_address)
-            logger.info("setup_child_transformers: dev_id %d, server_address %s",
+            logger.debug("setup_child_transformers: dev_id %d, server_address %s",
                         dev_id, server_address)
 
     def transformer(self, tname):

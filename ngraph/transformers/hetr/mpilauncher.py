@@ -56,7 +56,7 @@ class MPILauncher(object):
         server_infos = [tuple(map(int, line.split(':'))) for line in self._tmpfile]
         server_infos = sorted(server_infos, key=lambda x: x[0])
         self._rpc_ports = [row[2] for row in server_infos]
-        logger.info("get_rpc_ports: ports (in MPI rank order): %s", self._rpc_ports)
+        logger.debug("get_rpc_ports: ports (in MPI rank order): %s", self._rpc_ports)
         self._tmpfile.close()
         return self._rpc_ports[rank]
 
@@ -66,7 +66,7 @@ class MPILauncher(object):
 
     def launch(self, num_servers, process_per_node):
         if self.mpirun_proc is not None:
-            logger.info("mpirun_proc is already launched")
+            logger.debug("mpirun_proc is already launched")
             return
         server_path = os.path.dirname(os.path.realpath(__file__)) + "/hetr_server.py"
         mpirun_env = dict(os.environ)
@@ -82,7 +82,7 @@ class MPILauncher(object):
         if 'MLSL_ALLOW_REINIT' not in mpirun_env:
             mpirun_env['MLSL_ALLOW_REINIT'] = '1'
 
-        logger.info("mpilauncher: launch: hostfile %s, hosts %s, num_servers %s, tmpfile %s",
+        logger.debug("mpilauncher: launch: hostfile %s, hosts %s, num_servers %s, tmpfile %s",
                     self._hostfile, self._hosts, num_servers, self._tmpfile)
 
         if self._hostfile is not None:
@@ -96,7 +96,7 @@ class MPILauncher(object):
         if self._rpc_ports is not None:
             cmd.extend(['-p'] + self._rpc_ports)
             self._rpc_ports = None
-        logger.info("mpirun cmd: %s", cmd)
+        logger.debug("mpirun cmd: %s", cmd)
 
         try:
             self.mpirun_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,

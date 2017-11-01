@@ -52,7 +52,6 @@ class Computation(NameableValue):
 
     def __init__(self, transformer, computation_op, **kwargs):
         super(Computation, self).__init__(**kwargs)
-        logging.info("Creating computation with computation_op: %s", computation_op)
         self.transformer = transformer
         self.computation_op = computation_op
         self.computation_name = None
