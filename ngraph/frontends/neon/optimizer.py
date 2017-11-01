@@ -326,17 +326,21 @@ class RMSProp(LearningRateOptimizer):
                                                Default: no clipping
         weight_clip_value (float, optional): Value to element-wise clip weights after updates are
                                              applied, symmetric around 0. Default: no clipping
+        wdecay (float, optional): Amount of weight decay (L2) penalty. Default: 0
+        momentum_coef (float, optional): Coefficient of momentum. Default: 0
     """
 
     def __init__(
-            self,
-            decay_rate=0.95,
-            learning_rate=2e-3,
-            epsilon=1e-6,
-            gradient_clip_norm=None,
-            gradient_clip_value=None,
-            weight_clip_value=None,
-            **kwargs
+        self,
+        decay_rate=0.95,
+        learning_rate=2e-3,
+        epsilon=1e-6,
+        gradient_clip_norm=None,
+        gradient_clip_value=None,
+        weight_clip_value=None,
+        wdecay=0.0,
+        momentum_coef=0.0,
+        **kwargs
     ):
         super(RMSProp, self).__init__(learning_rate=learning_rate,
                                       gradient_clip_norm=gradient_clip_norm,
@@ -346,15 +350,21 @@ class RMSProp(LearningRateOptimizer):
         self.state_list = None
         self.epsilon = epsilon
         self.decay_rate = decay_rate
+        self.wdecay = wdecay
+        self.momentum = momentum_coef
 
     def variable_update(self, variable, grad, scale_factor):
         epsilon, decay = (self.epsilon, self.decay_rate)
         grad = clip_gradient_value(grad, self.gradient_clip_value)
-        state = ng.persistent_tensor(axes=variable.axes, initial_value=0.)
+        state = ng.persistent_tensor(axes=variable.axes, initial_value=1.)
+        velocity = ng.persistent_tensor(axes=variable.axes,
+                                        initial_value=0.).named(variable.name + '_vel')
         updates = ng.sequential([
             ng.assign(state, decay * state + (1.0 - decay) * ng.square(grad)),
-            ng.assign(variable, variable - ((scale_factor * grad * self.lrate)
-                                            / (ng.sqrt(state + epsilon) + epsilon)))
+            ng.assign(velocity, velocity * self.momentum +
+                      (self.lrate * scale_factor * grad / ng.sqrt(state + epsilon)) +
+                      self.lrate * self.wdecay * variable),
+            ng.assign(variable, variable - velocity)
         ])
         return updates
 

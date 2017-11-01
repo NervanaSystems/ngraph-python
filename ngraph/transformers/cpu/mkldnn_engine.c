@@ -295,6 +295,7 @@ mkldnn_opkernel_t create_empty_kernel(int id) {
   op_kernel->num_inputs = 0;
   op_kernel->num_outputs = 0;
   op_kernel->net_size = 0;
+  op_kernel->stream = NULL;
 
   return op_kernel;
 }
@@ -327,6 +328,8 @@ void delete_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   }
   MKL_CHECK(mkldnn_primitive_desc_destroy(opkernel->op_desc));
   MKL_CHECK(mkldnn_primitive_destroy(opkernel->op_prim));
+  if (opkernel->stream)
+    MKL_CHECK(mkldnn_stream_destroy(opkernel->stream));
 }
 
 void set_input_tensor_data_handle(mkldnn_opkernel_t opkernel, void *buffer,
@@ -343,7 +346,10 @@ void set_output_tensor_data_handle(mkldnn_opkernel_t opkernel, void *buffer,
 
 void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
   void *buf;
+  char *str_buf;
   printf("ID: %d\n", opkernel->id);
+  MKL_CHECK(mkldnn_primitive_desc_query(opkernel->op_desc, mkldnn_query_impl_info_str, 0, &str_buf));
+  printf("Impl: %s\n", str_buf);
   printf(" INPUTS\n");
   for (int i = 0; i < opkernel->num_inputs; i++) {
     mkldnn_memory_desc_t md =
@@ -355,6 +361,10 @@ void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
           opkernel->internal_inputs[i].desc);
       mkldnn_memory_get_data_handle(opkernel->internal_inputs[i].prim, &buf);
       printf(" -> (%p) md.format: %d", buf, i_md.format);
+      mkldnn_primitive_desc_t reorder_desc;
+      mkldnn_primitive_get_primitive_desc(opkernel->reorder_i[i], &reorder_desc);
+      MKL_CHECK(mkldnn_primitive_desc_query(reorder_desc, mkldnn_query_impl_info_str, 0, &str_buf));
+      printf("\n ReorderImpl: %s", str_buf);
     }
     printf("\n");
   }
@@ -369,6 +379,10 @@ void print_mkldnn_opkernel(mkldnn_opkernel_t opkernel) {
           opkernel->internal_outputs[i].desc);
       mkldnn_memory_get_data_handle(opkernel->internal_outputs[i].prim, &buf);
       printf(" <- (%p) md.format: %d", buf, i_md.format);
+      mkldnn_primitive_desc_t reorder_desc;
+      mkldnn_primitive_get_primitive_desc(opkernel->reorder_o[i], &reorder_desc);
+      MKL_CHECK(mkldnn_primitive_desc_query(reorder_desc, mkldnn_query_impl_info_str, 0, &str_buf));
+      printf("\n ReorderImpl: %s", str_buf);
     }
     printf("\n");
   }
@@ -379,11 +393,16 @@ void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel, int verbose) {
   if (verbose) {
     clock_gettime(CLOCK_REALTIME, &start);
   }
-  // print_mkldnn_opkernel(opkernel);
-  MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
   mkldnn_primitive_t error_primitive;
-  mkldnn_status_t s = mkldnn_stream_submit(opkernel->stream, opkernel->net_size,
-                                           opkernel->net, &error_primitive);
+  mkldnn_status_t s;
+  if (!opkernel->stream) {
+    MKL_CHECK(mkldnn_stream_create(&opkernel->stream, mkldnn_eager));
+    s = mkldnn_stream_submit(opkernel->stream, opkernel->net_size,
+                             opkernel->net, &error_primitive);
+  } else {
+    s = mkldnn_stream_rerun(opkernel->stream, &error_primitive);
+  }
+  
   if (s != mkldnn_success) {
     printf(
         "[%s:%d] error: mkldnn_stream_submit returns %d, error_primitive: %p\n",
@@ -391,7 +410,6 @@ void run_mkldnn_opkernel(mkldnn_opkernel_t opkernel, int verbose) {
     exit(2);
   }
   MKL_CHECK(mkldnn_stream_wait(opkernel->stream, opkernel->net_size, NULL));
-  MKL_CHECK(mkldnn_stream_destroy(opkernel->stream));
   if (verbose) {
     clock_gettime(CLOCK_REALTIME, &end);
     printf("\nOpkernel%d Exec start: %lld.%lld s end: %lld.%lld s time_taken: "
