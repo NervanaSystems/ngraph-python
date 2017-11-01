@@ -126,6 +126,7 @@ class HetrComputation(Computation):
 
         logger.info('Start preparing the distributed graph.'),
         for t_name, trans in iteritems(self.transformer.child_transformers):
+            logger.debug('child transformer: {}'.format(t_name))
             trans.build_transformer()
             transform_ops = [r.args[0] if isinstance(r, ResultOp) else r for r in t_returns[t_name]]
             trans.create_computation(pb_ops, pb_edges, transform_ops, t_placeholders[t_name])
