@@ -24,8 +24,8 @@ import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import ArrayIterator  # noqa
 from ngraph.frontends.neon import CIFAR10  # noqa
-from ngraph.frontends.neon import Affine, Convolution, Sequential, Preprocess
-from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax
+from ngraph.frontends.neon import Affine, Sequential, Preprocess
+from ngraph.frontends.neon import KaimingInit, Softmax
 from ngraph.frontends.neon import ax
 from ngraph.frontends.neon import Saver
 from ngraph.frontends.neon import GradientDescentMomentum

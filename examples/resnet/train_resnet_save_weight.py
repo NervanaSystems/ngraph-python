@@ -208,8 +208,10 @@ with closing(ngt.make_transformer()) as transformer:
 with Layer.inference_mode_on():
     # Doing inference post weight restore
     restore_inference_prob = resnet(input_ph['image'])
-    restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]), label_indices)
-    restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob, ng.one_hot(label_indices, axis=ax.Y))
+    restore_errors = ng.not_equal(ng.argmax(restore_inference_prob, out_axes=[ax.N]),
+                                  label_indices)
+    restore_eval_loss = ng.cross_entropy_multi(restore_inference_prob,
+                                               ng.one_hot(label_indices, axis=ax.Y))
     restore_eval_loss_names = ['cross_ent_loss', 'misclass']
     # Computation for inference
     restore_eval_computation = ng.computation([restore_eval_loss, restore_errors], "all")
@@ -217,7 +219,9 @@ with Layer.inference_mode_on():
 with closing(ngt.make_transformer()) as transformer:
     restore_eval_function = transformer.add_computation(restore_eval_computation)
     # Restore weight
-    weight_saver.setup_restore(transformer=transformer, computation=restore_eval_computation, filename="weights")
+    weight_saver.setup_restore(transformer=transformer,
+                               computation=restore_eval_computation,
+                               filename="weights")
     weight_saver.restore()
 
     restore_eval_losses = loop_eval(valid_set, restore_eval_function, restore_eval_loss_names)
