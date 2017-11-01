@@ -118,9 +118,6 @@ class RPCTransformerClient(object):
     def create_computation(self, pb_ops, pb_edges, returns, placeholders):
         logger.debug("client: create_computation")
 
-        def ops_to_protobuf(ops):
-            return [op_to_protobuf(o) for o in ops]
-
         def make_computation_request(pb_ops, pb_edges, pb_returns=None, pb_placeholders=None):
             return hetr_pb2.ComputationRequest(
                 ops=pb_ops,
@@ -129,8 +126,8 @@ class RPCTransformerClient(object):
                 placeholders=pb_placeholders)
 
         def generate_messages():
-            pb_returns = ops_to_protobuf(returns)
-            pb_placeholders = ops_to_protobuf(placeholders)
+            pb_returns = [op_to_protobuf(o) for o in returns]
+            pb_placeholders = [op_to_protobuf(o) for o in placeholders]
 
             ops = Op.all_op_references(returns + list(placeholders))
             yield make_computation_request(pb_ops,

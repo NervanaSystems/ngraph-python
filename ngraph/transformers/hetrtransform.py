@@ -119,32 +119,25 @@ class HetrComputation(Computation):
             pb_ops.append(op_to_protobuf(o))
             add_edges(pb_edges, pb_ops, o)
 
-        # simplify by already having asynctrans made by passes
-        for t_name, trans in iteritems(self.transformer.child_transformers):
-            logger.debug('child transformer: {}'.format(t_name))
-            trans.build_transformer()
-            my_params = [(g_pos, p)
-                         for g_pos, p in enumerate(self.computation_op.parameters)
-                         if is_my_op(p, t_name)]
-            my_ops = [op for op in self.send_nodes | new_returns
-                      if is_my_op(op, t_name)]
+        t_placeholders, t_returns = {}, {}
+        for t_name in self.transformer.child_transformers.keys():
+            t_placeholders[t_name] = [p for p in placeholders if is_my_op(p, t_name)]
+            t_returns[t_name] = [r for r in all_returns if is_my_op(r, t_name)]
 
-            transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
-            placeholders = [p for _, p in my_params]
-            trans.create_computation(pb_ops, pb_edges, transform_ops, placeholders)
+        logger.info('Start preparing the distributed graph.'),
+        for t_name, trans in iteritems(self.transformer.child_transformers):
+            trans.build_transformer()
+            transform_ops = [r.args[0] if isinstance(r, ResultOp) else r for r in t_returns[t_name]]
+            trans.create_computation(pb_ops, pb_edges, transform_ops, t_placeholders[t_name])
 
         for t_name, trans in iteritems(self.transformer.child_transformers):
             comp = trans.get_computation()
-            my_params = [(g_pos, p)
-                         for g_pos, p in enumerate(self.computation_op.parameters)
-                         if is_my_op(p, t_name)]
-            my_ops = [op for op in self.send_nodes | new_returns
-                      if is_my_op(op, t_name)]
-            comp.param_idx = [g_pos for g_pos, p in my_params]
+            comp.param_idx = [g_pos for g_pos, p in enumerate(self.computation_op.parameters)
+                              if is_my_op(p, t_name)]
 
             # when there is a ResultOp, hack around it
             comp.returns = dict()
-            for i, op in enumerate(my_ops):
+            for i, op in enumerate(t_returns[t_name]):
                 if op in self.returns and 'hetr_replaced_by' not in op.metadata:
                     comp.returns[op] = i
                 elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
