@@ -132,7 +132,14 @@ class HetrComputation(Computation):
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
             placeholders = [p for _, p in my_params]
             trans.create_computation(pb_ops, pb_edges, transform_ops, placeholders)
+
+        for t_name, trans in iteritems(self.transformer.child_transformers):
             comp = trans.get_computation()
+            my_params = [(g_pos, p)
+                         for g_pos, p in enumerate(self.computation_op.parameters)
+                         if is_my_op(p, t_name)]
+            my_ops = [op for op in self.send_nodes | new_returns
+                      if is_my_op(op, t_name)]
             comp.param_idx = [g_pos for g_pos, p in my_params]
 
             # when there is a ResultOp, hack around it
