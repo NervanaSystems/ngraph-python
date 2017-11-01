@@ -16,6 +16,60 @@ from __future__ import division
 
 from operator import itemgetter
 from ngraph.frontends.neon.graph import SubGraph
+import ngraph as ng
+
+
+class Parallel(SubGraph):
+    """
+    Parallel is a container of layers. each of which operates on the same input
+    Output of each branch is concatenated to form a larger tensor
+
+    Arguments:
+        branches: List of layers that will operate on the same input
+        name: name to be used with selector
+
+    Example:
+    .. code-block:: python
+        branches = [Convolution(name='br1', filter_shape=(3, 3, 16)),
+                    Convolution(name='br2', filter_shape=(3, 3, 32))]
+        par1 = Parallel(branches, concat_axis=branches[0].axes.channel_axis())
+        output = par1(input)
+
+    The above code is equivalent of doing
+    .. code-block:: python
+        br1 = Convolution(name='br1', filter_shape=(3, 3, 16)
+        br2 = Convolution(name='br2', filter_shape=(3, 3, 32)
+        br1_out = br1(input)
+        br2_out = br2(input)
+        output = [br1_out, br2_out]
+        output = ng.concat_along_axis(output, br1_out.axes.channel_axis())
+
+    """
+    # TODO: option to sum the outputs of branches rather than concatenate
+    def __init__(self, branches, name=None, mode='concat', **kwargs):
+        super(Parallel, self).__init__(name=name, **kwargs)
+        self.branches = branches
+        self.mode = mode
+        if not ((self.mode is None) or (self.mode == 'concat')):
+            raise NotImplementedError("Unrecognized mode:{}".format(str(self.mode)))
+
+    @SubGraph.scope_op_creation
+    def __call__(self, in_obj, merge_axis=None):
+        outputs = [branch(in_obj) for branch in self.branches]
+        if (type(merge_axis) == str):
+            merge_axis = ng.make_axis(name=merge_axis)
+
+        if self.mode == 'concat':
+            # Concatenate along the given axis
+            if merge_axis is None:
+                merge_axis = outputs[0].axes.channel_axis()
+            outputs = ng.concat_along_axis(outputs, merge_axis)
+        elif self.mode is None:
+            # Return the output list directly
+            pass
+        else:
+            pass
+        return outputs
 
 
 class Sequential(SubGraph):
