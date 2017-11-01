@@ -181,7 +181,8 @@ with closing(ngt.make_transformer()) as transformer:
         # Scale the image to [-1., .1]
         orig_image = np.copy(data['image'])
         data['image'] = scale_set(data['image'])
-        data['label'] = data['label']
+        # Aeon returned label has batch axis and one mode dimension
+        data['label'] = data['label'].reshape((args.batch_size,1))
 
         # Train
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}

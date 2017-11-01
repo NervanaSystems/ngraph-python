@@ -24,9 +24,13 @@ from ngraph.frontends.neon import Convolution, Pooling, Sequential, Parallel
 from ngraph.frontends.neon import Rectlin, Softmax, Dropout
 
 
-def conv_params(filter_shape, strides=1, batch_norm=BatchNorm(rho=0.999), activation=Rectlin(),
+def conv_params(filter_shape, strides=1, batch_norm=None, activation=Rectlin(),
                 bias_init=None,
                 filter_init=UniformInit(), padding=0):
+    # If you do not want any batch_norm, set batch_norm to False
+    # If batch_norm is set to None, it will initialize a BatchNorm with the given rho
+    if batch_norm is None:
+        batch_norm = BatchNorm(rho=0.999) 
     return dict(filter_shape=filter_shape,
                 strides=strides,
                 padding=padding,
@@ -270,19 +274,19 @@ class Inception(object):
                                            **conv_params(filter_shape=(3, 3, 32),
                                                          padding=0, strides=2)),
                                # conv2d_1a_3x3
-                               Convolution(name='conv_2a_3x3', **
-                                           conv_params(filter_shape=(3, 3, 16), padding=0)),
+                               Convolution(name='conv_2a_3x3',
+                                           **conv_params(filter_shape=(3, 3, 16), padding=0)),
                                # conv2d_2a_3x3
-                               Convolution(name='conv_2b_3x3', **
-                                           conv_params(filter_shape=(3, 3, 16), padding=1)),
+                               Convolution(name='conv_2b_3x3', 
+                                           **conv_params(filter_shape=(3, 3, 16), padding=1)),
                                # conv2d_2b_3x3
                                Pooling(name='pool_1_3x3', pool_shape=(3, 3), padding=0,
                                        strides=2, pool_type='max'),  # maxpool_3a_3x3
-                               Convolution(name='conv_3b_1x1', **
-                                           conv_params(filter_shape=(1, 1, 16))),
+                               Convolution(name='conv_3b_1x1', 
+                                           **conv_params(filter_shape=(1, 1, 16))),
                                # conv2d_3b_1x1
-                               Convolution(name='conv_4a_3x3', **
-                                           conv_params(filter_shape=(3, 3, 32), padding=1)),
+                               Convolution(name='conv_4a_3x3', 
+                                           **conv_params(filter_shape=(3, 3, 32), padding=1)),
                                # conv2d_4a_3x3
                                Pooling(name='pool_2_3x3', pool_shape=(3, 3), padding=0,
                                        strides=2, pool_type='max'),  # maxpool_5a_3x3

@@ -44,4 +44,4 @@ parsel==1.2.0
 pillow==4.2.0
 
 # onnx frontend
-onnx==0.2
+# onnx==0.2
