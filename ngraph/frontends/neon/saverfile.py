@@ -23,7 +23,7 @@ class SaverFile(object):
         A class that write and read dictionary of numpy.ndarray's with Op name as key to file
 
         Arguments:
-            Name (string): Name of file used for saving.
+            Name (string): Name of file used for saving. Extension .npz will be appended.
 
         Methods:
             write_values: write dictionary of numpy.ndarray's with Op name as key to file
