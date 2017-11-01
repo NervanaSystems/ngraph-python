@@ -11,7 +11,7 @@ publicly when they are more mature.
 
 # Nervana Graph
 
-Nervana graph is Nervana's library for developing frameworks that can efficiently run deep
+Nervana Graph is Nervana's library for developing frameworks that can efficiently run deep
 learning computations on a variety of compute platforms. It consists of three primary API
 components:
 
@@ -128,9 +128,9 @@ make doc
 - The neon frontend offers an improved interface for increased composability/flexibility
   while leaving common use cases easy. We demonstrate this with MLP, convolutional, and
   RNN network examples on MNIST, CIFAR10, and Penn Treebank datasets.
-- The tensorflow importer allows users to import existing tensorflow graphs and execute
+- The TensorFlow importer allows users to import existing tensorflow graphs and execute
   them using Nervana Graph transformers/runtimes. This importer currently only supports a
-  subset of the tensorflow API, but this will be expanded over time.
+  subset of the TensorFlow API, but this will be expanded over time.
 
 ### Nervana Graph API
 - The Nervana Graph API consists of a collection of graph building functions all exposed
