@@ -110,10 +110,13 @@ class HetrComputation(Computation):
             op_trans = op.metadata['transformer']
             return name == op_trans or name in op_trans
 
+        # build whole_graph once to avoid slow serialization once per worker
+        # split whole pb message into list of smaller chunks
+        # gRPC prefers sending smaller messages
         placeholders = [p for p in self.computation_op.parameters]
         all_returns = [o for o in self.send_nodes | new_returns]
-        transform_ops = [o.args[0] if isinstance(o, ResultOp) else o for o in all_returns]
-        whole_graph = Op.all_op_references(transform_ops + placeholders)
+        transform_returns = [o.args[0] if isinstance(o, ResultOp) else o for o in all_returns]
+        whole_graph = Op.all_op_references(transform_returns + placeholders)
 
         pb_whole_graph = []
         pb_ops, pb_edges = [], []
@@ -129,6 +132,9 @@ class HetrComputation(Computation):
             t_placeholders[t_name] = [p for p in placeholders if is_my_op(p, t_name)]
             t_returns[t_name] = [r for r in all_returns if is_my_op(r, t_name)]
 
+        # create_computation is an async call using gPRC future
+        # allowing child transformers to create computation simultaneously
+        # get_computation waits the corresponding request to finish
         logger.info('Start preparing the distributed graph.'),
         for t_name, trans in iteritems(self.transformer.child_transformers):
             logger.debug('child transformer: {}'.format(t_name))
