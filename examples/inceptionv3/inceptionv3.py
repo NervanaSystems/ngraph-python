@@ -34,7 +34,6 @@ import ngraph.transformers as ngt
 from ngraph.frontends.neon import NgraphArgparser
 from ngraph.frontends.neon import Layer
 from ngraph.frontends.neon import ax, RMSProp, GradientDescentMomentum
-from ngraph.frontends.common.utils import squeeze_axes
 from data import make_aeon_loaders
 import inception
 
@@ -132,8 +131,7 @@ else:
     raise NotImplementedError("Unrecognized Optimizer")
 
 # Build the main and auxiliary loss functions
-label = squeeze_axes([inputs['label']])[0]
-y_onehot = ng.one_hot(label, axis=ax.Y)
+y_onehot = ng.one_hot(inputs['label'], axis=ax.Y)
 train_prob_main = inception.seq2(inception.seq1(inputs['image']))
 train_prob_main = ng.map_roles(train_prob_main, {"C": ax.Y.name})
 train_loss_main = ng.cross_entropy_multi(train_prob_main, y_onehot, enable_softmax_opt=False)
@@ -146,7 +144,6 @@ batch_cost = ng.sequential([optimizer(train_loss_main + 0.4 * train_loss_aux),
                             ng.mean(train_loss_main, out_axes=())])
 
 train_computation = ng.computation([batch_cost], 'all')
-label_indices = inputs['label']
 
 # Build the computations for inference (evaluation)
 with Layer.inference_mode_on():
@@ -154,7 +151,7 @@ with Layer.inference_mode_on():
     slices = [0 if cx.name in ("H", "W") else slice(None) for cx in inference_prob.axes]
     inference_prob = ng.tensor_slice(inference_prob, slices)
     inference_prob = ng.map_roles(inference_prob, {"C": "Y"})
-    errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), label)
+    errors = ng.not_equal(ng.argmax(inference_prob, out_axes=[ax.N]), inputs['label'])
     eval_loss = ng.cross_entropy_multi(inference_prob, y_onehot, enable_softmax_opt=False)
     eval_loss_names = ['cross_ent_loss', 'misclass', 'predictions']
     eval_computation = ng.computation([eval_loss, errors, inference_prob], "all")
@@ -181,7 +178,6 @@ with closing(ngt.make_transformer()) as transformer:
         # Scale the image to [-1., .1]
         orig_image = np.copy(data['image'])
         data['image'] = scale_set(data['image'])
-        data['label'] = data['label']
 
         # Train
         feed_dict = {inputs[k]: data[k] for k in inputs.keys()}
