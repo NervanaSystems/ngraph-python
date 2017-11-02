@@ -30,6 +30,7 @@ from ngraph.op_graph.serde.serde import op_to_protobuf, add_edges
 import logging
 
 
+_OPS_PER_MSG = 10
 logger = logging.getLogger(__name__)
 
 
@@ -114,10 +115,14 @@ class HetrComputation(Computation):
         transform_ops = [o.args[0] if isinstance(o, ResultOp) else o for o in all_returns]
         whole_graph = Op.all_op_references(transform_ops + placeholders)
 
+        pb_whole_graph = []
         pb_ops, pb_edges = [], []
-        for o in whole_graph:
+        for i, o in enumerate(whole_graph):
             pb_ops.append(op_to_protobuf(o))
             add_edges(pb_edges, pb_ops, o)
+            if (i != 0 and i % _OPS_PER_MSG == 0) or (i == len(whole_graph) - 1):
+                pb_whole_graph.append((pb_ops, pb_edges))
+                pb_ops, pb_edges = [], []
 
         t_placeholders, t_returns = {}, {}
         for t_name in self.transformer.child_transformers.keys():
@@ -129,7 +134,7 @@ class HetrComputation(Computation):
             logger.debug('child transformer: {}'.format(t_name))
             trans.build_transformer()
             transform_ops = [r.args[0] if isinstance(r, ResultOp) else r for r in t_returns[t_name]]
-            trans.create_computation(pb_ops, pb_edges, transform_ops, t_placeholders[t_name])
+            trans.create_computation(pb_whole_graph, transform_ops, t_placeholders[t_name])
 
         for t_name, trans in iteritems(self.transformer.child_transformers):
             comp = trans.get_computation()

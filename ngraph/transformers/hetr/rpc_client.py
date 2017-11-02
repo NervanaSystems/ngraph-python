@@ -11,7 +11,6 @@ import logging
 
 
 _TIMEOUT_SECONDS = 600
-_OPS_PER_MSG = 10
 logger = logging.getLogger(__name__)
 
 
@@ -115,25 +114,30 @@ class RPCTransformerClient(object):
             self.is_trans_built = False
             raise RuntimeError("RPC build_transformer request failed: {}".format(response.message))
 
-    def create_computation(self, pb_ops, pb_edges, returns, placeholders):
+    def create_computation(self, pb_graph, returns, placeholders):
         logger.debug("client: create_computation")
 
         def make_computation_request(pb_ops, pb_edges, pb_returns=None, pb_placeholders=None):
-            return hetr_pb2.ComputationRequest(
-                ops=pb_ops,
-                edges=pb_edges,
-                returns=pb_returns,
-                placeholders=pb_placeholders)
+            if pb_returns or pb_placeholders:
+                return hetr_pb2.ComputationRequest(
+                    ops=pb_ops,
+                    edges=pb_edges,
+                    returns=pb_returns,
+                    placeholders=pb_placeholders)
+            else:
+                return hetr_pb2.ComputationRequest(
+                    ops=pb_ops,
+                    edges=pb_edges)
 
         def generate_messages():
             pb_returns = [op_to_protobuf(o) for o in returns]
             pb_placeholders = [op_to_protobuf(o) for o in placeholders]
 
-            ops = Op.all_op_references(returns + list(placeholders))
-            yield make_computation_request(pb_ops,
-                                           pb_edges,
-                                           pb_returns,
-                                           pb_placeholders)
+            for pb_ops, pb_edges in pb_graph:
+                msg = make_computation_request(
+                    pb_ops, pb_edges, pb_returns, pb_placeholders)
+                yield msg
+                pb_returns, pb_placeholders = [], []
 
         if not self.is_trans_built:
             raise RuntimeError("call build_transformer before create_computation")
