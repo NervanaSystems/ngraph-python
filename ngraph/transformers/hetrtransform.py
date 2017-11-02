@@ -133,7 +133,8 @@ class HetrComputation(Computation):
         for t_name, trans in iteritems(self.transformer.child_transformers):
             logger.debug('child transformer: {}'.format(t_name))
             trans.build_transformer()
-            transform_ops = [r.args[0] if isinstance(r, ResultOp) else r for r in t_returns[t_name]]
+            transform_ops = [
+                r.args[0] if isinstance(r, ResultOp) else r for r in t_returns[t_name]]
             trans.create_computation(pb_whole_graph, transform_ops, t_placeholders[t_name])
 
         for t_name, trans in iteritems(self.transformer.child_transformers):
@@ -237,7 +238,7 @@ class HetrTransformer(ComputationGraphTransformer):
             server_address = self.mpilauncher.get_address_by_rank(dev_id, num_servers)
             trans.set_server_address(server_address)
             logger.debug("setup_child_transformers: dev_id %d, server_address %s",
-                        dev_id, server_address)
+                         dev_id, server_address)
 
     def transformer(self, tname):
         assert tname in self.child_transformers, "register transformer {} before use".format(tname)

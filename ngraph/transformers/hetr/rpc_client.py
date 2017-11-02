@@ -3,10 +3,9 @@ from six import iteritems
 
 from . import hetr_pb2
 from . import hetr_pb2_grpc
-from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, add_edges,\
+from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf,\
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
-from ngraph.op_graph.op_graph import Op
 import logging
 
 
@@ -69,7 +68,7 @@ class RPCTransformerClient(object):
 
     def __init__(self, transformer_type, server_address='localhost'):
         logger.debug("client: init, transformer: %s, server_address: %s",
-                    transformer_type, server_address)
+                     transformer_type, server_address)
         self.transformer_type = transformer_type
         self.server_address = server_address
         self.computations = dict()

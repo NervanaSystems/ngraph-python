@@ -83,7 +83,7 @@ class MPILauncher(object):
             mpirun_env['MLSL_ALLOW_REINIT'] = '1'
 
         logger.debug("mpilauncher: launch: hostfile %s, hosts %s, num_servers %s, tmpfile %s",
-                    self._hostfile, self._hosts, num_servers, self._tmpfile)
+                     self._hostfile, self._hosts, num_servers, self._tmpfile)
 
         if self._hostfile is not None:
             cmd.extend(['-hostfile', self._hostfile])

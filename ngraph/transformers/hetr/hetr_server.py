@@ -196,7 +196,7 @@ def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=options)
     hetr_pb2_grpc.add_HetrServicer_to_server(HetrServer(comm, server), server)
     logger.debug("server: rank %d, tmpfile %s, ports %s",
-                comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
+                 comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
 
     if args.ports is not None and len(args.ports) > comm.Get_rank():
         p = args.ports[comm.Get_rank()]
