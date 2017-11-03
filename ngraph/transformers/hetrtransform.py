@@ -173,6 +173,7 @@ class HetrComputation(Computation):
         return_vals = dict()
         for child in itervalues(self.child_computations):
             return_vals.update(child.get_results())
+
         if isinstance(self.computation_op.returns, Op):
             return return_vals[self.computation_op.returns]
         elif isinstance(self.computation_op.returns, (collections.Sequence, OrderedSet)):

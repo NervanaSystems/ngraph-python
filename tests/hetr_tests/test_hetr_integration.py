@@ -36,6 +36,18 @@ ax_C = ng.make_axis(12)
 ax_D = ng.make_axis(24)
 
 
+def test_broadcast_scalar():
+    x = ng.placeholder(())
+    y = ng.placeholder(())
+    with ng.metadata(device_id=('0', '1'), parallel=ax_A):
+        x_plus_y = x + y
+
+    with closing(ngt.make_transformer_factory('hetr', device='cpu')()) as transformer:
+        computation = transformer.computation(x_plus_y, x, y)
+        res = computation(1, 2)
+        np.testing.assert_array_equal(res, 3)
+
+
 @pytest.mark.multi_device
 @pytest.mark.parametrize('config', [
     {
