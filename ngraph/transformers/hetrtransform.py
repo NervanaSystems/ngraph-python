@@ -117,6 +117,11 @@ class HetrComputation(Computation):
             my_ops = [op for op in self.send_nodes | new_returns
                       if is_my_op(op, t_name)]
 
+            # add metadata to skip returns for returns used for code generation only
+            for op in my_ops:
+                if op not in new_returns:
+                    op.metadata['skip_returns'] = True
+
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
             trans.create_computation(transform_ops, tuple([p for pos, p in my_params]))
             comp = trans.get_computation()
@@ -146,6 +151,7 @@ class HetrComputation(Computation):
         return_vals = dict()
         for child in itervalues(self.child_computations):
             return_vals.update(child.get_results())
+
         if isinstance(self.computation_op.returns, Op):
             return return_vals[self.computation_op.returns]
         elif isinstance(self.computation_op.returns, (collections.Sequence, OrderedSet)):

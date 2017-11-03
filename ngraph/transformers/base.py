@@ -116,7 +116,7 @@ class Computation(NameableValue):
             :param op:
             :return: Return value for op.
             """
-            if op.is_tensor_op:
+            if op.is_tensor_op and 'skip_returns' not in op.metadata:
                 return self.transformer.device_to_host(self, op)
             else:
                 return None
