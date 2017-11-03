@@ -237,14 +237,14 @@ class HetrLocals(object):
         if self.process_idx == root_idx:
             send_buf = None
             send_node = broadcast_recv_op.send_node()
-            send_buf = np.ctypeslib.as_ctypes(send_node.arr)
+            send_buf = np.ctypeslib.as_ctypes(np.atleast_1d(send_node.arr))
             count = send_node.arr.size
             req = self.distribution.bcast(send_buf, count,
                                           mlsl.DataType.FLOAT, root_idx,
                                           mlsl.GroupType.DATA)
             out[...] = send_node.arr
         else:
-            recv_buf = np.ctypeslib.as_ctypes(out)
+            recv_buf = np.ctypeslib.as_ctypes(np.atleast_1d(out))
             count = out.size
             req = self.distribution.bcast(recv_buf, count,
                                           mlsl.DataType.FLOAT, root_idx,
