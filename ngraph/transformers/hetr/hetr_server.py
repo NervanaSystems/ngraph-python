@@ -5,6 +5,7 @@ import socket
 import grpc
 import hetr_pb2
 import hetr_pb2_grpc
+import traceback
 from mpi4py import MPI
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, tensor_to_protobuf,\
@@ -13,8 +14,6 @@ from ngraph.transformers.hetrtransform import build_transformer
 import logging
 import os
 import fcntl
-import traceback
-
 
 try:
     # The first "import mlsl" will create internal mlsl object and will init MLSL library.
@@ -27,6 +26,8 @@ except ImportError:
 
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
+logger = logging.getLogger(__name__)
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,6 +66,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                                              message="build transformer before computation")
         try:
             comp_id = self.new_comp_id()
+
             pb_ops, pb_edges = [], []
             returns, placeholders = [], []
             reconstructed_returns, reconstructed_placeholders = [], []
@@ -75,6 +77,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 placeholders.extend([protobuf_to_op(op) for op in request.placeholders])
 
             subgraph = _deserialize_graph_ops_edges(pb_ops, pb_edges)
+
             ops = Op.ordered_ops(subgraph)
             for r in returns:
                 for op in ops:
@@ -112,6 +115,8 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 if self.transformer.runtime and \
                    not self.transformer.runtime.ctx == drv.Context.get_current():
                     self.transformer.runtime.ctx.push()
+                # TODO figure out doc for rpdb to pass in port
+                # give unique port per device (4444 + device_id)
                 outputs = computation(*values)
                 self.transformer.runtime.ctx.pop()
             else:
@@ -188,7 +193,7 @@ def serve():
     comm = MPI.COMM_WORLD
 
     options = [('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)]
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10), options=options)
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=options)
     hetr_pb2_grpc.add_HetrServicer_to_server(HetrServer(comm, server), server)
     logger.info("server: rank %d, tmpfile %s, ports %s",
                 comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")

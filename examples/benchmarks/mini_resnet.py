@@ -15,117 +15,60 @@
 """
 Run it using
 
-python examples/benchmarks/mini_resnet.py -data cifar10 -b hetr -d cpu -m 2 -z 64 -t 2 -s 1 --bprop
+python -m examples.benchmarks.mini_resnet -data cifar10 -b hetr -d cpu -m 2 -z 64 -t 2 -s 1 --bprop
 """
 from __future__ import division
 from __future__ import print_function
-from benchmark import Benchmark
-from fake_data_generator import generate_data
-from ngraph.frontends.neon import Affine, Preprocess, Convolution, Pooling, BatchNorm, Activation
-from ngraph.frontends.neon import Sequential
-from ngraph.frontends.neon import KaimingInit, Rectlin, Softmax, GradientDescentMomentum
+from .benchmark import Benchmark
+from .fake_data_generator import generate_data
+from ngraph.frontends.neon import GradientDescentMomentum
 from ngraph.frontends.neon import ax, NgraphArgparser
 from ngraph.frontends.neon import ArrayIterator
 import ngraph as ng
-from examples.cifar10.cifar10_msra import cifar_mean_subtract, conv_params
+from examples.resnet.resnet import BuildResnet
 
 
-class f_module(object):
-    def __init__(self, nfm, first=False, strides=1, batch_norm=False):
-
-        self.trunk = None
-        self.side_path = None
-        main_path = [Convolution(**conv_params(1, nfm, strides=strides, batch_norm=batch_norm)),
-                     Convolution(**conv_params(3, nfm, batch_norm=batch_norm)),
-                     Convolution(**conv_params(1, nfm * 4, relu=False, batch_norm=False))]
-
-        if first or strides == 2:
-            self.side_path = Convolution(
-                **conv_params(1, nfm * 4, strides=strides, relu=False, batch_norm=False))
-        else:
-            if batch_norm:
-                main_path = [BatchNorm(), Activation(Rectlin())] + main_path
-            else:
-                main_path = [Activation(Rectlin())] + main_path
-
-        if strides == 2:
-            if batch_norm:
-                self.trunk = Sequential([BatchNorm(), Activation(Rectlin())])
-            else:
-                self.trunk = Sequential([Activation(Rectlin())])
-
-        self.main_path = Sequential(main_path)
-
-    def __call__(self, x):
-        t_x = self.trunk(x) if self.trunk else x
-        s_y = self.side_path(t_x) if self.side_path else t_x
-        m_y = self.main_path(t_x)
-        return s_y + m_y
-
-
-class mini_residual_network(Sequential):
-    def __init__(self, inputs, dataset, stage_depth,
-                 batch_norm=False, activation=False, preprocess=False):
-        nfms = [2**(stage + 4) for stage in sorted(list(range(3)) * stage_depth)]
-        strides = [1 if cur == prev else 2 for cur, prev in zip(nfms[1:], nfms[:-1])]
-        layers = []
-        if preprocess and dataset == 'cifar10':
-            layers = Preprocess(functor=cifar_mean_subtract)
-        layers.append(Convolution(**conv_params(3, 16, batch_norm=batch_norm)))
-        layers.append(f_module(nfms[0], first=True, batch_norm=batch_norm))
-
-        for nfm, stride in zip(nfms[1:], strides):
-            layers.append(f_module(nfm, strides=stride, batch_norm=batch_norm))
-
-        if batch_norm:
-            layers.append(BatchNorm())
-        if activation:
-            layers.append(Activation(Rectlin()))
-
-        layers.append(Pooling((8, 8), strides=2, pool_type='avg'))
-        if dataset == 'cifar10':
-            ax.Y.length = 10
-            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                 batch_norm=batch_norm, activation=Softmax()))
-        elif dataset == 'i1k':
-            ax.Y.length = 1000
-            layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(),
-                                 batch_norm=batch_norm, activation=Softmax()))
-        else:
-            raise ValueError("Incorrect dataset provided")
-        super(mini_residual_network, self).__init__(layers=layers)
-
-
-def get_mini_resnet(inputs, dataset, device_id, stage_depth=1, batch_norm=False,
-                    activation=True, preprocess=False):
-    model = mini_residual_network(inputs, dataset, stage_depth, batch_norm, activation, preprocess)
-    with ng.metadata(device_id=device_id, parallel=ax.N):
+def get_mini_resnet(inputs, dataset, device, device_id, stage_depth=1,
+                    batch_norm=False, activation=True, preprocess=False):
+    en_bottleneck = False
+    num_resnet_mods = 0
+    if dataset == 'i1k':
+        ax.Y.length = 1000
+        if stage_depth > 34:
+            en_bottleneck = True
+    if dataset == 'cifar10':
+        ax.Y.length = 10
+        num_resnet_mods = (stage_depth - 2) // 6
+    model = BuildResnet(dataset, stage_depth, en_bottleneck, num_resnet_mods,
+                        batch_norm=batch_norm)
+    with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
         model_out = model(inputs['image'])
     return model_out
 
 
-def get_fake_data(dataset, batch_size, num__iterations):
-    x_train, y_train = generate_data(dataset, batch_size)
+def get_fake_data(dataset, batch_size, num_iterations, seed=None):
+    x_train, y_train = generate_data(dataset, batch_size, rand_seed=seed)
 
     train_data = {'image': {'data': x_train, 'axes': ('batch', 'C', 'H', 'W')},
                   'label': {'data': y_train, 'axes': ('batch',)}}
 
-    train_set = ArrayIterator(train_data, batch_size, total_iterations=num__iterations)
+    train_set = ArrayIterator(train_data, batch_size, total_iterations=num_iterations)
     inputs = train_set.make_placeholders(include_iteration=True)
     return inputs, train_data, train_set
 
 
 def run_resnet_benchmark(dataset, num_iterations, n_skip, batch_size, device_id,
                          transformer_type, device, bprop=True, batch_norm=False,
-                         visualize=False):
+                         visualize=False, stage_depth=1):
     inputs, data, train_set = get_fake_data(dataset, batch_size, num_iterations)
 
     # Running forward propagation
-    model_out = get_mini_resnet(inputs, dataset, device_id, batch_norm=batch_norm)
+    model_out = get_mini_resnet(inputs, dataset, device, device_id, batch_norm=batch_norm,
+                                stage_depth=stage_depth)
 
     # Running back propagation
     if bprop:
-        with ng.metadata(device_id=device_id, parallel=ax.N):
+        with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
             optimizer = GradientDescentMomentum(0.01, 0.9)
             train_loss = ng.cross_entropy_multi(model_out,
                                                 ng.one_hot(inputs['label'], axis=ax.Y))
@@ -160,6 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_batch_norm', action='store_true',
                         help='whether to use batch normalization')
     parser.add_argument('--graph_vis', action="store_true", help="enable graph visualization")
+    parser.add_argument('--size', type=int, default=8, help="Enter size of resnet")
     args = parser.parse_args()
 
     device_ids = [[str(device) for device in range(num_devices)]
@@ -174,4 +118,5 @@ if __name__ == "__main__":
                              device=args.hetr_device,
                              bprop=args.bprop,
                              batch_norm=args.use_batch_norm,
-                             visualize=args.graph_vis)
+                             visualize=args.graph_vis,
+                             stage_depth=args.size)

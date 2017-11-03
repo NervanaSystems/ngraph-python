@@ -28,6 +28,8 @@ import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 from pycuda.driver import event_flags
 
+import logging
+logger = logging.getLogger(__name__)
 
 SLEEP_S = 0.1
 ITEMS_PER_THREAD = 32
@@ -56,7 +58,7 @@ def _reduction_kernel(op):
             float4 dest_regs;
             float4 scratch_regs;
             int offset = (blockIdx.x * ITEMS_PER_THREAD * blockDim.x) + (threadIdx.x * 4);
-            float ndevs = num_scratch_arrays + 1;
+            float n_devs = num_scratch_arrays + 1;
 
             #pragma unroll
             for(int i = 0; i < ITEMS_PER_THREAD; i+=4)
@@ -96,14 +98,14 @@ def _reduction_kernel(op):
         mean_code = """
                     if(offset < max_size)
                     {{
-                        dest_regs.x /= ndevs;
-                        dest_regs.y /= ndevs;
-                        dest_regs.z /= ndevs;
-                        dest_regs.w /= ndevs;
+                        dest_regs.x /= n_devs;
+                        dest_regs.y /= n_devs;
+                        dest_regs.z /= n_devs;
+                        dest_regs.w /= n_devs;
                     }}
                     """
     else:
-        mean_code = "(void)ndevs;"
+        mean_code = "(void)n_devs;"
 
     kernel_code = kernel_code_template.format(mean_code=mean_code)
     _float_accum_kernel = SourceModule(kernel_code)
@@ -335,13 +337,13 @@ class CudaScatterRecvKernel(GPUKernel):
         self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaScatterRecvKernel, self).bind_buffers()
         # get a handle to the send-buffer in the corresponding send-op
-        if self.op.is_root:
+        if self.comm.Get_rank() == 0:
             send_op_td = self.send_op.args[0].tensor_description()
             self.sender_buf = self.pointer_from_td(send_op_td)
         else:
             self.tnsr_ipc_hdl = bcast_ipc_handle(self.comm)
             chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-            self.sender_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+            self.sender_buf = int(self.tnsr_ipc_hdl) + self.comm.Get_rank() * chunk_size
 
     def execute(self):
         self.comm.barrier()
@@ -365,15 +367,18 @@ class CudaGatherSendKernel(GPUKernel):
             self.tensor = self.tensor_view_from_td(self.tensor)
         super(CudaGatherSendKernel, self).bind_buffers()
         # bind buffers for not root device
-        if not self.op.is_root:
+        if self.comm.Get_rank() > 0:
             self.tnsr_ipc_hdl = bcast_ipc_handle(self.comm)
-            chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
-            self.recvr_buf = int(self.tnsr_ipc_hdl) + self.op.idx * chunk_size
+            if self.op.use_reduce:
+                self.recvr_buf = self.tnsr_ipc_hdl
+            else:
+                chunk_size = self.tensor.tensor.size * self.op.dtype.itemsize
+                self.recvr_buf = int(self.tnsr_ipc_hdl) + self.comm.Get_rank() * chunk_size
 
     def execute(self):
         # Push our fragment into its section of the larger recvr buffer, which assumes gather axis
         # is least contiguous.
-        if not self.op.is_root:
+        if self.comm.Get_rank() > 0:
             drv.memcpy_dtod(
                 self.recvr_buf,
                 self.tensor.tensor.gpudata,
@@ -407,13 +412,26 @@ class CudaGatherRecvKernel(GPUKernel):
         self.comm.barrier()
 
 
+def calculate_segment_size(size, num_devices):
+    segment_size = int(size / num_devices)
+    if ((segment_size * num_devices) < size):
+        segment_size += 1
+
+    # Align segment size to 16 bytes
+    if (segment_size & 0x03):
+        segment_size = (segment_size & (~0x03)) + 4
+
+    return segment_size
+
+
 class CudaAllReduceKernel(GPUKernel):
 
     def __init__(self, transformer, comm, op):
         super(CudaAllReduceKernel, self).__init__(transformer)
         self.op = op
         self.tensor = op.tensor_description()
-        self.device_id = transformer.device_id
+        self.device_id = int(transformer.device_id)
+        self.device_ids = list(map(int, self.op.device_ids))
         self.event = drv.Event(flags=event_flags.INTERPROCESS | event_flags.DISABLE_TIMING)
         self.stream = drv.Stream()
         self.output_buff_dict = {}
@@ -426,9 +444,13 @@ class CudaAllReduceKernel(GPUKernel):
         shape = self.op.args[0].tensor_description().shape
         dtype = self.op.args[0].tensor_description().dtype
 
+        n_devs = len(self.op.device_ids)
+        size = self.op.args[0].tensor_description().axes.size
+        segment_size = calculate_segment_size(size, n_devs)
+
         # Allocate output and scratch buffers
         self.output_buff = gpuarray.zeros(shape, dtype)
-        self.scratch_buff = gpuarray.zeros(shape, dtype)
+        self.scratch_buff = gpuarray.zeros(segment_size * n_devs, dtype)
 
         self.output_buff_dict[self.device_id] = self.output_buff.gpudata
         self.scratch_buff_dict[self.device_id] = self.scratch_buff.gpudata
@@ -440,13 +462,15 @@ class CudaAllReduceKernel(GPUKernel):
 
         # Broadcast handles to others
         msg = (self.device_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl)
-        self.comm.bcast(msg, root=self.device_id)
+        for i in self.device_ids:
+            if i == self.device_id:
+                self.comm.bcast(msg, root=i)
+            else:
+                (peer_id,
+                 output_ipc_hdl,
+                 scratch_ipc_hdl,
+                 event_ipc_hdl) = self.comm.bcast(None, root=i)
 
-        # Get handles from others
-        for i in self.op.device_ids:
-            if i != self.device_id:
-                (peer_id, output_ipc_hdl, scratch_ipc_hdl, event_ipc_hdl) =\
-                    self.comm.bcast(msg, root=i)
                 output_hdl = drv.IPCMemoryHandle(output_ipc_hdl)
                 scratch_hdl = drv.IPCMemoryHandle(scratch_ipc_hdl)
                 event_hdl = drv.Event.from_ipc_handle(event_ipc_hdl)
@@ -461,16 +485,10 @@ class CudaAllReduceKernel(GPUKernel):
         self.input_tensor = self.tensor_view_from_td(self.op.args[0].tensor_description())
 
     def execute(self):
-        ndevs = len(self.op.device_ids)
+        n_devs = len(self.device_ids)
         size = self.input_tensor.tensor.size
         dtype = self.input_tensor.dtype
-        segment_size = int(size / ndevs)
-        if ((segment_size * ndevs) < size):
-            segment_size += 1
-
-        # Align segment size to 16 bytes
-        if (segment_size & 0x03):
-            segment_size = (segment_size & (~0x03)) + 4
+        segment_size = calculate_segment_size(size, n_devs)
 
         # Determine GPU active mask based on segment size
         num_active = int(size / segment_size)
@@ -484,8 +502,8 @@ class CudaAllReduceKernel(GPUKernel):
             size * dtype.itemsize)
 
         # Send each GPU its assigned segment
-        device_idx = self.op.device_ids.index(self.device_id)
-        for peer_idx, peer_id in enumerate(self.op.device_ids):
+        device_idx = self.device_ids.index(self.device_id)
+        for peer_idx, peer_id in enumerate(self.device_ids):
             if (peer_id == self.device_id):
                 continue
 
@@ -522,7 +540,7 @@ class CudaAllReduceKernel(GPUKernel):
         self.comm.Barrier()
 
         # Wait for other GPUs events
-        for peer_id in self.op.device_ids:
+        for peer_id in self.device_ids:
             if (peer_id == self.device_id):
                 continue
             self.stream.wait_for_event(self.event_buff_dict[peer_id])
@@ -543,7 +561,7 @@ class CudaAllReduceKernel(GPUKernel):
 
             # Perform reduction operation
             if (device_idx < num_active):
-                num_arrays = ndevs - 1
+                num_arrays = n_devs - 1
                 params = [src, self.scratch_buff_dict[self.device_id],
                           this_segment_size, num_arrays, segment_size]
                 grid_dim = (grid_size, 1, 1)
@@ -552,7 +570,7 @@ class CudaAllReduceKernel(GPUKernel):
                 kernel.prepared_async_call(grid_dim, block_dim, self.stream, *params)
 
                 # Send other GPUs this GPU's assigned segment
-                for peer_id in self.op.device_ids:
+                for peer_id in self.device_ids:
                     if (peer_id == self.device_id):
                         continue
 
@@ -568,7 +586,7 @@ class CudaAllReduceKernel(GPUKernel):
             self.comm.Barrier()
 
             # Wait for other GPUs events
-            for peer_id in self.op.device_ids:
+            for peer_id in self.device_ids:
                 if (peer_id == self.device_id):
                     continue
                 self.event_buff_dict[peer_id].synchronize()
@@ -592,7 +610,7 @@ class CudaAllReduceKernel(GPUKernel):
             self.comm.Barrier()
 
             # Wait for other GPUs events
-            for peer_id in self.op.device_ids:
+            for peer_id in self.device_ids:
                 if (peer_id == self.device_id):
                     continue
                 self.event_buff_dict[peer_id].synchronize()

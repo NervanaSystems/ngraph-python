@@ -17,7 +17,6 @@ import os
 
 from orderedset import OrderedSet
 from six import itervalues, iteritems
-
 from ngraph.op_graph.comm_nodes import ResultOp
 from ngraph.op_graph.op_graph import Op, TensorValueOp
 from ngraph.transformers.base import Computation
@@ -26,7 +25,7 @@ from ngraph.transformers.base import make_transformer_factory
 from ngraph.transformers.hetr.mpilauncher import MPILauncher
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
-from ngraph.transformers.passes.hetrpasses import DistributedPass
+from ngraph.transformers.passes.hetrpasses import AxesUpdatePass
 import logging
 
 
@@ -98,34 +97,30 @@ class HetrComputation(Computation):
             if isinstance(p, TensorValueOp):
                 p.metadata.update(p.states_read[0].metadata)
 
-        self.transformer.mpilauncher.launch(len(self.transformer.child_transformers))
-        self.transformer.setup_child_transformers()
+        # assume all children are the same type
+        # and all GPUs are in one chassis
+        num_process = len(self.transformer.child_transformers)
+        ppn = 1 if self.transformer.default_device == 'cpu' else num_process
+        self.transformer.mpilauncher.launch(num_process, ppn)
+        self.transformer.setup_child_transformers(num_process)
+
+        def is_my_op(op, name):
+            op_trans = op.metadata['transformer']
+            return name == op_trans or name in op_trans
 
         # simplify by already having asynctrans made by passes
         for t_name, trans in iteritems(self.transformer.child_transformers):
-
             trans.build_transformer()
-
             my_params = [(g_pos, p)
                          for g_pos, p in enumerate(self.computation_op.parameters)
-                         if p.metadata['transformer'] == t_name]
+                         if is_my_op(p, t_name)]
             my_ops = [op for op in self.send_nodes | new_returns
-                      if op.metadata['transformer'] == t_name]
+                      if is_my_op(op, t_name)]
 
             transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
             trans.create_computation(transform_ops, tuple([p for pos, p in my_params]))
-
-        for t_name, trans in iteritems(self.transformer.child_transformers):
-
-            my_params = [(g_pos, p)
-                         for g_pos, p in enumerate(self.computation_op.parameters)
-                         if p.metadata['transformer'] == t_name]
-
             comp = trans.get_computation()
             comp.param_idx = [g_pos for g_pos, p in my_params]
-
-            my_ops = [op for op in self.send_nodes | new_returns
-                      if op.metadata['transformer'] == t_name]
 
             # when there is a ResultOp, hack around it
             comp.returns = dict()
@@ -153,10 +148,10 @@ class HetrComputation(Computation):
             return_vals.update(child.get_results())
         if isinstance(self.computation_op.returns, Op):
             return return_vals[self.computation_op.returns]
+        elif isinstance(self.computation_op.returns, (collections.Sequence, OrderedSet)):
+            return tuple(return_vals[op] for op in self.computation_op.returns)
         elif isinstance(self.computation_op.returns, collections.Set):
             return return_vals
-        elif isinstance(self.computation_op.returns, collections.Sequence):
-            return tuple(return_vals[op] for op in self.computation_op.returns)
         else:
             return None
 
@@ -178,6 +173,7 @@ class HetrTransformer(ComputationGraphTransformer):
     def __init__(self, device='cpu', **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
 
+        self.default_device = device
         self.my_pid = os.getpid()
         self.is_closed = False
         self.child_transformers = dict()
@@ -186,7 +182,7 @@ class HetrTransformer(ComputationGraphTransformer):
                                               default_device=device,
                                               default_device_id=0),
                              CommunicationPass(self.send_nodes),
-                             DistributedPass(self.send_nodes)]
+                             AxesUpdatePass()]
         self.mpilauncher = MPILauncher()
 
     def close(self):
@@ -214,11 +210,11 @@ class HetrTransformer(ComputationGraphTransformer):
                 trans_client = RPCTransformerClient(tname)
             self.child_transformers[tname] = trans_client
 
-    def setup_child_transformers(self):
+    def setup_child_transformers(self, num_servers):
         # expect that all child transformers have been already registered
         for tname, trans in iteritems(self.child_transformers):
             dev_id = int(tname[3:])
-            server_address = self.mpilauncher.get_address_by_rank(dev_id)
+            server_address = self.mpilauncher.get_address_by_rank(dev_id, num_servers)
             trans.set_server_address(server_address)
             logger.info("setup_child_transformers: dev_id %d, server_address %s",
                         dev_id, server_address)

@@ -38,6 +38,24 @@ def max_iter():
     return 20
 
 
+def test_provided_lr(iter_buf, max_iter, base_lr):
+    # setup
+    name = 'provided'
+    params = {'name': name,
+              'lr_placeholder': iter_buf}
+    gamma = 0.1
+
+    # execute
+    naive_lr = base_lr * gamma * (np.arange(max_iter))
+    lr_op = lr_policies[name]['obj'](params)(iter_buf)
+    with ExecutorFactory() as ex:
+        compute_lr = ex.executor(lr_op, iter_buf)
+        ng_lr = [compute_lr(naive_lr[i]).item(0) for i in range(max_iter)]
+
+        # compare
+        ng.testing.assert_allclose(ng_lr, naive_lr, atol=0, rtol=0)
+
+
 def test_fixed_lr(iter_buf, max_iter, base_lr):
     # set up
     name = 'fixed'

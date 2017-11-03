@@ -1,6 +1,17 @@
+# Important Note
+
+We are currently transitioning the Intel® Nervana™ Graph codebase from Python to C++.
+ 
+As a result, most work in this repository is now focused on the higher levels of the 
+neon™ framework. Additional work is ongoing in internal repositories for the core C++ 
+Intel Nervana Graph project and for framework bridges from Intel Nervana Graph to 
+TensorFlow*/XLA and MXNet*. We will continue to support neon and it will retain 
+its Python interface. C++ implementations of Intel Nervana Graph will be released 
+publicly when they are more mature.  
+
 # Nervana Graph
 
-Nervana graph is Nervana's library for developing frameworks that can efficiently run deep
+Nervana Graph is Nervana's library for developing frameworks that can efficiently run deep
 learning computations on a variety of compute platforms. It consists of three primary API
 components:
 
@@ -117,9 +128,9 @@ make doc
 - The neon frontend offers an improved interface for increased composability/flexibility
   while leaving common use cases easy. We demonstrate this with MLP, convolutional, and
   RNN network examples on MNIST, CIFAR10, and Penn Treebank datasets.
-- The tensorflow importer allows users to import existing tensorflow graphs and execute
+- The TensorFlow importer allows users to import existing tensorflow graphs and execute
   them using Nervana Graph transformers/runtimes. This importer currently only supports a
-  subset of the tensorflow API, but this will be expanded over time.
+  subset of the TensorFlow API, but this will be expanded over time.
 
 ### Nervana Graph API
 - The Nervana Graph API consists of a collection of graph building functions all exposed

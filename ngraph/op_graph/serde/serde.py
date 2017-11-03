@@ -299,6 +299,7 @@ def _serialize_graph(ops):
     """
     assert isinstance(ops, Iterable), "Ops passed into `serialize_graph` must be an iterable"
     ops = Op.all_op_references(ops)
+
     pb_ops = []
     pb_edges = []
     for op in ops:

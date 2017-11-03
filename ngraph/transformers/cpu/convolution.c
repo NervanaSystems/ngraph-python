@@ -74,6 +74,8 @@ void create_mkldnn_conv_fprop_kernel(mkldnn_engine_t engine, int src_dims,
                          &(opkernel->inputs[0]));
   }
   if (input_weights_md) {
+    // MKL prefers ihwo nomenclature for filter layouts. chwn an ihwo are equivalent
+    if (input_weights_md->format == mkldnn_chwn) input_weights_md->format = mkldnn_ihwo;
     create_mkldnn_tensor_from_md(weights_dims, weights_sizes, input_weights_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
@@ -293,6 +295,8 @@ void create_mkldnn_conv_bprop_data_kernel(
                          &(opkernel->inputs[0]));
   }
   if (input_weights_md) {
+    // MKL prefers ihwo nomenclature for filter layouts. chwn an ihwo are equivalent
+    if (input_weights_md->format == mkldnn_chwn) input_weights_md->format = mkldnn_ihwo;
     create_mkldnn_tensor_from_md(weights_dims, weights_sizes, input_weights_md, engine,
                                  &(opkernel->inputs[1]));
   } else {
@@ -395,7 +399,7 @@ void create_mkldnn_conv_bprop_weights_kernel(
     int dst_dims, int* src_sizes, int* weights_sizes, int* bias_sizes, 
     int* dst_sizes, int* strides, int* padding, 
     mkldnn_memory_desc_t* input_src_md,
-    mkldnn_memory_desc_t* input_weights_md,
+    mkldnn_memory_desc_t* output_weights_md,
     mkldnn_memory_desc_t* input_dst_md, mkldnn_data_type_t data_type,
     mkldnn_opkernel_t opkernel) {
   mkldnn_memory_desc_t mkldnn_memory_desc_src_md, mkldnn_memory_desc_dst_md,
@@ -449,8 +453,10 @@ void create_mkldnn_conv_bprop_weights_kernel(
     create_mkldnn_tensor(dst_dims, dst_sizes, data_type, mkldnn_chwn, engine,
                          &(opkernel->inputs[1]));
   }
-  if (input_weights_md) {
-    create_mkldnn_tensor_from_md(weights_dims, weights_sizes, input_weights_md, engine,
+  if (output_weights_md) {
+    // MKL prefers ihwo nomenclature for filter layouts. chwn an ihwo are equivalent
+    if (output_weights_md->format == mkldnn_chwn) output_weights_md->format = mkldnn_ihwo;
+    create_mkldnn_tensor_from_md(weights_dims, weights_sizes, output_weights_md, engine,
                                  &(opkernel->outputs[0]));
   } else {
     create_mkldnn_tensor(weights_dims, weights_sizes, data_type, mkldnn_ihwo,
