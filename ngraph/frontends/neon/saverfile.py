@@ -23,7 +23,7 @@ class SaverFile(object):
         A class that write and read dictionary of numpy.ndarray's with Op name as key to file
 
         Arguments:
-            Name (string): Name of file used for saving. Extension .npz will be appended.
+            name (string): Name of file used for saving. Extension .npz will be appended.
 
         Methods:
             write_values: write dictionary of numpy.ndarray's with Op name as key to file
@@ -31,16 +31,18 @@ class SaverFile(object):
         """
 
         filename, fileext = os.path.splitext(name)
-        if fileext is not "":
-            assert fileext == ".npz"
-        self.name = filename
+        if fileext is ".npz":
+            self.name = filename
+        else:
+            self.name = name
 
-    def write_values(self, tensors, compress):
+    def write_values(self, tensors, compress=False):
         """
         write dictionary of numpy.ndarray's with Op name as key to file
 
         Arguments:
             tensors (dict): A dictionary of numpy.ndarray's with Op name as key
+            compress: specify whether to compress tensors
         """
         if compress:
             np.savez_compressed(self.name, **tensors)

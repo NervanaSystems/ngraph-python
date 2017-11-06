@@ -31,6 +31,29 @@ class Saver(object):
             setup_restore: prepare restore function for loading weight from file to
                            weight variables in computation
             restore: load weight values to computation
+        Examples:
+            ... create some_op_graph ...
+            comp = ng.computation(some_op_graph, "all")
+
+            " create saver object
+            weight_saver = Saver()
+            with closing(ngt.make_transformer()) as transformer:
+                func = transformer.add_computation(comp)
+                " setup save function
+                weight_saver.setup_save(transformer=transformer, computation=comp)
+                ... some usage of func ...
+                " call save
+                weight_saver.save(filename="some_name")
+            ...
+            with closing(ngt.make_transformer()) as another_transformer:
+                another_func = restore_transformer.add_computation(comp)
+                " setup restore
+                weight_saver.setup_restore(transformer=another_transformer,
+                                           computation=comp,
+                                           filename="some_name")
+                " call restore
+                weight_saver.restore()
+                ... now use another_func with the restored weights ...
         """
         self.getter_op_names = None
         self.getter = None
@@ -88,13 +111,22 @@ class Saver(object):
         self.getter_op_names, ops = zip(*save_variables.items())
         self.getter = transformer.computation(ops)
 
-    def save(self, filename, compress=False):
+    def save(self, filename, compress=False, transformer=None, computation=None):
         """
         Save weight values to named file
 
         Arguments:
-            name: name of file to be used for saving weights
+            filename: name of file to be used for saving weights
+            compress: specify whether to compress the weights
+            transformer : transformer where the weights are stored
+                          required only if setup_save is not called
+            computation (ComputationOp): A ComputationOp of interest.
+                                         required only if setup_save
+                                         is not called
         """
+        if self.getter is None:
+            self.setup_save(transformer=transformer,
+                            computation=computation)
         tensors = dict()
         tensors = {name: tensor.copy() for name, tensor in zip(self.getter_op_names,
                                                                self.getter())}
@@ -157,8 +189,20 @@ class Saver(object):
             restore_ops.append(ng.AssignOp(op_to_save, op_value))
         self.setter = transformer.computation(restore_ops)
 
-    def restore(self):
+    def restore(self, transformer=None, computation=None, filename=None):
         """
         load weight values to computation
+        Arguments:
+            transformer : transformer where the weights will be restored
+                          required only if setup_restore is not called
+            computation (ComputationOp): A ComputationOp of interest.
+                                         required only if setup_restore
+                                         is not called
+            filename: name of file with saved weights
+                      required only if setup_restore is not called
         """
+        if self.setter is None:
+            self.setup_restore(transformer=transformer,
+                               computation=computation,
+                               filename=filename)
         self.setter()
