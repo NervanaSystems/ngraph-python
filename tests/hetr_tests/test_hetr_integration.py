@@ -36,13 +36,25 @@ ax_C = ng.make_axis(12)
 ax_D = ng.make_axis(24)
 
 
-def test_broadcast_scalar():
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'device_id': ('0', '1'),
+    },
+    {
+        'device_id': ('0', '1', '2', '3'),
+    },
+])
+def test_broadcast_scalar(hetr_device, config):
+    if hetr_device == 'gpu':
+        pytest.skip('gpu communication broadcast op is not supported.')
+    device_id = config['device_id']
     x = ng.placeholder(())
     y = ng.placeholder(())
-    with ng.metadata(device_id=('0', '1'), parallel=ax_A):
+    with ng.metadata(device_id=device_id, parallel=ax_A):
         x_plus_y = x + y
 
-    with closing(ngt.make_transformer_factory('hetr', device='cpu')()) as transformer:
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
         computation = transformer.computation(x_plus_y, x, y)
         res = computation(1, 2)
         np.testing.assert_array_equal(res, 3)

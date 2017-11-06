@@ -26,9 +26,11 @@ from ngraph.transformers.hetr.mpilauncher import MPILauncher
 from ngraph.transformers.passes.hetrpasses import CommunicationPass
 from ngraph.transformers.passes.hetrpasses import DeviceAssignPass
 from ngraph.transformers.passes.hetrpasses import AxesUpdatePass
+from ngraph.op_graph.serde.serde import op_to_protobuf, add_edges
 import logging
 
 
+_OPS_PER_MSG = 10
 logger = logging.getLogger(__name__)
 
 
@@ -108,33 +110,53 @@ class HetrComputation(Computation):
             op_trans = op.metadata['transformer']
             return name == op_trans or name in op_trans
 
-        # simplify by already having asynctrans made by passes
+        # build whole_graph once to avoid slow serialization once per worker
+        # split whole pb message into list of smaller chunks
+        # gRPC prefers sending smaller messages
+        placeholders = [p for p in self.computation_op.parameters]
+        all_returns = [o for o in self.send_nodes | new_returns]
+        transform_returns = [o.args[0] if isinstance(o, ResultOp) else o for o in all_returns]
+        whole_graph = Op.all_op_references(transform_returns + placeholders)
+
+        pb_whole_graph = []
+        pb_ops, pb_edges = [], []
+        for i, o in enumerate(whole_graph):
+            pb_ops.append(op_to_protobuf(o))
+            add_edges(pb_edges, pb_ops, o)
+            if (i != 0 and i % _OPS_PER_MSG == 0) or (i == len(whole_graph) - 1):
+                pb_whole_graph.append((pb_ops, pb_edges))
+                pb_ops, pb_edges = [], []
+
+        t_placeholders, t_returns = {}, {}
+        for t_name in self.transformer.child_transformers.keys():
+            t_placeholders[t_name] = [p for p in placeholders if is_my_op(p, t_name)]
+            t_returns[t_name] = [r for r in all_returns if is_my_op(r, t_name)]
+
+        # create_computation is an async call using gPRC future
+        # allowing child transformers to create computation simultaneously
+        # get_computation waits the corresponding request to finish
+        logger.info('Start preparing the distributed graph.'),
         for t_name, trans in iteritems(self.transformer.child_transformers):
+            logger.debug('child transformer: {}'.format(t_name))
             trans.build_transformer()
-            my_params = [(g_pos, p)
-                         for g_pos, p in enumerate(self.computation_op.parameters)
-                         if is_my_op(p, t_name)]
-            my_ops = [op for op in self.send_nodes | new_returns
-                      if is_my_op(op, t_name)]
+            transform_ops = [
+                r.args[0] if isinstance(r, ResultOp) else r for r in t_returns[t_name]]
+            trans.create_computation(pb_whole_graph, transform_ops, t_placeholders[t_name])
 
-            # add metadata to skip returns for returns used for code generation only
-            for op in my_ops:
-                if op not in new_returns:
-                    op.metadata['skip_returns'] = True
-
-            transform_ops = [op.args[0] if isinstance(op, ResultOp) else op for op in my_ops]
-            trans.create_computation(transform_ops, tuple([p for pos, p in my_params]))
+        for t_name, trans in iteritems(self.transformer.child_transformers):
             comp = trans.get_computation()
-            comp.param_idx = [g_pos for g_pos, p in my_params]
+            comp.param_idx = [g_pos for g_pos, p in enumerate(self.computation_op.parameters)
+                              if is_my_op(p, t_name)]
 
             # when there is a ResultOp, hack around it
             comp.returns = dict()
-            for i, op in enumerate(my_ops):
+            for i, op in enumerate(t_returns[t_name]):
                 if op in self.returns and 'hetr_replaced_by' not in op.metadata:
                     comp.returns[op] = i
                 elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
                     comp.returns[op.metadata['replaces_op']] = i
             self.child_computations[t_name] = comp
+        logger.info('Finished preparing the distributed graph.'),
 
     def __call__(self, *args, **kwargs):
         """
@@ -212,7 +234,7 @@ class HetrTransformer(ComputationGraphTransformer):
                 from ngraph.transformers.hetr.rpc_client import RPCTransformerClient
                 # TODO: use dev_id from tuple
                 dev_id = int(tname[3:])
-                logger.info("register_transformer: dev_id %d", dev_id)
+                logger.debug("register_transformer: dev_id %d", dev_id)
                 trans_client = RPCTransformerClient(tname)
             self.child_transformers[tname] = trans_client
 
@@ -222,8 +244,8 @@ class HetrTransformer(ComputationGraphTransformer):
             dev_id = int(tname[3:])
             server_address = self.mpilauncher.get_address_by_rank(dev_id, num_servers)
             trans.set_server_address(server_address)
-            logger.info("setup_child_transformers: dev_id %d, server_address %s",
-                        dev_id, server_address)
+            logger.debug("setup_child_transformers: dev_id %d, server_address %s",
+                         dev_id, server_address)
 
     def transformer(self, tname):
         assert tname in self.child_transformers, "register transformer {} before use".format(tname)
