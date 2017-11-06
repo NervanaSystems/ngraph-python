@@ -24,11 +24,16 @@ def test_if_mlp_network_is_trainable(script_path, description, misclass_threshol
     smoke test.
     """
 
+    dir_path = ''
+    BASE_DATA_DIR = os.getenv("BASE_DATA_DIR")
+    if BASE_DATA_DIR is not None:
+        dir_path = " --data_dir " + BASE_DATA_DIR
+
     print("Description of test case: ", description)
     mlp_path = os.path.dirname(__file__) + "/../../" + script_path
 
     # start MLP training for flexgpu with 200 iterations and random number generator seed equals 1
-    cmd = "python " + mlp_path + " -b flexgpu -t 200 -r 1"
+    cmd = "python " + mlp_path + " -b flexgpu -t 200 -r 1" + dir_path
 
     output = subprocess.check_output(cmd, shell=True).decode("utf-8")
     misclass_pct = re.findall(r"misclass_pct': [-+]?\d*\.\d+", output)[-1].split()[-1]

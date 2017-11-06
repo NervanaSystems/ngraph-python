@@ -47,7 +47,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
         return c_id
 
     def BuildTransformer(self, request, context):
-        logger.info("server: build_transformer")
+        logger.debug("server: build_transformer")
         self.transformer_type = request.transformer_type[:3]
         if self.transformer_type not in ['gpu', 'cpu']:
             message = 'unknown transformer type {}'.format(self.transformer_type)
@@ -60,7 +60,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             return hetr_pb2.BuildTransformerReply(status=False, message=traceback.format_exc())
 
     def Computation(self, request_iterator, context):
-        logger.info("server: computation")
+        logger.debug("server: computation")
         if not self.transformer:
             return hetr_pb2.ComputationReply(comp_id=-1,
                                              message="build transformer before computation")
@@ -96,7 +96,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             return hetr_pb2.ComputationReply(comp_id=-1, message=traceback.format_exc())
 
     def FeedInput(self, request, context):
-        logger.info("server: feed_input")
+        logger.debug("server: feed_input")
         if request.comp_id not in self.computations:
             message = 'unknown computation id {}'.format(request.comp_id)
             return hetr_pb2.FeedInputReply(status=False, message=message)
@@ -129,7 +129,7 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             return hetr_pb2.FeedInputReply(status=False, message=traceback.format_exc())
 
     def GetResults(self, request, context):
-        logger.info("server: get_results")
+        logger.debug("server: get_results")
         if request.comp_id not in self.results:
             message = 'unknown computation id {}'.format(request.comp_id)
             return hetr_pb2.GetResultsReply(status=False, message=message)
@@ -148,12 +148,12 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             return hetr_pb2.GetResultsReply(status=False, message=traceback.format_exc())
 
     def CloseTransformer(self, request, context):
-        logger.info("server: close transformer")
+        logger.debug("server: close transformer")
         self.transformer.close()
         return hetr_pb2.CloseTransformerReply(status=True)
 
     def Close(self, request, context):
-        logger.info("server: close, self.transformer_type %s", self.transformer_type)
+        logger.debug("server: close, self.transformer_type %s", self.transformer_type)
         if use_mlsl:
             HetrLocals.close_mlsl()
         self.server.stop(0)
@@ -167,7 +167,7 @@ def is_port_open(port):
         s.bind(('localhost', int(port)))
         return True
     except Exception as e:
-        logger.info("is_port_open: port %s, exception: %s", port, e)
+        logger.debug("is_port_open: port %s, exception: %s", port, e)
         return False
     finally:
         s.close()
@@ -177,7 +177,7 @@ def write_server_info(filename, port):
     pid = os.getpid()
     rank = MPI.COMM_WORLD.Get_rank()
     server_info = '{}:{}:{}'.format(rank, pid, port).strip()
-    logger.info("write_server_info: line %s, filename %s", server_info, filename)
+    logger.debug("write_server_info: line %s, filename %s", server_info, filename)
     with open(filename, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.write(server_info + '\n')
@@ -195,8 +195,8 @@ def serve():
     options = [('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)]
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=options)
     hetr_pb2_grpc.add_HetrServicer_to_server(HetrServer(comm, server), server)
-    logger.info("server: rank %d, tmpfile %s, ports %s",
-                comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
+    logger.debug("server: rank %d, tmpfile %s, ports %s",
+                 comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
 
     if args.ports is not None and len(args.ports) > comm.Get_rank():
         p = args.ports[comm.Get_rank()]

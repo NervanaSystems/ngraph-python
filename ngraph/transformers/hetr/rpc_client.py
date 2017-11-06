@@ -3,15 +3,13 @@ from six import iteritems
 
 from . import hetr_pb2
 from . import hetr_pb2_grpc
-from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf, add_edges,\
+from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf,\
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
 from ngraph.transformers.hetr.hetr_utils import update_comm_deps
-from ngraph.op_graph.op_graph import Op
 import logging
 
 
 _TIMEOUT_SECONDS = 600
-_OPS_PER_MSG = 10
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +25,7 @@ class RPCComputationClient(object):
         self.feed_input_response_future = None
 
     def feed_input(self, values):
-        logger.info("client: feed input")
+        logger.debug("client: feed input")
         pb_values = []
         for v in values:
             pb_val = hetr_pb2.Value()
@@ -43,7 +41,7 @@ class RPCComputationClient(object):
             _TIMEOUT_SECONDS)
 
     def get_results(self):
-        logger.info("client: get results")
+        logger.debug("client: get results")
         if self.feed_input_response_future is None:
             raise RuntimeError("call feed_input before get_results")
         response = self.feed_input_response_future.result()
@@ -69,8 +67,8 @@ class RPCComputationClient(object):
 class RPCTransformerClient(object):
 
     def __init__(self, transformer_type, server_address='localhost'):
-        logger.info("client: init, transformer: %s, server_address: %s",
-                    transformer_type, server_address)
+        logger.debug("client: init, transformer: %s, server_address: %s",
+                     transformer_type, server_address)
         self.transformer_type = transformer_type
         self.server_address = server_address
         self.computations = dict()
@@ -82,15 +80,15 @@ class RPCTransformerClient(object):
 
     def set_server_address(self, address):
         if self.is_trans_built:
-            logger.info("client: set_server_address: transformer is already built, \
+            logger.debug("client: set_server_address: transformer is already built, \
                         skip server address")
             return
         self.server_address = address
 
     def build_transformer(self):
-        logger.info("client: build_transformer, server address: %s", self.server_address)
+        logger.debug("client: build_transformer, server address: %s", self.server_address)
         if self.is_trans_built:
-            logger.info("client: build_transformer: transformer is already built")
+            logger.debug("client: build_transformer: transformer is already built")
             return
         options = [('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)]
         channel = grpc.insecure_channel(self.server_address, options=options)
@@ -115,8 +113,8 @@ class RPCTransformerClient(object):
             self.is_trans_built = False
             raise RuntimeError("RPC build_transformer request failed: {}".format(response.message))
 
-    def create_computation(self, returns, placeholders):
-        logger.info("client: create_computation")
+    def create_computation(self, pb_graph, returns, placeholders):
+        logger.debug("client: create_computation")
 
         def make_computation_request(pb_ops, pb_edges, pb_returns=None, pb_placeholders=None):
             if pb_returns or pb_placeholders:
@@ -130,41 +128,26 @@ class RPCTransformerClient(object):
                     ops=pb_ops,
                     edges=pb_edges)
 
-        def generate_returns_placeholders():
-            pb_returns = []
-            pb_placeholders = []
-            for op in returns:
-                pb_returns.append(op_to_protobuf(op))
-            for op in placeholders:
-                pb_placeholders.append(op_to_protobuf(op))
-            return pb_returns, pb_placeholders
-
         def generate_messages():
-            pb_ops, pb_edges = [], []
-            pb_returns, pb_placeholders = generate_returns_placeholders()
-            ops = Op.all_op_references(returns + list(placeholders))
-            for i, op in enumerate(ops):
-                pb_ops.append(op_to_protobuf(op))
-                add_edges(pb_edges, pb_ops, op)
-                if (i != 0 and i % _OPS_PER_MSG == 0) or (i == len(ops) - 1):
-                    msg = make_computation_request(pb_ops,
-                                                   pb_edges,
-                                                   pb_returns,
-                                                   pb_placeholders)
-                    yield msg
+            pb_returns = [op_to_protobuf(o) for o in returns]
+            pb_placeholders = [op_to_protobuf(o) for o in placeholders]
 
-                    pb_ops, pb_edges = [], []
-                    pb_returns, pb_placeholders = [], []
+            for pb_ops, pb_edges in pb_graph:
+                msg = make_computation_request(
+                    pb_ops, pb_edges, pb_returns, pb_placeholders)
+                yield msg
+                pb_returns, pb_placeholders = [], []
 
         if not self.is_trans_built:
             raise RuntimeError("call build_transformer before create_computation")
+
         update_comm_deps(returns)
 
         self.computation_response_future = self.RPC.Computation.future(
             generate_messages(), _TIMEOUT_SECONDS)
 
     def get_computation(self):
-        logger.info("client: get_computation")
+        logger.debug("client: get_computation")
         if self.computation_response_future is None:
             raise RuntimeError("call create_computation before get_computation")
         response = self.computation_response_future.result()
@@ -176,14 +159,14 @@ class RPCTransformerClient(object):
             raise RuntimeError("RPC computation request failed: {}".format(response.message))
 
     def close_transformer(self):
-        logger.info("client: close_transformer")
+        logger.debug("client: close_transformer")
         if self.is_trans_built:
             self.close_transformer_response_future = self.RPC.CloseTransformer.future(
                 hetr_pb2.CloseTransformerRequest(),
                 _TIMEOUT_SECONDS)
 
     def close(self):
-        logger.info("client: close")
+        logger.debug("client: close")
         if self.close_transformer_response_future is not None:
             response = self.close_transformer_response_future.result()
             if not response.status:
