@@ -92,6 +92,12 @@ class HetrLocals(object):
     def mlsl_free(array):
         HetrLocals.mlsl_obj.free(array.__array_interface__['data'][0])
 
+    def as_buffer(self, array):
+        # array.shape is () for scalar
+        if not array.shape:
+            array = np.atleast_1d(array)
+        return np.ctypeslib.as_ctypes(array)
+
     def mlsl_send(self, send_id, x_nparr):
         send_op = self.send_nodes[send_id]
         self.comm.Send(x_nparr, dest=send_op.metadata['peer_id'], tag=USER_TAG)
@@ -112,7 +118,7 @@ class HetrLocals(object):
             # todo: remove that workaround for non-symmetric case
             gather_send_op.arr = x_nparr
         else:
-            send_buf = np.ctypeslib.as_ctypes(x_nparr)
+            send_buf = self.as_buffer(x_nparr)
             send_count = x_nparr.size
             recv_buf = None
             if gather_send_op.use_reduce:
@@ -134,9 +140,9 @@ class HetrLocals(object):
         # todo: remove that workaround for non-symmetric case
         if self.process_idx == root_idx:
             send_node = gather_recv_op.send_nodes[0]
-            send_buf = np.ctypeslib.as_ctypes(send_node.arr)
+            send_buf = self.as_buffer(send_node.arr)
             send_count = send_node.arr.size
-            recv_buf = np.ctypeslib.as_ctypes(np.atleast_1d(out))
+            recv_buf = self.as_buffer(out)
 
             if gather_recv_op.use_reduce:
                 req = self.distribution.reduce(send_buf, recv_buf, send_count,
@@ -174,8 +180,8 @@ class HetrLocals(object):
         send_buf = None
         if self.process_idx == root_idx:
             send_node = scatter_recv_op.send_node()
-            send_buf = np.ctypeslib.as_ctypes(send_node.arr)
-        recv_buf = np.ctypeslib.as_ctypes(out)
+            send_buf = self.as_buffer(send_node.arr)
+        recv_buf = self.as_buffer(out)
         recv_count = out.size
 
         req = self.distribution.scatter(send_buf, recv_buf, recv_count,
@@ -190,9 +196,9 @@ class HetrLocals(object):
             allreduce_op._req = [None]
         if allreduce_op.reduce_func == 'sum' or allreduce_op.reduce_func == 'mean':
             allreduce_op.arr = out
-            send_buf = np.ctypeslib.as_ctypes(x_nparr)
+            send_buf = self.as_buffer(x_nparr)
             send_count = x_nparr.size
-            recv_buf = np.ctypeslib.as_ctypes(out)
+            recv_buf = self.as_buffer(out)
             allreduce_op.req = self.distribution.all_reduce(send_buf, recv_buf, send_count,
                                                             mlsl.DataType.FLOAT,
                                                             mlsl.ReductionType.SUM,
@@ -237,14 +243,14 @@ class HetrLocals(object):
         if self.process_idx == root_idx:
             send_buf = None
             send_node = broadcast_recv_op.send_node()
-            send_buf = np.ctypeslib.as_ctypes(np.atleast_1d(send_node.arr))
+            send_buf = self.as_buffer(send_node.arr)
             count = send_node.arr.size
             req = self.distribution.bcast(send_buf, count,
                                           mlsl.DataType.FLOAT, root_idx,
                                           mlsl.GroupType.DATA)
             out[...] = send_node.arr
         else:
-            recv_buf = np.ctypeslib.as_ctypes(np.atleast_1d(out))
+            recv_buf = self.as_buffer(out)
             count = out.size
             req = self.distribution.bcast(recv_buf, count,
                                           mlsl.DataType.FLOAT, root_idx,
