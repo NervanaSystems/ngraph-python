@@ -38,13 +38,14 @@ TEST_DIRS_TENSORFLOW := ngraph/frontends/tensorflow/tests
 TEST_DIRS_CAFFE2 := ngraph/frontends/caffe2/tests
 TEST_DIRS_MXNET := ngraph/frontends/mxnet/tests
 TEST_DIRS_CNTK := ngraph/frontends/cntk/tests
+TEST_DIRS_ONNX := ngraph/frontends/onnx/tests
 TEST_DIRS_INTEGRATION := integration_tests/
 
 # Set parallel execution by setting the NUM_PROCS variable in the environment
 #	export NUM_PROCS=8
 #	make test_gpu
 # OR
-#	make test_gpu NUM_PROCS=8 
+#	make test_gpu NUM_PROCS=8
 #
 # If NUM_PROCS is unset, serial excution will be used
 # if NUM_PROCS = 0, serial execution will be used
@@ -135,7 +136,7 @@ test_flex: gpu_prepare test_prepare clean
 	@echo Running flex unit tests...
 	py.test --boxed --transformer flexgpu -m "transformer_dependent and not hetr_only or flex_only" \
 	--junit-xml=testout_test_flex_$(PY).xml --timeout=1200 --cov=ngraph \
-	$(TEST_DIRS) $(TEST_DIRS_NEON) ${TEST_DIRS_TENSORFLOW} ${TEST_DIRS_COMMON}
+	$(TEST_DIRS) $(TEST_DIRS_NEON) ${TEST_DIRS_TENSORFLOW} ${TEST_DIRS_ONNX} ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_flex_$(PY).xml
 
 test_mkldnn: export PYTHONHASHSEED=0
@@ -156,7 +157,7 @@ test_mkldnn:
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" --boxed \
 	--junit-xml=testout_test_mkldnn_hetr_$(PY).xml \
 	--cov-append \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_ONNX} ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_mkldnn_$(PY).xml
 
 test_cpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -165,7 +166,7 @@ test_cpu: test_prepare clean
 	echo Running unit tests for core and cpu transformer tests...
 	py.test -m "not hetr_only and not flex_only and not hetr_gpu_only" --boxed \
 	--junit-xml=testout_test_cpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_ONNX} ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_cpu_$(PY).xml
 
 test_gpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -195,9 +196,9 @@ test_hetr: multinode_prepare test_prepare clean
 	unset HTTP_PROXY && \
 	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m "transformer_dependent and not flex_only or hetr_only" \
-  --hetr_device cpu --boxed \
+	--hetr_device cpu --boxed \
 	--junit-xml=testout_test_hetr_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_ONNX} ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_hetr_$(PY).xml
 
 test_mgpu: export LD_PRELOAD+=:${WARP_CTC_PATH}/libwarpctc.so
@@ -210,7 +211,7 @@ test_mgpu: multinode_prepare test_prepare clean
 	unset HTTPS_PROXY && \
 	py.test --transformer hetr -m multi_device --hetr_device gpu --boxed \
 	--junit-xml=testout_test_mgpu_$(PY).xml \
-	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_COMMON}
+	$(TEST_OPTS) $(TEST_DIRS) $(TEST_DIRS_NEON) $(TEST_DIRS_TENSORFLOW) ${TEST_DIRS_ONNX} ${TEST_DIRS_COMMON}
 	coverage xml -i -o coverage_test_mgpu_$(PY).xml
 
 test_mxnet: test_prepare clean
