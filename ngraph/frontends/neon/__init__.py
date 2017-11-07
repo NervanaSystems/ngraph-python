@@ -27,3 +27,5 @@ from ngraph.frontends.neon.model import *
 from ngraph.frontends.neon.optimizer import *
 from ngraph.frontends.neon.initializer import *
 from ngraph.frontends.neon.data import *
+from ngraph.frontends.neon.saver import *
+from ngraph.frontends.neon.saverfile import *
