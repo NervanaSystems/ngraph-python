@@ -23,7 +23,6 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   serialized_pb=_b('\n#ngraph/transformers/hetr/hetr.proto\x1a\x1fngraph/op_graph/serde/ops.proto\"F\n\x05Value\x12\x19\n\x06scalar\x18\x01 \x01(\x0b\x32\x07.ScalarH\x00\x12\x19\n\x06tensor\x18\x02 \x01(\x0b\x32\x07.TensorH\x00\x42\x07\n\x05value\"3\n\x17\x42uildTransformerRequest\x12\x18\n\x10transformer_type\x18\x01 \x01(\t\"8\n\x15\x42uildTransformerReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"\x19\n\x17\x43loseTransformerRequest\"8\n\x15\x43loseTransformerReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"m\n\x12\x43omputationRequest\x12\x10\n\x03ops\x18\x01 \x03(\x0b\x32\x03.Op\x12\x14\n\x05\x65\x64ges\x18\x02 \x03(\x0b\x32\x05.Edge\x12\x14\n\x07returns\x18\x03 \x03(\x0b\x32\x03.Op\x12\x19\n\x0cplaceholders\x18\x04 \x03(\x0b\x32\x03.Op\"4\n\x10\x43omputationReply\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x0f\n\x07message\x18\x02 \x01(\t\";\n\x10\x46\x65\x65\x64InputRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\x12\x16\n\x06values\x18\x02 \x03(\x0b\x32\x06.Value\"1\n\x0e\x46\x65\x65\x64InputReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"$\n\x11GetResultsRequest\x12\x0f\n\x07\x63omp_id\x18\x01 \x01(\x05\"K\n\x0fGetResultsReply\x12\x0e\n\x06status\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x17\n\x07results\x18\x03 \x03(\x0b\x32\x06.Value\"\x0e\n\x0c\x43loseRequest\"\x1d\n\nCloseReply\x12\x0f\n\x07message\x18\x01 \x01(\t2\xe1\x02\n\x04Hetr\x12\x46\n\x10\x42uildTransformer\x12\x18.BuildTransformerRequest\x1a\x16.BuildTransformerReply\"\x00\x12\x46\n\x10\x43loseTransformer\x12\x18.CloseTransformerRequest\x1a\x16.CloseTransformerReply\"\x00\x12\x39\n\x0b\x43omputation\x12\x13.ComputationRequest\x1a\x11.ComputationReply\"\x00(\x01\x12\x31\n\tFeedInput\x12\x11.FeedInputRequest\x1a\x0f.FeedInputReply\"\x00\x12\x34\n\nGetResults\x12\x12.GetResultsRequest\x1a\x10.GetResultsReply\"\x00\x12%\n\x05\x43lose\x12\r.CloseRequest\x1a\x0b.CloseReply\"\x00\x62\x06proto3')
   ,
   dependencies=[ngraph_dot_op__graph_dot_serde_dot_ops__pb2.DESCRIPTOR,])
-_sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 
 
@@ -523,6 +522,7 @@ DESCRIPTOR.message_types_by_name['GetResultsRequest'] = _GETRESULTSREQUEST
 DESCRIPTOR.message_types_by_name['GetResultsReply'] = _GETRESULTSREPLY
 DESCRIPTOR.message_types_by_name['CloseRequest'] = _CLOSEREQUEST
 DESCRIPTOR.message_types_by_name['CloseReply'] = _CLOSEREPLY
+_sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 Value = _reflection.GeneratedProtocolMessageType('Value', (_message.Message,), dict(
   DESCRIPTOR = _VALUE,
@@ -616,6 +616,75 @@ CloseReply = _reflection.GeneratedProtocolMessageType('CloseReply', (_message.Me
 _sym_db.RegisterMessage(CloseReply)
 
 
+
+_HETR = _descriptor.ServiceDescriptor(
+  name='Hetr',
+  full_name='Hetr',
+  file=DESCRIPTOR,
+  index=0,
+  options=None,
+  serialized_start=780,
+  serialized_end=1133,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='BuildTransformer',
+    full_name='Hetr.BuildTransformer',
+    index=0,
+    containing_service=None,
+    input_type=_BUILDTRANSFORMERREQUEST,
+    output_type=_BUILDTRANSFORMERREPLY,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='CloseTransformer',
+    full_name='Hetr.CloseTransformer',
+    index=1,
+    containing_service=None,
+    input_type=_CLOSETRANSFORMERREQUEST,
+    output_type=_CLOSETRANSFORMERREPLY,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Computation',
+    full_name='Hetr.Computation',
+    index=2,
+    containing_service=None,
+    input_type=_COMPUTATIONREQUEST,
+    output_type=_COMPUTATIONREPLY,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='FeedInput',
+    full_name='Hetr.FeedInput',
+    index=3,
+    containing_service=None,
+    input_type=_FEEDINPUTREQUEST,
+    output_type=_FEEDINPUTREPLY,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='GetResults',
+    full_name='Hetr.GetResults',
+    index=4,
+    containing_service=None,
+    input_type=_GETRESULTSREQUEST,
+    output_type=_GETRESULTSREPLY,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Close',
+    full_name='Hetr.Close',
+    index=5,
+    containing_service=None,
+    input_type=_CLOSEREQUEST,
+    output_type=_CLOSEREPLY,
+    options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_HETR)
+
+DESCRIPTOR.services_by_name['Hetr'] = _HETR
+
 try:
   # THESE ELEMENTS WILL BE DEPRECATED.
   # Please use the generated *_pb2_grpc.py files instead.
@@ -627,6 +696,9 @@ try:
 
 
   class HetrStub(object):
+    """
+    Class used for HeTr grpc communication. 
+    """
 
     def __init__(self, channel):
       """Constructor.
@@ -667,33 +739,54 @@ try:
 
 
   class HetrServicer(object):
+    """
+    Class used for HeTr grpc communication. 
+    """
 
     def BuildTransformer(self, request, context):
+      """
+      RPC Function for creating child transformers. 
+      """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def CloseTransformer(self, request, context):
+      """
+      RPC Function for shutting down child transformers. 
+      """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def Computation(self, request_iterator, context):
+      """
+      RPC Function for creating child computations and sending serialized graph to HeTr child processes.
+      """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def FeedInput(self, request, context):
+      """
+      RPC Function for sending input data to HeTr child processes.
+      """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def GetResults(self, request, context):
+      """
+      RPC Function for getting results from HeTr child processes.
+      """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
     def Close(self, request, context):
+      """
+      RPC Function for shutting down the HeTr server on child processes.
+      """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
@@ -743,17 +836,38 @@ try:
     It is recommended to use the GA API (classes and functions in this
     file not marked beta) for all further purposes. This class was generated
     only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0."""
+    """
+    Class used for HeTr grpc communication. 
+    """
     def BuildTransformer(self, request, context):
+      """
+      RPC Function for creating child transformers. 
+      """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def CloseTransformer(self, request, context):
+      """
+      RPC Function for shutting down child transformers. 
+      """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def Computation(self, request_iterator, context):
+      """
+      RPC Function for creating child computations and sending serialized graph to HeTr child processes.
+      """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def FeedInput(self, request, context):
+      """
+      RPC Function for sending input data to HeTr child processes.
+      """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def GetResults(self, request, context):
+      """
+      RPC Function for getting results from HeTr child processes.
+      """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def Close(self, request, context):
+      """
+      RPC Function for shutting down the HeTr server on child processes.
+      """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
 
 
@@ -763,22 +877,43 @@ try:
     It is recommended to use the GA API (classes and functions in this
     file not marked beta) for all further purposes. This class was generated
     only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0."""
+    """
+    Class used for HeTr grpc communication. 
+    """
     def BuildTransformer(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      """
+      RPC Function for creating child transformers. 
+      """
       raise NotImplementedError()
     BuildTransformer.future = None
     def CloseTransformer(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      """
+      RPC Function for shutting down child transformers. 
+      """
       raise NotImplementedError()
     CloseTransformer.future = None
     def Computation(self, request_iterator, timeout, metadata=None, with_call=False, protocol_options=None):
+      """
+      RPC Function for creating child computations and sending serialized graph to HeTr child processes.
+      """
       raise NotImplementedError()
     Computation.future = None
     def FeedInput(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      """
+      RPC Function for sending input data to HeTr child processes.
+      """
       raise NotImplementedError()
     FeedInput.future = None
     def GetResults(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      """
+      RPC Function for getting results from HeTr child processes.
+      """
       raise NotImplementedError()
     GetResults.future = None
     def Close(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      """
+      RPC Function for shutting down the HeTr server on child processes.
+      """
       raise NotImplementedError()
     Close.future = None
 
