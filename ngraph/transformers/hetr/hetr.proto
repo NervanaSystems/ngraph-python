@@ -2,33 +2,12 @@ syntax = "proto3";
 
 import "ngraph/op_graph/serde/ops.proto";
 
-/* 
- * Class used for HeTr grpc communication. 
- */
 service Hetr {
-    /* 
-     * RPC Function for creating child transformers. 
-     */
     rpc BuildTransformer (BuildTransformerRequest) returns (BuildTransformerReply) {}
-    /* 
-     * RPC Function for shutting down child transformers. 
-     */
     rpc CloseTransformer (CloseTransformerRequest) returns (CloseTransformerReply) {}
-    /* 
-     * RPC Function for creating child computations and sending serialized graph to HeTr child processes.
-     */
     rpc Computation (stream ComputationRequest) returns (ComputationReply) {}
-    /* 
-     * RPC Function for sending input data to HeTr child processes.
-     */
     rpc FeedInput (FeedInputRequest) returns (FeedInputReply) {}
-    /* 
-     * RPC Function for getting results from HeTr child processes.
-     */
     rpc GetResults (GetResultsRequest) returns (GetResultsReply) {}
-    /* 
-     * RPC Function for shutting down the HeTr server on child processes.
-     */
     rpc Close (CloseRequest) returns (CloseReply) {}
 }
 
