@@ -91,6 +91,7 @@ class HetrComputation(Computation):
                 new_returns.add(op)
 
         # Do Hetr passes
+        logger.info('Running graph passes'),
         pass_ops = new_returns | OrderedSet(self.computation_op.parameters)
         for graph_pass in self.transformer.graph_passes:
             pass_ops = pass_ops | OrderedSet(hetr.send_nodes)
@@ -102,6 +103,7 @@ class HetrComputation(Computation):
             if isinstance(p, TensorValueOp):
                 p.metadata.update(p.states_read[0].metadata)
 
+        logger.info('Launching child processes'),
         # assume all children are the same type
         # and all GPUs are in one chassis
         num_process = len(self.transformer.child_transformers)
@@ -113,6 +115,7 @@ class HetrComputation(Computation):
             op_trans = op.metadata['transformer']
             return name == op_trans or name in op_trans
 
+        logger.info('Serializaing computation graph'),
         # build whole_graph once to avoid slow serialization once per worker
         # split whole pb message into list of smaller chunks
         # gRPC prefers sending smaller messages
@@ -138,7 +141,7 @@ class HetrComputation(Computation):
         # create_computation is an async call using gPRC future
         # allowing child transformers to create computation simultaneously
         # get_computation waits the corresponding request to finish
-        logger.info('Start preparing the distributed graph.'),
+        logger.info('Creating remote computations'),
         for t_name, trans in iteritems(self.transformer.child_transformers):
             logger.debug('child transformer: {}'.format(t_name))
             trans.build_transformer()
@@ -159,7 +162,6 @@ class HetrComputation(Computation):
                 elif 'replaces_op' in op.metadata and op.metadata['replaces_op'] in self.returns:
                     comp.returns[op.metadata['replaces_op']] = i
             self.child_computations[t_name] = comp
-        logger.info('Finished preparing the distributed graph.'),
 
     def __call__(self, *args, **kwargs):
         """
