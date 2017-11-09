@@ -200,10 +200,6 @@ class HetrTransformer(ComputationGraphTransformer):
 
     def __init__(self, device='cpu', **kwargs):
         super(HetrTransformer, self).__init__(**kwargs)
-        if os.getenv('http_proxy') is not None:
-            logger.warning("http_proxy environment variable is set, unset http_proxy or " +
-                           "ensure that all targeted hosts (including localhost) " +
-                           "are specified in the no_proxy environment variable")
 
         self.default_device = device
         self.my_pid = os.getpid()
