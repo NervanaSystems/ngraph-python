@@ -301,6 +301,13 @@ release: check
 	echo
 
 UNAME=$(shell uname)
+onnx_dependency:
+ifeq ("$(UNAME)", "Darwin")
+	brew install protobuf
+else ifeq ("$(UNAME)", "Linux")
+	sudo apt-get install protobuf-compiler libprotobuf-dev
+endif
+
 viz_prepare:
 ifeq ("$(UNAME)", "Darwin")
 	brew install graphviz

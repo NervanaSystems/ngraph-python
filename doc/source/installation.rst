@@ -65,6 +65,10 @@ To install with Intel® Math Kernel Library for Deep Neural Networks (Intel® MK
     cmake -DCMAKE_INSTALL_PREFIX=$PWD/../install .. && make install
     cd ../.. && export MKLDNN_ROOT=$PWD/mkl-dnn/install
 
+To install onnx system dependency::
+
+    make onnx_dependency
+
 To build and install, run::
 
     make install
