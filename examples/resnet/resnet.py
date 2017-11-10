@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division, print_function
 import numpy as np
 import ngraph as ng
 from ngraph.frontends.neon import Sequential
@@ -72,7 +73,7 @@ def conv_params(fil_size, num_fils, strides=1, batch_norm=True, activation=Rectl
 class BuildResnet(Sequential):
     def __init__(self, net_type, resnet_size, bottleneck, num_resnet_mods, batch_norm=True):
         # For CIFAR10 dataset
-        if net_type == 'cifar10':
+        if (net_type in ('cifar10', 'cifar100')):
             # Number of Filters
             num_fils = [16, 32, 64]
             # Network Layers
@@ -113,7 +114,7 @@ class BuildResnet(Sequential):
             layers.append(Affine(axes=ax.Y, weight_init=KaimingInit(), batch_norm=batch_norm))
             layers.append(Activation(Softmax()))
         # For I1K dataset
-        elif net_type == "i1k":
+        elif (net_type in ('i1k', 'i1k100')):
             # Number of Filters
             num_fils = [64, 128, 256, 512]
             # Number of residual modules we need to instantiate at each level
@@ -174,7 +175,7 @@ class BuildResnet(Sequential):
     # This methods takes dataset type and returns main path and side path
     def get_mp_sp(self, num_fils, net_type, direct=True, bottleneck=False, strides=1,
                   batch_norm=True):
-        if(net_type == "cifar10"):
+        if(net_type in ('cifar10', 'cifar100')):
             # Mainpath for CIFAR10 is fixed
             main_path = Sequential([
                 Convolution(**conv_params(3, num_fils, strides=strides, batch_norm=batch_norm)),
@@ -186,7 +187,7 @@ class BuildResnet(Sequential):
                 side_path = Convolution(**conv_params(1, num_fils,
                                                       strides=strides, activation=None,
                                                       batch_norm=batch_norm))
-        elif(net_type == "i1k"):
+        elif(net_type in ('i1k', 'i1k100')):
             # Mainpath for i1k is depends if bottleneck is enabled or not
             if(bottleneck):
                 main_path = Sequential([

@@ -31,7 +31,7 @@ class SaverFile(object):
         """
 
         filename, fileext = os.path.splitext(name)
-        if fileext is ".npz":
+        if fileext == ".npz":
             self.name = filename
         else:
             self.name = name
