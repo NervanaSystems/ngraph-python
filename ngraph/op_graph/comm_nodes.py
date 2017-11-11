@@ -256,6 +256,12 @@ class GatherRecvOp(RecvOp):
             self.use_reduce = True
             send_node.use_reduce = True
 
+    def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
+        if fragment_axis in send_axes and \
+           send_axes.find_by_name(fragment_axis.name).lengths[0] != fragment_axis.length:
+            send_axes = make_axes([fragment_axis if a == fragment_axis else a for a in send_axes])
+        return send_axes
+
     @property
     def slices(self):
         return self._slices

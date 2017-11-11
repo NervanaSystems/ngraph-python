@@ -18,7 +18,7 @@ from orderedset import OrderedSet
 
 from ngraph.factory.comm_node_factory import get_comm_pattern, CommNodePair
 from ngraph.op_graph.op_graph import Op, TensorValueOp
-from ngraph.transformers.hetr.hetr_utils import clone_graph
+from ngraph.op_graph.comm_nodes import RecvOp
 from ngraph.transformers.passes.passes import GraphBuildingPass
 from ngraph.op_graph.axes import make_axis
 from ngraph.transformers.hetr.hetr_utils import update_parallel_axis
@@ -61,6 +61,8 @@ class CommunicationPass(GraphBuildingPass):
 
     def visit(self, op, *op_args):
         args = list()
+        if isinstance(op, RecvOp):
+            self.send_nodes.add(op.send_node())
         for arg in op_args:
             comm_pattern = get_comm_pattern(from_node=arg, to_node=op)
             if comm_pattern:
@@ -91,61 +93,6 @@ class CommunicationPass(GraphBuildingPass):
         ops.update(self.send_nodes)
 
 
-class DistributedPass(GraphBuildingPass):
-    """
-    DistributedPass clones subgraphs of which root is a GatherSendOp to finish
-    implementing scatter/gather. It assigns new parallel axes and device_id
-
-    Assumes
-        CommunicationPass ran already, to insert incomplete Scatter/Gather nodes
-        metadata['parallel', 'device_id', ] are present on nodes
-    """
-
-    def __init__(self, send_nodes, **kwargs):
-        super(DistributedPass, self).__init__(**kwargs)
-        self.send_nodes = send_nodes
-        self.num_devices = 0
-        self.parallel_axes = None
-
-    def do_pass(self, ops, **kwargs):
-
-        ops = OrderedSet(op.forwarded for op in ops)
-
-        for op in reversed(Op.ordered_ops(ops)):
-            if op.metadata.get('marker') == 'gather':
-                # op is GatherRecvOp
-                if self.parallel_axes is None:
-                    a = op.metadata['parallel']
-                    assert a.length % len(op.from_id) == 0, '{} can not be equally divided by {}'\
-                        .format(a, len(op.from_id))
-                    self.parallel_axes = make_axis(
-                        name=a.name,
-                        length=a.length // len(op.from_id),
-                        docstring='HeTr parallel axis')
-                gather_send_op = op.send_nodes[0]
-
-                # clone nodes for each device_id
-                replaced_send_ops = OrderedSet()
-                new_gather_send_nodes = OrderedSet()
-                for id in op.from_id:
-                    new_gather_send_op, new_sends, replaced_sends = clone_graph(
-                        root=gather_send_op,
-                        clone_id=id,
-                        parallel_axis=self.parallel_axes)
-
-                    new_gather_send_nodes.add(new_gather_send_op)
-                    new_sends.add(new_gather_send_op)
-                    for o in new_sends:
-                        self.send_nodes.add(o)
-
-                    replaced_send_ops |= replaced_sends
-
-                op.send_nodes = new_gather_send_nodes
-                replaced_send_ops.add(gather_send_op)
-                for o in replaced_send_ops:
-                    self.send_nodes.remove(o)
-
-
 class AxesUpdatePass(GraphBuildingPass):
     """
     Description:
@@ -155,23 +102,22 @@ class AxesUpdatePass(GraphBuildingPass):
 
     def __init__(self, **kwargs):
         super(AxesUpdatePass, self).__init__(**kwargs)
-        self.parallel_axes = None
+        self.parallel_axis = None
 
     def do_pass(self, ops, **kwargs):
 
         ops = OrderedSet(op.forwarded for op in ops)
-        parallel_axis = None
 
         for op in reversed(Op.ordered_ops(ops)):
             if op.metadata.get('marker') == 'gather':
                 # op is GatherRecvOp
-                if parallel_axis is None:
+                if self.parallel_axis is None:
                     a = op.metadata['parallel']
                     assert a.length % len(op.from_id) == 0, '{} can not be equally divided by {}'\
                         .format(a, len(op.from_id))
-                    parallel_axis = make_axis(
+                    self.parallel_axis = make_axis(
                         name=a.name,
                         length=a.length // len(op.from_id),
                         docstring='HeTr parallel axis')
                 gather_send_op = op.send_nodes[0]
-                update_parallel_axis(gather_send_op, parallel_axis)
+                update_parallel_axis(gather_send_op, self.parallel_axis)

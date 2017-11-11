@@ -129,6 +129,62 @@ def test_distributed_dot(hetr_device, config):
 
 
 @pytest.mark.multi_device
+def test_multi_computations(hetr_device):
+    if hetr_device == 'gpu':
+        pytest.xfail("enable after gpu exgraph")
+    axes_x = ng.make_axes([ax_A, ax_B])
+    x = ng.placeholder(axes=axes_x)
+    y = ng.placeholder(())
+    with ng.metadata(device_id=('0', '1'), parallel=ax_A):
+        f = x ** 2
+        out = y - ng.mean(f, out_axes=())
+
+    np_x = np.random.randint(10, size=axes_x.lengths)
+    np_y = np.random.randint(10)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as t:
+        comp = t.computation(out, x, y)
+        another_comp = t.computation(f, x)
+
+        res_comp = comp(np_x, np_y)
+        res_another_comp = another_comp(np_x)
+        ref_comp = np_y - np.mean(np_x**2)
+        np.testing.assert_array_equal(res_comp, ref_comp)
+        np.testing.assert_array_equal(res_another_comp, np_x**2)
+
+
+@pytest.mark.multi_device
+@pytest.mark.parametrize('config', [
+    {
+        'axes': ng.make_axes([ax_A]),
+        'device_id': ('0', '1'),
+        'parallel_axis': ax_A,
+    },
+])
+def test_repeat_computation(hetr_device, config):
+    if hetr_device == 'gpu':
+        pytest.xfail("enable after gpu exgraph")
+    device_id = config['device_id']
+    axes = config['axes']
+    parallel_axis = config['parallel_axis']
+
+    with ng.metadata(device=hetr_device):
+        x = ng.placeholder(axes=axes)
+        with ng.metadata(device_id=device_id, parallel=parallel_axis):
+            x_plus_one = x + 1
+
+        np_x = np.random.randint(100, size=axes.lengths)
+        with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+            comp = transformer.computation(x_plus_one, x)
+            comp2 = transformer.computation(x_plus_one, x)
+
+            res = comp(np_x)
+            np.testing.assert_array_equal(res, np_x + 1)
+
+            res2 = comp2(np_x)
+            np.testing.assert_array_equal(res2, np_x + 1)
+
+
+@pytest.mark.multi_device
 def test_comm_broadcast_op(hetr_device):
     if hetr_device == 'gpu':
         pytest.skip('gpu communication broadcast op is not supported.')

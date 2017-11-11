@@ -63,6 +63,9 @@ class HetrComputation(Computation):
     def __init__(self, hetr, computation_op):
         self.child_computations = dict()
         self.transformer = hetr
+        # clear send_nodes for multiple computations
+        if hetr.send_nodes:
+            hetr.send_nodes.clear()
         self.send_nodes = hetr.send_nodes
         self.computation_op = computation_op
 
