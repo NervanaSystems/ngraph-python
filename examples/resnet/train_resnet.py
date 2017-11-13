@@ -91,6 +91,9 @@ if __name__ == "__main__":
     parser.add_argument('--tb', action="store_true", help="1- Enables tensorboard")
     parser.add_argument('--logfile', type=str, default=None, help="Name of the csv which \
                         logs different metrics of model")
+    parser.add_argument('--hetr_device', type=str, default='cpu', help="hetr device type")
+    parser.add_argument('--num_devices', '-m', type=int, default=1, help="num hetr devices")
+    parser.add_argument('--disable_batch_norm', action='store_true')
     parser.add_argument('--save_file', type=str, default=None, help="File to save weights")
     parser.add_argument('--inference', type=str, default=None, help="File to load weights")
     args = parser.parse_args()
@@ -115,42 +118,47 @@ print("Completed loading " + args.dataset + " dataset")
 np.random.seed(args.rng_seed)
 # Make placeholders
 input_ph = train_set.make_placeholders(include_iteration=True)
-# Build the network
-resnet = BuildResnet(args.dataset, args.size, en_bottleneck, num_resnet_mods)
-# Tensorboard
-if(args.tb):
-    try:
-        from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
-    except:
-        print("Tensorboard not installed")
-    seq1 = BuildResnet(args.dataset, args.size, en_bottleneck, num_resnet_mods)
-    train = seq1(input_ph['image'])
-    tb = TensorBoard("/tmp/")
-    tb.add_graph(train)
-    exit()
 
-# Learning Rate Placeholder
-lr_ph = ng.placeholder(axes=(), initial_value=base_lr)
+device = args.hetr_device
+device_id = [str(d) for d in range(args.num_devices)]
+with ng.metadata(device=device, device_id=device_id, parallel=ax.N):
+    # Build the network
+    resnet = BuildResnet(args.dataset, args.size, en_bottleneck, num_resnet_mods,
+                         batch_norm=not args.disable_batch_norm)
+    # Tensorboard
+    if(args.tb):
+        try:
+            from ngraph.op_graph.tensorboard.tensorboard import TensorBoard
+        except:
+            print("Tensorboard not installed")
+        seq1 = BuildResnet(args.dataset, args.size, en_bottleneck, num_resnet_mods)
+        train = seq1(input_ph['image'])
+        tb = TensorBoard("/tmp/")
+        tb.add_graph(train)
+        exit()
 
-# Optimizer
-# Provided learning policy takes learning rate as input to graph using a placeholder.
-# This allows you to control learning rate based on various factors of network
-learning_rate_policy = {'name': 'provided',
-                        'lr_placeholder': lr_ph}
+    # Learning Rate Placeholder
+    lr_ph = ng.placeholder(axes=(), initial_value=base_lr)
 
-optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
-                                    momentum_coef=momentum_coef,
-                                    wdecay=wdecay,
-                                    nesterov=False,
-                                    iteration=input_ph['iteration'])
-label_indices = input_ph['label']
-# Make a prediction
-prediction = resnet(input_ph['image'])
-# Calculate loss
-train_loss = ng.cross_entropy_multi(prediction, ng.one_hot(label_indices, axis=ax.Y))
-# Average loss over the batch
-batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
-train_computation = ng.computation(batch_cost, "all")
+    # Optimizer
+    # Provided learning policy takes learning rate as input to graph using a placeholder.
+    # This allows you to control learning rate based on various factors of network
+    learning_rate_policy = {'name': 'provided',
+                            'lr_placeholder': lr_ph}
+
+    optimizer = GradientDescentMomentum(learning_rate=learning_rate_policy,
+                                        momentum_coef=momentum_coef,
+                                        wdecay=wdecay,
+                                        nesterov=False,
+                                        iteration=input_ph['iteration'])
+    label_indices = input_ph['label']
+    # Make a prediction
+    prediction = resnet(input_ph['image'])
+    # Calculate loss
+    train_loss = ng.cross_entropy_multi(prediction, ng.one_hot(label_indices, axis=ax.Y))
+    # Average loss over the batch
+    batch_cost = ng.sequential([optimizer(train_loss), ng.mean(train_loss, out_axes=())])
+    train_computation = ng.computation(batch_cost, "all")
 
 # Instantiate the Saver object to save weights
 weight_saver = Saver()
@@ -179,7 +187,8 @@ if(args.inference is not None):
         exit()
 
 # Training the network by calling transformer
-with closing(ngt.make_transformer()) as transformer:
+t_args = {'device': args.hetr_device} if args.backend == 'hetr' else {}
+with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transformer:
     # Trainer
     train_function = transformer.add_computation(train_computation)
     # Inference
