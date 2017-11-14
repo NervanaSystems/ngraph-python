@@ -210,7 +210,7 @@ with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transfor
         # Dictionary for training
         feed_dict = {input_ph[k]: data[k] for k in input_ph.keys()}
         # Learning Schedule
-        feed_dict[lr_ph] = set_lr(base_lr, step, [10, 15], gamma)
+        feed_dict[lr_ph] = set_lr(base_lr, step, learning_schedule, gamma)
         # Mean batch cost
         output = train_function(feed_dict=feed_dict)
         # Update progress bar
