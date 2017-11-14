@@ -400,8 +400,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(
             *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        dil_d, dil_h, dil_w = itemgetter(
+            *('dil_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_h, pad_w]
         stride = [str_h, str_w]
+        dilation = [dil_h - 1, dil_w - 1]
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.safe_name] = self.mkldnn.create_empty_kernel(op_id)
@@ -417,6 +420,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             get_ctypes_arg(output_shape),
             get_ctypes_arg(stride),
             get_ctypes_arg(pad),
+            get_ctypes_arg(dilation),
             input_layout,
             filter_layout,
             data_type,
@@ -448,8 +452,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(
             *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        dil_d, dil_h, dil_w = itemgetter(
+            *('dil_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_h, pad_w]
         stride = [str_h, str_w]
+        dilation = [dil_h - 1, dil_w - 1]
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.safe_name] = self.mkldnn.create_empty_kernel(op_id)
@@ -463,6 +470,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             get_ctypes_arg(output_shape),
             get_ctypes_arg(stride),
             get_ctypes_arg(pad),
+            get_ctypes_arg(dilation),
             input_layout,
             filter_layout,
             data_type,
@@ -497,8 +505,11 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             *('pad_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         str_d, str_h, str_w = itemgetter(
             *('str_' + s for s in ('d', 'h', 'w')))(op.conv_params)
+        dil_d, dil_h, dil_w = itemgetter(
+            *('dil_' + s for s in ('d', 'h', 'w')))(op.conv_params)
         pad = [pad_h, pad_w]
         stride = [str_h, str_w]
+        dilation = [dil_h - 1, dil_w - 1]
 
         op_id = len(self.mkldnn.kernels)
         self.mkldnn.kernels[op.safe_name] = self.mkldnn.create_empty_kernel(op_id)
@@ -514,6 +525,7 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
             get_ctypes_arg(inputs_shape),
             get_ctypes_arg(stride),
             get_ctypes_arg(pad),
+            get_ctypes_arg(dilation),
             delta_layout,
             filter_layout,
             inputs_layout,

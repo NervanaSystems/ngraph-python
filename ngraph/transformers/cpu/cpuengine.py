@@ -127,19 +127,20 @@ class Mkldnn(object):
             self.conv_fprop_kernel.argtypes = \
                 [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
                  ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
-                 ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
+                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
             self.conv_bprop_kernel = \
                 self.mkllib.create_mkldnn_conv_bprop_data_kernel
             self.conv_bprop_kernel.argtypes = \
                 [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
                  ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
-                 ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
+                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
             self.update_conv_kernel = \
                 self.mkllib.create_mkldnn_conv_bprop_weights_kernel
             self.update_conv_kernel.argtypes = \
                 [ct.c_void_p, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_void_p,
                  ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
-                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_int, ct.c_void_p]
+                 ct.c_void_p, ct.c_void_p, ct.c_void_p, ct.c_void_p,
+                 ct.c_int, ct.c_void_p]
 
             self.innerproduct_fprop_kernel = \
                 self.mkllib.create_mkldnn_innerproduct_fprop_kernel
