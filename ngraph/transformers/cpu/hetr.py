@@ -50,11 +50,6 @@ class HetrLocals(object):
         self.broadcast_recv_nodes = broadcast_recv_nodes
 
         # MLSL-specific
-        self.mlsl_obj = mlsl.MLSL()
-        self.mlsl_obj.init()
-        self.process_count = self.mlsl_obj.get_process_count()
-        self.process_idx = self.mlsl_obj.get_process_idx()
-        # data parallelism
         self.distribution = None
 
         # MPI-specific
@@ -67,7 +62,6 @@ class HetrLocals(object):
     def close(self):
         if self.distribution:
             self.mlsl_obj.delete_distribution(self.distribution)
-        self.mlsl_obj.finalize()
 
     @staticmethod
     def close_mlsl():

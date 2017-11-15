@@ -28,8 +28,6 @@ except ImportError:
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 
 class HetrServer(hetr_pb2_grpc.HetrServicer):
 
