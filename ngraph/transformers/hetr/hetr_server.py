@@ -177,6 +177,8 @@ def write_server_info(filename, port):
     with open(filename, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.write(server_info + '\n')
+        f.flush()
+        os.fsync(f.fileno())
         fcntl.flock(f, fcntl.LOCK_UN)
     return server_info
 
