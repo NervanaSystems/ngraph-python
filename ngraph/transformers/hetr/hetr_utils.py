@@ -119,12 +119,11 @@ def update_comm_deps(ops):
 def update_parallel_axis(root, parallel_axis):
     for op in Op.ordered_ops([root]):
 
-        if hasattr(op, 'reduction_axes') and parallel_axis in op.reduction_axes:
+        if (hasattr(op, 'reduction_axes') and
+                parallel_axis in Axes.as_flattened_list(op.reduction_axes)):
             op.reduction_axes = set_parallel_axes(op.reduction_axes, parallel_axis)
-
         if getattr(op, 'axes', None) is not None \
                 and parallel_axis in Axes.as_flattened_list(op.axes):
-            # if parallel_axis in Axes.as_flattened_list(op.axes):
             op._axes = set_parallel_axes(op.axes, parallel_axis)
             if isinstance(op, DotOp):
                 if parallel_axis in op.x_out_axes:

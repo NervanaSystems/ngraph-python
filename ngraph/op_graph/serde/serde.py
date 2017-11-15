@@ -388,6 +388,7 @@ def protobuf_to_axes(msg):
     axes = ngraph.make_axes(list(map(pb_to_axis, msg.axes)))
     axes.uuid = uuid.UUID(bytes=msg.uuid.uuid)
     axes.name = msg.name
+
     GLOBAL_AXIS_REGISTRY[msg.uuid.uuid] = axes
     return axes
 
@@ -417,10 +418,10 @@ def pb_to_axis(msg):
     elif msg.HasField('flattened_axes'):  # FlattenedAxis
         axes = protobuf_to_axes(msg.flattened_axes)
         axis = FlattenedAxis(axes)
+        axis.name = msg.name
     else:
         axis = Axis(name=msg.name,
                     length=msg.length)
-
     axis.uuid = uuid.UUID(bytes=msg.uuid.uuid)
     GLOBAL_AXIS_REGISTRY[axis.uuid.bytes] = axis
     return axis

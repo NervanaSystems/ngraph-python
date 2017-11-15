@@ -66,7 +66,6 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                                              message="build transformer before computation")
         try:
             comp_id = self.new_comp_id()
-
             pb_ops, pb_edges = [], []
             returns, placeholders = [], []
             reconstructed_returns, reconstructed_placeholders = [], []
@@ -109,7 +108,6 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 else:
                     values.append(pb_to_tensor(v.tensor))
             computation = self.computations[request.comp_id]
-
             if self.transformer.transformer_name == "gpu":
                 import pycuda.driver as drv
                 if self.transformer.runtime and \

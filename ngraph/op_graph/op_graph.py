@@ -3848,7 +3848,6 @@ def compute_reduction_axes(x, reduction_axes, out_axes):
     if not reduction_axes & out_axes == make_axes(()):
         raise ValueError("reduction_axes {} and out_axes {} must not overlap"
                          .format(reduction_axes, out_axes))
-
     # union of reduction_axes and out_axes must be x.axes
     if not (reduction_axes | out_axes).is_equal_set(x.axes):
         raise ValueError(("union of reduction_axes {} and out_axes {} must "

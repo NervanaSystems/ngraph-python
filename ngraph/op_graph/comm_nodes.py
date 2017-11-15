@@ -33,15 +33,19 @@ def calculate_gather_axes(axes, gather_axis, num_devices):
 
 def set_parallel_axes(axes, parallel_axis):
     new_axes = []
-    for axis in Axes.as_nested_list(axes):
+    flat_names = dict()
+    for i, axis in enumerate(Axes.as_nested_list(axes)):
         if axis == parallel_axis:
             axis = parallel_axis
         elif isinstance(axis, collections.Iterable):
-            # flattened axis
+            flat_names[i] = axes[i].name
             axis = [parallel_axis if a == parallel_axis else a for a in axis]
         new_axes.append(axis)
+    new_axes = make_axes(new_axes)
 
-    return make_axes(new_axes)
+    for i in flat_names:
+        new_axes[i].name = flat_names[i]
+    return new_axes
 
 
 def get_slices(axes, parallel_axis, num_devices):
@@ -454,7 +458,7 @@ class CPUMlslAllReduceStartOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
         self._req[0] = value
 
 
-class CPUMlslAllReduceWaitOp(AllReduceOp):
+class CPUMlslAllReduceWaitOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
     """
     Represents CPU-based implementation for AllReduce op over async MLSL::AllReduce.
     Complete async communication.

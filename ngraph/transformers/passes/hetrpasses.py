@@ -84,7 +84,6 @@ class CommunicationPass(GraphBuildingPass):
                 args.append(arg)
 
         op._args = tuple(args)
-
         # invalidate deps cache as op._args is updated
         op.invalidate_property_cache('all_deps')
 
