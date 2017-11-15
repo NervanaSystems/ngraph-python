@@ -50,9 +50,9 @@ Setup Intel MPI environment:
 source <impi_install_path>/bin64/mpivars.sh
 ```
 Intel MLSL is required for multi-CPU support in addtion to MPI.  
-Download Intel MLSL from [here](https://github.com/01org/MLSL/releases).
+Download Intel MLSL from [here](https://github.com/intel/MLSL/releases).
 
-Install Intel MLSL (follow the instructions [here](https://github.com/01org/MLSL/blob/master/README.md)).
+Install Intel MLSL (follow the instructions [here](https://github.com/intel/MLSL/blob/master/README.md)).
 
 Setup Intel MLSL environment:
 ```
