@@ -55,7 +55,7 @@ void create_mkldnn_add_kernel(mkldnn_engine_t engine, int src1_dims,
   const_mkldnn_primitive_desc_t input_pds[] = {pd1, pd1};
 
   // create a Sum primitive descriptor
-  double scale_vector[] = {1, 1};
+  float scale_vector[] = {1, 1};
   MKL_CHECK(mkldnn_sum_primitive_desc_create(
       &opkernel->op_desc, NULL, num_matrix_to_add, scale_vector, input_pds));
 
