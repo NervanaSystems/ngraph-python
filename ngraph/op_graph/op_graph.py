@@ -4368,9 +4368,9 @@ class CrossEntropyBinaryInnerOp(ValueOp):
     """
 
     def __init__(self, y, t, enable_sig_opt=True, enable_diff_opt=True, **kwargs):
-        if y.axes.is_not_equal_set(t.axes):
-            raise UnmatchedAxesError("y and t must have matching axes: {} vs. {}".format(y.axes,
-                                                                                         t.axes))
+        if (not y.axes.is_sub_set(t.axes)) and (not y.axes.is_super_set(t.axes)):
+            error_str = "y and t must broadcast to matching axes: {} vs. {}".format(y.axes, t.axes)
+            raise UnmatchedAxesError(error_str)
         super(CrossEntropyBinaryInnerOp, self).__init__(**kwargs)
         self.y = y
         self.t = t
