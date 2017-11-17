@@ -171,6 +171,27 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         assert mkldnn.enabled
         self.mkldnn = mkldnn
 
+    def begin_pass(self, op_accessor, **kwargs):
+        """
+        Computes a dictionary of exops that are control-dependent on a specific exop.
+        This dictionary is used while moving exops in this pass.
+        """
+        if op_accessor is not None:
+            self.op_accessor = op_accessor
+        else:
+            assert False, "Expect op_accessor to be set for PeepholeGraphPass"
+        self.exop_control_deps = {}
+        for curr_exop in op_accessor.exop_block:
+            for op in curr_exop.op.control_deps:
+                try:
+                    exop = op_accessor.computation_decl.get_exop(op)
+                except KeyError:
+                    continue
+                try:
+                    self.exop_control_deps[exop].add(curr_exop)
+                except KeyError:
+                    self.exop_control_deps[exop] = {curr_exop}
+
     def get_exop(self, op):
         return self.op_accessor.computation_decl.get_exop(op)
 
@@ -220,16 +241,24 @@ class MklCreateOpDescriptors(PeepholeGraphPass):
         """
         Recursively move exop's children/deps to after after_exop if needed
         """
+        child_exops = set()
+
         for output_decl in exop.output_decls:
             for child_input_decl in output_decl.user_input_decls:
-                child_exop = child_input_decl.exop
-                n_exop = child_exop
-                while n_exop != after_exop and not n_exop.is_exop_end_of_list:
-                    n_exop = n_exop.next_exop
-                if n_exop == after_exop and child_exop != after_exop:
-                    self.op_accessor.exop_block.move_exop_to_after_exop(
-                        child_exop, after_exop)
-                    self.move_child_exops(child_exop, child_exop)
+                child_exops.add(child_input_decl.exop)
+
+        if exop in self.exop_control_deps:
+            for dep_exop in self.exop_control_deps[exop]:
+                child_exops.add(dep_exop)
+
+        for child_exop in child_exops:
+            n_exop = child_exop
+            while n_exop != after_exop and not n_exop.is_exop_end_of_list:
+                n_exop = n_exop.next_exop
+            if n_exop == after_exop and child_exop != after_exop:
+                self.op_accessor.exop_block.move_exop_to_after_exop(
+                    child_exop, after_exop)
+                self.move_child_exops(child_exop, child_exop)
 
     def replace_exop(self, new_op, old_op, index=0):
         """
