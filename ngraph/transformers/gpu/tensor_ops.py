@@ -404,11 +404,11 @@ class CudaGatherRecvKernel(GPUKernel):
     def execute(self):
         # gather send execution is done here
         send_op_tensor = self.tensor_view_from_td(
-            self.send_op[0].args[0].tensor_description())
+            self.send_op.args[0].tensor_description())
         drv.memcpy_dtod(
             self.tensor.tensor.gpudata,
             send_op_tensor.tensor.gpudata,
-            send_op_tensor.tensor.size * self.send_op[0].dtype.itemsize)
+            send_op_tensor.tensor.size * self.send_op.dtype.itemsize)
         self.comm.barrier()
 
 

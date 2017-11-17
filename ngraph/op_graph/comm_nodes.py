@@ -14,7 +14,6 @@
 # ----------------------------------------------------------------------------
 from __future__ import division
 import collections
-from orderedset import OrderedSet
 from ngraph.op_graph.op_graph import TensorOp, compute_reduction_axes, \
     MutateInsteadOfCopyWithNewArgsMixin
 from ngraph.op_graph.axes import Axes, make_axes, make_axis
@@ -152,19 +151,6 @@ class RecvOp(CommunicationOp):
     def send_node(self):
         return self._send_node
 
-    @property
-    def all_deps(self):
-        """
-        Returns:
-            All dependencies except the dependency on the send nodes
-        """
-        deps = super(RecvOp, self).all_deps
-        remove_deps = OrderedSet()
-        for dep in deps:
-            if isinstance(dep, SendOp):
-                remove_deps.add(dep)
-        return deps - remove_deps
-
 
 class ScatterSendOp(SendOp):
     """
@@ -269,22 +255,6 @@ class GatherRecvOp(RecvOp):
     @property
     def slices(self):
         return self._slices
-
-    @property
-    def send_nodes(self):
-        """
-        :return: iterable of send nodes
-        """
-        from ngraph.transformers.hetr.hetr_utils import get_iterable
-        return OrderedSet(i for i in get_iterable(self._send_node))
-
-    @send_nodes.setter
-    def send_nodes(self, new_send_nodes):
-        self._send_node = new_send_nodes
-
-    def send_node(self):
-        # make it work for general traversal in functions (e.g. find_recv())
-        return self.send_nodes
 
 
 class GPUCudaSendOp(MutateInsteadOfCopyWithNewArgsMixin, SendOp):

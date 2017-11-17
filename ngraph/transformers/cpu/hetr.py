@@ -133,7 +133,7 @@ class HetrLocals(object):
 
         # todo: remove that workaround for non-symmetric case
         if self.process_idx == root_idx:
-            send_node = gather_recv_op.send_nodes[0]
+            send_node = gather_recv_op.send_node()
             send_buf = self.as_buffer(send_node.arr)
             send_count = send_node.arr.size
             recv_buf = self.as_buffer(out)

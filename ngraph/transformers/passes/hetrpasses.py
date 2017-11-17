@@ -118,5 +118,5 @@ class AxesUpdatePass(GraphBuildingPass):
                         name=a.name,
                         length=a.length // len(op.from_id),
                         docstring='HeTr parallel axis')
-                gather_send_op = op.send_nodes[0]
+                gather_send_op = op.send_node()
                 update_parallel_axis(gather_send_op, self.parallel_axis)

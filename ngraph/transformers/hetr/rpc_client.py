@@ -5,7 +5,6 @@ from . import hetr_pb2
 from . import hetr_pb2_grpc
 from ngraph.op_graph.serde.serde import op_to_protobuf, tensor_to_protobuf,\
     pb_to_tensor, is_scalar_type, assign_scalar, protobuf_scalar_to_python
-from ngraph.transformers.hetr.hetr_utils import update_comm_deps
 import logging
 
 
@@ -140,8 +139,6 @@ class RPCTransformerClient(object):
 
         if not self.is_trans_built:
             raise RuntimeError("call build_transformer before create_computation")
-
-        update_comm_deps(returns)
 
         self.computation_response_future = self.RPC.Computation.future(
             generate_messages(), _TIMEOUT_SECONDS)
