@@ -71,6 +71,7 @@ class PoolParams(object):
 
         output = ng.pooling(self.pool_params, ip, axes=self.ax_o)
         delta = BpropPoolOp(ep, ip, output)
+        delta.add_control_dep(output)
 
         with executor([output, delta], ip, ep) as pool_executor:
             output_value, delta_value = pool_executor(iv, ev)
