@@ -18,24 +18,26 @@
 Transformers
 ************
 
-Transformers are used to convert the ``Op`` graph into a backend-specific executable format. Once the graph has been defined, one or more computations are created using a transformer. Computations are handles to executable objects created by the transformer, which can be called to evaluate a subset of the entire graph. All transformers must implement a common abstract interface that allows users to easily switch between backends without altering their computation graph definition. Transformers are currently provided for the following backends:
+The term *transformer* refers to all operations related to running computations, from compilation to execution, that are defined by a graph on a backend. Since any subset of the graph represents a potential computation, the graph should be thought of as a template for computations related to some particular model. For example, the core of a model is its inference graph. An optimizer extends the inference graph by adding the derivative computations and variable updates. The extended graph includes the computations used for both inference and for training.
 
-- CPUs (via NumPy)
+The transformer method ``computation`` is used to specify a subgraph to be computed. This method needs one or more result graph nodes that need to be computed; their values will be returned when the computation is executed. The computation also needs a parameter list of nodes that will receive the arguments when the computation is called. This parameter list must include all the ``placeholder`` nodes that contribute to the computed nodes. You can include include additional nodes, such as variables, by setting the ``is_input`` attribute to ``True``. The ``computation`` method returns a function that expects tensors for each parameter and returns tensors for each value-producing result node.
+
+Transformers are currently provided for the following backends:
+
+- CPUs (via NumPy and MKL-DNN)
 - NVIDIA* GPUs (via PyCUDA)
-
-Additional transformers will be implemented for other backends in the future.
 
 Transformer creation
 ====================
 
-You should create transformers using the factory interface in ``ngraph.transformers.base``:
+You should create transformers using the factory interface in ``ngraph.transformers.base``, as shown:
 
 .. code-block:: python
 
     from ngraph.transformers import make_transformer
     transformer = make_transformer()
 
-This creates a transformer using the default factory (CPU). It is possible to manually set the transformer factory to control the target backend. The transformer API provides functionality to enumerate the available transformers to assist with this:
+This creates a transformer using the default transformer factory (CPU). You can manually set the transformer factory to control the target backend. The transformer API provides functionality to enumerate the available transformers to assist with this, as shown below:
 
 .. code-block:: python
 
@@ -47,17 +49,17 @@ This creates a transformer using the default factory (CPU). It is possible to ma
 
     transformer = ngt.make_transformer()
 
-The example above first checks if the GPU transformer is available (this depends on whether CUDA and PyCuda are installed). If the GPU transformer is available, the example sets the transformer factory to generate GPU transformers. The call to ``make_transformer`` then returns a GPU transformer if one is available, and a CPU transformer otherwise.
+The example above first checks if the GPU transformer is available (this depends on whether CUDA and PyCUDA are installed). If the GPU transformer is available, this example sets the transformer factory to generate GPU transformers. The call to ``make_transformer`` then returns a GPU transformer if one is available. Otherwise, the ``make_transformer`` call returns a CPU transformer.
 
 Computations
 ============
 
-Computation objects are created by the transformer and provide an interface to evaluate a subset of the graph. The format of the executable used for evaluation depends on the transformer that created the computation. For example, the CPU transformer generates Python NumPy code that is called to evaluate the computation, while the GPU transformer generates a series of CUDA kernels that can be called to evaluate the computation.
+Computation objects are created by the transformer and provide an interface to evaluate a subset of the graph. The format of the executable used for evaluation depends on which transformer created the computation object. For example, the CPU transformer generates Python NumPy code that is called to evaluate the computation, while the GPU transformer generates a series of CUDA kernels that can be called to evaluate the computation.
 
 Computation creation
 --------------------
 
-Computations are created with the ``Transformer.computation`` method. When creating a computation, users must specify a list of results that should be evaluated by the computation. These results should be Intel® Nervana™ ``Op`` s. The transformer is able to traverse the graph backwards from these results to determine the entire subset of graph nodes that are required to evaluate these results, so it is not necessary for users to specify the entire subset of nodes to execute. Users must also specify a list of graph nodes to be set as inputs to the computation. Typically these are placeholder tensors. Continuing from the code example above, a simple graph and computation can be created:
+Computations are created with the ``Transformer.computation`` method. When creating a computation, users must specify a list of results that should be evaluated by the computation. These results should be Intel® Nervana™ ``Op`` s. The transformer can traverse the graph backwards from these results to determine the entire subset of graph nodes that are required to evaluate these results. This means that is not necessary for users to specify the entire subset of nodes to execute. However, users must set a list of graph nodes as inputs to the computation. Typically these are placeholder tensors. Continuing from the code example above, let's create a simple graph and computation:
 
 .. code-block:: python
 
@@ -71,14 +73,14 @@ Computations are created with the ``Transformer.computation`` method. When creat
 
     example_comp = transformer.computation(e, b, c)
 
-This example creates a simple graph to evaluate the function ``e = ((a * b) + c)``. The first argument is the result of the computation, and the remaining arguments are inputs to the computation. The only result that we need to specify to create the computation is ``e`` since ``d`` will be discovered when the transformer traverses the graph. In this example, ``a`` is a constant so it does not need to be passed in as an input, but ``b`` and ``c`` are placeholder tensors that must be filled as inputs.
+This example creates a simple graph to evaluate the function ``e = ((a * b) + c)``. The first argument is the result of the computation, and the remaining arguments are inputs to the computation. To create the computation, the only result that we need to specify is ``e``, since ``d`` is discovered when the transformer traverses the graph. In this example, ``a`` is a constant so it does not need to be passed in as an input, but ``b`` and ``c`` are placeholder tensors that must be specified as inputs.
 
-After all computations are created, the ``Transformer.initialize`` method must be called to finalize transformation and allocate all device memory for tensors (this is called automatically if a computation is called before manually calling ``initialize``). 
+After any computations is created, the ``Transformer.initialize`` method must be called to finalize transformation and allocate all device memory for tensors (the ``Transformer.initialize`` method is called automatically if a computation is called before you manually call ``initialize``). 
 
 Computation Execution
 ---------------------
 
-This computation object can be executed with its ``__call__`` method by specifying the inputs ``b`` and ``c``.
+Our example computation object can be executed with its ``__call__`` method by specifying the inputs ``b`` and ``c``.
 
 .. code-block:: python
 
@@ -89,53 +91,17 @@ The return value of this call is the resulting value of ``e``, which should be (
 Computations with multiple results
 ----------------------------------
 
-In real world cases, we often want computations that return multiple results. For example, a single training iteration might compute both the cost value and the weight updates. Multiple results can be passed to computation creation in a list. After execution, the computation returns a tuple of the results:
+In real world use cases, we often want to create computations that return multiple results. For example, a single training iteration might compute both the cost value and the weight updates. Multiple results can be passed to computation creation in a list. After execution, the computation returns a tuple of the results:
 
 .. code-block:: python
 
     example_comp2 = transformer.computation([d, e], b, c)
     result_d, result_e = example_comp2(2, 7)
 
-In addition to returning the final result as above, this example also sets ``result_d`` to the result of the ``d`` operation, which should be 8.
+In addition to returning the final result as seen above, this example also sets ``result_d`` to the result of the ``d`` operation, which should be 8.
 
-Transformed graph state
------------------------
+Transformer/Backend state
+-------------------------
 
-Once the transformer has been initialized and the computation objects have been finalized, all tensors (constants, variables, placeholders) will be allocated in device memory. These tensors are only allocated and initialized once at transformation time, so the transformed graph has a state that is persistent between computation evaluations. This is most important for variable tensors, since constants are never modified after creation and placeholders are usually filled by the caller each time a computation is run. The value of variable tensors will remain unchanged between the completion of one computation and the subsequent evaluation of another.
+A computation is compiled and installed on the backend device the first time the computation is called. Any new persistent tensors (such as variables) will be initialized at this time. Persistent tensors that were also used in previously defined computations will retain their states unless they have been listed among the computation's arguments. If some persistent tensors are listed among the computation's arguments, their values will be set when the computation is invoked. For example, variables updated by a training computation will retain their values for an inference computation. You can manually save variables by defining a computation that returns their values, and can store variables by using them as arguments for a computation.
 
-Computations created by the same transformer will share state for any op graph nodes that are needed by both computations. If a variable tensor is assigned in one computation, the updated value is seen by a subsequent call to a different computation which references that variable tensor. An example of this is a script which defines both a train and test computation. We want to evaluate the test computation to check convergence periodically using the parameters that are being trained in the train computation.
-
-Executor utility
-================
-
-For convenience, an executor utility is provided in ``ngraph.util.utils``. This executor utility reduces the process of creating a transformer and a computation to a single function call. 
-
-.. Note::
-   Calling this function creates a new transformer each time, so it should not be used for cases where multiple computations with a shared state are needed.
-
-.. code-block:: python
-
-    from ngraph.util.utils import executor
-    example_comp = executor(e, b, c)
-    result_e = example_comp(2, 7)
-
-Graph execution
-===============
-
-A *computation* is a subset of ops whose values are desired and which correspond to a callable procedure on a backend.
-Users define one or more computations by specifying sets of ops to be computed. In addition, the transformer
-defines four additional procedures:
-
-*allocate*
-    Allocate required storage required for all computations. This includes all allocations for all ops
-    marked as `in`.
-
-*initialize*
-    Run all initializations. These are all the `initializers` for the ops needed for the computations.  These
-    are analogous to C++ static initializers.
-
-*save*
-    Save all persistent state. These are states with the `persistent` property set.
-
-*restore*
-    Restore saved state.
