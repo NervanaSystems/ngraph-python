@@ -19,8 +19,10 @@ from __future__ import division
 import logging
 
 import ngraph as ng
-from ngraph.frontends.onnx.onnx_importer.utils import verify_axes_binary_broadcast_compatible, \
-    make_reduction_op, cast_axes_for_matmul
+from ngraph.frontends.onnx.onnx_importer.utils.reduction import make_reduction_op
+from ngraph.frontends.onnx.onnx_importer.utils.binary import \
+    verify_axes_binary_broadcast_compatible, cast_axes_for_matmul
+from ngraph.frontends.onnx.onnx_importer.utils.conv import make_convolution_op
 from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import cast_to_pos_axes
 
 logger = logging.getLogger(__name__)
@@ -175,6 +177,15 @@ def Gemm(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     a_dot_b = ng.dot(input_a, input_b)
     a_dot_b = cast_to_pos_axes(a_dot_b)
     return alpha * a_dot_b + beta * input_c
+
+
+# Convolution ops
+def Conv(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return cast_to_pos_axes(make_convolution_op(onnx_node, ng_inputs))
+
+
+def ConvTranspose(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return cast_to_pos_axes(make_convolution_op(onnx_node, ng_inputs, transpose=True))
 
 
 # Misc

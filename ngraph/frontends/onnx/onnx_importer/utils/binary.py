@@ -13,12 +13,11 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
-from __future__ import print_function
 from __future__ import division
+from __future__ import print_function
 
 import logging
 import ngraph as ng
-
 from ngraph.frontends.tensorflow.tf_importer.utils_broadcast import is_compatible_broadcast_shape
 
 logger = logging.getLogger(__name__)
@@ -85,40 +84,3 @@ def cast_axes_for_matmul(ng_input_left, ng_input_right):  # type: (Op, Op) -> (O
         right = ng.cast_axes(right, axes=right_axes)
 
     return left, right
-
-
-def get_reduction_axes(onnx_node):  # type: (NodeWrapper) -> Axes
-    """
-    Create an ngraph Axes object for a subset of axes to be used in a reduction operation.
-    """
-    input_tensor = onnx_node.get_ng_inputs()[0]
-    axes_attribute = onnx_node.get_attribute('axes')
-
-    if axes_attribute is None:
-        ng_reduction_axes = input_tensor.axes
-    else:
-        ng_reduction_axes = ng.make_axes([input_tensor.axes[ind] for ind in
-                                          axes_attribute.get_value()])
-
-    return ng_reduction_axes
-
-
-def make_reduction_op(ng_op_type, onnx_node, ng_input):
-    # type: (Callable, NodeWrapper, TensorOp) -> Op
-    """
-    Create an ngraph Op node for a reduction operation (min, max, sum, etc.)
-
-    :param ng_op_type: an ngraph reduction factory function such as ng.max, etc.
-    :param onnx_node: wrapped ONNX node
-    :param ng_input: ngraph Op to be used as input to the reduction node
-    """
-    reduction_ng_axes = get_reduction_axes(onnx_node)
-    op = ng_op_type(ng_input, reduction_axes=reduction_ng_axes)
-
-    if onnx_node.get_attribute_value('keepdims', default=1):
-        for axis in reduction_ng_axes:
-            pos = ng_input.axes.index(axis)
-            new_axis = ng.make_axis(length=1, name=axis.name)
-            op = ng.expand_dims(op, new_axis, pos)
-
-    return op
