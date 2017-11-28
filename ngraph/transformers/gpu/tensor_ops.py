@@ -653,14 +653,15 @@ class RngFillKernel(GPUKernel):
         """
         if self.distribution == 'uniform':
             self.transformer.runtime.pcg.fill_uniform(self.out)
-            self.out[:] = (self.out * (self.params['high'] - self.params['low']) +
-                           self.params['low'])
+            self.out[()] = (self.out * (self.params['high'] - self.params['low']) +
+                            self.params['low'])
         elif self.distribution == 'normal':
             self.transformer.runtime.pcg.fill_normal(self.out)
-            self.out[:] = self.out * self.params['scale'] + self.params['loc']
+            self.out[()] = self.out * self.params['scale'] + self.params['loc']
 
 
 class FlexAssignKernel(GPUKernel):
+
     def __init__(self, transformer, tensor, value, **kwargs):
         super(FlexAssignKernel, self).__init__(transformer, **kwargs)
         self.tensor = self.tensor_view_from_td(tensor)

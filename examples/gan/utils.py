@@ -13,7 +13,7 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 """
-Utilities for mnist_gan example
+Utilities for wgan example
 """
 import numpy as np
 try:
@@ -27,16 +27,29 @@ except ImportError:
 def save_plots(data, filename, train_data, args, title=None):
     # format incoming data
     data = (data.astype(np.float) + 1.0) / 2.0
-    data = data.squeeze().transpose(2, 0, 1)
+    # hard limit values outside of range
+    data[data > 1.0] = 1.0
+    data[data < 0.0] = 0.0
+
+    if len(data.shape) == 5:  # MNIST example generated: C,D,H,W,N
+        data = data.squeeze().transpose(2, 0, 1)
+    elif len(data.shape) == 4:  # LSUN color image genrated: N,C,H,W
+        data = data.squeeze().transpose(0, 2, 3, 1)  # NCHW -> NHWC
 
     # auto size plots
-    y_dim = 2 ** (int(np.log2(args.batch_size) / 2))
-    x_dim = args.batch_size / y_dim
+    y_dim = int(2 ** (int(np.log2(args.batch_size) / 2)))
+    x_dim = int(args.batch_size / y_dim)
 
-    data = data.reshape(y_dim, x_dim, 28, 28).transpose(0, 2, 1, 3).reshape(y_dim * 28, x_dim * 28)
+    if len(data.shape) == 3:  # mnist image : N,H,W
+        data = data.reshape(y_dim, x_dim, args.im_size, args.im_size).transpose(0, 2, 1, 3).\
+            reshape(y_dim * args.im_size, x_dim * args.im_size)
+        plt.gray()
+    elif len(data.shape) == 4:  # color image : N,H,W,C
+        data = data.reshape(y_dim, x_dim,
+                            args.im_size, args.im_size, 3).transpose(0, 2, 1, 3, 4).\
+            reshape(y_dim * args.im_size, x_dim * args.im_size, 3)
 
     # plot and save file
-    plt.gray()
     plt.imshow(data)
     plt.title(title)
     plt.axis('off')
@@ -80,10 +93,12 @@ def get_image(datadict):
     '''
 
     image_samp = 2. * (datadict['image'].astype(np.float) / 255.0) - 1.0
-    # reshape from NHW to DHWN
-    image_samp = np.expand_dims(image_samp.transpose([1, 2, 0]), axis=0)
-    # reshape from DHWN to CDHWN
-    image_samp = np.expand_dims(image_samp, axis=0)
+
+    if len(image_samp.shape) == 3:  # grey image
+        # reshape from NHW to DHWN
+        image_samp = np.expand_dims(image_samp.transpose([1, 2, 0]), axis=0)
+        # reshape from DHWN to CDHWN
+        image_samp = np.expand_dims(image_samp, axis=0)
 
     return image_samp
 

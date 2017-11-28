@@ -46,6 +46,9 @@ parser.add_argument('--w_clip', type=int, default=0.01,
                     help='Weight clipping value for WGAN')
 parser.add_argument('--plot_dir', type=str, default='MNIST_Plots',
                     help='Directory name to save the results')
+parser.add_argument('--im_size', type=int, default=28,
+                    help='the size of image')
+
 args = parser.parse_args()
 
 if not os.path.isdir(args.plot_dir):
@@ -180,13 +183,8 @@ elif args.loss_type == "WGAN-GP":
 
 # calculate gradient for all losses
 
-# TODO
-# change constant 0.5 to uniform random
-# once ng.uniform is fixed for GPU
-# https://github.com/NervanaSystems/private-ngraph/issues/2011
-# x = ng.variable(initial_value=0.5, axes=[])
-# epsilon = ng.uniform(x)
-epsilon = ng.constant(0.5)  # delete after uniform is fixed
+x = ng.variable(initial_value=0.5, axes=[])
+epsilon = ng.uniform(x)
 interpolated = epsilon * image + (1 - epsilon) * generated
 D3 = discriminator(interpolated)
 

@@ -59,6 +59,7 @@ class ToyGAN(object):
         data_sigma (float): std dev of actual Gaussian data distribution
         noise_range (float): range in stratified sampling noise input to generator
     """
+
     def __init__(self, batch_size, num_iter, data_mu=4, data_sigma=0.5, noise_range=8):
         self.batch_size = batch_size
         self.num_iter = num_iter
