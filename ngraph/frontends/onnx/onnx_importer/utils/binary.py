@@ -51,6 +51,15 @@ def verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs):
 
 
 def cast_axes_for_matmul(ng_input_left, ng_input_right):  # type: (Op, Op) -> (Op, Op)
+    """
+    Prepare two ngraph tensors for matrix multiplication by casting axes.
+
+    Matching axes will be cast to enable matrix @ matrix or vector @ matrix dot multiply.
+
+    :param ng_input_left: first input to matrix multiplication
+    :param ng_input_right: second input to matrix multiplication
+    :return: tuple with the first and second input tensor with axes cast for matrix multiplication
+    """
     left, right = ng_input_left, ng_input_right
     left_num_axes = len(left.axes)
     right_num_axes = len(right.axes)

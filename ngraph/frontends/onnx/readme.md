@@ -32,14 +32,21 @@ As more ONNX operations are supported this solution will become viable.
 
 * Abs
 * Add
+* AveragePool
 * Constant
+* Conv
+* ConvTranspose
 * Div
 * Dot
 * Elu
 * Gemm
+* GlobalAveragePool
+* GlobalMaxPool
 * LeakyRelu
+* MaxPool
 * Mul
 * PRelu
+* Pad
 * ReduceLogSumExp
 * ReduceMax
 * ReduceMean

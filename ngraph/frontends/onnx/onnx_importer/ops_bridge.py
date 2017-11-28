@@ -19,6 +19,8 @@ from __future__ import division
 import logging
 
 import ngraph as ng
+from ngraph.frontends.onnx.onnx_importer.utils.misc import split_into_pairs
+from ngraph.frontends.onnx.onnx_importer.utils.pool import make_pooling_op, make_global_pooling_op
 from ngraph.frontends.onnx.onnx_importer.utils.reduction import make_reduction_op
 from ngraph.frontends.onnx.onnx_importer.utils.binary import \
     verify_axes_binary_broadcast_compatible, cast_axes_for_matmul
@@ -186,6 +188,40 @@ def Conv(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 def ConvTranspose(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     return cast_to_pos_axes(make_convolution_op(onnx_node, ng_inputs, transpose=True))
+
+
+def Pad(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    paddings = onnx_node.get_attribute_value('paddings')
+    constant = 'constant'
+    mode = onnx_node.get_attribute_value('mode', constant)  # 'constant', 'reflect' or 'edge'
+    value = onnx_node.get_attribute_value('value', 0)
+
+    if mode != constant or value != 0:
+        raise NotImplementedError('Pad node (%s): only constant padding with value=0 '
+                                  'is supported.', onnx_node.name)
+
+    # Split paddings into pairs for each axis
+    paddings = [pad for pad in split_into_pairs(paddings)]
+    return cast_to_pos_axes(ng.pad(ng_inputs[0], paddings))
+
+
+# Pooling
+def AveragePool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return cast_to_pos_axes(make_pooling_op(onnx_node, ng_inputs))
+
+
+def MaxPool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return cast_to_pos_axes(make_pooling_op(onnx_node, ng_inputs))
+
+
+def GlobalMaxPool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Equivalent to MaxPool with kernel size equal to the spatial dimension of input tensor"""
+    return cast_to_pos_axes(make_global_pooling_op(onnx_node, ng_inputs))
+
+
+def GlobalAveragePool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Equivalent to AveragePool with kernel size equal to the spatial dimension of input tensor"""
+    return cast_to_pos_axes(make_global_pooling_op(onnx_node, ng_inputs))
 
 
 # Misc

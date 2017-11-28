@@ -20,6 +20,7 @@ from math import floor
 
 import ngraph as ng
 from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes
+from ngraph.frontends.onnx.onnx_importer.utils.misc import verify_symmetric_padding
 
 
 def get_conv_params(onnx_node):  # type: (NodeWrapper) -> Dict
@@ -29,19 +30,11 @@ def get_conv_params(onnx_node):  # type: (NodeWrapper) -> Dict
     :param onnx_node: wrapped ONNX node for Conv of ConvTranspose op
     :return: dict of conv_params for ng.convolution
     """
-    auto_pad = onnx_node.get_attribute_value('auto_pad')  # SAME_UPPER, SAME_LOWER or VALID
     pads = onnx_node.get_attribute_value('pads', ())  # Padding along each axis
     dilations = onnx_node.get_attribute_value('dilations')  # dilation along each filter axis
     strides = onnx_node.get_attribute_value('strides')  # stride along each axis
 
-    if auto_pad:
-        raise NotImplementedError('%s node (%s): "auto_pad" attribute is not supported.',
-                                  onnx_node.op_type, onnx_node.name)
-
-    for pad_left, pad_right in zip(*[iter(pads)] * 2):
-        if pad_left != pad_right:
-            raise NotImplementedError('%s node (%s): asymmetric padding is not supported '
-                                      'by ngraph.', onnx_node.op_type, onnx_node.name)
+    verify_symmetric_padding(onnx_node)
 
     pad_h, pad_w, pad_d = 0, 0, 0
     if pads and len(pads) == 4:  # ONNX input axes NCHW
@@ -69,7 +62,7 @@ def get_conv_params(onnx_node):  # type: (NodeWrapper) -> Dict
 
 
 def make_conv_output_axes(input, filter, conv_params):
-    # type: (TensorOp, TensorOp, conv) -> Axes
+    # type: (TensorOp, TensorOp, Dict) -> Axes
     """
     Prepare axes for the output of an ng.convolution operation
 

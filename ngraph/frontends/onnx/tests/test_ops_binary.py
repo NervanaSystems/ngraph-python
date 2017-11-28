@@ -46,7 +46,6 @@ def import_and_compute(op_type, input_data_left, input_data_right):
     return computation(input_data_left, input_data_right)
 
 
-@lru_cache(maxsize=1)
 def get_transformer():
     return ng.transformers.make_transformer()
 
