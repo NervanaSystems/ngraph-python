@@ -20,8 +20,8 @@ from ngraph.frontends.neon.axis import is_shadow_axis
 
 class GaussianInit(object):
 
-    def __init__(self, mean=0.0, var=0.01):
-        self.functor = partial(np.random.normal, mean, var)
+    def __init__(self, mean=0.0, std=0.01):
+        self.functor = partial(np.random.normal, mean, std)
 
     def __call__(self, w_axes):
         return self.functor(w_axes.lengths)

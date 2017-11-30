@@ -36,7 +36,7 @@ from ngraph.frontends.neon import NgraphArgparser
 def affine_layer(h_dim, activation, name):
     return Affine(nout=h_dim,
                   activation=activation,
-                  weight_init=GaussianInit(var=1.0),
+                  weight_init=GaussianInit(std=1.0),
                   bias_init=ConstantInit(val=0.0),
                   name=name)
 
