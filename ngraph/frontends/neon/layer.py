@@ -262,9 +262,13 @@ class LookupTable(Layer):
         Arguments:
             in_obj (Tensor): object that provides the lookup indices
         """
-        in_obj = ng.axes_with_order(in_obj,
-                                    ng.make_axes([in_obj.axes.recurrent_axis(),
-                                                  in_obj.axes.batch_axis()]))
+        if in_obj.axes.recurrent_axis() is None:
+            in_obj = ng.axes_with_order(in_obj,
+                                        ng.make_axes([in_obj.axes.batch_axis()]))
+        else:
+            in_obj = ng.axes_with_order(in_obj,
+                                        ng.make_axes([in_obj.axes.recurrent_axis(),
+                                                      in_obj.axes.batch_axis()]))
         in_obj = ng.flatten(in_obj)
         in_axes = in_obj.axes
 
