@@ -33,12 +33,14 @@ As more ONNX operations are supported this solution will become viable.
 * Abs
 * Add
 * AveragePool
+* Concat
 * Constant
 * Conv
 * ConvTranspose
 * Div
 * Dot
 * Elu
+* Flatten
 * Gemm
 * GlobalAveragePool
 * GlobalMaxPool
@@ -54,10 +56,14 @@ As more ONNX operations are supported this solution will become viable.
 * ReduceProd
 * ReduceSum
 * Relu
+* Reshape
 * Selu
 * Sigmoid
+* Slice
+* Squeeze
 * Sub
 * Tanh
+* Transpose
 
 Refer to ONNX docs for the complete
 [operator list][https://github.com/onnx/onnx/blob/master/docs/Operators.md].

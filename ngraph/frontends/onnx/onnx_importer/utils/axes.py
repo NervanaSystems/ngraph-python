@@ -16,7 +16,9 @@
 from __future__ import division
 from __future__ import print_function
 
+import numpy as np
 import ngraph as ng
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 
 
 def reorder_axes(input_tensor, input_template, output_template):
@@ -48,3 +50,25 @@ def reorder_axes(input_tensor, input_template, output_template):
                            else ng.make_axis(name=output_axis_name, length=1))
 
     return ng.broadcast(input_tensor, axes=output_axes)
+
+
+def reshape_workaround(data, shape_out):
+    """Limited workaround for tensor reshape operation"""
+
+    shape_in = data.shape.lengths
+
+    if np.prod(shape_in) != np.prod(shape_out):
+        raise ValueError("Total size of input (%d) and output (%d) dimension mismatch.",
+                         np.prod(shape_in), np.prod(shape_out))
+
+    ndims_out = len(shape_out)
+    if ndims_out == 1:
+        tensor = ng.flatten(data)
+    elif ndims_out == 2:
+        cumprods = list(np.cumprod(shape_in))
+        flatten_at_idx = cumprods.index(shape_out[0]) + 1
+        tensor = ng.flatten_at(data, flatten_at_idx)
+    else:
+        raise NotImplementedError("Reshape can only support flatten to 1d or 2d.")
+
+    return ng.cast_axes(tensor, make_pos_axes(shape_out))

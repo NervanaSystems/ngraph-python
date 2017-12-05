@@ -127,8 +127,10 @@ def make_convolution_op(onnx_node, ng_inputs, transpose=False):
         raise NotImplementedError('Conv node (%s): only 2D and 3D convolutions are supported.',
                                   onnx_node.name)
 
-    if onnx_node.get_attribute_value('group'):
-        raise NotImplementedError('Conv node (%s): group attribute not supported.', onnx_node.name)
+    groups = onnx_node.get_attribute_value('group', 1)
+    if groups != 1:
+        raise NotImplementedError('Conv node (%s): `group` attribute value %d not supported.',
+                                  onnx_node.name, groups)
 
     # Prepare ngraph convolution operation
     conv_params = get_conv_params(onnx_node)
