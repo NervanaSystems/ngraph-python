@@ -26,13 +26,21 @@ def split_into_pairs(items):  # type: (Iterable) -> List[Tuple]
     return list(zip(*[iter(items)] * 2))
 
 
-def verify_symmetric_padding(onnx_node):  # type: (NodeWrapper) -> bool
+def verify_symmetric_padding(onnx_node, pads):
+    # type: (NodeWrapper, Optional[Iterable]) -> bool
     """
-    Checks if the "pads" attribute of an ONNX node contains only symmetric padding pairs.
-    """
-    pads = onnx_node.get_attribute_value('pads', ())
+    Check if the `pads` value of an ONNX node contains only symmetric padding pairs.
 
-    for pad_left, pad_right in split_into_pairs(pads):
+    :param onnx_node: an ONNX node
+    :param pads: the value for `pads` already extracted or calculated base on `auto_pad`
+    :return: True if padding is symmetric, otherwise raises a NotImplementedError
+    """
+    # `pads` format should be as follow [x1_begin, x2_begin..., x1_end, x2_end,...]
+    first_end_pad_index = int(len(pads) / 2)
+    begin_pads = pads[:first_end_pad_index]
+    end_pads = pads[first_end_pad_index:]
+
+    for pad_left, pad_right in zip(begin_pads, end_pads):
         if pad_left != pad_right:
             raise NotImplementedError('%s node (%s): asymmetric padding is not supported '
                                       'by ngraph.', onnx_node.op_type, onnx_node.name)

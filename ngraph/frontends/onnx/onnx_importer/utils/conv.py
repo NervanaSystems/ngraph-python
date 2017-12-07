@@ -16,55 +16,114 @@
 from __future__ import division
 from __future__ import print_function
 
-from math import floor
+from math import floor, ceil
 
 import ngraph as ng
 from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes
 from ngraph.frontends.onnx.onnx_importer.utils.misc import verify_symmetric_padding
 
 
-def get_conv_params(onnx_node):  # type: (NodeWrapper) -> Dict
+def get_pads(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
     """
-    Parse ONNX Conv operation attributes and produce an ngraph compatible conv_params dict
+    Get padding values for the operation described by an ONNX node.
 
-    :param onnx_node: wrapped ONNX node for Conv of ConvTranspose op
-    :return: dict of conv_params for ng.convolution
+    If `auto_pad` attribute is specified as SAME_UPPER or SAME_LOWER, or VALID values are
+    calculated. Otherwise values are taken from the `pads` attribute.
+
+    `pads` value should follow [x1_begin, x2_begin..., x1_end, x2_end,...]
+
+    :param onnx_node: wrapped ONNX node for Conv or Pool operation
+    :return: tuple of numbers of pixels to pad (height, width, depth)
     """
+    auto_pad = onnx_node.get_attribute_value('auto_pad')
     pads = onnx_node.get_attribute_value('pads', ())  # Padding along each axis
-    dilations = onnx_node.get_attribute_value('dilations')  # dilation along each filter axis
-    strides = onnx_node.get_attribute_value('strides')  # stride along each axis
+    kernel_shape = onnx_node.get_attribute_value('kernel_shape')
 
-    verify_symmetric_padding(onnx_node)
+    # Attribute 'auto_pad' is deprecated, but is currently used by CNTK
+    if auto_pad:
+        if auto_pad == 'VALID':
+            pads = [0, 0] * len(kernel_shape)
+
+        else:
+            # SAME_UPPER or SAME_LOWER mean pad the input so that the output size match the input.
+            # In case of odd number add the extra padding at the end for SAME_UPPER and at the
+            # beginning for SAME_LOWER.
+            def pad_value(kernel_dim):
+                return (kernel_dim - 1.0) / 2.0
+
+            pads_starts = [floor(pad_value(dim)) if auto_pad == 'SAME_UPPER' else
+                           ceil(pad_value(dim)) for dim in kernel_shape]
+            pads_ends = [ceil(pad_value(dim)) if auto_pad == 'SAME_UPPER' else
+                         floor(pad_value(dim)) for dim in kernel_shape]
+            pads = pads_starts + pads_ends
+
+    verify_symmetric_padding(onnx_node, pads)
 
     pad_h, pad_w, pad_d = 0, 0, 0
     if pads and len(pads) == 4:  # ONNX input axes NCHW
-        pad_h, _, pad_w, _ = pads
+        pad_h, pad_w, _, _ = pads
     elif pads and len(pads) == 6:  # ONNX input axes NCHWD
-        pad_h, _, pad_w, _, pad_d, _ = pads
+        pad_h, pad_w, pad_d, _, _, _ = pads
 
-    str_h, str_w, str_d = 1, 1, 1
-    if strides and len(strides) == 2:  # ONNX input axes order NCHW
+    return pad_h, pad_w, pad_d
+
+
+def get_strides(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
+    """
+    Get number of pixels to stride operation by in each direction.
+
+    :param onnx_node: wrapped ONNX node for Conv or Pool operation
+    :return: tuple of numbers of pixels to stride by (height, width, depth)
+    """
+    str_h, str_w, str_d = 1, 1, 1  # default values
+    strides = onnx_node.get_attribute_value('strides', ())  # stride along each axis
+
+    if len(strides) == 2:  # ONNX input axes order NCHW
         str_h, str_w = strides
-    elif strides and len(strides) == 3:  # ONNX input axes order NCHWD
+    elif len(strides) == 3:  # ONNX input axes order NCHWD
         str_h, str_w, str_d = strides
 
-    dil_h, dil_w, dil_d = 1, 1, 1
-    if dilations and len(dilations) == 2:  # ONNX input axes order NCHW
+    return str_h, str_w, str_d
+
+
+def get_dilations(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
+    """
+    Get number of pixels for filter dilation in each direction.
+
+    :param onnx_node: wrapped ONNX node for Conv or Pool operation
+    :return: tuple of numbers of pixels for filter dilation (height, width, depth)
+    """
+    dil_h, dil_w, dil_d = 1, 1, 1  # default values
+    dilations = onnx_node.get_attribute_value('dilations', ())  # dilation along each filter axis
+
+    if len(dilations) == 2:  # ONNX input axes order NCHW
         dil_h, dil_w = dilations
-    elif dilations and len(dilations) == 3:  # ONNX input axes order NCHWD
+    elif len(dilations) == 3:  # ONNX input axes order NCHWD
         dil_h, dil_w, dil_d = dilations
 
-    return dict(
-        pad_d=pad_d, pad_h=pad_h, pad_w=pad_w,
-        str_d=str_d, str_h=str_h, str_w=str_w,
-        dil_d=dil_d, dil_h=dil_h, dil_w=dil_w
-    )
+    return dil_h, dil_w, dil_d
+
+
+def get_conv_params(onnx_node):  # type: (NodeWrapper) -> Dict
+    """
+    Parse ONNX Conv operation attributes and produce an ngraph compatible conv_params dict.
+
+    :param onnx_node: wrapped ONNX node for Conv or ConvTranspose operation
+    :return: dict of conv_params for ng.convolution
+    """
+    pad_h, pad_w, pad_d = get_pads(onnx_node)
+    str_h, str_w, str_d = get_strides(onnx_node)
+    dil_h, dil_w, dil_d = get_dilations(onnx_node)
+
+    return {'pad_d': pad_d, 'pad_h': pad_h, 'pad_w': pad_w,
+            'str_d': str_d, 'str_h': str_h, 'str_w': str_w,
+            'dil_d': dil_d, 'dil_h': dil_h, 'dil_w': dil_w}
 
 
 def make_conv_output_axes(input, filter, conv_params):
     # type: (TensorOp, TensorOp, Dict) -> Axes
     """
-    Prepare axes for the output of an ng.convolution operation
+    Prepare axes for the output of an ng.convolution operation.
 
     :param input: ngraph tensor with convolution input data
     :param filter: ngraph tensor with convolution filter data
@@ -103,7 +162,7 @@ def make_convolution_op(onnx_node, ng_inputs, transpose=False):
     :param onnx_node: wrapped ONNX node for Conv of ConvTranspose op
     :param ng_inputs: ngraph TensorOp input tensors
     :param transpose: should this be a transposed convolution?
-    :return:
+    :return: ngraph Op for convolution or deconvolution
     """
     if len(ng_inputs) == 3:
         x, weights, bias = ng_inputs

@@ -17,37 +17,46 @@ from __future__ import division
 from __future__ import print_function
 
 import logging
+
 import ngraph as ng
-from ngraph.frontends.tensorflow.tf_importer.utils_broadcast import is_compatible_broadcast_shape
 
 logger = logging.getLogger(__name__)
 
 
-def verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs):
-    # type: (NodeWrapper, List[TensorOp]) -> bool
+def cast_axes_for_binary_broadcast(onnx_node, ng_inputs):
+    # type: (NodeWrapper, List[TensorOp]) -> (TensorOp, TensorOp)
     """
-    Check if two ngraph input nodes have shapes compatible for an element-wise binary operation.
-    """
-    shape_left = tuple(axis.length for axis in ng_inputs[0].shape)
-    shape_right = tuple(axis.length for axis in ng_inputs[1].shape)
-    dimensions_identical = shape_left == shape_right
+    Cast axes of the right operand to make operands compatible for an element-wise binary operation
 
-    broadcast_attribute = onnx_node.get_attribute('broadcast')
-    broadcast_flag_set = broadcast_attribute and broadcast_attribute.get_value() == 1
-    if not dimensions_identical and not broadcast_flag_set:
+    Casting is based on `broadcast` and `axis` attributes of an ONNX node.
+
+    :param onnx_node: wrapped ONNX node
+    :param ng_inputs: left and right operand
+    :return: left and right operand after broadcasting
+    """
+    left = ng_inputs[0]
+    right = ng_inputs[1]
+
+    dimensions_identical = left.axes.lengths == right.axes.lengths
+    if dimensions_identical:
+        return left, right
+
+    broadcast = onnx_node.get_attribute_value('broadcast', 0)
+    if not broadcast:
         logger.warning('%s node (%s): operands have different dimensions, and "broadcast"'
                        ' attribute is not set. ', onnx_node.op_type, onnx_node.name)
+        return left, right
 
-    axis_attribute = onnx_node.get_attribute('axis')
-    if axis_attribute:
-        raise NotImplementedError('%s node (%s): "axis" attribute not supported yet.',
-                                  onnx_node.op_type, onnx_node.name)
+    start_axis = onnx_node.get_attribute_value('axis')  # start of mutually equal shape
+    if start_axis is not None:
+        # Rename axes in the right operand to match corresponding names in the left operand
+        renamed_axes = [ng.make_axis(length=axis.length,
+                                     name='POS_' + str(len(left.axes) - 1 - start_axis - i))
+                        for i, axis in enumerate(right.axes)]
+        right = ng.cast_axes(right, ng.make_axes(axes=renamed_axes))
 
-    if not dimensions_identical and not is_compatible_broadcast_shape(shape_right, shape_left):
-        logger.error('%s node (%s): operands have shapes incompatible for broadcasting.',
-                     onnx_node.op_type, onnx_node.name)
-        return False
-    return True
+    right = ng.broadcast(right, axes=left.axes)
+    return left, right
 
 
 def cast_axes_for_matmul(ng_input_left, ng_input_right):  # type: (Op, Op) -> (Op, Op)

@@ -24,8 +24,8 @@ from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes, reshape
 from ngraph.frontends.onnx.onnx_importer.utils.misc import split_into_pairs
 from ngraph.frontends.onnx.onnx_importer.utils.pool import make_pooling_op, make_global_pooling_op
 from ngraph.frontends.onnx.onnx_importer.utils.reduction import make_reduction_op
-from ngraph.frontends.onnx.onnx_importer.utils.binary import \
-    verify_axes_binary_broadcast_compatible, cast_axes_for_matmul
+from ngraph.frontends.onnx.onnx_importer.utils.binary import cast_axes_for_binary_broadcast, \
+    cast_axes_for_matmul
 from ngraph.frontends.onnx.onnx_importer.utils.conv import make_convolution_op
 from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import cast_to_pos_axes
 
@@ -133,23 +133,23 @@ def ReduceProd(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> 
 
 # Binary Ops
 def Add(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
-    return ng.add(ng_inputs[0], ng_inputs[1])
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.add(left, right)
 
 
 def Sub(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
-    return ng.subtract(ng_inputs[0], ng_inputs[1])
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.subtract(left, right)
 
 
 def Mul(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
-    return ng.multiply(ng_inputs[0], ng_inputs[1])
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.multiply(left, right)
 
 
 def Div(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    verify_axes_binary_broadcast_compatible(onnx_node, ng_inputs)
-    return ng.divide(ng_inputs[0], ng_inputs[1])
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.divide(left, right)
 
 
 # Matrix multiplication
