@@ -26,6 +26,7 @@ except ImportError:
 
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
+LINE_TOKEN = 'token'
 logger = logging.getLogger(__name__)
 
 
@@ -172,14 +173,16 @@ def is_port_open(port):
 def write_server_info(filename, port):
     pid = os.getpid()
     rank = MPI.COMM_WORLD.Get_rank()
-    server_info = '{}:{}:{}'.format(rank, pid, port).strip()
+    server_info = '{}:{}:{}:{}:{}'.format(LINE_TOKEN, rank, pid, port, LINE_TOKEN).strip()
     logger.debug("write_server_info: line %s, filename %s", server_info, filename)
+
+    time.sleep(0.1 * rank)
     with open(filename, "a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        fcntl.lockf(f, fcntl.LOCK_EX)
         f.write(server_info + '\n')
         f.flush()
         os.fsync(f.fileno())
-        fcntl.flock(f, fcntl.LOCK_UN)
+        fcntl.lockf(f, fcntl.LOCK_UN)
     return server_info
 
 
