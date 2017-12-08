@@ -2827,6 +2827,10 @@ class InputOp(TensorOp):
         self.data_type_count = len(data_types)
         self.group_type = group_type
 
+    @property
+    def is_persistent(self):
+        return True
+
 
 def uniform(x, low=0.0, high=1.0):
     """

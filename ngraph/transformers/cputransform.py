@@ -318,9 +318,11 @@ def get_tensors(f):
 
 class CPUCodeGenerator(PyGen):
 
-    def __init__(self, transformer, **kwargs):
+    def __init__(self, transformer, skip_comm_ops=False, skip_input_ops=False, **kwargs):
         super(CPUCodeGenerator, self).__init__(**kwargs)
         self.transformer = transformer
+        self.skip_comm_ops = skip_comm_ops
+        self.skip_input_ops = skip_input_ops
 
     @generic_method()
     def name(self, x):
@@ -480,9 +482,14 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(InputOp)
     def generate_op(self, op, out, *args):
-        self.append("""{}=self.get_dataloader_data({}, '{}', {}, {})""",
-                    out, op.aeon_cfg, op.group_type, op.data_type_index,
-                    op.data_type_count)
+        if self.skip_input_ops:
+            self.append("if '{out}' not in self.input_op_fake_data:", out=out)
+            self.append("    {out}[()] = np.zeros({out}.shape)", out=out)
+            self.append("    self.input_op_fake_data['{out}'] = True", out=out)
+        else:
+            self.append("""{}=self.get_dataloader_data({}, '{}', {}, {})""",
+                        out, op.aeon_cfg, op.group_type, op.data_type_index,
+                        op.data_type_count)
 
     @generate_op.on_type(ReadOp)
     def generate_op(self, op, out):
@@ -750,36 +757,48 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(CPUMlslSendOp)
     def generate_op(self, op, out, arg):
+        if self.skip_comm_ops:
+            return
         send_id = len(self.send_nodes)
         self.send_nodes.append(op)
         self.append("self.mlsl_send({}, {})", send_id, arg)
 
     @generate_op.on_type(CPUMlslRecvOp)
     def generate_op(self, op, out):
+        if self.skip_comm_ops:
+            return
         recv_id = len(self.recv_nodes)
         self.recv_nodes.append(op)
         self.append("self.recv_from_mlsl_send({}, out={})", recv_id, out)
 
     @generate_op.on_type(CPUMlslGatherSendOp)
     def generate_op(self, op, out, arg):
+        if self.skip_comm_ops:
+            return
         gather_send_id = len(self.gather_send_nodes)
         self.gather_send_nodes.append(op)
         self.append("self.mlsl_gather_send({}, {})", gather_send_id, arg)
 
     @generate_op.on_type(CPUMlslGatherRecvOp)
     def generate_op(self, op, out):
+        if self.skip_comm_ops:
+            return
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes.append(op)
         self.append("self.gather_recv_from_mlsl_gather_send({}, out={})", gather_recv_id, out)
 
     @generate_op.on_type(CPUMlslScatterSendOp)
     def generate_op(self, op, out, arg):
+        if self.skip_comm_ops:
+            return
         scatter_send_id = len(self.scatter_send_nodes)
         self.scatter_send_nodes.append(op)
         self.append("self.mlsl_scatter_send({}, {})", scatter_send_id, arg)
 
     @generate_op.on_type(CPUMlslScatterRecvOp)
     def generate_op(self, op, out):
+        if self.skip_comm_ops:
+            return
         scatter_recv_id = len(self.scatter_recv_nodes)
         self.scatter_recv_nodes.append(op)
         self.append("self.scatter_recv_from_mlsl_scatter_send({}, out={})",
@@ -787,24 +806,32 @@ class CPUCodeGenerator(PyGen):
 
     @generate_op.on_type(CPUMlslAllReduceStartOp)
     def generate_op(self, op, out, arg):
+        if self.skip_comm_ops:
+            return
         allreduce_id = len(self.allreduce_nodes)
         self.allreduce_nodes.append(op)
         self.append("self.mlsl_allreduce_start({}, {}, {})", allreduce_id, out, arg)
 
     @generate_op.on_type(CPUMlslAllReduceWaitOp)
     def generate_op(self, op, out):
+        if self.skip_comm_ops:
+            return
         allreduce_id = len(self.allreduce_nodes)
         self.allreduce_nodes.append(op)
         self.append("self.mlsl_allreduce_wait({})", allreduce_id)
 
     @generate_op.on_type(CPUMlslBroadcastSendOp)
     def generate_op(self, op, out, arg):
+        if self.skip_comm_ops:
+            return
         broadcast_send_id = len(self.broadcast_send_nodes)
         self.broadcast_send_nodes.append(op)
         self.append("self.mlsl_broadcast_send({}, {})", broadcast_send_id, arg)
 
     @generate_op.on_type(CPUMlslBroadcastRecvOp)
     def generate_op(self, op, out):
+        if self.skip_comm_ops:
+            return
         broadcast_recv_id = len(self.broadcast_recv_nodes)
         self.broadcast_recv_nodes.append(op)
         self.append("self.broadcast_recv_from_mlsl_broadcast_send({}, out={})",
@@ -832,6 +859,18 @@ class CPUTransformer(ExecutionGraphTransformer):
             global use_mlsl
             use_mlsl = True
 
+        skip_comm_ops = 'HETR_SKIP_COMM_OPS' in os.environ
+        if skip_comm_ops:
+            logger.warning("HETR_SKIP_COMM_OPS in environment,"
+                           " all communication ops will become no-ops,"
+                           " expect non-functionality")
+
+        skip_input_ops = 'HETR_SKIP_INPUT_OPS' in os.environ
+        if skip_input_ops:
+            logger.warning("HETR_SKIP_INPUT_OPS in environment,"
+                           " all input ops will provide correctly shaped"
+                           " buffers full of zeros, expect non-functionality")
+
         self.device_computation = None
         self.conv_engine = CPUConvEngine()
         self.init_code = CPUCodeGenerator(self)
@@ -847,7 +886,8 @@ class CPUTransformer(ExecutionGraphTransformer):
         self.exop_codegen_pools = CPUCodeGenerator(self)
         self.exop_codegen_tensor = CPUCodeGenerator(self)
         self.exop_codegen_tensor_view = CPUCodeGenerator(self)
-        self.exop_codegen = CPUCodeGenerator(self)
+        self.exop_codegen = CPUCodeGenerator(self, skip_comm_ops=skip_comm_ops,
+                                             skip_input_ops=skip_input_ops)
         self.exop_codegen_define_length = 0
         self.prefix = ''
 
@@ -908,6 +948,9 @@ class CPUTransformer(ExecutionGraphTransformer):
         with indenting(self.exop_codegen):
             self.exop_codegen.append("def __init__(self, **kwargs):")
             with indenting(self.exop_codegen):
+                self.exop_codegen.append("""
+self.input_op_fake_data = dict()
+""")
                 if is_tracing_enabled():
                     self.exop_codegen.append("""
 self.__profiler_start__ = list()
