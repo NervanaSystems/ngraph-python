@@ -48,12 +48,39 @@ class HetrLocals(object):
         self.allreduce_nodes = allreduce_nodes
         self.broadcast_send_nodes = broadcast_send_nodes
         self.broadcast_recv_nodes = broadcast_recv_nodes
+        self.dataloader_configs = dict()
+        self.dataloaders = dict()
+        self.dataloader_data = dict()
+        self.dataloader_trackers = dict()
 
         # MLSL-specific
         self.distribution = None
 
         # MPI-specific
         self.comm = MPI.COMM_WORLD
+
+    def get_dataloader_data(self, cfg, group_type, data_type_index, data_type_count):
+        from aeon import DataLoader
+
+        if group_type != 'train' and group_type != 'valid':
+            raise ValueError('group type can only be train or valid')
+
+        if group_type not in self.dataloader_configs.keys():
+            self.dataloader_configs[group_type] = cfg
+            self.dataloaders[group_type] = DataLoader(config=cfg)
+            self.dataloader_trackers[group_type] = set()
+
+        if len(self.dataloader_trackers[group_type]) % data_type_count == 0:
+            self.dataloader_trackers[group_type].clear()
+            self.dataloader_data[group_type] = self.dataloaders[group_type].next()
+
+        self.dataloader_trackers[group_type].add(data_type_index)
+        return_value = None
+        if self.dataloader_data[group_type] is not None:
+            return_value = self.dataloader_data[group_type][data_type_index][1]
+        else:
+            raise ValueError("fetched empty data from dataloader for group_type: " + group_type)
+        return return_value
 
     def create_distribution(self):
         if not self.distribution:
@@ -87,6 +114,10 @@ class HetrLocals(object):
         HetrLocals.mlsl_obj.free(array.__array_interface__['data'][0])
 
     def as_buffer(self, array):
+        if array.dtype not in (np.float32, np.float64):
+            raise AssertionError('dtype for mlsl is expected to be either \
+                                  float32 or float64. dtype == ' + str(array.dtype))
+
         # array.shape is () for scalar
         if not array.shape:
             array = np.atleast_1d(array)
@@ -106,6 +137,7 @@ class HetrLocals(object):
 
         # todo: get real root_idx
         root_idx = 0
+
         # np.atleast_1d is used in cases when we need to reduce to a scalar value
         x_nparr = np.atleast_1d(x_nparr)
         if self.process_idx == root_idx:

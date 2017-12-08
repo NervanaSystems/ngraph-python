@@ -66,7 +66,10 @@ from ngraph.op_graph.comm_nodes import CPUMlslSendOp, CPUMlslRecvOp, \
     CPUMlslBroadcastSendOp, CPUMlslBroadcastRecvOp
 
 from ngraph.util.trace_events import is_tracing_enabled
+from ngraph.op_graph.op_graph import InputOp
 
+import logging
+logger = logging.getLogger(__name__)
 
 use_mlsl = False
 
@@ -474,6 +477,12 @@ class CPUCodeGenerator(PyGen):
                 class_name=self.__class__.__name__,
                 op=op.__class__.__name__,
             ))
+
+    @generate_op.on_type(InputOp)
+    def generate_op(self, op, out, *args):
+        self.append("""{}=self.get_dataloader_data({}, '{}', {}, {})""",
+                    out, op.aeon_cfg, op.group_type, op.data_type_index,
+                    op.data_type_count)
 
     @generate_op.on_type(ReadOp)
     def generate_op(self, op, out):

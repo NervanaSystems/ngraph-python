@@ -2802,6 +2802,32 @@ class RngOp(TensorOp):
         return type(self)(self.distribution, self.params, *args)
 
 
+class InputOp(TensorOp):
+    """
+    Op to provide input data without using a placeholder
+
+    Currently implemented to provide fake data instead of using Aeon
+    """
+
+    def __init__(self, axes, aeon_cfg, data_type, data_types, group_type, *args, **kwargs):
+        """
+        Arguments:
+            axes  : of fake data to generate
+            aeon_cfg : aeon configuration passed in as a string
+        Return:
+        """
+
+        super(InputOp, self).__init__(
+            axes=axes, *args, **kwargs
+        )
+        self._is_input = True
+        self.aeon_cfg = aeon_cfg
+        self.data_type = data_type
+        self.data_type_index = data_types.index(data_type)
+        self.data_type_count = len(data_types)
+        self.group_type = group_type
+
+
 def uniform(x, low=0.0, high=1.0):
     """
     Fills x with uniform distribution between low and high.

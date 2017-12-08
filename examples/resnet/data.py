@@ -84,7 +84,13 @@ def ingest_cifar10(root_dir, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dataset="cifar10"):
+def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dataset="cifar10",
+                      num_devices=1, device='cpu', split_batch=False, address=None, port=None,
+                      return_train=True, return_valid=True):
+    batch_size_per_device = batch_size
+    if split_batch and (device == 'hetr' and num_devices > 1):
+        batch_size_per_device = batch_size // num_devices
+
     # Generating manifests for different datasets
     if(dataset == "cifar10"):
         train_manifest, valid_manifest = ingest_cifar10(work_dir)
@@ -106,6 +112,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
             cache_root = get_data_cache_or_nothing('cifar10-cache/')
             # Define image properties
             image_config = {"type": "image",
+                            "channels": 3,
                             "height": 32,
                             "width": 32}
             # Define label properties
@@ -136,6 +143,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
             cache_root = get_data_cache_or_nothing("i1k-cache/")
             # Define image properties
             image_config = {"type": "image",
+                            "channels": 3,
                             "height": 224,
                             "width": 224}
             # Define label properties
@@ -174,6 +182,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
             cache_root = get_data_cache_or_nothing('cifar100-cache/')
             # Define image properties
             image_config = {"type": "image",
+                            "channels": 3,
                             "height": 32,
                             "width": 32}
             # Define label properties
@@ -204,6 +213,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
             cache_root = get_data_cache_or_nothing("i1k-cache/")
             # Define image properties
             image_config = {"type": "image",
+                            "channels": 3,
                             "height": 224,
                             "width": 224}
             # Define label properties
@@ -240,17 +250,28 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
         else:
             raise NameError("Unkown dataset.Choose correct dataset")
 
-    train_config = common_config(train_manifest, batch_size)
-    train_config['iteration_mode'] = "COUNT"
-    train_config['iteration_mode_count'] = train_iterations
-    train_config['shuffle_manifest'] = True
-    train_config['shuffle_enable'] = True
-    train_config['random_seed'] = random_seed
+    if return_train:
+        train_config = common_config(train_manifest, batch_size=batch_size_per_device)
+        train_config['iteration_mode'] = "INFINITE"
+        train_config['shuffle_manifest'] = True
+        train_config['shuffle_enable'] = True
+        train_config['random_seed'] = random_seed
+        if device == 'hetr' and num_devices > 1 and address is not None and port is not None:
+            train_config['remote'] = {'address': address, 'port': port, 'close_session': False}
+        train_loader = AeonDataLoader(train_config)
 
-    valid_config = common_config(valid_manifest, batch_size, valid_set=True)
-    valid_config['iteration_mode'] = "ONCE"
+    if return_valid:
+        valid_config = common_config(valid_manifest,
+                                     batch_size=batch_size_per_device, valid_set=True)
+        valid_config['iteration_mode'] = "ONCE"
+        if device == 'hetr' and num_devices > 1 and address is not None and port is not None:
+            valid_config['iteration_mode'] = "INFINITE"
+            valid_config['remote'] = {'address': address, 'port': port, 'close_session': False}
+        valid_loader = AeonDataLoader(valid_config)
 
-    train_loader = AeonDataLoader(train_config)
-    valid_loader = AeonDataLoader(valid_config)
-
-    return (train_loader, valid_loader)
+    if return_train and return_valid:
+        return (train_loader, valid_loader)
+    if return_train:
+        return train_loader
+    if return_valid:
+        return valid_loader

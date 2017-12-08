@@ -18,6 +18,7 @@ import logging
 from builtins import object
 
 import ngraph as ng
+from ngraph.op_graph.op_graph import InputOp
 
 logger = logging.getLogger(__name__)
 try:
@@ -44,6 +45,7 @@ class AeonDataLoader(object):
     def __init__(self, config, *args, **kwargs):
         self.config = config
         self._dataloader = DataLoader(config)
+        self.session_id = self._dataloader.session_id
         self.ndata = self._dataloader.ndata
         if self.ndata < self._dataloader.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
@@ -73,6 +75,41 @@ class AeonDataLoader(object):
         if include_iteration:
             placeholders['iteration'] = ng.placeholder(axes=())
         return placeholders
+
+    def make_input_ops(self, group_type, address, port, batch_axis, device, device_id):
+        logger.debug("make_input_ops: session_id = " + str(self.session_id) +
+                     ", group_type = " + group_type)
+
+        # Setup aeon datloader config for worker
+        config_worker = {'remote': {'address': address, 'port': port,
+                         'close_session': False, 'session_id': self.session_id}}
+
+        # Setup axes for dataloader's input ops
+        C = ng.make_axis(length=self.config['etl'][0]['channels'], name='C')
+        H = ng.make_axis(length=self.config['etl'][0]['height'], name='H')
+        W = ng.make_axis(length=self.config['etl'][0]['width'], name='W')
+        u = ng.make_axis(length=1, name='unit_axis')
+
+        # Build dataloader input ops for data set
+        input_ops = dict()
+        with ng.metadata(device=device, device_id=device_id, parallel=batch_axis):
+            data_types = [a['type'] for a in self.config['etl']]
+            for obj in self.config['etl']:
+                ph_name = obj['type']
+                if ph_name == 'image':
+                    input_ops[ph_name] = ng.placeholder(axes=[batch_axis, C, H, W]) \
+                        if (address is None and port is None) else \
+                        InputOp(axes=[batch_axis, C, H, W], aeon_cfg=str(config_worker),
+                                data_type=ph_name, data_types=data_types, group_type=group_type)
+                elif ph_name == 'label':
+                    input_ops[ph_name] = ng.placeholder(axes=[batch_axis]) \
+                        if (address is None and port is None) else \
+                        InputOp(axes=[batch_axis, u], aeon_cfg=str(config_worker),
+                                data_type=ph_name, data_types=data_types, group_type=group_type)
+
+        # use placeholder for iteration parameter
+        input_ops['iteration'] = ng.placeholder(axes=())
+        return input_ops
 
     def reset(self):
         self._dataloader.reset()

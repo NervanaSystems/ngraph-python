@@ -18,6 +18,8 @@ import tempfile
 import atexit
 import os
 from contextlib import contextmanager
+import logging
+logger = logging.getLogger(__name__)
 
 
 class PyModule(dict):
@@ -94,6 +96,7 @@ class PyModule(dict):
 
         file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', prefix=self.prefix,
                                            delete=False)
+        logger.debug("pygen compile: file == " + str(file.name))
         self.filename = file.name
         self.filenames.append(self.filename)
         file.write(source)
