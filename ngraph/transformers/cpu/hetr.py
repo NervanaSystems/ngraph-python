@@ -72,7 +72,7 @@ class HetrLocals(object):
 
         if len(self.dataloader_trackers[group_type]) % data_type_count == 0:
             self.dataloader_trackers[group_type].clear()
-            self.dataloader_data[group_type] = self.dataloaders[group_type].next()
+            self.dataloader_data[group_type] = next(self.dataloaders[group_type])
 
         self.dataloader_trackers[group_type].add(data_type_index)
         return_value = None
