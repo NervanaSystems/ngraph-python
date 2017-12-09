@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 # To normalize the data.
 from sklearn import preprocessing
+import sys
 
 
 def categorical_numbers(column):
@@ -75,12 +76,32 @@ class CensusDataset(object):
                         "income_bracket"]
 
         print("Loading training data ...")
-        self.data = pd.read_csv("adult.data", names=self.COLUMNS, skipinitialspace=True,
-                                engine="python")
+        try:
+            self.data = pd.read_csv("adult.data",
+                                    names=self.COLUMNS,
+                                    skipinitialspace=True, engine="python")
+        except IOError as e:
+            print("I/O error({0}): {1}. Donwload the Census 'adult.data' file from " +
+                  "https://archive.ics.uci.edu/ml/datasets/adult. ".format(e.errno, e.strerror))
+            sys.exit(1)
+        except:
+            print
+            "Unexpected error:", sys.exc_info()[0]
+            raise
 
         print("Loading validation data ...")
-        self.test = pd.read_csv("adult.test", names=self.COLUMNS, skipinitialspace=True,
-                                engine="python", skiprows=1)
+        try:
+            self.test = pd.read_csv("adult.test",
+                                    names=self.COLUMNS,
+                                    skipinitialspace=True, engine="python", skiprows=1)
+        except IOError as e:
+            print("I/O error({0}): {1}. Donwload the Census 'adult.test' file from " +
+                  "https://archive.ics.uci.edu/ml/datasets/adult. ".format(e.errno, e.strerror))
+            sys.exit(1)
+        except:
+            print
+            "Unexpected error:", sys.exc_info()[0]
+            raise
 
         # Remove rows with empty records.
 
