@@ -36,7 +36,6 @@ def reorder_axes(input_tensor, input_template, output_template):
     :param output_template: string with one letter for each axis in a different order e.g. 'CHWN'
     :return: broadcast Op which reorders the axes of the input tensor
     """
-
     if not len(set(input_template)) == len(input_template):
         raise ValueError('Input axes names cannot repeat.')
 
@@ -52,13 +51,27 @@ def reorder_axes(input_tensor, input_template, output_template):
     return ng.broadcast(input_tensor, axes=output_axes)
 
 
-def reshape_workaround(data, shape_out):
-    """Limited workaround for tensor reshape operation"""
+def rename_axes(input_tensor, output_template):  # type: (TensorOp, str) -> TensorOp
+    """
+    Rename tensor axes according to letter names given in `output_template`.
 
+    Example: if `output_template` is 'NHWC', then axes will be renamed to 'N', 'H', 'W' and 'C'.
+
+    :param input_tensor: ngraph TensorOp
+    :param output_template: string with one letter per axis in `input_tensor`
+    :return: ngraph TensorOp with renamed axes
+    """
+    output_axes = [ng.make_axis(length=input_tensor.axes[i].length, name=output_template[i])
+                   for i in range(len(input_tensor.axes))]
+    return ng.cast_axes(input_tensor, axes=ng.make_axes(output_axes))
+
+
+def reshape_workaround(data, shape_out):
+    """Limited workaround for tensor reshape operation."""
     shape_in = data.shape.lengths
 
     if np.prod(shape_in) != np.prod(shape_out):
-        raise ValueError("Total size of input (%d) and output (%d) dimension mismatch.",
+        raise ValueError('Total size of input (%d) and output (%d) dimension mismatch.',
                          np.prod(shape_in), np.prod(shape_out))
 
     ndims_out = len(shape_out)
@@ -69,6 +82,6 @@ def reshape_workaround(data, shape_out):
         flatten_at_idx = cumprods.index(shape_out[0]) + 1
         tensor = ng.flatten_at(data, flatten_at_idx)
     else:
-        raise NotImplementedError("Reshape can only support flatten to 1d or 2d.")
+        raise NotImplementedError('Reshape can only support flatten to 1d or 2d.')
 
     return ng.cast_axes(tensor, make_pos_axes(shape_out))

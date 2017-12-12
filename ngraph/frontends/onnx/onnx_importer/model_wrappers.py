@@ -27,9 +27,7 @@ from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 
 
 class WrapperBaseClass(object):
-    """
-    Base class for wrappers, which add ngraph import functionality to ONNX protobuf objects.
-    """
+    """Base class for wrappers, which add ngraph import functionality to ONNX protobuf objects."""
 
     def __init__(self, onnx_proto_instance, graph):
         # type: (protobuf.message.Message, GraphWrapper) -> None
@@ -42,14 +40,13 @@ class WrapperBaseClass(object):
     def __repr__(self):  # type: () -> str
         name = getattr(self._proto, 'name', None)
         if name:
-            return "<{}: {}>".format(self.__class__.__name__, name)
-        return "<{}>".format(self.__class__.__name__)
+            return '<{}: {}>'.format(self.__class__.__name__, name)
+        return '<{}>'.format(self.__class__.__name__)
 
 
 class ModelWrapper(WrapperBaseClass):
-    """
-    Wrapper for ONNX ModelProto objects.
-    """
+    """Wrapper for ONNX ModelProto objects."""
+
     def __init__(self, model_proto):  # type: (ModelProto) -> None
         self.graph = GraphWrapper(model_proto.graph)
         super(ModelWrapper, self).__init__(model_proto, self.graph)
@@ -61,6 +58,7 @@ class GraphWrapper(WrapperBaseClass):
 
     Transforms objects defined in an ONNX graph to ngraph tensors and nodes.
     """
+
     def __init__(self, onnx_proto_instance):  # type: (GraphProto) -> None
         super(GraphWrapper, self).__init__(onnx_proto_instance, self)
         self._ng_node_cache = {}
@@ -112,16 +110,12 @@ class GraphWrapper(WrapperBaseClass):
         self._ng_node_cache[name] = node
 
     def initialize_ng_tensors(self):  # type: () -> None
-        """
-        Create and cache ngraph Op nodes for all input values in the ONNX graph.
-        """
+        """Create and cache ngraph Op nodes for all input values in the ONNX graph."""
         for value_info in self.input:
             value_info.get_ng_node()
 
     def initialize_ng_nodes(self):  # type: () -> None
-        """
-        Create and cache ngraph Op nodes for all operation nodes in the ONNX graph.
-        """
+        """Create and cache ngraph Op nodes for all operation nodes in the ONNX graph."""
         # @TODO: Verify topological sort of nodes
         for node in self.node:
             node.get_ng_nodes_dict()
@@ -142,7 +136,7 @@ class GraphWrapper(WrapperBaseClass):
             output_nodes.append({
                 'name': output_proto.name,
                 'output': self.ng_node_cache_get(output_proto.name),
-                'inputs': [self.ng_node_cache_get(inpt.name) for inpt in self._proto.input]
+                'inputs': [self.ng_node_cache_get(inpt.name) for inpt in self._proto.input],
             })
         return output_nodes
 
@@ -156,9 +150,7 @@ class ValueInfoWrapper(WrapperBaseClass):
 
     @lru_cache(maxsize=1)
     def get_ng_axes(self):  # type: () -> Axes
-        """
-        Create an ngraph Axes object matching the shape of this value.
-        """
+        """Create an ngraph Axes object matching the shape of this value."""
         if self.type.sparse_tensor_type.elem_type != onnx_pb2.TensorProto.UNDEFINED:
             raise NotImplementedError('Sparse tensors (SparseTensorTypeProto) not supported yet.')
 
@@ -172,30 +164,22 @@ class ValueInfoWrapper(WrapperBaseClass):
         return ng.make_axes(axes=make_pos_axes(shape))
 
     def get_dtype(self):  # type: () -> numpy.dtype
-        """
-        Return the Numpy data type for this value.
-        """
+        """Return the Numpy data type for this value."""
         if self.type.sparse_tensor_type.elem_type != onnx_pb2.TensorProto.UNDEFINED:
             raise NotImplementedError('Sparse tensors (SparseTensorTypeProto) not supported yet.')
 
         return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[self.type.tensor_type.elem_type]
 
     @lru_cache(maxsize=1)
-    def get_ng_placeholder(self):  # type: () -> Op
-        """
-        Create an ngraph placeholder node for this value.
-        :return: AssignableTensorOp
-        """
+    def get_ng_placeholder(self):  # type: () -> AssignableTensorOp
+        """Create an ngraph placeholder node for this value."""
         axes = self.get_ng_axes()
         dtype = self.get_dtype()
         return ng.placeholder(axes=axes, dtype=dtype).named(self.name)
 
     @lru_cache(maxsize=1)
-    def get_ng_variable(self):  # type: () -> Op
-        """
-        Create an ngraph variable node for this value.
-        :return: AssignableTensorOp
-        """
+    def get_ng_variable(self):  # type: () -> AssignableTensorOp
+        """Create an ngraph variable node for this value."""
         axes = self.get_ng_axes()
         dtype = self.get_dtype()
         if self.has_initializer:
@@ -204,11 +188,8 @@ class ValueInfoWrapper(WrapperBaseClass):
                                initial_value=initializer.to_array()).named(self.name)
         return ng.variable(axes=axes, dtype=dtype).named(self.name)
 
-    def get_ng_node(self):  # type: () -> Op
-        """
-        Create an ngraph placeholder or variable node for this value.
-        :return: AssignableTensorOp
-        """
+    def get_ng_node(self):  # type: () -> AssignableTensorOp
+        """Create an ngraph placeholder or variable node for this value."""
         node = self._graph.ng_node_cache_get(self.name)
         if node:
             return node
@@ -223,36 +204,26 @@ class ValueInfoWrapper(WrapperBaseClass):
 
     @property
     def has_initializer(self):  # type: () -> bool
-        """
-        Return true if the ONNX graph contains an initializer corresponding to this value.
-        """
+        """Return true if the ONNX graph contains an initializer corresponding to this value."""
         if self.get_initializer():
             return True
         return False
 
     def get_initializer(self):  # type: () -> TensorWrapper
-        """
-        Get the initializer tensor corresponding to this value.
-        """
+        """Get the initializer tensor corresponding to this value."""
         return self._graph.get_initializer(self.name)
 
 
 class TensorWrapper(WrapperBaseClass):
-    """
-    Wrapper for ONNX TensorProto objects.
-    """
+    """Wrapper for ONNX TensorProto objects."""
 
     def to_array(self):  # type: () -> numpy.ndarray
-        """
-        Get the value of this tensor as a Numpy array.
-        """
+        """Get the value of this tensor as a Numpy array."""
         return onnx.numpy_helper.to_array(self._proto)
 
 
 class NodeWrapper(WrapperBaseClass):
-    """
-    Wrapper for ONNX NodeProto objects.
-    """
+    """Wrapper for ONNX NodeProto objects."""
 
     def __init__(self, onnx_proto_instance, graph):  # type: (NodeProto, GraphWrapper) -> None
         super(NodeWrapper, self).__init__(onnx_proto_instance, graph)
@@ -264,8 +235,8 @@ class NodeWrapper(WrapperBaseClass):
         name = getattr(self._proto, 'name', None)
         op_type = self._proto.op_type
         if name:
-            return "<{}({}): {}>".format(self.__class__.__name__, op_type, name)
-        return "<{}({})>".format(self.__class__.__name__, op_type)
+            return '<{}({}): {}>'.format(self.__class__.__name__, op_type, name)
+        return '<{}({})>'.format(self.__class__.__name__, op_type)
 
     def get_attribute(self, attribute_name):  # type: (str) -> Optional[AttributeWrapper]
         """
@@ -288,14 +259,13 @@ class NodeWrapper(WrapperBaseClass):
         return default
 
     def get_ng_inputs(self):  # type: () -> List[Op]
-        """
-        Get a list of ngraph Ops for each input of this node.
-        """
+        """Get a list of ngraph Ops for each input of this node."""
         return [self._graph.ng_node_cache_get(input_name) for input_name in self._proto.input]
 
     def get_ng_nodes_dict(self):  # type: () -> Dict[str, Op]
         """
         Get a dict containing an ngraph Op for each output of this node.
+
         :return: dict {output_name: ng_node}
         """
         output_nodes_dict = {}
@@ -311,29 +281,25 @@ class NodeWrapper(WrapperBaseClass):
 
 
 class AttributeWrapper(WrapperBaseClass):
-    """
-    Wrapper for ONNX AttributeProto objects.
-    """
+    """Wrapper for ONNX AttributeProto objects."""
 
     def get_value(self):  # type: () -> Any
-        """
-        Get the value of this attribute.
-        """
+        """Get the value of this attribute."""
         attr = self._proto
-        if attr.HasField("f"):
+        if attr.HasField('f'):
             return attr.f
-        elif attr.HasField("i"):
+        elif attr.HasField('i'):
             return attr.i
-        elif attr.HasField("s"):
-            return attr.s.decode("utf-8")
-        elif attr.HasField("t"):
+        elif attr.HasField('s'):
+            return attr.s.decode('utf-8')
+        elif attr.HasField('t'):
             return TensorWrapper(attr.t, self._graph)
         elif attr.floats:
             return list(attr.floats)
         elif attr.ints:
             return list(attr.ints)
         elif attr.strings:
-            return [string.decode("utf-8") for string in attr.strings]
+            return [string.decode('utf-8') for string in attr.strings]
         elif attr.tensors:
             return [TensorWrapper(t, self._graph) for t in attr.tensors]
         else:

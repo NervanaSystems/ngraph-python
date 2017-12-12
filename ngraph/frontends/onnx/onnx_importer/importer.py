@@ -19,8 +19,7 @@ from ngraph.frontends.onnx.onnx_importer.model_wrappers import ModelWrapper
 
 def import_onnx_model(onnx_protobuf):  # type: (ModelProto) -> List[Dict]
     """
-    Import an ONNX Protocol Buffers model (onnx_pb2.ModelProto) object
-    and convert it into a list of ngraph operations.
+    Import an ONNX Protocol Buffers model and convert it into a list of ngraph operations.
 
     An ONNX model defines a set of output nodes. Each output node will be added to the
     returned list as a dict with the following fields:
@@ -45,6 +44,9 @@ def import_onnx_model(onnx_protobuf):  # type: (ModelProto) -> List[Dict]
     >>> computation = transformer.computation(ng_model['output'], *ng_model['inputs'])
     >>> computation(4, 6)
     array([ 10.], dtype=float32)
+
+    :param onnx_protobuf: ONNX Protocol Buffers model (onnx_pb2.ModelProto object)
+    :return: list of dicts representing ngraph Ops and their inputs
     """
     model = ModelWrapper(onnx_protobuf)
     return model.graph.get_ng_model()

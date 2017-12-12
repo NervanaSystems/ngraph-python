@@ -20,7 +20,8 @@ import logging
 from string import ascii_letters
 
 import ngraph as ng
-from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes, reshape_workaround
+from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes, reshape_workaround, \
+    rename_axes
 from ngraph.frontends.onnx.onnx_importer.utils.misc import split_into_pairs
 from ngraph.frontends.onnx.onnx_importer.utils.pool import make_pooling_op, make_global_pooling_op
 from ngraph.frontends.onnx.onnx_importer.utils.reduction import make_reduction_op
@@ -33,15 +34,13 @@ logger = logging.getLogger(__name__)
 
 
 def make_ng_node(onnx_node):  # type: (NodeWrapper) -> Op
-    """
-    Create an ngraph Op from an ONNX node definition.
-    """
+    """Create an ngraph Op from an ONNX node definition."""
     op_type = onnx_node.op_type
 
     try:
         ng_node_factory = globals()[op_type]
     except KeyError:
-        raise NotImplementedError("Unknown operation: %s", op_type)
+        raise NotImplementedError('Unknown operation: %s', op_type)
 
     ng_inputs = onnx_node.get_ng_inputs()
     return ng_node_factory(onnx_node, ng_inputs)
@@ -217,18 +216,18 @@ def MaxPool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 
 def GlobalMaxPool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Equivalent to MaxPool with kernel size equal to the spatial dimension of input tensor"""
+    """Equivalent to MaxPool with kernel size equal to spatial dimensions of input tensor."""
     return cast_to_pos_axes(make_global_pooling_op(onnx_node, ng_inputs))
 
 
 def GlobalAveragePool(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Equivalent to AveragePool with kernel size equal to the spatial dimension of input tensor"""
+    """Equivalent to AveragePool with kernel size equal to spatial dimensions of input tensor."""
     return cast_to_pos_axes(make_global_pooling_op(onnx_node, ng_inputs))
 
 
 # Reshape ops
 def Flatten(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Flatten the input tensor into a 2D matrix"""
+    """Flatten the input tensor into a 2D matrix."""
     data = ng_inputs[0]
     axis = onnx_node.get_attribute_value('axis', 1)
 
@@ -240,7 +239,7 @@ def Flatten(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 
 def Transpose(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Transpose the input tensor similar to numpy.transpose
+    """Transpose the input tensor similar to numpy.transpose.
 
     By default, reverse the dimensions, but if `perm` attribute is specified
     permute the axes according to the values given.
@@ -281,7 +280,7 @@ def Slice(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 
 def Concat(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Concatenate a list of tensors into a single tensor"""
+    """Concatenate a list of tensors into a single tensor."""
     axis = onnx_node.get_attribute_value('axis', 0)
 
     if len(ng_inputs) < 2:
@@ -300,7 +299,7 @@ def Concat(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 
 def Squeeze(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Remove single-dimensional entries from the shape of a tensor"""
+    """Remove single-dimensional entries from the shape of a tensor."""
     data = ng_inputs[0]
     axes_to_squeeze = onnx_node.get_attribute_value('axes')
 
@@ -315,7 +314,7 @@ def Squeeze(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 
 def Reshape(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    """Reshape the input tensor similar to numpy.reshape"""
+    """Reshape the input tensor similar to numpy.reshape."""
     data = ng_inputs[0]
     shape = onnx_node.get_attribute_value('shape', data.axes.lengths)
 
@@ -335,3 +334,30 @@ def Reshape(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 def Constant(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     value_tensor = onnx_node.get_attribute_value('value')
     return cast_to_pos_axes(ng.constant(value_tensor.to_array()))
+
+
+def BatchNormalization(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    x, scale, bias, mean, var = ng_inputs
+
+    is_test = onnx_node.get_attribute_value('is_test', 1)
+    spatial = onnx_node.get_attribute_value('spatial', 1)
+    epsilon = onnx_node.get_attribute_value('epsilon', 1e-3)
+    # @TODO: Implement learning mode support
+    # momentum = onnx_node.get_attribute_value('momentum', 0.99)
+
+    if not is_test:
+        raise NotImplementedError('BatchNormalization node (%s): only `is_test` mode is currently '
+                                  'supported.', onnx_node.name)
+    if not spatial:
+        raise NotImplementedError('BatchNormalization node (%s): only `spatial` mode is currently '
+                                  'supported.', onnx_node.name)
+
+    x = rename_axes(x, 'NCHW')
+    mean = rename_axes(mean, 'C')
+    scale = rename_axes(scale, 'C')
+    bias = rename_axes(bias, 'C')
+    var = rename_axes(var, 'C')
+
+    ng_op = ng.unflatten(scale * ((x - mean) * ng.reciprocal(ng.sqrt(var + epsilon))) + bias)
+
+    return cast_to_pos_axes(ng_op)
