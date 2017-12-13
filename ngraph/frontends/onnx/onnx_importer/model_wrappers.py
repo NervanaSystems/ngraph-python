@@ -22,7 +22,7 @@ import onnx.mapping
 from onnx import onnx_pb2
 from cachetools.func import lru_cache
 
-from ngraph.frontends.onnx.onnx_importer.ops_bridge import make_ng_node
+from ngraph.frontends.onnx.onnx_importer.ops_bridge import make_ng_nodes
 from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import make_pos_axes
 
 
@@ -258,9 +258,23 @@ class NodeWrapper(WrapperBaseClass):
             return attribute.get_value()
         return default
 
+    def get_output_names(self):  # type: () -> List[str]
+        """Get names of all outputs of this node."""
+        return list(self._proto.output)
+
     def get_ng_inputs(self):  # type: () -> List[Op]
         """Get a list of ngraph Ops for each input of this node."""
         return [self._graph.ng_node_cache_get(input_name) for input_name in self._proto.input]
+
+    def _get_ng_nodes_dict_from_cache(self):  # type: () -> Dict[str, Op]
+        output_nodes_dict = {}
+        for output_name in self._proto.output:
+            ng_node = self._graph.ng_node_cache_get(output_name)
+            if ng_node:
+                output_nodes_dict.update({output_name: ng_node})
+            else:
+                return {}  # If any outputs are missing, we invalidate cache for this node
+        return output_nodes_dict
 
     def get_ng_nodes_dict(self):  # type: () -> Dict[str, Op]
         """
@@ -268,15 +282,16 @@ class NodeWrapper(WrapperBaseClass):
 
         :return: dict {output_name: ng_node}
         """
-        output_nodes_dict = {}
+        output_nodes_dict = self._get_ng_nodes_dict_from_cache()
+        if output_nodes_dict:
+            return output_nodes_dict
 
-        for output_name in self._proto.output:
-            ng_node = self._graph.ng_node_cache_get(output_name)
-            if not ng_node:
-                ng_node = make_ng_node(self).named(output_name)
-                self._graph.ng_node_cache_set(output_name, ng_node)
+        output_node_names = self._proto.output
+        output_nodes = make_ng_nodes(self)
+        for output_name, node in zip(output_node_names, output_nodes):
+            output_nodes_dict.update({output_name: node.named(output_name)})
+            self._graph.ng_node_cache_set(output_name, node)
 
-            output_nodes_dict.update({output_name: ng_node})
         return output_nodes_dict
 
 

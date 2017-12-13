@@ -19,7 +19,7 @@ import numpy as np
 import onnx
 import pytest
 
-from ngraph.frontends.onnx.tests.utils import convert_and_calculate
+from ngraph.frontends.onnx.tests.utils import convert_and_calculate, all_arrays_equal
 
 
 def test_reshape():
@@ -105,3 +105,26 @@ def test_squeeze():
     node = onnx.helper.make_node('Squeeze', inputs=['x'], outputs=['y'], axes=[0, 3])
     ng_results = convert_and_calculate(node, [data], [expected_output])
     assert np.array_equal(ng_results, [expected_output])
+
+
+@pytest.mark.parametrize("node,expected_output", [
+    # Split into 2 equal parts along axis=0
+    (onnx.helper.make_node('Split', inputs=['x'], outputs=['y', 'z'], axis=0),
+     [np.array([[0, 1, 2, 3]]), np.array([[4, 5, 6, 7]])]),
+
+    # Split into 2 equal parts along axis=1
+    (onnx.helper.make_node('Split', inputs=['x'], outputs=['a', 'b'], axis=1),
+     [np.array([[0, 1], [4, 5]]), np.array([[2, 3], [6, 7]])]),
+
+    # Split into 4 equal parts along axis=1
+    (onnx.helper.make_node('Split', inputs=['x'], outputs=['a', 'b', 'c', 'd'], axis=1),
+     [np.array([[0], [4]]), np.array([[1], [5]]), np.array([[2], [6]]), np.array([[3], [7]])]),
+
+    # Split into 2 unequal parts along axis=1
+    (onnx.helper.make_node('Split', inputs=['x'], outputs=['a', 'b'], axis=1, split=(3, 1)),
+     [np.array([[0, 1, 2], [4, 5, 6]]), np.array([[3], [7]])]),
+])
+def test_split(node, expected_output):
+    data = np.arange(8).reshape(2, 4)
+    ng_results = convert_and_calculate(node, [data], expected_output)
+    assert all_arrays_equal(ng_results, expected_output)

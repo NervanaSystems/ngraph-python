@@ -15,6 +15,7 @@
 
 from __future__ import print_function, division
 
+import numpy as np
 import onnx
 from onnx.helper import make_graph, make_model, make_tensor_value_info
 
@@ -26,24 +27,23 @@ def get_transformer():
     return ng.transformers.make_transformer()
 
 
-def convert_and_calculate(onnx_node, data_inputs, data_output):
+def convert_and_calculate(onnx_node, data_inputs, data_outputs):
     # type: (NodeProto, List[np.ndarray], List[np.ndarray]) -> List[np.ndarray]
     """
     Convert ONNX node to ngraph node and perform computation on input data.
 
     :param onnx_node: ONNX NodeProto describing a computation node
     :param data_inputs: list of numpy ndarrays with input data
-    :param data_output: list of numpy ndarrays with expected output data
+    :param data_outputs: list of numpy ndarrays with expected output data
     :return: list of numpy ndarrays with computed output
     """
-
     transformer = get_transformer()
     input_tensors = [make_tensor_value_info(name, onnx.TensorProto.FLOAT, value.shape)
                      for name, value in zip(onnx_node.input, data_inputs)]
     output_tensors = [make_tensor_value_info(name, onnx.TensorProto.FLOAT, value.shape)
-                      for name, value in zip(onnx_node.output, data_output)]
+                      for name, value in zip(onnx_node.output, data_outputs)]
 
-    graph = make_graph([onnx_node], "test_graph", input_tensors, output_tensors)
+    graph = make_graph([onnx_node], 'test_graph', input_tensors, output_tensors)
     model = make_model(graph, producer_name='ngraph ONNXImporter')
 
     ng_results = []
@@ -52,3 +52,15 @@ def convert_and_calculate(onnx_node, data_inputs, data_output):
         ng_results.append(computation(*data_inputs))
 
     return ng_results
+
+
+def all_arrays_equal(first_list, second_list):
+    # type: (Iterable[np.ndarray], Iterable[np.ndarray]) -> bool
+    """
+    Check that all numpy ndarrays in `first_list` are equal to all numpy ndarrays in `second_list`.
+
+    :param first_list: iterable containing numpy ndarray objects
+    :param second_list: another iterable containing numpy ndarray objects
+    :return: True if all ndarrays are equal, otherwise False
+    """
+    return all(map(lambda pair: np.array_equal(*pair), zip(first_list, second_list)))

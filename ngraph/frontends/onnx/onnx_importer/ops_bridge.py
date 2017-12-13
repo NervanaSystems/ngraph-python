@@ -33,8 +33,8 @@ from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import cast_to_pos_a
 logger = logging.getLogger(__name__)
 
 
-def make_ng_node(onnx_node):  # type: (NodeWrapper) -> Op
-    """Create an ngraph Op from an ONNX node definition."""
+def make_ng_nodes(onnx_node):  # type: (NodeWrapper) -> Tuple[Op]
+    """Create ngraph output Ops for an ONNX node."""
     op_type = onnx_node.op_type
 
     try:
@@ -43,7 +43,12 @@ def make_ng_node(onnx_node):  # type: (NodeWrapper) -> Op
         raise NotImplementedError('Unknown operation: %s', op_type)
 
     ng_inputs = onnx_node.get_ng_inputs()
-    return ng_node_factory(onnx_node, ng_inputs)
+    ng_outputs = ng_node_factory(onnx_node, ng_inputs)
+
+    if type(ng_outputs) != tuple:
+        ng_outputs = (ng_outputs,)
+
+    return ng_outputs
 
 
 # Unary Ops
@@ -328,6 +333,34 @@ def Reshape(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     return cast_to_pos_axes(x)
     """
     return reshape_workaround(data, shape)
+
+
+def Split(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Tuple[Op]
+    """Split a tensor into a list of tensors."""
+    data = ng_inputs[0]
+    count_outputs = len(onnx_node.get_output_names())
+    axis_to_split = onnx_node.get_attribute_value('axis')
+    len_axis_to_split = data.axes[axis_to_split].length
+    len_parts = onnx_node.get_attribute_value('split')
+
+    if not len_parts:
+        if len_axis_to_split % count_outputs:
+            raise ValueError('Split node (%s): Tensor cannot be split into %d equal parts, along '
+                             'axis of length %d', onnx_node.name, count_outputs, len_axis_to_split)
+        len_parts = [int(len_axis_to_split / count_outputs)] * count_outputs
+
+    outputs = []
+    start_index = 0
+    for len_part in len_parts:
+        end_index = start_index + len_part
+        output_axes = [ng.make_axis(length=len_part, name=data.axes[i].name) if i == axis_to_split
+                       else data.axes[i] for i in range(len(data.axes))]
+        slices = [slice(start_index, end_index) if i == axis_to_split else
+                  slice(None) for i in range(len(data.axes))]
+        outputs.append(ng.tensor_slice(data, slices, axes=ng.make_axes(output_axes)))
+        start_index = end_index
+
+    return tuple(outputs)
 
 
 # Misc
