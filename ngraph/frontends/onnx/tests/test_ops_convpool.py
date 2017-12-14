@@ -37,15 +37,15 @@ def make_onnx_model_for_conv_op(x_shape, weights_shape, transpose=False, **attri
     output_shape = ()  # We don't need output shape to be accurate for these tests
 
     if transpose:
-        node_op = "ConvTranspose"
+        node_op = 'ConvTranspose'
     else:
-        node_op = "Conv"
+        node_op = 'Conv'
 
-    node = make_node(node_op, ["X", "weight"], ["Y"], name="test_node", **attributes)
-    graph = make_graph([node], "test_graph",
-                       [make_tensor_value_info("X", onnx.TensorProto.FLOAT, x_shape),
-                        make_tensor_value_info("weight", onnx.TensorProto.FLOAT, weights_shape)],
-                       [make_tensor_value_info("Y", onnx.TensorProto.FLOAT, output_shape)])
+    node = make_node(node_op, ['X', 'weight'], ['Y'], name='test_node', **attributes)
+    graph = make_graph([node], 'test_graph',
+                       [make_tensor_value_info('X', onnx.TensorProto.FLOAT, x_shape),
+                        make_tensor_value_info('weight', onnx.TensorProto.FLOAT, weights_shape)],
+                       [make_tensor_value_info('Y', onnx.TensorProto.FLOAT, output_shape)])
     model = make_model(graph, producer_name='ngraph ONNXImporter')
     return model
 

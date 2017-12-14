@@ -19,7 +19,6 @@ import ngraph as ng
 import onnx
 import onnx.numpy_helper
 import onnx.mapping
-from onnx import onnx_pb2
 from cachetools.func import lru_cache
 
 from ngraph.frontends.onnx.onnx_importer.ops_bridge import make_ng_nodes
@@ -47,7 +46,7 @@ class WrapperBaseClass(object):
 class ModelWrapper(WrapperBaseClass):
     """Wrapper for ONNX ModelProto objects."""
 
-    def __init__(self, model_proto):  # type: (ModelProto) -> None
+    def __init__(self, model_proto):  # type: (onnx.ModelProto) -> None
         self.graph = GraphWrapper(model_proto.graph)
         super(ModelWrapper, self).__init__(model_proto, self.graph)
 
@@ -59,9 +58,9 @@ class GraphWrapper(WrapperBaseClass):
     Transforms objects defined in an ONNX graph to ngraph tensors and nodes.
     """
 
-    def __init__(self, onnx_proto_instance):  # type: (GraphProto) -> None
+    def __init__(self, onnx_proto_instance):  # type: (onnx.GraphProto) -> None
         super(GraphWrapper, self).__init__(onnx_proto_instance, self)
-        self._ng_node_cache = {}
+        self._ng_node_cache = {}  # type: Dict[str, TensorOp]
         self.node = [NodeWrapper(node, self) for node in self._proto.node]
         self.input = [ValueInfoWrapper(inpt, self) for inpt in self._proto.input]
         self.output = [ValueInfoWrapper(output, self) for output in self._proto.output]
@@ -91,7 +90,7 @@ class GraphWrapper(WrapperBaseClass):
         """
         return next((inpt for inpt in self.input if inpt.name == value_name), None)
 
-    def ng_node_cache_get(self, name):  # type: (str) -> Optional[Op]
+    def ng_node_cache_get(self, name):  # type: (str) -> Optional[TensorOp]
         """
         Get an ngraph Op node from graph's cache.
 
@@ -100,7 +99,7 @@ class GraphWrapper(WrapperBaseClass):
         """
         return self._ng_node_cache.get(name)
 
-    def ng_node_cache_set(self, name, node):  # type: (str, Op) -> None
+    def ng_node_cache_set(self, name, node):  # type: (str, TensorOp) -> None
         """
         Store an ngraph Op node in this graph's cache.
 
@@ -116,7 +115,6 @@ class GraphWrapper(WrapperBaseClass):
 
     def initialize_ng_nodes(self):  # type: () -> None
         """Create and cache ngraph Op nodes for all operation nodes in the ONNX graph."""
-        # @TODO: Verify topological sort of nodes
         for node in self.node:
             node.get_ng_nodes_dict()
 
@@ -151,9 +149,6 @@ class ValueInfoWrapper(WrapperBaseClass):
     @lru_cache(maxsize=1)
     def get_ng_axes(self):  # type: () -> Axes
         """Create an ngraph Axes object matching the shape of this value."""
-        if self.type.sparse_tensor_type.elem_type != onnx_pb2.TensorProto.UNDEFINED:
-            raise NotImplementedError('Sparse tensors (SparseTensorTypeProto) not supported yet.')
-
         shape = []
         for dim in self.type.tensor_type.shape.dim:
             if dim.dim_param:
@@ -165,20 +160,17 @@ class ValueInfoWrapper(WrapperBaseClass):
 
     def get_dtype(self):  # type: () -> numpy.dtype
         """Return the Numpy data type for this value."""
-        if self.type.sparse_tensor_type.elem_type != onnx_pb2.TensorProto.UNDEFINED:
-            raise NotImplementedError('Sparse tensors (SparseTensorTypeProto) not supported yet.')
-
         return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[self.type.tensor_type.elem_type]
 
     @lru_cache(maxsize=1)
-    def get_ng_placeholder(self):  # type: () -> AssignableTensorOp
+    def get_ng_placeholder(self):  # type: () -> TensorOp
         """Create an ngraph placeholder node for this value."""
         axes = self.get_ng_axes()
         dtype = self.get_dtype()
         return ng.placeholder(axes=axes, dtype=dtype).named(self.name)
 
     @lru_cache(maxsize=1)
-    def get_ng_variable(self):  # type: () -> AssignableTensorOp
+    def get_ng_variable(self):  # type: () -> TensorOp
         """Create an ngraph variable node for this value."""
         axes = self.get_ng_axes()
         dtype = self.get_dtype()
@@ -188,11 +180,11 @@ class ValueInfoWrapper(WrapperBaseClass):
                                initial_value=initializer.to_array()).named(self.name)
         return ng.variable(axes=axes, dtype=dtype).named(self.name)
 
-    def get_ng_node(self):  # type: () -> AssignableTensorOp
+    def get_ng_node(self):  # type: () -> TensorOp
         """Create an ngraph placeholder or variable node for this value."""
-        node = self._graph.ng_node_cache_get(self.name)
-        if node:
-            return node
+        cached_node = self._graph.ng_node_cache_get(self.name)
+        if cached_node:
+            return cached_node
 
         if self.has_initializer:
             node = self.get_ng_variable()
@@ -225,7 +217,7 @@ class TensorWrapper(WrapperBaseClass):
 class NodeWrapper(WrapperBaseClass):
     """Wrapper for ONNX NodeProto objects."""
 
-    def __init__(self, onnx_proto_instance, graph):  # type: (NodeProto, GraphWrapper) -> None
+    def __init__(self, onnx_proto_instance, graph):  # type: (onnx.NodeProto, GraphWrapper) -> None
         super(NodeWrapper, self).__init__(onnx_proto_instance, graph)
         self.input = [self._graph.get_input(input_name) for input_name in self._proto.input]
         self.output = [self._graph.get_input(output_name) for output_name in self._proto.output]
@@ -262,11 +254,11 @@ class NodeWrapper(WrapperBaseClass):
         """Get names of all outputs of this node."""
         return list(self._proto.output)
 
-    def get_ng_inputs(self):  # type: () -> List[Op]
+    def get_ng_inputs(self):  # type: () -> List[TensorOp]
         """Get a list of ngraph Ops for each input of this node."""
         return [self._graph.ng_node_cache_get(input_name) for input_name in self._proto.input]
 
-    def _get_ng_nodes_dict_from_cache(self):  # type: () -> Dict[str, Op]
+    def _get_ng_nodes_dict_from_cache(self):  # type: () -> Dict[str, TensorOp]
         output_nodes_dict = {}
         for output_name in self._proto.output:
             ng_node = self._graph.ng_node_cache_get(output_name)
@@ -276,7 +268,7 @@ class NodeWrapper(WrapperBaseClass):
                 return {}  # If any outputs are missing, we invalidate cache for this node
         return output_nodes_dict
 
-    def get_ng_nodes_dict(self):  # type: () -> Dict[str, Op]
+    def get_ng_nodes_dict(self):  # type: () -> Dict[str, TensorOp]
         """
         Get a dict containing an ngraph Op for each output of this node.
 

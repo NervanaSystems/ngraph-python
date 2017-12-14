@@ -1,7 +1,7 @@
 ## ONNX importer for ngraph
 
 This module will allow users to import and execute models
-serialized using [ONNX][https://github.com/onnx/onnx/] in ngraph.
+serialized using [ONNX](https://github.com/onnx/onnx/) in ngraph.
 
 Current support is limited and should be considered a **proof of concept**.
 As more ONNX operations are supported this solution will become viable.
@@ -33,18 +33,19 @@ As more ONNX operations are supported this solution will become viable.
 * Abs
 * Add
 * AveragePool
+* BatchNormalization
 * Concat
 * Constant
 * Conv
 * ConvTranspose
 * Div
-* Dot
 * Elu
 * Flatten
 * Gemm
 * GlobalAveragePool
 * GlobalMaxPool
 * LeakyRelu
+* MatMul
 * MaxPool
 * Mul
 * PRelu
@@ -60,10 +61,11 @@ As more ONNX operations are supported this solution will become viable.
 * Selu
 * Sigmoid
 * Slice
+* Split
 * Squeeze
 * Sub
 * Tanh
 * Transpose
 
 Refer to ONNX docs for the complete
-[operator list][https://github.com/onnx/onnx/blob/master/docs/Operators.md].
+[operator list](https://github.com/onnx/onnx/blob/master/docs/Operators.md).

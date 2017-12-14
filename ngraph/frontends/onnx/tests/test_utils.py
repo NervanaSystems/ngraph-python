@@ -31,31 +31,31 @@ def test_split_into_pairs():
 
 def test_get_pads():
     def wrap_node(node):
-        graph = make_graph([node], "test_graph",
-                           [make_tensor_value_info("X", onnx.TensorProto.FLOAT, (1, 1, 1, 1)),
-                            make_tensor_value_info("Y", onnx.TensorProto.FLOAT, (1, 1, 1, 1))],
-                           [make_tensor_value_info("Z", onnx.TensorProto.FLOAT, ())])
+        graph = make_graph([node], 'test_graph',
+                           [make_tensor_value_info('X', onnx.TensorProto.FLOAT, (1, 1, 1, 1)),
+                            make_tensor_value_info('Y', onnx.TensorProto.FLOAT, (1, 1, 1, 1))],
+                           [make_tensor_value_info('Z', onnx.TensorProto.FLOAT, ())])
         return NodeWrapper(node, GraphWrapper(graph))
 
-    node = wrap_node(make_node("Conv", ["X", "Y"], ["Z"], pads=(1, 2, 3, 1, 2, 3)))
+    node = wrap_node(make_node('Conv', ['X', 'Y'], ['Z'], pads=(1, 2, 3, 1, 2, 3)))
     assert get_pads(node) == (1, 2, 3)
 
     with pytest.raises(NotImplementedError):
-        node = wrap_node(make_node("Conv", ["X", "Y"], ["Z"], pads=(1, 1, 2, 4)))
+        node = wrap_node(make_node('Conv', ['X', 'Y'], ['Z'], pads=(1, 1, 2, 4)))
         assert get_pads(node) == (1, 1, 0)
 
-    node = wrap_node(make_node("Conv", ["X", "Y"], ["Z"], auto_pad='VALID', kernel_shape=(5, 5)))
+    node = wrap_node(make_node('Conv', ['X', 'Y'], ['Z'], auto_pad='VALID', kernel_shape=(5, 5)))
     assert get_pads(node) == (0, 0, 0)
 
-    node = wrap_node(make_node("Conv", ["X", "Y"], ["Z"],
+    node = wrap_node(make_node('Conv', ['X', 'Y'], ['Z'],
                                auto_pad='SAME_UPPER', kernel_shape=(5, 5)))
     assert get_pads(node) == (2, 2, 0)
 
-    node = wrap_node(make_node("Conv", ["X", "Y"], ["Z"],
+    node = wrap_node(make_node('Conv', ['X', 'Y'], ['Z'],
                                auto_pad='SAME_UPPER', kernel_shape=(7, 7, 7)))
     assert get_pads(node) == (3, 3, 3)
 
     with pytest.raises(NotImplementedError):
-        node = wrap_node(make_node("Conv", ["X", "Y"], ["Z"],
+        node = wrap_node(make_node('Conv', ['X', 'Y'], ['Z'],
                                    auto_pad='SAME_UPPER', kernel_shape=(6, 6)))
         assert get_pads(node) == (2, 2, 0)

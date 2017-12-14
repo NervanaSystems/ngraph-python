@@ -15,30 +15,31 @@
 
 from __future__ import print_function, division
 
-import onnx
 import pytest
+import onnx
 
-import ngraph as ng
 import numpy as np
+import ngraph as ng
+
+from onnx.helper import make_node, make_graph, make_tensor_value_info, make_model, make_tensor
 from ngraph.frontends.onnx.onnx_importer.model_wrappers import ModelWrapper, GraphWrapper, \
     NodeWrapper, ValueInfoWrapper, TensorWrapper
-from onnx.helper import make_node, make_graph, make_tensor_value_info, make_model, make_tensor
 
 
 @pytest.fixture
 def onnx_model():
-    node = make_node("Abs", ["X"], ["Y"], name="test_node")
-    graph = make_graph([node], "test_graph",
-                       [make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 2])],
-                       [make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 2])],
-                       initializer=[make_tensor("X", onnx.TensorProto.FLOAT, [1, 2], [1, 1])])
-    model = make_model(graph, producer_name="ngraph ONNXImporter")
+    node = make_node('Abs', ['X'], ['Y'], name='test_node')
+    graph = make_graph([node], 'test_graph',
+                       [make_tensor_value_info('X', onnx.TensorProto.FLOAT, [1, 2])],
+                       [make_tensor_value_info('Y', onnx.TensorProto.FLOAT, [1, 2])],
+                       initializer=[make_tensor('X', onnx.TensorProto.FLOAT, [1, 2], [1, 1])])
+    model = make_model(graph, producer_name='ngraph ONNXImporter')
     return model
 
 
 def test_model_wrapper(onnx_model):
     wrapped_model = ModelWrapper(onnx_model)
-    assert wrapped_model.producer_name == "ngraph ONNXImporter"
+    assert wrapped_model.producer_name == 'ngraph ONNXImporter'
     assert wrapped_model.graph.__class__ == GraphWrapper
 
 
@@ -58,9 +59,9 @@ def test_graph_wrapper(onnx_model):
     assert len(wrapped_graph.initializer) == 1
     assert wrapped_graph.initializer[0].__class__ == TensorWrapper
 
-    initializer = wrapped_graph.get_initializer("X")
+    initializer = wrapped_graph.get_initializer('X')
     assert np.all(initializer.to_array() == np.array([[1., 1.]], dtype=np.float32))
-    assert not wrapped_graph.get_initializer("Y")
+    assert not wrapped_graph.get_initializer('Y')
 
     ng_model = wrapped_graph.get_ng_model()[0]
     assert ng_model['output'].__class__ == ng.op_graph.op_graph.AbsoluteOp
@@ -110,10 +111,10 @@ def test_node_wrapper(onnx_model):
 
 def test_attribute_wrapper():
     def attribute_value_test(attribute_value):
-        node = make_node("Abs", ["X"], [], name="test_node", test_attribute=attribute_value)
-        model = make_model(make_graph([node], "test_graph", [
-            make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 2])
-        ], []), producer_name="ngraph")
+        node = make_node('Abs', ['X'], [], name='test_node', test_attribute=attribute_value)
+        model = make_model(make_graph([node], 'test_graph', [
+            make_tensor_value_info('X', onnx.TensorProto.FLOAT, [1, 2]),
+        ], []), producer_name='ngraph')
         wrapped_attribute = ModelWrapper(model).graph.node[0].get_attribute('test_attribute')
         return wrapped_attribute.get_value()
 

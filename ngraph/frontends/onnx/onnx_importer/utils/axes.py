@@ -66,7 +66,7 @@ def rename_axes(input_tensor, output_template):  # type: (TensorOp, str) -> Tens
     return ng.cast_axes(input_tensor, axes=ng.make_axes(output_axes))
 
 
-def reshape_workaround(data, shape_out):
+def reshape_workaround(data, shape_out):  # type: (TensorOp, Sequence[int]) -> TensorOp
     """Limited workaround for tensor reshape operation."""
     shape_in = data.shape.lengths
 

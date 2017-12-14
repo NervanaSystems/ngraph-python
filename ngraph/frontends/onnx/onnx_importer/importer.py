@@ -17,7 +17,7 @@ import onnx
 from ngraph.frontends.onnx.onnx_importer.model_wrappers import ModelWrapper
 
 
-def import_onnx_model(onnx_protobuf):  # type: (ModelProto) -> List[Dict]
+def import_onnx_model(onnx_protobuf):  # type: (onnx.ModelProto) -> List[Dict]
     """
     Import an ONNX Protocol Buffers model and convert it into a list of ngraph operations.
 

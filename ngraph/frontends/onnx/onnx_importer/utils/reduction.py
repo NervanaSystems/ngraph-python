@@ -20,9 +20,7 @@ import ngraph as ng
 
 
 def get_reduction_axes(onnx_node):  # type: (NodeWrapper) -> Axes
-    """
-    Create an ngraph Axes object for a subset of axes to be used in a reduction operation.
-    """
+    """Create an ngraph Axes object for a subset of axes to be used in a reduction operation."""
     input_tensor = onnx_node.get_ng_inputs()[0]
     axes_attribute = onnx_node.get_attribute('axes')
 
@@ -38,7 +36,7 @@ def get_reduction_axes(onnx_node):  # type: (NodeWrapper) -> Axes
 def make_reduction_op(ng_op_type, onnx_node, ng_input):
     # type: (Callable, NodeWrapper, TensorOp) -> Op
     """
-    Create an ngraph Op node for a reduction operation (min, max, sum, etc.)
+    Create an ngraph Op node for a reduction operation (min, max, sum, etc.).
 
     :param ng_op_type: an ngraph reduction factory function such as ng.max, etc.
     :param onnx_node: wrapped ONNX node

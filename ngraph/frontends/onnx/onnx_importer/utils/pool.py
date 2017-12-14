@@ -21,7 +21,7 @@ from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes
 from ngraph.frontends.onnx.onnx_importer.utils.conv import get_pads, get_strides
 
 
-def get_kernel_shape(onnx_node):
+def get_kernel_shape(onnx_node):  # type:  (NodeWrapper) -> Tuple[int, int, int]
     """
     Get shape of kernel (filter) in pixels.
 
@@ -133,7 +133,7 @@ def make_pooling_op(onnx_node, ng_inputs, custom_pool_params=None):
 
 
 def make_global_pooling_op(onnx_node, ng_inputs):
-    # type: (NodeWrapper, List[TensorOp], Dict) -> Op
+    # type: (NodeWrapper, List[TensorOp]) -> Op
     """
     Create a ngraph global pooling operation.
 

@@ -14,7 +14,7 @@
 # ----------------------------------------------------------------------------
 
 
-def split_into_pairs(items):  # type: (Iterable) -> List[Tuple]
+def split_into_pairs(items):  # type: (Sequence) -> List[Tuple]
     """
     Split a list or tuple of items into a list of pairs (tuples).
 
@@ -27,7 +27,7 @@ def split_into_pairs(items):  # type: (Iterable) -> List[Tuple]
 
 
 def verify_symmetric_padding(onnx_node, pads):
-    # type: (NodeWrapper, Optional[Iterable]) -> bool
+    # type: (NodeWrapper, Sequence[int]) -> bool
     """
     Check if the `pads` value of an ONNX node contains only symmetric padding pairs.
 

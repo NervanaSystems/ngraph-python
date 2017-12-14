@@ -23,7 +23,7 @@ from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes
 from ngraph.frontends.onnx.onnx_importer.utils.misc import verify_symmetric_padding
 
 
-def get_pads(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
+def get_pads(onnx_node):  # type: (NodeWrapper) -> Tuple[int, int, int]
     """
     Get padding values for the operation described by an ONNX node.
 
@@ -48,7 +48,7 @@ def get_pads(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
             # SAME_UPPER or SAME_LOWER mean pad the input so that the output size match the input.
             # In case of odd number add the extra padding at the end for SAME_UPPER and at the
             # beginning for SAME_LOWER.
-            def pad_value(kernel_dim):
+            def pad_value(kernel_dim):  # type: (int) -> float
                 return (kernel_dim - 1.0) / 2.0
 
             pads_starts = [floor(pad_value(dim)) if auto_pad == 'SAME_UPPER' else
@@ -68,7 +68,7 @@ def get_pads(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
     return pad_h, pad_w, pad_d
 
 
-def get_strides(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
+def get_strides(onnx_node):  # type: (NodeWrapper) -> Tuple[int, int, int]
     """
     Get number of pixels to stride operation by in each direction.
 
@@ -86,7 +86,7 @@ def get_strides(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
     return str_h, str_w, str_d
 
 
-def get_dilations(onnx_node):  # type: (NodeWrapper) -> (int, int, int)
+def get_dilations(onnx_node):  # type: (NodeWrapper) -> Tuple[int, int, int]
     """
     Get number of pixels for filter dilation in each direction.
 
@@ -168,7 +168,7 @@ def make_convolution_op(onnx_node, ng_inputs, transpose=False):
         x, weights, bias = ng_inputs
     elif len(ng_inputs) == 2:
         x, weights = ng_inputs
-        bias = 0
+        bias = ng.constant(0)
     else:
         raise ValueError('Conv node (%s): unexpected number of input values: %d.',
                          onnx_node.name, len(ng_inputs))

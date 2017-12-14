@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 
 
 def cast_axes_for_binary_broadcast(onnx_node, ng_inputs):
-    # type: (NodeWrapper, List[TensorOp]) -> (TensorOp, TensorOp)
+    # type: (NodeWrapper, List[TensorOp]) -> Tuple[TensorOp, TensorOp]
     """
-    Cast axes of the right operand to make operands compatible for an element-wise binary operation
+    Cast axes of the right operand to make ops compatible for an element-wise binary operation.
 
     Casting is based on `broadcast` and `axis` attributes of an ONNX node.
 
@@ -59,7 +59,8 @@ def cast_axes_for_binary_broadcast(onnx_node, ng_inputs):
     return left, right
 
 
-def cast_axes_for_matmul(ng_input_left, ng_input_right):  # type: (Op, Op) -> (Op, Op)
+def cast_axes_for_matmul(ng_input_left, ng_input_right):
+    # type: (TensorOp, TensorOp) -> Tuple[TensorOp, TensorOp]
     """
     Prepare two ngraph tensors for matrix multiplication by casting axes.
 
@@ -77,7 +78,7 @@ def cast_axes_for_matmul(ng_input_left, ng_input_right):  # type: (Op, Op) -> (O
         # vector @ vector
         # cast to axes: i, icast_axes_for_matmul
         assert left.shape.lengths == right.shape.lengths, \
-            "Vector lengths must be equal for multiplication."
+            'Vector lengths must be equal for multiplication.'
         if left.shape != right.shape:
             right = ng.cast_axes(right, axes=left.axes)
 

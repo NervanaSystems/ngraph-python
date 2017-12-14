@@ -31,7 +31,7 @@ def test_reshape():
     assert np.array_equal(ng_results, [expected_output])
 
 
-@pytest.mark.parametrize("axis,expected_output", [
+@pytest.mark.parametrize('axis,expected_output', [
     (0, np.arange(120).reshape(120)),
     (1, np.arange(120).reshape(2, 60)),
     (2, np.arange(120).reshape(6, 20)),

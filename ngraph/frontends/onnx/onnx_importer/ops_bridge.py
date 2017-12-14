@@ -158,6 +158,11 @@ def Div(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 
 # Matrix multiplication
 def Dot(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    logger.warning('Dot node (%s): Dot operation is deprecated, use MatMul.', onnx_node.name)
+    return MatMul(onnx_node, ng_inputs)
+
+
+def MatMul(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     left, right = cast_axes_for_matmul(*ng_inputs)
     return cast_to_pos_axes(ng.dot(left, right))
 
@@ -236,7 +241,7 @@ def Flatten(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     data = ng_inputs[0]
     axis = onnx_node.get_attribute_value('axis', 1)
 
-    if not (0 <= axis <= len(data.axes)):
+    if axis < 0 or axis > len(data.axes):
         raise ValueError('Flatten node (%s): %d is not a valid value for `axis`.',
                          onnx_node.name, axis)
 

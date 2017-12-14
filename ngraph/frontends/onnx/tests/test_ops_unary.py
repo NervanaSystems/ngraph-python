@@ -30,10 +30,10 @@ def make_onnx_model_for_unary_op(op_type, input_shape, output_shape=None, **node
     if not output_shape:
         output_shape = input_shape
 
-    node = make_node(op_type, ["X"], ["Y"], name="test_node", **node_attrs)
-    graph = make_graph([node], "test_graph",
-                       [make_tensor_value_info("X", onnx.TensorProto.FLOAT, input_shape)],
-                       [make_tensor_value_info("Y", onnx.TensorProto.FLOAT, output_shape)])
+    node = make_node(op_type, ['X'], ['Y'], name='test_node', **node_attrs)
+    graph = make_graph([node], 'test_graph',
+                       [make_tensor_value_info('X', onnx.TensorProto.FLOAT, input_shape)],
+                       [make_tensor_value_info('Y', onnx.TensorProto.FLOAT, output_shape)])
     model = make_model(graph, producer_name='ngraph ONNXImporter')
     return model
 
