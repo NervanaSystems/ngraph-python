@@ -258,7 +258,7 @@ with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transfor
         if device_backend == 'hetr' and args.num_devices > 1:
             feed_dict = {input_ops_train['iteration']: step}
         else:
-            data = train_set.next()
+            data = next(train_set)
             data['iteration'] = step
             feed_dict = {input_ops_train[k]: data[k] for k in input_ops_train.keys()}
         # Learning Schedule
