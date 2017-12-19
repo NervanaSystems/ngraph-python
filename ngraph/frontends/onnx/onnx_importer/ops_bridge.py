@@ -18,6 +18,7 @@ from __future__ import division
 
 import logging
 from string import ascii_letters
+from functools import reduce
 
 import ngraph as ng
 from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes, reshape_workaround, \
@@ -54,6 +55,34 @@ def make_ng_nodes(onnx_node):  # type: (NodeWrapper) -> Tuple[Op]
 # Unary Ops
 def Abs(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     return ng.absolute(ng_inputs[0])
+
+
+def Ceil(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return -ng.floordivide(-ng_inputs[0], 1)
+
+
+def Exp(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.exp(ng_inputs[0])
+
+
+def Floor(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.floordivide(ng_inputs[0], 1)
+
+
+def Log(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.log(ng_inputs[0])
+
+
+def Neg(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.negative(ng_inputs[0])
+
+
+def Reciprocal(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.reciprocal(ng_inputs[0])
+
+
+def Sqrt(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.sqrt(ng_inputs[0])
 
 
 def Sigmoid(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
@@ -135,6 +164,14 @@ def ReduceProd(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> 
     return make_reduction_op(ng.prod, onnx_node, ng_inputs[0])
 
 
+def ArgMin(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return make_reduction_op(ng.argmin, onnx_node, ng_inputs[0])
+
+
+def ArgMax(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return make_reduction_op(ng.argmax, onnx_node, ng_inputs[0])
+
+
 # Binary Ops
 def Add(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
@@ -154,6 +191,27 @@ def Mul(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
 def Div(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
     return ng.divide(left, right)
+
+
+# Variadic Ops
+def Sum(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Calculate element-wise sum of the input tensors."""
+    return reduce(ng.add, ng_inputs)
+
+
+def Min(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Calculate element-wise min of the input tensors."""
+    return reduce(ng.minimum, ng_inputs)
+
+
+def Max(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Calculate element-wise max of the input tensors."""
+    return reduce(ng.maximum, ng_inputs)
+
+
+def Mean(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Calculate element-wise mean of the input tensors."""
+    return reduce(ng.add, ng_inputs) / len(ng_inputs)
 
 
 # Matrix multiplication

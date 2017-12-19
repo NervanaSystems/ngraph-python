@@ -1,19 +1,20 @@
 ## ONNX importer for ngraph
 
-This module will allow users to import and execute models
-serialized using [ONNX](https://github.com/onnx/onnx/) in ngraph.
+This module allows users to import and execute models
+serialized in [ONNX](http://onnx.ai/) using ngraph.
 
-Current support is limited and should be considered a **proof of concept**.
-As more ONNX operations are supported this solution will become viable.
+Current support is limited to the operations listed below.
 
-#### Minimal example
+#### Usage example
+
+If you have a simple model `y = a + b` stored in an ONNX file named `y_equals_a_plus_b.onnx.pb`, you can import it using the following code.
+The `transformer.computation` line creates an executable version of the model.
 
 ```python
-    >>> import onnx
-    >>> from ngraph.frontends.onnx.onnx_importer.importer import import_onnx_model
+    >>> from ngraph.frontends.onnx.onnx_importer.importer import import_onnx_file
 
-    >>> onnx_protobuf = onnx.load('y_equals_a_plus_b.onnx.pb')
-    >>> import_onnx_model(onnx_protobuf)
+    >>> onnx_protobuf = onnx.load()
+    >>> import_onnx_file('y_equals_a_plus_b.onnx.pb')
     [{
         'name': 'Y',
         'inputs': [<AssignableTensorOp(placeholder):4552991464>,
@@ -32,24 +33,35 @@ As more ONNX operations are supported this solution will become viable.
 
 * Abs
 * Add
+* ArgMax
+* ArgMin
 * AveragePool
 * BatchNormalization
+* Ceil
 * Concat
 * Constant
 * Conv
 * ConvTranspose
 * Div
 * Elu
+* Exp
 * Flatten
+* Floor
 * Gemm
 * GlobalAveragePool
 * GlobalMaxPool
 * LeakyRelu
+* Log
 * MatMul
+* Max
 * MaxPool
+* Mean
+* Min
 * Mul
+* Neg
 * PRelu
 * Pad
+* Reciprocal
 * ReduceLogSumExp
 * ReduceMax
 * ReduceMean
@@ -62,10 +74,13 @@ As more ONNX operations are supported this solution will become viable.
 * Sigmoid
 * Slice
 * Split
+* Sqrt
 * Squeeze
 * Sub
+* Sum
 * Tanh
 * Transpose
+
 
 Refer to ONNX docs for the complete
 [operator list](https://github.com/onnx/onnx/blob/master/docs/Operators.md).

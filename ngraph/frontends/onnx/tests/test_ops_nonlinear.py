@@ -15,8 +15,15 @@
 
 from __future__ import print_function, division
 import numpy as np
+import onnx
 
-from ngraph.frontends.onnx.tests.test_ops_unary import import_and_compute
+from ngraph.frontends.onnx.tests.utils import convert_and_calculate
+
+
+def import_and_compute(op_type, input_data, **node_attrs):
+    data_inputs = [np.array(input_data)]
+    node = onnx.helper.make_node(op_type, inputs=['x'], outputs=['y'], **node_attrs)
+    return convert_and_calculate(node, data_inputs, data_inputs).pop()
 
 
 def assert_onnx_import_equals_callable(onnx_op_type, python_function, data, **kwargs):
@@ -55,30 +62,24 @@ def test_leaky_relu():
     def leaky_relu(x, alpha=0.01):
         return np.maximum(alpha * x, 0)
 
-    assert_onnx_import_equals_callable('LeakyRelu', leaky_relu,
-                                       [-2, -1., 0., 1., 2.], alpha=0.5)
+    assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [-2, -1., 0., 1., 2.], alpha=0.5)
     assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [0.])
     assert_onnx_import_equals_callable('LeakyRelu', leaky_relu,
                                        [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1], alpha=1)
-    assert_onnx_import_equals_callable('LeakyRelu', leaky_relu,
-                                       [[1, 2, 3], [4, 5, 6]], alpha=0.2)
-    assert_onnx_import_equals_callable('LeakyRelu', leaky_relu,
-                                       [[-3, -2, -1], [1, 2, 3]])
+    assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [[1, 2, 3], [4, 5, 6]], alpha=0.2)
+    assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [[-3, -2, -1], [1, 2, 3]])
 
 
 def test_parametric_relu():
     def parametic_relu(x, slope=0.01):
         return np.where(x < 0, slope * x, x)
 
-    assert_onnx_import_equals_callable('PRelu', parametic_relu,
-                                       [-2, -1., 0., 1., 2.], slope=0.5)
+    assert_onnx_import_equals_callable('PRelu', parametic_relu, [-2, -1., 0., 1., 2.], slope=0.5)
     assert_onnx_import_equals_callable('PRelu', parametic_relu, [0.])
     assert_onnx_import_equals_callable('PRelu', parametic_relu,
                                        [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1], slope=1)
-    assert_onnx_import_equals_callable('PRelu', parametic_relu,
-                                       [[1, 2, 3], [4, 5, 6]], slope=0.2)
-    assert_onnx_import_equals_callable('PRelu', parametic_relu,
-                                       [[-3, -2, -1], [1, 2, 3]])
+    assert_onnx_import_equals_callable('PRelu', parametic_relu, [[1, 2, 3], [4, 5, 6]], slope=0.2)
+    assert_onnx_import_equals_callable('PRelu', parametic_relu, [[-3, -2, -1], [1, 2, 3]])
 
 
 def test_selu():
@@ -86,15 +87,11 @@ def test_selu():
     def selu(x, alpha=1.6732, gamma=1.0507):
         return np.where(x <= 0, gamma * (alpha * np.exp(x) - alpha), gamma * x)
 
-    assert_onnx_import_equals_callable('Selu', selu,
-                                       [-2, -1., 0., 1., 2.])
+    assert_onnx_import_equals_callable('Selu', selu, [-2, -1., 0., 1., 2.])
     assert_onnx_import_equals_callable('Selu', selu, [0.])
-    assert_onnx_import_equals_callable('Selu', selu,
-                                       [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1])
-    assert_onnx_import_equals_callable('Selu', selu,
-                                       [[1, 2, 3], [4, 5, 6]])
-    assert_onnx_import_equals_callable('Selu', selu,
-                                       [-2, -1., 0., 1., 2.], gamma=0.5, alpha=0.5)
+    assert_onnx_import_equals_callable('Selu', selu, [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1])
+    assert_onnx_import_equals_callable('Selu', selu, [[1, 2, 3], [4, 5, 6]])
+    assert_onnx_import_equals_callable('Selu', selu, [-2, -1., 0., 1., 2.], gamma=0.5, alpha=0.5)
 
 
 def test_elu():
@@ -102,12 +99,8 @@ def test_elu():
     def elu(x, alpha=1):
         return np.where(x < 0, alpha * (np.exp(x) - 1), x)
 
-    assert_onnx_import_equals_callable('Elu', elu,
-                                       [-2, -1., 0., 1., 2.])
+    assert_onnx_import_equals_callable('Elu', elu, [-2, -1., 0., 1., 2.])
     assert_onnx_import_equals_callable('Elu', elu, [0.])
-    assert_onnx_import_equals_callable('Elu', elu,
-                                       [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1])
-    assert_onnx_import_equals_callable('Elu', elu,
-                                       [[1, 2, 3], [4, 5, 6]])
-    assert_onnx_import_equals_callable('Elu', elu,
-                                       [-2, -1., 0., 1., 2.], alpha=0.5)
+    assert_onnx_import_equals_callable('Elu', elu, [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1])
+    assert_onnx_import_equals_callable('Elu', elu, [[1, 2, 3], [4, 5, 6]])
+    assert_onnx_import_equals_callable('Elu', elu, [-2, -1., 0., 1., 2.], alpha=0.5)

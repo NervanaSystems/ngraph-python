@@ -22,13 +22,15 @@ import ngraph as ng
 def get_reduction_axes(onnx_node):  # type: (NodeWrapper) -> Axes
     """Create an ngraph Axes object for a subset of axes to be used in a reduction operation."""
     input_tensor = onnx_node.get_ng_inputs()[0]
-    axes_attribute = onnx_node.get_attribute('axes')
+    attribute_axes = onnx_node.get_attribute_value('axes')
+    attribute_axis = onnx_node.get_attribute_value('axis')
 
-    if axes_attribute is None:
-        ng_reduction_axes = input_tensor.axes
+    if attribute_axes is not None:
+        ng_reduction_axes = ng.make_axes([input_tensor.axes[ind] for ind in attribute_axes])
+    elif attribute_axis is not None:
+        ng_reduction_axes = ng.make_axes((input_tensor.axes[attribute_axis],))
     else:
-        ng_reduction_axes = ng.make_axes([input_tensor.axes[ind] for ind in
-                                          axes_attribute.get_value()])
+        ng_reduction_axes = input_tensor.axes
 
     return ng_reduction_axes
 
