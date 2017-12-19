@@ -193,6 +193,47 @@ def Div(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     return ng.divide(left, right)
 
 
+# Logical ops
+def Equal(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.equal(left, right)
+
+
+def Less(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.less(left, right)
+
+
+def Greater(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    return ng.greater(left, right)
+
+
+def And(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    left = ng.not_equal(left, 0)
+    right = ng.not_equal(right, 0)
+    return left * right
+
+
+def Or(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    left = ng.not_equal(left, 0)
+    right = ng.not_equal(right, 0)
+    return (left + right) > 0
+
+
+def Xor(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    left, right = cast_axes_for_binary_broadcast(onnx_node, ng_inputs)
+    left = ng.not_equal(left, 0)
+    right = ng.not_equal(right, 0)
+    return (left + right) % 2
+
+
+def Not(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    return ng.equal(ng_inputs[0] + 1, 1)
+
+
 # Variadic Ops
 def Sum(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     """Calculate element-wise sum of the input tensors."""
