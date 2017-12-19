@@ -1,13 +1,14 @@
 import pytest
 import numpy as np
+from collections import OrderedDict
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
 from ngraph.testing import executor
 from ngraph.frontends.common import utils
 from ngraph.op_graph.axes import IncompatibleAxesError
-from ngraph.frontends.neon import Convolution, Deconvolution
-from ngraph.frontends.neon import ConstantInit, Rectlin, GaussianInit
+from ngraph.frontends.neon import Convolution, Deconvolution, Sequential
+from ngraph.frontends.neon import ConstantInit, Rectlin, GaussianInit, make_bound_computation
 
 
 def reference_conv1d(inputs, filters, activation, strides=1, padding=0):
@@ -145,6 +146,51 @@ def test_alternate_channel_axes(conv1d_placeholder, output_size, channel_axis):
         conv_layer(conv1d_placeholder)
     output = conv_layer(conv1d_placeholder, channel_axes="channel")
     assert output.axes == conv1d_placeholder.axes
+
+
+@pytest.mark.parametrize('dilation', [1, 2, 3])
+def test_dilated_conv(dilation):
+    """Test that the dilated convolution layer output matches expected. This test compares
+    the maximum output value to an expected max output value. The expected value is computed
+    based on the dilation parameter. The test also checks that the output size matches the
+    expected size based on the dilaton parameter value."""
+    image_size = 3
+    batch_size = 1
+    init_val = 0.1
+    conv_size = 3
+    pad = 3
+    N_filters = 1
+    image_channels = 3
+    model = Sequential([Convolution((conv_size, conv_size, N_filters),
+                                    filter_init=ConstantInit(val=init_val),
+                                    padding=pad, dilation=dilation)])
+    X = np.ones(shape=(batch_size, 3, image_size, image_size))  # Create dummy image
+    data = {'image': X, 'iteration': 1}
+    data_size = OrderedDict([('N', batch_size), ('C', 3), ('H', image_size), ('W', image_size)])
+    ax = [ng.make_axis(length=data_size[k], name=k) for k in list(data_size.keys())]
+    p_axes = ng.make_axes(ax)
+    named_inputs = {'image': ng.placeholder(p_axes)}
+    outputs = model(named_inputs['image'])
+    named_outputs = {outputs.name: outputs}
+    with closing(ngt.make_transformer()) as transformer:
+        m = make_bound_computation(transformer, named_outputs, named_inputs)
+    output = m(data)[list(m(data).keys())[0]]
+    filter_size = dilation * (conv_size - 1) + 1  # Compute expected filter size
+    # Compute the expected output size based on convolution parameters
+    out_size = (image_size + 2 * pad - filter_size) + 1
+    filt_tmp = np.zeros(filter_size)
+    filt_tmp[0::dilation] = 1
+    # max overlap between dilated filter and image (in 1-d)
+    max_overlap = int(np.min([filter_size, image_size]))
+    exp_max_output = init_val * image_channels * (np.sum(filt_tmp[0: max_overlap]))**2
+    # Expected max output changes for different dilation parameter values#
+    assert int(10 * np.max(output)) == int(10 * exp_max_output), \
+        ("Dilated conv max outputs do not match expected: "
+         "{} != {}").format(np.max(output),
+                            init_val * conv_size * ((image_size - (dilation - 1))**2))
+    assert np.shape(output) == (batch_size, N_filters, out_size, out_size), \
+        ("Dilated conv output is not expected size: "
+         "{} != {}").format(np.shape(output), (batch_size, N_filters, out_size, out_size))
 
 
 @pytest.config.argon_disabled(reason="Argon Transformer error")  # TODO triage
