@@ -18,10 +18,18 @@ from collections import defaultdict
 from orderedset import OrderedSet
 
 from ngraph.op_graph.op_graph import as_op, ReturnOp, LiteralScalarOp
+from ngraph.op_graph.comm_nodes import CPUMlslGatherRecvOp, CPUMlslScatterRecvOp
 
 import numpy as np
 import logging
 
+import os
+try:
+    # Python 2
+    from Queue import PriorityQueue
+except ImportError:
+    # Python 3
+    from queue import PriorityQueue
 
 logger = logging.getLogger(__name__)
 
@@ -685,6 +693,15 @@ class ExOpBlock(ExecutionGraphElt):
         parents = defaultdict(OrderedSet)
         ready = OrderedSet()
 
+        # Setting the environmental variable below to 0 can be used to disable toposort
+        # with priorities and switch to naive algo in case something went wrong unexpectedly
+        algo_num = int(os.getenv('NGRAPH_TOPOSORT_ALGO', 1))
+        pqueue = PriorityQueue()
+        op_counter = 0
+        wait_order = 100000
+        std_order = 2
+        start_order = 1
+
         # Some ops in roots may have been replaced by other ops; if so, they
         # are in the graph already, although maybe not in this block. Get the
         # op from the exop so we have the current version.
@@ -696,33 +713,77 @@ class ExOpBlock(ExecutionGraphElt):
 
         while available:
             op = available.pop()
+            if algo_num > 0:
+                if 'priority' in op.metadata:
+                    if op.metadata['priority'] == 'high':
+                        op.metadata['order'] = start_order
+                    else:
+                        op.metadata['order'] = wait_order
+                elif 'order' not in op.metadata:
+                    op.metadata['order'] = std_order
             if op in counts or op in self.all_ops:
                 continue
 
             nchildren = 0
-            for child in op.all_deps:
+
+            op_deps = op.all_deps
+            if (isinstance(op, CPUMlslGatherRecvOp) or
+                    isinstance(op, CPUMlslScatterRecvOp)) and op.send_node() in available:
+                op_deps.add(op.send_node())
+            for child in op_deps:
                 exop = self.computation_decl.get_exop(child, None)
                 if exop is not None:
                     child = exop.op
                 if child not in self.all_ops:
                     parents[child].add(op)
                     available.add(child)
+                    if algo_num > 0:
+                        ch_order = child.metadata['order'] if 'order' in child.metadata else -1
+                        new_order = op.metadata['order'] + 1
+                        if 'priority' not in child.metadata and \
+                                ('order' not in child.metadata or new_order < ch_order):
+                            child.metadata['order'] = new_order
                     nchildren += 1
             if nchildren > 0:
                 counts[op] = nchildren
             else:
-                ready.add(op)
+                if op not in ready:
+                    ready.add(op)
+                    if algo_num > 0:
+                        op_counter = op_counter - 1
+                        pqueue.put((op.metadata['order'], op_counter, op))
 
-        while ready:
-            op = ready.pop()
-            after_exop = self.add_op(op, after_exop=after_exop)
-            for p in parents.get(op, []):
-                count = counts[p] - 1
-                if count == 0:
-                    ready.add(p)
-                    del counts[p]
-                else:
-                    counts[p] = count
+        if algo_num == 0:
+            while ready:
+                op = ready.pop()
+                after_exop = self.add_op(op, after_exop=after_exop)
+                for p in parents.get(op, []):
+                    count = counts[p] - 1
+                    if count == 0:
+                        ready.add(p)
+                        del counts[p]
+                    else:
+                        counts[p] = count
+
+        else:
+            while len(pqueue.queue) > 0:
+                _, _, op = pqueue.get()
+                after_exop = self.add_op(op, after_exop=after_exop)
+                for p in parents.get(op, []):
+                    count = counts[p] - 1
+                    if count == 0:
+                        op_counter = op_counter - 1
+                        # Shouldn't happen, but we have a way to get back to naive scheduling
+                        assert 'order' in p.metadata, \
+                            "Something went wrong with the scheduling. \
+                                 Please try NGRAPH_TOPOSORT_ALGO=0"
+                        if p.metadata['order'] == wait_order:
+                            pqueue.put((p.metadata['order'], int(-op_counter), p))
+                        else:
+                            pqueue.put((p.metadata['order'], op_counter, p))
+                        del counts[p]
+                    else:
+                        counts[p] = count
         if len(counts) > 0:
             raise ValueError("Graph not a DAG")
 

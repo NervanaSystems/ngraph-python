@@ -418,6 +418,7 @@ class CPUMlslAllReduceStartOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
                                                       dtype=input_node.dtype,
                                                       func=func)
         self._req = [None]  # use mutable field to share it between start and wait ops
+        self.metadata['priority'] = 'high'
 
     @property
     def req(self):
@@ -445,6 +446,7 @@ class CPUMlslAllReduceWaitOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
         self._args = tuple([])
         self.add_control_dep(start_node)
         self._req = start_node._req
+        self.metadata['priority'] = 'low'
 
     @property
     def req(self):
