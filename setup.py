@@ -14,6 +14,7 @@
 # ----------------------------------------------------------------------------
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext as _build_ext
+import sys
 import sysconfig
 import os
 
@@ -46,11 +47,16 @@ class build_ext(_build_ext):
 ext_modules = []
 if "MKLDNN_ROOT" in os.environ:
     MKLDNNROOT=os.environ['MKLDNN_ROOT']
+    if sys.platform == 'darwin':
+        extra_link_args = ["-Wl,-rpath,%s/lib"%(MKLDNNROOT)]
+    else:
+        extra_link_args = ["-shared", "-Wl,-rpath,%s/lib"%(MKLDNNROOT)]
     ext_modules.append(Extension('mkldnn_engine',
                         include_dirs = ['%s/include'%(MKLDNNROOT)],
 			extra_compile_args = ["-std=gnu99"],
-                        extra_link_args = ["-shared", "-lmkldnn", "-Wl,-rpath,%s/lib"%(MKLDNNROOT)],
+                        extra_link_args = extra_link_args,
                         library_dirs = ['%s/lib'%(MKLDNNROOT)],
+                        libraries = ['mkldnn'],
                         sources = ['ngraph/transformers/cpu/convolution.c', \
                                    'ngraph/transformers/cpu/elementwise.c', \
                                    'ngraph/transformers/cpu/innerproduct.c', \

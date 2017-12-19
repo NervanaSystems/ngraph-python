@@ -451,7 +451,7 @@ void create_mkldnn_reorder_kernel(mkldnn_engine_t engine, int ndims, int *dims,
   opkernel->net[opkernel->net_size++] = opkernel->op_prim;
 }
 
-void *alloc_aligned_memory(void **buf, size_t size,
+void alloc_aligned_memory(void **buf, size_t size,
                            mkldnn_data_type_t data_type, size_t alignment) {
   size_t size_to_alloc;
   switch (data_type) {

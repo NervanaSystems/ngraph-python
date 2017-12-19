@@ -21,6 +21,9 @@
 
 size_t product(int *arr, size_t size);
 
+void alloc_aligned_memory(void **buf, size_t size,
+                           mkldnn_data_type_t data_type, size_t alignment);
+
 void* alloc_memory(size_t size, mkldnn_data_type_t data_type);
 
 void set_mkl_dimensions(char *primitive_name, int *primitive_src_sizes,

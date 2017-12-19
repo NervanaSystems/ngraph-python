@@ -250,23 +250,25 @@ mkldnn_primitive_t mkldnn_memory_prim_bias;
 
   const_mkldnn_primitive_t ip_dsts[] = {mkldnn_memory_prim_dst};
 
-  mkldnn_primitive_at_t ip_srcs[3];
   if (bias_sizes)
   {
+    mkldnn_primitive_at_t ip_srcs[3];
     /* create a convolution primitive */
     ip_srcs[0] = mkldnn_primitive_at(mkldnn_memory_prim_weights, 0);
     ip_srcs[1] = mkldnn_primitive_at(mkldnn_memory_prim_src, 0);
     ip_srcs[2] = mkldnn_primitive_at(mkldnn_memory_prim_bias, 0); 
+    MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc,
+                                      ip_srcs, ip_dsts));
   }
   else
   {
     mkldnn_primitive_at_t ip_srcs[] = {
         mkldnn_primitive_at(mkldnn_memory_prim_weights, 0),
         mkldnn_primitive_at(mkldnn_memory_prim_src, 0)};
+    MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc,
+                                      ip_srcs, ip_dsts));
   }
 
-  MKL_CHECK(mkldnn_primitive_create(&opkernel->op_prim, opkernel->op_desc,
-                                    ip_srcs, ip_dsts));
 
   if (opkernel->reorder_i[0])
     opkernel->net[opkernel->net_size++] = opkernel->reorder_i[0];
