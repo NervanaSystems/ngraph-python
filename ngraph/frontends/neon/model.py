@@ -138,6 +138,15 @@ class Container(object):
 class BoundComputation(object):
     """
     Callable object that has inputs and outputs of a computation bound via names
+
+    This class allows to define the computation using named inputs and outputs.
+    Inputs are then provided as a dictionary and outputs are returned as a
+    dictionary.
+
+    Arguments:
+        transformer (object): Transformer object defined in the model
+        named_outputs (dict): Output entities wanted for the computation
+        named_inputs (dict): Input entities needed for the computation
     """
     def __init__(self, transformer, named_outputs, named_inputs):
         self.input_keys = tuple(sorted(named_inputs.keys()))
@@ -161,6 +170,26 @@ class BoundComputation(object):
 
 
 def make_bound_computation(transformer, named_outputs, named_inputs):
+    """
+    Creates a `BoundComputation` instance that takes named input arrays
+    and returns named output arrays.
+
+    Arguments:
+        transformer (object): Transformer object defined in the model
+        named_outputs (dict): Output entities wanted for the computation
+        named_inputs (dict): Input entities needed for the computation
+
+    Example:
+        .. code-block:: python
+        # inputs is a dictionary of placeholders
+        train_outputs = {'batch_cost': mean_cost, 'updates': updates}
+        train_inputs = {'mini_batch': inputs['input_data']}
+        train_computation = make_bound_compuation(transformer,
+                                                  train_outputs,
+                                                  train_inputs)
+        output_dict = train_computation({"minibatch": 0})
+    """
+
     return BoundComputation(transformer, named_outputs, named_inputs)
 
 

@@ -1271,9 +1271,19 @@ class BatchNorm(Layer):
 class Dropout(Layer):
     """
     Layer for stochastically dropping activations to prevent overfitting
-    Args:
+
+    Arguments:
         keep (float):  Number between 0 and 1 that indicates probability of any particular
-                       activation being dropped.  Default 0.5.
+                       activation being kept.  Defaults to 0.5.
+
+    Example:
+        .. code-block:: python
+        # Place a Dropout layer between two affine layers
+        layers = [
+            Affine(nout=2048, activation=Rectlin()),
+            Dropout(keep=0.6),
+            Affine(nout=2048, activation=Rectlin())
+        ]
     """
     def __init__(self, keep=0.5, **kwargs):
         super(Dropout, self).__init__(**kwargs)

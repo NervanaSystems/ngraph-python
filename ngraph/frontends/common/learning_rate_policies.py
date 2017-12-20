@@ -66,6 +66,19 @@ class lr_policy_step(lr_policy):
 
 class lr_policy_schedule(lr_policy):
     """
+
+    Implements learning rate change based a predetermined schedule
+
+    Required Arguments:
+        name(string): Name of the learning rate schedule
+        base_lr(float): Initial learning rate
+        gamma(float, list): Multiplicative factor to use when scaling the
+                            learning rate. Learning rate will be multiplied
+                            by this factor at each trigger point determined
+                            by the schedule
+        schedule(list): Each point in this list will act as the trigger point
+                        to adjust the learning accoring to gamma value
+
     This learning policy allows you to provide a learning rate schedule, gamma and
     base learning rate.
     Learning rate drops at the provided iteration by multiplying with the gamma.
@@ -77,6 +90,12 @@ class lr_policy_schedule(lr_policy):
                             'schedule': [1000, 2000],
                             'gamma': 0.1,
                             'base_lr': 0.1}
+
+    optimizer = GradientDescentMomentum(
+        learning_rate=learning_rate_policy,
+        momentum_coef=0.9,
+        wdecay=0.005,
+        iteration=inputs['iteration'])
     """
     req_args = ('name', 'base_lr', 'gamma', 'schedule')
 

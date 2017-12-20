@@ -36,7 +36,8 @@ except ImportError:
 
 NAME_MAP = {"channels": "C",
             "height": "H",
-            "width": "W"}
+            "width": "W",
+            "frames": "D"}
 """Converts aeon axis names to canonical ngraph axis types."""
 
 

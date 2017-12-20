@@ -46,6 +46,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
         """
         Setup the default arguments used by ngraph
         """
+
         self.add_argument('-c', '--config', is_config_file=True,
                           help='Read values for these arguments from the '
                                'configuration file specified here first.')
@@ -56,27 +57,50 @@ class NgraphArgparser(configargparse.ArgumentParser):
         self.add_argument('--no_progress_bar',
                           action="store_true",
                           help="suppress running display of progress bar")
-        self.add_argument('-w', '--data_dir',
-                          default=os.path.join(self.work_dir, 'data'),
-                          help='working directory in which to cache '
-                               'downloaded and preprocessed datasets')
-        self.add_argument('-o', '--output_file',
-                          default=self.defaults.get('output_file', 'output.hdf5'),
-                          help='hdf5 data file for metrics computed during '
-                               'the run, optional.  Can be used by nvis for '
-                               'visualization.')
 
-        self.add_argument('-z', '--batch_size', type=int, default=128)
-        self.add_argument('-b', '--backend',
-                          choices=self.backend_names(),
-                          default='cpu',
-                          help='backend type')
-        self.add_argument('-t', '--num_iterations', type=int, default=2000)
-        self.add_argument('--iter_interval', type=int, default=200)
-        self.add_argument('-r', '--rng_seed', type=int,
-                          default=self.defaults.get('rng_seed', None),
-                          metavar='SEED',
-                          help='random number generator seed')
+        # runtime specific arguments
+        rt_grp = self.add_argument_group('runtime')
+
+        rt_grp.add_argument('-w', '--data_dir',
+                            default=os.path.join(self.work_dir, 'data'),
+                            help='working directory in which to cache '
+                                 'downloaded and preprocessed datasets')
+        rt_grp.add_argument('-o', '--output_file',
+                            default=self.defaults.get('output_file', 'output.hdf5'),
+                            help='hdf5 data file for metrics computed during '
+                                 'the run, optional.  Can be used by nvis for '
+                                 'visualization.')
+        rt_grp.add_argument('-t', '--num_iterations', type=int, default=2000)
+        rt_grp.add_argument('--iter_interval', type=int, default=200)
+        rt_grp.add_argument('-e', '--epochs', type=int,
+                            default=self.defaults.get('epochs', 10),
+                            help='number of complete passes over the dataset to run')
+        rt_grp.add_argument('--manifest', action='append', help="manifest files")
+        rt_grp.add_argument('--manifest_root', type=str, default=None,
+                            help='Common root path for relative path items in the '
+                            'supplied manifest files')
+        rt_grp.add_argument('-eval', '--eval_freq', type=int,
+                            default=self.defaults.get('eval_freq', None),
+                            help='frequency (in epochs) to test the eval set.')
+        rt_grp.add_argument('-l', '--log', dest='logfile', nargs='?',
+                            const=os.path.join(self.work_dir, 'neon_log.txt'),
+                            help='log file')
+        rt_grp.add_argument('-s', '--save_path', type=str,
+                            default=self.defaults.get('save_path'),
+                            help='file path to save model snapshots')
+
+        # backend specific arguments
+        be_grp = self.add_argument_group('backend')
+
+        be_grp.add_argument('-z', '--batch_size', type=int, default=128)
+        be_grp.add_argument('-b', '--backend',
+                            choices=self.backend_names(),
+                            default='cpu',
+                            help='backend type')
+        be_grp.add_argument('-r', '--rng_seed', type=int,
+                            default=self.defaults.get('rng_seed', None),
+                            metavar='SEED',
+                            help='random number generator seed')
 
         FlexNgraphArgparser.setup_flex_args(self)
 
@@ -91,7 +115,7 @@ class NgraphArgparser(configargparse.ArgumentParser):
 
     def make_and_set_transformer_factory(self, args):
         if args.backend == flex_gpu_transformer_name:
-                FlexNgraphArgparser.make_and_set_transformer_factory(args)
+            FlexNgraphArgparser.make_and_set_transformer_factory(args)
         else:
             factory = ngt.make_transformer_factory(args.backend)
             ngt.set_transformer_factory(factory)
