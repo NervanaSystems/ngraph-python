@@ -4285,7 +4285,7 @@ class DerivOp(ValueOp):
 
         # add hetr metadata to the deriv op
         # should be allreduced across data-parallel workers
-        self.value_tensor.metadata['reduce_func'] = 'sum'
+        self.value_tensor.metadata['reduce_func'] = 'mean'
 
 
 def deriv(dependent, independent, error=None):
