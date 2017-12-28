@@ -910,7 +910,7 @@ def gpu_layout_factory(op):
     elif isinstance(op, (GPUCudaSendOp, GPUCudaRecvOp)):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaScatterRecvOp, GPUCudaGatherRecvOp)):
-        return GPULayoutAssignment.generate_comms_layout(op, 3)
+        return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, GPUCudaGatherSendOp):
         return GPULayoutAssignment.generate_default_layout(op.axes, 3)
     elif isinstance(op, (GPUCudaAllReduceOp)):
@@ -968,8 +968,8 @@ def gpu_constraint_factory(op, arg):
         return GPUBinaryLayoutConstraint(op, arg)
     elif isinstance(op, (GPUCudaSendOp, GPUCudaRecvOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
-    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp)):
-        return GPUCommsLayoutConstraint(op, arg)
+    elif isinstance(op, (GPUCudaScatterSendOp, GPUCudaGatherSendOp, GPUCudaGatherRecvOp)):
+        return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, (GPUCudaAllReduceOp)):
         return GPUFixedLayoutConstraint(op, arg, arg.axes)
     elif isinstance(op, CTCOp):

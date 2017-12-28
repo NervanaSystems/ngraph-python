@@ -41,7 +41,7 @@ from ngraph.op_graph.debug import PrintOp
 from ngraph.transformers.cpu.batchnorm import BatchnormOp, BpropBatchnormOp
 from ngraph.transformers.cpu.relu import ReluOp, BpropReluOp
 from ngraph.transformers.passes.passes import RequiredTensorShaping, \
-    CPUTensorShaping, SimplePrune
+    CPUTensorShaping, SimplePrune, HeTrTensorShaping
 from ngraph.transformers.passes.cpulayout import CPUTensorLayout
 from ngraph.transformers.passes.cpufusion import CPUFusion
 from ngraph.transformers.passes.mkldnnpasses import MklCreateOpDescriptors, \
@@ -780,12 +780,13 @@ class CPUCodeGenerator(PyGen):
         self.append("self.mlsl_gather_send({}, {})", gather_send_id, arg)
 
     @generate_op.on_type(CPUMlslGatherRecvOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, arg):
         if self.skip_comm_ops:
             return
         gather_recv_id = len(self.gather_recv_nodes)
         self.gather_recv_nodes.append(op)
-        self.append("self.gather_recv_from_mlsl_gather_send({}, out={})", gather_recv_id, out)
+        self.append("self.gather_recv_from_mlsl_gather_send\
+                    ({}, {}, out={})", gather_recv_id, arg, out)
 
     @generate_op.on_type(CPUMlslScatterSendOp)
     def generate_op(self, op, out, arg):
@@ -902,6 +903,7 @@ class CPUTransformer(ExecutionGraphTransformer):
             self.byte_alignment = 64
         self.graph_passes += [
             # ExVizPass(view=True, filename="initial"),
+            HeTrTensorShaping(),
             CPUTensorLayout(),
             SimplePrune(),
             RequiredTensorShaping(),

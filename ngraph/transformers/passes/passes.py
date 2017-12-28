@@ -25,6 +25,8 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
     PatternLabelOp, PatternSkipOp
 from ngraph.transformers.passes.opdelegate import DelegateOpAccessor
+from ngraph.op_graph.comm_nodes import CPUMlslGatherSendOp, CPUMlslScatterSendOp, \
+    GatherWrapperOp, CPUMlslGatherRecvOp
 
 from ngraph.util.generics import generic_method
 
@@ -397,6 +399,78 @@ class RequiredTensorShaping(PeepholeGraphPass):
             out = ReorderAxes(out, out_axes)
 
         self.replace_op(op, out)
+
+
+class HeTrTensorShaping(PeepholeGraphPass):
+    """
+    Pass to reorder the axes layout of HeTr Communication ops.
+    This reordering is relevant when the parallel axis (axis to split across devices)
+    is not the least contiguous axis (first axis)
+    """
+
+    @generic_method(dispatch_base_type=Op)
+    def visit(self, op, *args):
+        pass
+
+    @visit.on_type(CPUMlslScatterSendOp)
+    def visit(self, op, arg):
+        p_axis = arg.axes.find_by_name(op.metadata['parallel'].name)
+        assert len(p_axis) > 0, "Invalid to scatter a scalar"
+        if arg.axes.index(p_axis[0]) > 0:
+            arg = axes_with_order(arg, p_axis + (arg.axes - p_axis))
+            arg = flatten_at(arg, 0)
+            arg = unflatten(arg)
+
+            # replace the ops
+            new_op = op.copy_with_new_args([arg])
+            self.replace_op(op, new_op)
+
+    @visit.on_type(CPUMlslGatherSendOp)
+    def visit(self, op, arg):
+        p_axis = arg.axes.find_by_name(op.metadata['parallel'].name)
+        if len(p_axis) == 0:
+            pass
+
+        elif arg.axes.index(p_axis[0]) > 0:
+            arg = axes_with_order(arg, p_axis + (arg.axes - p_axis))
+            arg = flatten_at(arg, 0)
+            arg = unflatten(arg)
+
+            # replace the ops
+            new_op = op.copy_with_new_args([arg])
+            self.replace_op(op, new_op)
+
+    @visit.on_type(CPUMlslGatherRecvOp)
+    def visit(self, op, arg):
+        p_axis = arg.axes.find_by_name(op.send_node().metadata['parallel'].name)
+        if len(p_axis) == 0:
+            pass
+
+        elif arg.axes.index(p_axis[0]) > 0:
+            arg = axes_with_order(arg, p_axis + (arg.axes - p_axis))
+            arg = flatten_at(arg, 0)
+            arg = unflatten(arg)
+
+            # replace the ops
+            new_op = op.copy_with_new_args([arg])
+            self.replace_op(op, new_op)
+
+    @visit.on_type(GatherWrapperOp)
+    def visit(self, op, arg):
+        if 'parallel' not in arg.metadata:
+            return
+
+        p_axis = op.axes.find_by_name(arg.metadata['parallel'].name)
+        if len(p_axis) == 0:
+            self.replace_op(op, arg)
+
+        elif op.axes.index(p_axis[0]) > 0:
+            arg = axes_with_order(arg, op.axes)
+            arg = flatten_at(arg, 0)
+            arg = unflatten(arg)
+
+            # replace the ops
+            self.replace_op(op, arg)
 
 
 class CPUTensorShaping(PeepholeGraphPass):

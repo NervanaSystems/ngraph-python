@@ -48,7 +48,7 @@ from ngraph.op_graph.lookuptable import LookupTableOp, update_lut
 from ngraph.op_graph.ctc import CTCOp
 from ngraph.util.generics import generic_method
 
-from ngraph.transformers.passes.passes import SimplePrune
+from ngraph.transformers.passes.passes import SimplePrune, HeTrTensorShaping
 from ngraph.transformers.passes.gpusimplification import GPUSubstitution
 from ngraph.transformers.passes.layout import GenerateLayoutDomains, GenerateLayoutConstraints, \
     AssignLayouts, AddLayoutConversions, PruneContiguousPass
@@ -1058,7 +1058,8 @@ class GPUTransformer(ComputationGraphTransformer):
         layout_assign_pass = AssignLayouts(layout_domain_pass, layout_constraints_pass)
         layout_convert_pass = AddLayoutConversions(layout_assign_pass)
 
-        self.graph_passes = [SimplePrune(), PruneContiguousPass(), GPUSubstitution(),
+        self.graph_passes = [HeTrTensorShaping(), SimplePrune(),
+                             PruneContiguousPass(), GPUSubstitution(),
                              layout_domain_pass, layout_constraints_pass, layout_assign_pass,
                              layout_convert_pass]  # , VizPass(show_metadata="layout")]
 

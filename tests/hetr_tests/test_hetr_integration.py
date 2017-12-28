@@ -194,34 +194,100 @@ def test_comm_broadcast_op(hetr_device):
     x = ng.placeholder(axes=[N, H])
     # w will be broadcasted to devices
     w = ng.placeholder(axes=[H, weight])
-    with ng.metadata(device_id=('0', '1'), parallel=N):
+    with ng.metadata(device=hetr_device, device_id=('0', '1'), parallel=N):
         dot = ng.dot(x, w)
 
     np_x = np.random.randint(100, size=[N.length, H.length])
     np_weight = np.random.randint(100, size=[H.length, weight.length])
-    with ExecutorFactory() as ex:
-        computation = ex.executor(dot, x, w)
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(dot, x, w)
         res = computation(np_x, np_weight)
         np.testing.assert_array_equal(res, np.dot(np_x, np_weight))
 
 
-def test_distributed_dot_parallel_second_axis():
-    pytest.xfail("'parallel' for not first axis isn't supported yet")
+@pytest.mark.multi_device
+def test_reduce_scalar(hetr_device):
+    """
+    A scalar is produced by sum() on each worker
+    in this case, should be mean reduced before being returned
+    """
+    if hetr_device == 'gpu':
+        pytest.xfail("gather/reduce work-around for gpus does not choose between mean or sum,\
+        it uses only the value on the first device and ignores the values on other devices")
+
+    N = ng.make_axis(length=8, name='batch')
+    x = ng.placeholder(axes=[N])
+    with ng.metadata(device=hetr_device, device_id=('0', '1'), parallel=N):
+        out = ng.sum(x)
+
+    np_x = np.random.randint(100, size=[N.length])
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(out, x)
+        res = computation(np_x)
+
+        # gather returns one element per worker
+        np.testing.assert_array_equal(res, np.sum(np_x) / 2.)
+
+
+@pytest.mark.multi_device
+def test_reduce_vector(hetr_device):
+    """
+    A whole vector is produced on each worker and should be reduced
+    before being returned, but not along its axes since it
+    does not have the parallel axis in its axes
+    """
+    if hetr_device == 'gpu':
+        pytest.xfail("broadcast communication ops not yet supported on gpus")
 
     H = ng.make_axis(length=4, name='height')
     N = ng.make_axis(length=8, name='batch')
     weight = ng.make_axis(length=2, name='weight')
+    x = ng.placeholder(axes=[N, H])
+    w = ng.placeholder(axes=[H, weight])
+    with ng.metadata(device=hetr_device, device_id=('0', '1'), parallel=N):
+        dot = ng.dot(x, w)
+        out = ng.sum(dot, N)
+
+    np_x = np.random.randint(100, size=[N.length, H.length])
+    np_weight = np.random.randint(100, size=[H.length, weight.length])
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation(out, x, w)
+        res = computation(np_x, np_weight)
+        # TODO should the reduce infer a sum or mean?
+        expected = np.sum(np.dot(np_x, np_weight), 0) / 2.
+        np.testing.assert_array_equal(res, expected)
+
+
+@pytest.mark.multi_device
+def test_distributed_dot_parallel_second_axis(hetr_device):
+    if hetr_device == 'gpu':
+        pytest.xfail("Axes Layout needs to be fixed for GPUs after changes to make\
+        parallel_axis the least contiguous axis for scatter/gather communication ops")
+
+    H = ng.make_axis(length=6, name='height')
+    N = ng.make_axis(length=8, name='batch')
+    W1 = ng.make_axis(length=2, name='W1')
+    W2 = ng.make_axis(length=4, name='W2')
     x = ng.placeholder(axes=[H, N])
-    w = ng.placeholder(axes=[weight, H])
-    with ng.metadata(device_id=('0', '1'), parallel=N):
-        dot = ng.dot(w, x)
+    w2 = ng.placeholder(axes=[W2, W1])
+    with ng.metadata(device=hetr_device, device_id=('0', '1'), parallel=N):
+        w1 = ng.placeholder(axes=[W1, H])
+        dot1 = ng.dot(w1, x).named("dot1")
+    dot2 = ng.dot(w2, dot1).named("dot2")
 
     np_x = np.random.randint(100, size=[H.length, N.length])
-    np_weight = np.random.randint(100, size=[weight.length, H.length])
-    with ExecutorFactory() as ex:
-        computation = ex.executor(dot, x, w)
-        res = computation(np_x, np_weight)
-        np.testing.assert_array_equal(res, np.dot(np_weight, np_x))
+    np_w1 = np.random.randint(100, size=[W1.length, H.length])
+    np_w2 = np.random.randint(100, size=[W2.length, W1.length])
+    with closing(ngt.make_transformer_factory('hetr', device=hetr_device)()) as transformer:
+        computation = transformer.computation([dot2, dot1], x, w1, w2)
+        res2, res1 = computation(np_x, np_w1, np_w2)
+        np.testing.assert_array_equal(res1, np.dot(np_w1, np_x))
+        np.testing.assert_array_equal(res2, np.dot(np_w2, np.dot(np_w1, np_x)))
+
+        computation2 = transformer.computation([dot1, dot2], x, w1, w2)
+        res1, res2 = computation2(np_x, np_w1, np_w2)
+        np.testing.assert_array_equal(res1, np.dot(np_w1, np_x))
+        np.testing.assert_array_equal(res2, np.dot(np_w2, np.dot(np_w1, np_x)))
 
 
 @pytest.mark.multi_device

@@ -21,7 +21,7 @@ from ngraph.op_graph.comm_nodes import \
     GPUCudaSendOp, GPUCudaRecvOp, \
     GPUCudaGatherSendOp, GPUCudaGatherRecvOp, \
     GPUCudaScatterSendOp, GPUCudaScatterRecvOp, \
-    GPUCudaAllReduceOp
+    GPUCudaAllReduceOp, GatherWrapperOp
 from ngraph.op_graph.op_graph import BroadcastOp
 from collections import defaultdict
 
@@ -217,7 +217,7 @@ class GPUCommNodeFactory(CommNodeFactory):
                     input_node=from_node,
                     func=from_node.metadata['reduce_func'])
         else:
-            assert False, "Not supported!!!"
+            assert False, "Not supported!!! node_type: " + node_type
 
 
 class CPUCommNodeFactory(CommNodeFactory):
@@ -260,10 +260,19 @@ class CPUCommNodeFactory(CommNodeFactory):
             return CPUMlslGatherSendOp(
                 from_node=from_node)
         elif node_type == 'gather_recv':
-            return CPUMlslGatherRecvOp(
+            # GatherWrapperOp is created as a wrapper over the GatherRecvOp
+            # when the parallel_axis is not the least contiguous axis.
+            # The GatherWrapperOp is used by the HeTrTensorShaping pass
+            # to add the necessary reorder ops to present the data back
+            # in the original axis requested by the user
+            recv_node = CPUMlslGatherRecvOp(
                 from_node=from_node,
                 to_node=to_node,
                 send_node=send_node)
+            if recv_node.axes == recv_node.native_axes:
+                return recv_node
+            else:
+                return GatherWrapperOp(recv_node=recv_node, arg_op=recv_node)
         elif node_type == 'broadcast_send':
             return CPUMlslBroadcastSendOp(
                 from_node=from_node,

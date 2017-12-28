@@ -83,7 +83,7 @@ class AeonDataLoader(object):
 
         # Setup aeon datloader config for worker
         config_worker = {'remote': {'address': address, 'port': port,
-                         'close_session': False, 'session_id': self.session_id}}
+                         'close_session': False, 'session_id': self.session_id, 'async': True}}
 
         # Setup axes for dataloader's input ops
         C = ng.make_axis(length=self.config['etl'][0]['channels'], name='C')

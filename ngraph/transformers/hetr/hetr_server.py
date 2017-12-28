@@ -14,6 +14,8 @@ from ngraph.transformers.hetrtransform import build_transformer
 import logging
 import os
 import fcntl
+from ngraph.op_graph.comm_nodes import GatherRecvOp, ScatterRecvOp
+import numpy as np
 
 try:
     # The first "import mlsl" will create internal mlsl object and will init MLSL library.
@@ -75,6 +77,19 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
                 placeholders.extend([protobuf_to_op(op) for op in request.placeholders])
 
             subgraph = _deserialize_graph_ops_edges(pb_ops, pb_edges)
+
+            # Add dependency on recv op to their send op in scenarios where the send buffer
+            # is passed as an argument to the communication call (gather/scatter)
+            # on the root device.
+            # This ensures that by the send buffer does not get reused before
+            # the recv_buf gets access to items
+            for op in Op.all_op_references(subgraph):
+                if isinstance(op, (GatherRecvOp, ScatterRecvOp)) and \
+                   MPI.COMM_WORLD.Get_rank() == op.metadata['device_id']:
+                    args = list(op._args)
+                    args.extend(op.send_node().args)
+                    op._args = tuple(args)
+                    op.invalidate_property_cache('all_deps')
 
             ops = Op.ordered_ops(subgraph)
             for r in returns:
@@ -198,6 +213,11 @@ def serve():
     hetr_pb2_grpc.add_HetrServicer_to_server(HetrServer(comm, server), server)
     logger.debug("server: rank %d, tmpfile %s, ports %s",
                  comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
+
+    # TODO (HeTr) #944: Pass the random value throug gRPC from hetr master
+    # Setting random seed to ensure that each hetr workers
+    # gets the same initializations for random values
+    np.random.seed(64)
 
     if args.ports is not None and len(args.ports) > comm.Get_rank():
         p = args.ports[comm.Get_rank()]

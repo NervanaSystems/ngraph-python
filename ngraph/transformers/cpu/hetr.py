@@ -21,7 +21,6 @@ import ctypes
 from ngraph.op_graph.comm_nodes import CPUMlslAllReduceStartOp
 import logging
 
-
 logger = logging.getLogger(__name__)
 USER_TAG = 1
 
@@ -157,7 +156,7 @@ class HetrLocals(object):
                                                mlsl.GroupType.DATA)
             self.mlsl_obj.wait(req)
 
-    def gather_recv_from_mlsl_gather_send(self, gather_recv_id, out):
+    def gather_recv_from_mlsl_gather_send(self, gather_recv_id, x_nparr, out):
         gather_recv_op = self.gather_recv_nodes[gather_recv_id]
 
         # todo: get real root_idx
@@ -165,9 +164,8 @@ class HetrLocals(object):
 
         # todo: remove that workaround for non-symmetric case
         if self.process_idx == root_idx:
-            send_node = gather_recv_op.send_node()
-            send_buf = self.as_buffer(send_node.arr)
-            send_count = send_node.arr.size
+            send_buf = self.as_buffer(x_nparr)
+            send_count = x_nparr.size
             recv_buf = self.as_buffer(out)
 
             if gather_recv_op.use_reduce:
@@ -183,7 +181,6 @@ class HetrLocals(object):
             # todo: replace by real reduce operation
             if gather_recv_op.use_reduce:
                 out /= self.process_count
-
         return out
 
     def mlsl_scatter_send(self, scatter_send_id, x_nparr):

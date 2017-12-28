@@ -15,7 +15,7 @@
 """
 To visualize HeTr computational graph with Tensorboard
 
-1. run `python dist_hetr.py -v`
+1. run `python dist_hetr.py --graph_vis`
 
 2. run `tensorboard --logdir /tmp/hetr_tb/ --port 6006`
 
@@ -26,36 +26,30 @@ from __future__ import print_function
 from contextlib import closing
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.op_graph.tensorboard.tensorboardpass import TensorBoardPass
-import argparse
+from ngraph.frontends.neon import NgraphArgparser
+import numpy as np
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--iter_count", "-i", type=int, default=5, help="num iterations to run")
-parser.add_argument("--visualize", "-v", action="store_true", help="enable graph visualization")
-parser.add_argument("--hetr_device", default="cpu",
-                    choices=["cpu", "gpu"], help="device to run HeTr")
+# Command Line Parser
+parser = NgraphArgparser(description="Distributed HeTr Example")
+parser.add_argument("--graph_vis", action="store_true", help="enable graph visualization")
 args = parser.parse_args()
 
 # Build the graph
-H = ng.make_axis(length=4, name='height')
+H = ng.make_axis(length=6, name='height')
 N = ng.make_axis(length=8, name='batch')
-weight = ng.make_axis(length=2, name='weight')
-np_weight = weight.length
+W1 = ng.make_axis(length=2, name='W1')
+W2 = ng.make_axis(length=4, name='W2')
 x = ng.placeholder(axes=[H, N])
-
+w1 = ng.placeholder(axes=[W1, H])
+w2 = ng.placeholder(axes=[W2, W1])
 with ng.metadata(device_id=('0', '1'), parallel=N):
-    w = ng.variable(axes=[weight, H], initial_value=np_weight)
-    dot = ng.dot(w, x)
+    dot1 = ng.dot(w1, x).named("dot1")
+dot2 = ng.dot(w2, dot1).named("dot2")
 
-# Select a transformer
-with closing(ngt.make_transformer_factory('hetr')()) as hetr:
-    # Visualize the graph
-    if args.visualize:
-        hetr.register_graph_pass(TensorBoardPass('/tmp/hetr_tb'))
-
-    # Define a computation
-    computation = hetr.computation(dot, x, w)
-
-    # Run the computation
-    for i in range(args.iter_count):
-        print(computation(i, i))
+np_x = np.random.randint(100, size=[H.length, N.length])
+np_w1 = np.random.randint(100, size=[W1.length, H.length])
+np_w2 = np.random.randint(100, size=[W2.length, W1.length])
+with closing(ngt.make_transformer_factory('hetr', device='cpu')()) as transformer:
+    computation = transformer.computation([dot1, dot2], x, w1, w2)
+    res1, res2 = computation(np_x, np_w1, np_w2)
+    print(res1, res2)

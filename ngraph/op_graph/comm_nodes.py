@@ -109,6 +109,19 @@ class CommunicationOp(TensorOp):
     def is_persistent(self):
         return True
 
+    def hetr_axes(self, axes, parallel_axis):
+        """
+        Function to ensure that HeTr axes are ordered such that parallel_axis
+        is least contiguous.
+        """
+        if parallel_axis is None:
+            hetr_axes = axes
+        elif parallel_axis not in axes:
+            hetr_axes = axes
+        else:
+            hetr_axes = parallel_axis + (axes - parallel_axis)
+        return hetr_axes
+
 
 class SendOp(CommunicationOp):
     """
@@ -118,12 +131,21 @@ class SendOp(CommunicationOp):
         from_node: The source node.
     """
 
-    def __init__(self, from_node):
+    def __init__(self, from_node, parallel_axis=None):
         super(SendOp, self).__init__(
             node=from_node,
             args=tuple([from_node]),
-            axes=from_node.axes,
+            axes=self.hetr_axes(from_node.axes, parallel_axis),
             dtype=from_node.dtype)
+
+        # Add native/original axes to op
+        # Also ensure that the native axes has the original length
+        # of the parallel_axis
+        self.native_axes = Axes.as_flattened_list(from_node.axes)
+        if parallel_axis is not None and parallel_axis in self.native_axes:
+            p_axis_idx = self.native_axes.index(parallel_axis)
+            self.native_axes[p_axis_idx] = parallel_axis
+        self.native_axes = make_axes(self.native_axes)
 
 
 class RecvOp(CommunicationOp):
@@ -135,18 +157,15 @@ class RecvOp(CommunicationOp):
         send_node: The send node associated with this recv node.
     """
 
-    def __init__(self, to_node, send_node, fragment_axis=None, fragments=None):
+    def __init__(self, to_node, send_node, parallel_axis=None, num_devices=None):
         super(RecvOp, self).__init__(
             node=to_node,
             args=(),
-            axes=self.calculate_recv_axes(send_node.axes, fragment_axis, fragments),
+            axes=self.hetr_axes(send_node.axes, parallel_axis),
             dtype=send_node.dtype)
         self._send_node = send_node
+        self.native_axes = send_node.native_axes
         self.source_id = send_node.metadata['device_id']
-
-    @classmethod
-    def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
-        return send_axes
 
     def send_node(self):
         return self._send_node
@@ -162,7 +181,7 @@ class ScatterSendOp(SendOp):
     """
 
     def __init__(self, from_node, to_node):
-        super(ScatterSendOp, self).__init__(from_node)
+        super(ScatterSendOp, self).__init__(from_node, to_node.metadata['parallel'])
         self.to_id = to_node.metadata['device_id']
         self._slices = get_slices(self.axes,
                                   to_node.metadata['parallel'],
@@ -187,11 +206,21 @@ class ScatterRecvOp(RecvOp):
 
     def __init__(self, to_node, send_node):
         super(ScatterRecvOp, self).__init__(to_node, send_node,
-                                            fragment_axis=to_node.metadata['parallel'],
-                                            fragments=len(to_node.metadata['device_id']))
+                                            parallel_axis=to_node.metadata['parallel'],
+                                            num_devices=len(to_node.metadata['device_id']))
         assert to_node.metadata.get('parallel', None) is not None, \
             "to_node must have a specified parallel attribute in metadata"
         self.metadata['parallel'] = to_node.metadata['parallel']
+
+    def copy_with_new_args(self, args):
+        """
+        Overriding parent function since this op's args can get
+        replaced with mklreorder ops during HeTrTensorShaping pass.
+        Also, we don't inherit from MutateInsteadOfCopy
+        because it adds extra parameters to init function.
+        """
+        self._set_args(args)
+        return self
 
 
 class GatherSendOp(SendOp):
@@ -203,7 +232,7 @@ class GatherSendOp(SendOp):
     """
 
     def __init__(self, from_node):
-        super(GatherSendOp, self).__init__(from_node)
+        super(GatherSendOp, self).__init__(from_node, from_node.metadata['parallel'])
         assert from_node.metadata.get('parallel', None) is not None, \
             "from_node must have a specified parallel attribute in metadata"
         self.metadata['parallel'] = from_node.metadata['parallel']
@@ -226,8 +255,8 @@ class GatherRecvOp(RecvOp):
 
     def __init__(self, from_node, to_node, send_node):
         super(GatherRecvOp, self).__init__(to_node, send_node,
-                                           fragment_axis=from_node.metadata['parallel'],
-                                           fragments=len(from_node.metadata['device_id']))
+                                           parallel_axis=from_node.metadata['parallel'],
+                                           num_devices=len(from_node.metadata['device_id']))
         self.metadata['marker'] = 'gather'
         assert from_node.metadata.get('parallel', None) is not None, \
             "from_node must have a specified parallel attribute in metadata"
@@ -246,11 +275,26 @@ class GatherRecvOp(RecvOp):
             self.use_reduce = True
             send_node.use_reduce = True
 
-    def calculate_recv_axes(cls, send_axes, fragment_axis, fragments):
-        if fragment_axis in send_axes and \
-           send_axes.find_by_name(fragment_axis.name).lengths[0] != fragment_axis.length:
-            send_axes = make_axes([fragment_axis if a == fragment_axis else a for a in send_axes])
-        return send_axes
+    def hetr_axes(self, axes, parallel_axis):
+        """
+        Override hetr_axes function to ensure GatherRecvOp has the full length
+        of the parallel_axis rather that parallel_axis.length//num_devices.
+        """
+        arg_axes = super(GatherRecvOp, self).hetr_axes(axes, parallel_axis)
+        if parallel_axis in axes and \
+           arg_axes.find_by_name(parallel_axis.name).lengths[0] != parallel_axis.length:
+            arg_axes = make_axes([parallel_axis if a == parallel_axis else a for a in arg_axes])
+        return arg_axes
+
+    def copy_with_new_args(self, args):
+        """
+        Overriding parent function since this op's args can get
+        replaced with mklreorder ops during HeTrTensorShaping pass.
+        Also, we don't inherit from MutateInsteadOfCopy
+        because it adds extra parameters to init function.
+        """
+        self._set_args(args)
+        return self
 
     @property
     def slices(self):
@@ -472,3 +516,22 @@ class CPUMlslBroadcastRecvOp(BroadcastRecvOp):
     """
     def __init__(self, to_node, send_node):
         super(CPUMlslBroadcastRecvOp, self).__init__(to_node, send_node)
+
+
+class GatherWrapperOp(CommunicationOp):
+
+    def __init__(self, recv_node, arg_op):
+        super(GatherWrapperOp, self).__init__(recv_node, args=tuple([arg_op]),
+                                              axes=arg_op.native_axes
+                                              if isinstance(arg_op, (SendOp, RecvOp)) else
+                                              arg_op.axes)
+
+    def copy_with_new_args(self, args):
+        """
+        Overriding parent function since this op's args can get
+        replaced with mklreorder ops during HeTrTensorShaping pass.
+        Also, we don't inherit from MutateInsteadOfCopy
+        because it adds extra parameters to init function.
+        """
+        self._set_args(args)
+        return self

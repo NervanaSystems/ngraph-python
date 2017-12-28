@@ -257,7 +257,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
         train_config['shuffle_enable'] = True
         train_config['random_seed'] = random_seed
         if device == 'hetr' and num_devices > 1 and address is not None and port is not None:
-            train_config['remote'] = {'address': address, 'port': port, 'close_session': False}
+            train_config['remote'] = {'address': address, 'port': port,
+                                      'close_session': False, 'async': True}
         train_loader = AeonDataLoader(train_config)
 
     if return_valid:
@@ -266,7 +267,8 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dat
         valid_config['iteration_mode'] = "ONCE"
         if device == 'hetr' and num_devices > 1 and address is not None and port is not None:
             valid_config['iteration_mode'] = "INFINITE"
-            valid_config['remote'] = {'address': address, 'port': port, 'close_session': False}
+            valid_config['remote'] = {'address': address, 'port': port,
+                                      'close_session': False, 'async': True}
         valid_loader = AeonDataLoader(valid_config)
 
     if return_train and return_valid:

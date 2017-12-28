@@ -153,8 +153,8 @@ def assert_axes_eq_len(expected_axes, actual_axes):
     {
         'axes': [64, 128, 256],
         'parallel_axis': 2,
-        'slices': [[slice(None), slice(None), slice(0, 128, 1)],
-                   [slice(None), slice(None), slice(128, 256, 1)]],
+        'slices': [[slice(0, 128, 1), slice(None), slice(None)],
+                   [slice(128, 256, 1), slice(None), slice(None)]],
         'device_id': (0, 1)
     }
 ])
@@ -162,6 +162,7 @@ def test_scatter_gather_node_axes(config):
     t = config
     axes = ng.make_axes([ng.make_axis(length) for length in t['axes']])
     parallel_axis = axes[t['parallel_axis']]
+    hetr_axes = parallel_axis + (axes - parallel_axis)
     with ng.metadata(device=None, device_id='0', transformer='cpu0', host_transformer=None):
         from_node = ng.placeholder(axes=axes)
         to_node = ng.placeholder(axes=axes)
@@ -172,13 +173,13 @@ def test_scatter_gather_node_axes(config):
 
     scatter_send_op = ScatterSendOp(from_node=from_node,
                                     to_node=par_node)
-    assert axes == scatter_send_op.axes
+    assert hetr_axes == scatter_send_op.axes
     assert t['slices'] == scatter_send_op.slices
 
     scatter_recv_op = ScatterRecvOp(to_node=par_node,
                                     send_node=scatter_send_op)
 
-    for sct_a, a in zip(scatter_recv_op.axes, axes):
+    for sct_a, a in zip(scatter_recv_op.axes, hetr_axes):
         assert sct_a.length == a.length
 
     gather_send_op = GatherSendOp(from_node=scatter_recv_op)
@@ -187,7 +188,7 @@ def test_scatter_gather_node_axes(config):
     gather_recv_op = GatherRecvOp(from_node=par_node,
                                   to_node=to_node,
                                   send_node=gather_send_op)
-    assert_axes_eq_len(axes, gather_recv_op.axes)
+    assert_axes_eq_len(hetr_axes, gather_recv_op.axes)
 
     assert t['slices'] == gather_recv_op.slices
 
