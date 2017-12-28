@@ -16,11 +16,9 @@ from __future__ import print_function
 from functools import wraps
 from collections import OrderedDict
 import ngraph.transformers as ngt
-import ngraph.transformers.passes.nviz
 import numpy as np
 import time
 from contextlib import closing
-from examples.benchmarks.fake_data_generator import preprocess_ds2_data
 
 
 class DefaultOrderedDict(OrderedDict):
@@ -54,12 +52,6 @@ class Benchmark(object):
         self.transformer = transformer
         self.device = device
 
-    def fill_feed_dict(self, dataset, feed_inputs, preprocess=False):
-        data = next(iter(dataset))
-        if preprocess:
-            data = preprocess_ds2_data(data)
-        return {feed_inputs[k]: data[k] for k in feed_inputs.keys()}
-
     @staticmethod
     def timing_wrapper(func, start, end, output):
         marker = Benchmark.marker
@@ -75,26 +67,19 @@ class Benchmark(object):
 
         return wrapper
 
-    def time(self, n_iterations, n_skip, computation_name, visualize,
-             subgraph_attr=None, preprocess=False):
+    def time(self, n_iterations, n_skip, computation_name, feed_dict):
         """
         This runs _any_ computation repeatedly with data from feed_dict, and times it
 
         (Nothing model-specific inside, can be reused)
         """
         times = DefaultOrderedDict()
-        feed_dict = self.fill_feed_dict(self.train_set, self.inputs, preprocess)
         start = Benchmark.marker.init_mark()
         end = Benchmark.marker.init_mark()
         t_args = {}
         if self.transformer == 'hetr':
             t_args['device'] = self.device
         with closing(ngt.make_transformer_factory(self.transformer, **t_args)()) as transformer:
-            if visualize:
-                nviz = ngraph.transformers.passes.nviz.VizPass(show_axes=True,
-                                                               show_all_metadata=True,
-                                                               subgraph_attr=subgraph_attr)
-                transformer.register_graph_pass(nviz)
             model_out_computation = transformer.add_computation(self.computation)
             for i in range(n_skip):
                 model_out_computation(feed_dict=feed_dict)

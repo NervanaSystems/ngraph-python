@@ -24,19 +24,48 @@ from __future__ import division, print_function
 import numpy as np
 import ngraph as ng
 import ngraph.transformers as ngt
-from ngraph.frontends.neon import ax, NgraphArgparser
+from ngraph.frontends.neon import (ax, NgraphArgparser, Saver,
+                                   Layer, GradientDescentMomentum)
+from ngraph.op_graph.op_graph import AssignableTensorOp
 from tqdm import tqdm
 from data import make_aeon_loaders
-from ngraph.frontends.neon import GradientDescentMomentum
-from ngraph.frontends.neon import Layer
+from examples.benchmarks.benchmark import Benchmark
 from resnet import BuildResnet
 from contextlib import closing
-from ngraph.frontends.neon import Saver
 from utils import get_network_params, set_lr
 import os
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def fill_feed_dict(input_or_ph_ops, data=None,
+                   learning_rate_ph=None, learning_rate_val=None, step=None):
+    """
+    Fill a feed_dict for use with the training or eval computation.
+
+    Provide data values by calling next(data_set) if placeholders are provided,
+    otherwise rely on InputOps to source their own data from aeon directly without
+    passing values through placeholders.
+
+    Provide a learning_rate value if there is a learning_rate placeholder
+    """
+    assert isinstance(input_or_ph_ops, dict), \
+        "provide a dict of input ops or placeholders, with names as keys"
+
+    fill_data_placeholder = any([(isinstance(p, AssignableTensorOp) and
+                                p._is_placeholder) for p in input_or_ph_ops.values()])
+    feed_dict = {input_or_ph_ops['iteration']: step}
+    data['iteration'] = step
+    if fill_data_placeholder:
+        for k in input_or_ph_ops.keys():
+            feed_dict[input_or_ph_ops[k]] = data[k]
+
+    if learning_rate_ph:
+        assert learning_rate_val is not None
+        feed_dict[learning_rate_ph] = learning_rate_val
+
+    return feed_dict
 
 
 # Calculate metrics over given dataset
@@ -46,11 +75,7 @@ def loop_eval(dataset, input_ops, metric_name, computation, en_top5=False):
     all_results = None
     # Iterating over the dataset
     for data in dataset:
-        if device_backend == 'hetr' and args.num_devices > 1:
-            feed_dict = {input_ops['iteration']: step}
-        else:
-            data['iteration'] = step
-            feed_dict = {input_ops[k]: data[k] for k in input_ops.keys()}
+        feed_dict = fill_feed_dict(input_or_ph_ops=input_ops, data=data)
         # Tuple of results from computation
         results = computation(feed_dict=feed_dict)
         # Seperate Results
@@ -111,6 +136,9 @@ if __name__ == "__main__":
     parser.add_argument('--disable_batch_norm', action='store_true')
     parser.add_argument('--save_file', type=str, default=None, help="File to save weights")
     parser.add_argument('--inference', type=str, default=None, help="File to load weights")
+    parser.add_argument('--benchmark', action='store_true', help="Run the training computation in \
+                        a timing loop, discarding the first and averaging the remaining iteration \
+                        times. Print timing statistics and then exit, without training the model.")
     args = parser.parse_args()
 
 # Get network parameters
@@ -218,6 +246,21 @@ with ng.metadata(device=device_hetr, device_id=device_id, parallel=ax.N):
         # Computation for inference
         eval_computation = ng.computation([inference_prob, eval_loss], "all")
 
+if args.benchmark:
+    inputs = input_ops_train
+    n_skip = 1  # don't count first iteration in timing
+    benchmark = Benchmark(train_computation, train_set, inputs,
+                          args.backend, args.hetr_device)
+    feed_dict = fill_feed_dict(input_or_ph_ops=input_ops_train,
+                               data=next(train_set),
+                               learning_rate_ph=lr_ph,
+                               learning_rate_val=0)
+    times = benchmark.time(args.num_iterations, n_skip,
+                           args.dataset + '_msra_train',
+                           feed_dict)
+    Benchmark.print_benchmark_results(times)
+    exit()
+
 # Doing inference
 if(args.inference is not None):
     # Check if file exists. TODO.
@@ -225,44 +268,34 @@ if(args.inference is not None):
         restore_eval_function = transformer.add_computation(eval_computation)
         weight_saver.setup_restore(transformer=transformer, computation=eval_computation,
                                    filename=args.inference)
-        # Restore weight
         weight_saver.restore()
-        # Calculate losses
         eval_losses = loop_eval(master_valid_set, input_ops_valid, metric_names,
                                 restore_eval_function, en_top5)
-        # Print statistics
         print("From restored weights: Test Avg loss:{tcost}".format(tcost=eval_losses))
         exit()
 
 # Training the network by calling transformer
 t_args = {'device': args.hetr_device} if args.backend == 'hetr' else {}
 with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transformer:
-    # Trainer
     train_function = transformer.add_computation(train_computation)
-    # Inference
     eval_function = transformer.add_computation(eval_computation)
-    # Set Saver for saving weights
     weight_saver.setup_save(transformer=transformer, computation=train_computation)
     # Progress bar
     tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
-    # Set interval cost to 0.0
     interval_cost = 0.0
     # Declare lists for logging metrics
-    if(args.logfile is not None):
+    if args.logfile is not None:
         train_result = []
         test_result = []
         err_result = []
     # Iterating over the training set
     for step in range(args.num_iterations):
-        # Dictionary for training
-        if device_backend == 'hetr' and args.num_devices > 1:
-            feed_dict = {input_ops_train['iteration']: step}
-        else:
-            data = next(train_set)
-            data['iteration'] = step
-            feed_dict = {input_ops_train[k]: data[k] for k in input_ops_train.keys()}
-        # Learning Schedule
-        feed_dict[lr_ph] = set_lr(base_lr, step, learning_schedule, gamma)
+        feed_dict = fill_feed_dict(input_or_ph_ops=input_ops_train,
+                                   data=next(train_set),
+                                   learning_rate_ph=lr_ph,
+                                   learning_rate_val=set_lr(base_lr, step,
+                                                            learning_schedule, gamma),
+                                   step=step)
         # Mean batch cost
         output = train_function(feed_dict=feed_dict)
 
