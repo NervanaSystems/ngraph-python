@@ -4341,7 +4341,7 @@ class CrossEntropyMultiOp(ValueOp):
             self.y = y
             self.x = y.deriv_handler.x
             self.s = -sum(self.x * t, out_axes=out_axes)
-            self.value_tensor = self.s + safelog(y.deriv_handler.Z)
+            self.value_tensor = minimum(self.s + log(y.deriv_handler.Z), safelog_cutoff)
             if enable_diff_opt:
                 self.value_tensor.deriv_handler = self
         else:

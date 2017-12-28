@@ -716,7 +716,11 @@ def np_cross_entropy_multi(y, t, axis=None):
     Returns:
       TODO
     """
-    return -np.sum(np.log(y) * t, axis=axis)
+
+    def safelog(x, limit=-50.0):
+        return np.maximum(np.log(x), limit)
+
+    return -np.sum(safelog(y) * t, axis=axis)
 
 
 @pytest.config.flex_disabled(reason="Results mismatch - too strict tolerance (rtol, atol)")
@@ -791,6 +795,21 @@ def test_cross_entropy_softmax(input_tensor):
         return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
 
     compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], rtol=1e-5)
+
+
+def test_cross_entropy_softmax_large_input(input_tensor):
+    p_x = input_tensor
+    p_t = ng.placeholder(p_x.axes)
+
+    cross_entropy_sm_x_t = ng.cross_entropy_multi(ng.softmax(p_x), p_t)
+
+    x = np.eye(3)[np.random.choice(3, 8)].T * rng.uniform(-10, 10, p_x.axes) * 25
+    t = np.eye(3)[np.random.choice(3, 8)].T
+
+    def f_np(x, t):
+        return np_cross_entropy_multi(np_softmax(x, 0), t, axis=0)
+
+    compare_f_at_x(cross_entropy_sm_x_t, [p_x, p_t], f_np, [x, t], atol=1e-7, rtol=1e-4)
 
 
 def test_cross_entropy_softmax_deriv(input_tensor):
