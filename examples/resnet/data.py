@@ -84,9 +84,13 @@ def ingest_cifar10(root_dir, overwrite=False):
     return manifest_files
 
 
-def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=0, dataset="cifar10",
+def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=None, dataset="cifar10",
                       num_devices=1, device='cpu', split_batch=False, address=None, port=None,
                       return_train=True, return_valid=True):
+
+    if random_seed is None:
+        random_seed = np.random.randint(low=1, high=np.iinfo(np.int32).max)
+
     batch_size_per_device = batch_size
     if split_batch and (device == 'hetr' and num_devices > 1):
         batch_size_per_device = batch_size // num_devices

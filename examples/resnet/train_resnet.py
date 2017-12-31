@@ -141,6 +141,9 @@ if __name__ == "__main__":
                         times. Print timing statistics and then exit, without training the model.")
     args = parser.parse_args()
 
+# Initialize seed before any use
+np.random.seed(args.rng_seed)
+
 # Get network parameters
 nw_params = get_network_params(args.dataset, args.size, args.batch_size)
 metric_names = nw_params['metric_names']
@@ -184,8 +187,6 @@ master_valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
                                      split_batch=False, address=None, port=None,
                                      return_train=False, return_valid=True)
 print("Completed loading " + args.dataset + " dataset")
-# Randomize seed
-np.random.seed(args.rng_seed)
 
 # Make input_ops or placeholders depending on single device or multi device compute
 input_ops_train = train_set.make_input_ops("train", aeon_adress, aeon_port, ax.N,
