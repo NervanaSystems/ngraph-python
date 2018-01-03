@@ -1,27 +1,31 @@
-# Important Note
+# NOTICE
 
-We are currently transitioning the Intel® Nervana™ Graph codebase from Python to C++.
+We are currently transitioning the Intel® nGraph™ codebase from Python to C++.
+
+As of January 03, 2018, this version of the project has a low level of activity. 
+Bug patches will continue to be reviewed and accepted by the maintainer; however, 
+new features will not be accepted. The code remains available for the community's 
+use.
  
-As a result, most work in this repository is now focused on the higher levels of the 
-neon™ framework. Additional work is ongoing in internal repositories for the core C++ 
-Intel Nervana Graph project and for framework bridges from Intel Nervana Graph to 
-TensorFlow*/XLA and MXNet*. We will continue to support neon and it will retain 
-its Python interface. C++ implementations of Intel Nervana Graph will be released 
-publicly when they are more mature.  
+As a result, most work in this repository is now focused on the higher levels of 
+the neon™ framework. Additional work in internal repositories is ongoing for the 
+core C++ Intel nGraph library project and for framework bridges from Intel nGraph 
+library to TensorFlow*/XLA and MXNet*. We will continue to support neon and it 
+will retain its Python interface and be fully integratable with the C++ version 
+of Intel nGraph library.  The new version will be released publicly when it is 
+more mature.  
 
-# Nervana Graph
+# nGraph library
 
-Nervana Graph is Nervana's library for developing frameworks that can efficiently run deep
-learning computations on a variety of compute platforms. It consists of three primary API
-components:
+nGraph library is Nervana's library for developing frameworks that can run deep
+learning computations efficiently on a variety of compute platforms. It consists 
+of three primary API components:
 
-- An API for creating computational `Nervana Graphs`.
-- Two higher level frontend APIs (TensorFlow and Neon) utilizing the `Nervana Graph` API for common deep learning workflows
+- An API for creating computational graphs.
+- Two higher level frontend APIs (TensorFlow and Neon) utilizing the `ngraph` 
+  library API for common deep learning workflows
 - A transformer API for compiling these graphs and executing them.
 
-For more information, please see the [blog
-post](https://www.nervanasys.com/intel-nervana-graph-preview-release/) announcing our
-preview release!
 
 ## Installation
 
@@ -32,7 +36,7 @@ Installation documentation can be found
 To install with Intel MKL-DNN support, first download MKL-DNN from [here](https://github.com/01org/mkl-dnn) 
 and follow the installation instructions there to install MKL-DNN. Set 
 environment variable MKLDNN_ROOT to point to the installed location and 
-follow the rest of the steps to install Nervana Graph.
+follow the rest of the steps to install nGraph library.
 ```
 export MKLDNN_ROOT=/path/to/mkldnn/root
 ```
@@ -63,8 +67,8 @@ Then, run
 make multinode_prepare
 ```
 
-### Nervana Graph installation
-We recommend installing Nervana Graph inside a virtual environment.
+### nGraph library installation
+We recommend installing nGraph library inside a virtual environment.
 
 To create and activate a Python 3 virtualenv:
 ```
@@ -78,7 +82,7 @@ virtualenv -p python2.7 .venv
 . .venv/bin/activate
 ```
 
-To install Nervana Graph:
+To install nGraph library:
 ```
 make install
 ```
@@ -88,7 +92,7 @@ To add GPU support:
 make gpu_prepare
 ```
 
-To uninstall Nervana Graph:
+To uninstall nGraph library:
 ```
 make uninstall
 ```
@@ -129,11 +133,11 @@ make doc
   while leaving common use cases easy. We demonstrate this with MLP, convolutional, and
   RNN network examples on MNIST, CIFAR10, and Penn Treebank datasets.
 - The TensorFlow importer allows users to import existing tensorflow graphs and execute
-  them using Nervana Graph transformers/runtimes. This importer currently only supports a
+  them using nGraph library transformers/runtimes. This importer currently only supports a
   subset of the TensorFlow API, but this will be expanded over time.
 
-### Nervana Graph API
-- The Nervana Graph API consists of a collection of graph building functions all exposed
+### nGraph library API
+- The nGraph library API consists of a collection of graph building functions all exposed
   in the `ngraph` module/namespace. (eg: `ngraph.sum(...)`)
 - We include walkthrough examples to use this API for logistic regression and multilayer
   perceptron classification of MNIST digit images.
@@ -162,7 +166,7 @@ These are known issues which are being addressed:
 
 ## Highlighted Future Work
 
-- Nervana Graph serialization/deserialization.
+- nGraph library serialization/deserialization.
 - Further improvements/abstractions to graph composability for usability/optimization.
 - Distributed, heterogeneous backend target support.
 - C APIs for interoperability to enable other languages to create/execute graphs.
@@ -170,4 +174,4 @@ These are known issues which are being addressed:
 - Support for model deployment
 
 ## Join Us
-Please feel free to [contribute](CONTRIBUTING.rst) in shaping the future of Nervana Graph.
+Please feel free to [contribute](CONTRIBUTING.rst) in shaping the future of nGraph library.
