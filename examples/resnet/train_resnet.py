@@ -135,6 +135,7 @@ if __name__ == "__main__":
     parser.add_argument('--benchmark', action='store_true', help="Run the training computation in \
                         a timing loop, discarding the first and averaging the remaining iteration \
                         times. Print timing statistics and then exit, without training the model.")
+    parser.add_argument('--resume', type=str, default=None, help="Weights file to resume training")
     args = parser.parse_args()
 
 # Initialize seed before any use
@@ -253,7 +254,6 @@ if args.benchmark:
 
 # Doing inference
 if(args.inference is not None):
-    # Check if file exists. TODO.
     with closing(ngt.make_transformer()) as transformer:
         restore_eval_function = transformer.add_computation(eval_computation)
         weight_saver.setup_restore(transformer=transformer, computation=eval_computation,
@@ -270,6 +270,11 @@ with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transfor
     train_function = transformer.add_computation(train_computation)
     eval_function = transformer.add_computation(eval_computation)
     weight_saver.setup_save(transformer=transformer, computation=train_computation)
+    # Resume weights for training from a checkpoint
+    if args.resume is not None:
+        weight_saver.setup_restore(transformer=transformer, computation=train_computation,
+                                   filename=args.resume)
+        weight_saver.restore()
     # Progress bar
     tpbar = tqdm(unit="batches", ncols=100, total=args.num_iterations)
     interval_cost = 0.0
