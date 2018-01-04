@@ -250,7 +250,7 @@ class LookupTable(Layer):
         padding to be 0.
         """
         init_w = self.init(axes)
-        if pad_word_axis is 0:
+        if axes.index(pad_word_axis) is 0:
             init_w[pad_idx] = 0
         else:
             init_w[:, pad_idx] = 0

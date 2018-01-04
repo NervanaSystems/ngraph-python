@@ -24,7 +24,8 @@ import collections
 class ArrayIterator(object):
 
     def __init__(self, data_arrays, batch_size,
-                 total_iterations=None, tgt_key='label'):
+                 total_iterations=None, tgt_key='label',
+                 shuffle=False):
         """
         During initialization, the input data will be converted to backend tensor objects
         (e.g. CPUTensor or GPUTensor). If the backend uses the GPU, the data is copied over to the
@@ -37,6 +38,7 @@ class ArrayIterator(object):
             total_iterations (int): number of minibatches to cycle through on this iterator.
                                     If not provided, it will cycle through all of the data once.
             tgt_key (str): name of the target (labels) key in data_arrays
+            shuffle (bool): if true, shuffles the dataset at the beginning of every epoch.
         """
         # Treat singletons like list so that iteration follows same syntax
         self.batch_size = batch_size
@@ -61,8 +63,12 @@ class ArrayIterator(object):
         if self.ndata < self.batch_size:
             raise ValueError('Number of examples is smaller than the batch size')
 
-        self.start = 0
         self.index = 0
+        self.pos = 0
+
+        if shuffle:
+            self.shuffle_data()
+        self.shuffle = shuffle
 
         self.total_iterations = self.nbatches if total_iterations is None else total_iterations
 
@@ -71,7 +77,7 @@ class ArrayIterator(object):
         """
         Return the number of minibatches in this dataset.
         """
-        return -((self.start - self.ndata) // self.batch_size)
+        return -((-self.ndata) // self.batch_size)
 
     def make_placeholders(self, include_iteration=False):
         placeholders = {}
@@ -99,6 +105,26 @@ class ArrayIterator(object):
         """
         self.start = 0
         self.index = 0
+        self.pos = 0
+
+    def shuffle_data(self):
+        p = np.random.permutation(self.ndata)
+        self.data_arrays = {k: src[p] for k, src in self.data_arrays.items()}
+
+    def get_at_most(self, bsz):
+        """
+        Returns at most bsz elements from the buffers along with the number of elements
+        actually retrieved, which may be fewer at the end of the dataset.
+        """
+        bsz = min(bsz, self.ndata - self.pos)
+        oslice = slice(self.pos, self.pos + bsz)
+        batch_bufs = {k: src[oslice] for k, src in self.data_arrays.items()}
+
+        self.pos = (self.pos + bsz) % self.ndata
+        if self.pos == 0 and self.shuffle:
+            self.shuffle_data()
+
+        return bsz, batch_bufs
 
     def __next__(self):
         """
@@ -107,21 +133,16 @@ class ArrayIterator(object):
         Yields:
             tuple: The next minibatch which includes both features and labels.
         """
-
         if self.index >= self.total_iterations:
             raise StopIteration
-
-        i1 = (self.start + self.index * self.batch_size) % self.ndata
-        bsz = min(self.batch_size, self.ndata - i1)
-        oslice1 = slice(i1, i1 + bsz)
         self.index += 1
 
-        if self.batch_size > bsz:
-            batch_bufs = {k: np.concatenate([src[oslice1], src[:self.batch_size - bsz]])
-                          for k, src in self.data_arrays.items()}
-        else:
-            batch_bufs = {k: src[oslice1] for k, src in self.data_arrays.items()}
-
+        total, batch_bufs = self.get_at_most(self.batch_size)
+        while total < self.batch_size:
+            bsz, next_batch_bufs = self.get_at_most(self.batch_size - total)
+            batch_bufs = {k: np.concatenate([batch_bufs[k], next_batch_bufs[k]])
+                          for k in batch_bufs}
+            total += bsz
         batch_bufs['iteration'] = self.index
         return batch_bufs
 
