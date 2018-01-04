@@ -39,12 +39,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def fill_feed_dict(input_or_ph_ops, data=None,
+def fill_feed_dict(input_or_ph_ops, dataset=None,
                    learning_rate_ph=None, learning_rate_val=None, step=None):
     """
     Fill a feed_dict for use with the training or eval computation.
 
-    Provide data values by calling next(data_set) if placeholders are provided,
+    Provide dataset which would be used to get data values if placeholders are provided,
     otherwise rely on InputOps to source their own data from aeon directly without
     passing values through placeholders.
 
@@ -53,12 +53,12 @@ def fill_feed_dict(input_or_ph_ops, data=None,
     assert isinstance(input_or_ph_ops, dict), \
         "provide a dict of input ops or placeholders, with names as keys"
 
-    fill_data_placeholder = any([(isinstance(p, AssignableTensorOp) and
+    fill_data_placeholder = all([(isinstance(p, AssignableTensorOp) and
                                 p._is_placeholder) for p in input_or_ph_ops.values()])
     feed_dict = {input_or_ph_ops['iteration']: step}
-    data['iteration'] = step
     if fill_data_placeholder:
-        for k in input_or_ph_ops.keys():
+        data = next(dataset)
+        for k in data.keys():
             feed_dict[input_or_ph_ops[k]] = data[k]
 
     if learning_rate_ph:
@@ -74,29 +74,26 @@ def loop_eval(dataset, input_ops, metric_name, computation, en_top5=False):
     dataset.reset()
     all_results = None
     # Iterating over the dataset
-    for data in dataset:
-        feed_dict = fill_feed_dict(input_or_ph_ops=input_ops, data=data)
+    for step in range(dataset.ndata):
+        feed_dict = fill_feed_dict(input_or_ph_ops=input_ops, dataset=dataset)
         # Tuple of results from computation
-        results = computation(feed_dict=feed_dict)
-        # Seperate Results
-        results_miss_loss = results[1]
-        results_inference = results[0]
+        predictions, miss_class, labels = computation(feed_dict=feed_dict)
         # Collect top5 and top1 results
-        top5 = np.argsort(results_inference, axis=0)[-5:]
+        top5 = np.argsort(predictions, axis=0)[-5:]
         top1 = top5[-1:]
         # Get ground truth labels
-        correct_label = data['label'].T
+        correct_labels = labels.T
         # Compare if any of the top5 matches with labels
-        top5_results = np.any(np.equal(correct_label, top5), axis=0)
+        top5_results = np.any(np.equal(correct_labels, top5), axis=0)
         # Invert for mis-classification
         top5_results = np.invert(top5_results)
         # Compare which are not equal
-        top1_results = np.not_equal(correct_label, top1)
+        top1_results = np.not_equal(correct_labels, top1)
         # Make a list of results
         if(en_top5):
-            total_results = [results_miss_loss, top5_results, top1_results]
+            total_results = [miss_class, top5_results, top1_results]
         else:
-            total_results = [results_miss_loss, top1_results]
+            total_results = [miss_class, top1_results]
         # Accumulate results
         if all_results is None:
             all_results = {name: list(res) for name, res in zip(metric_names, total_results)}
@@ -104,8 +101,7 @@ def loop_eval(dataset, input_ops, metric_name, computation, en_top5=False):
             for name, res in zip(metric_names, total_results):
                 all_results[name].extend(list(res))
     # Take mean of results
-    ndata = dataset.ndata
-    reduced_results = {k: np.mean(v[:ndata]) for k, v in all_results.items()}
+    reduced_results = {k: np.mean(v[:dataset.ndata]) for k, v in all_results.items()}
     return reduced_results
 
 
@@ -164,7 +160,7 @@ device_id = [str(d) for d in range(args.num_devices)]
 
 aeon_adress = None
 aeon_port = None
-if device_backend == 'hetr' and args.num_devices > 1:
+if device_backend == 'hetr':
     if 'HETR_AEON_IP' not in os.environ or 'HETR_AEON_PORT' not in os.environ:
         raise ValueError('To run hetr with more than one device, you need to set an ip address \
             for the HETR_AEON_IP environment variable and a port number for the HETR_AEON_PORT \
@@ -173,19 +169,11 @@ if device_backend == 'hetr' and args.num_devices > 1:
     aeon_adress = os.environ['HETR_AEON_IP']
     aeon_port = int(os.environ['HETR_AEON_PORT'])
 
-# Create training and validation set objects
-# two validation dataloaders sets are created,
-# one for the input_ops to fetch the data from aeon on the worker process
-# the other to get evalutation stats on the result on the hetr master process
+# Create training and validation dataset objects
 train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
                                          args.num_iterations, dataset=args.dataset,
                                          num_devices=args.num_devices, device=device_backend,
                                          split_batch=True, address=aeon_adress, port=aeon_port)
-master_valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
-                                     args.num_iterations, dataset=args.dataset,
-                                     num_devices=1, device=device_backend,
-                                     split_batch=False, address=None, port=None,
-                                     return_train=False, return_valid=True)
 print("Completed loading " + args.dataset + " dataset")
 
 # Make input_ops or placeholders depending on single device or multi device compute
@@ -245,7 +233,8 @@ with ng.metadata(device=device_hetr, device_id=device_id, parallel=ax.N):
         eval_loss = ng.cross_entropy_multi(inference_prob,
                                            ng.one_hot(input_ops_valid['label'], axis=ax.Y))
         # Computation for inference
-        eval_computation = ng.computation([inference_prob, eval_loss], "all")
+        eval_computation = ng.computation([inference_prob, eval_loss,
+                                           input_ops_valid['label']], "all")
 
 if args.benchmark:
     inputs = input_ops_train
@@ -253,7 +242,7 @@ if args.benchmark:
     benchmark = Benchmark(train_computation, train_set, inputs,
                           args.backend, args.hetr_device)
     feed_dict = fill_feed_dict(input_or_ph_ops=input_ops_train,
-                               data=next(train_set),
+                               dataset=train_set,
                                learning_rate_ph=lr_ph,
                                learning_rate_val=0)
     times = benchmark.time(args.num_iterations, n_skip,
@@ -270,7 +259,7 @@ if(args.inference is not None):
         weight_saver.setup_restore(transformer=transformer, computation=eval_computation,
                                    filename=args.inference)
         weight_saver.restore()
-        eval_losses = loop_eval(master_valid_set, input_ops_valid, metric_names,
+        eval_losses = loop_eval(valid_set, input_ops_valid, metric_names,
                                 restore_eval_function, en_top5)
         print("From restored weights: Test Avg loss:{tcost}".format(tcost=eval_losses))
         exit()
@@ -292,7 +281,7 @@ with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transfor
     # Iterating over the training set
     for step in range(args.num_iterations):
         feed_dict = fill_feed_dict(input_or_ph_ops=input_ops_train,
-                                   data=next(train_set),
+                                   dataset=train_set,
                                    learning_rate_ph=lr_ph,
                                    learning_rate_val=set_lr(base_lr, step,
                                                             learning_schedule, gamma),
@@ -307,7 +296,7 @@ with closing(ngt.make_transformer_factory(args.backend, **t_args)()) as transfor
         # Every epoch print test set metrics
         if (step + 1) % args.iter_interval == 0 and step > 0:
             # Call loop_eval to calculate metric over test set
-            eval_losses = loop_eval(master_valid_set, input_ops_valid,
+            eval_losses = loop_eval(valid_set, input_ops_valid,
                                     metric_names, eval_function, en_top5)
             tqdm.write("Interval {interval} Iteration {iteration} complete. "
                        "Avg Train Cost {cost:0.4f} Test Metrics:{tcost}".format(

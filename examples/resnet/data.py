@@ -92,7 +92,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=None, 
         random_seed = np.random.randint(low=1, high=np.iinfo(np.int32).max)
 
     batch_size_per_device = batch_size
-    if split_batch and (device == 'hetr' and num_devices > 1):
+    if split_batch and device == 'hetr':
         batch_size_per_device = batch_size // num_devices
 
     # Generating manifests for different datasets
@@ -260,7 +260,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=None, 
         train_config['shuffle_manifest'] = True
         train_config['shuffle_enable'] = True
         train_config['random_seed'] = random_seed
-        if device == 'hetr' and num_devices > 1 and address is not None and port is not None:
+        if device == 'hetr' and address is not None and port is not None:
             train_config['remote'] = {'address': address, 'port': port,
                                       'close_session': False, 'async': True}
         train_loader = AeonDataLoader(train_config)
@@ -269,7 +269,7 @@ def make_aeon_loaders(work_dir, batch_size, train_iterations, random_seed=None, 
         valid_config = common_config(valid_manifest,
                                      batch_size=batch_size_per_device, valid_set=True)
         valid_config['iteration_mode'] = "ONCE"
-        if device == 'hetr' and num_devices > 1 and address is not None and port is not None:
+        if device == 'hetr' and address is not None and port is not None:
             valid_config['iteration_mode'] = "INFINITE"
             valid_config['remote'] = {'address': address, 'port': port,
                                       'close_session': False, 'async': True}

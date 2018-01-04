@@ -487,7 +487,7 @@ class CPUCodeGenerator(PyGen):
             self.append("    {out}[()] = np.zeros({out}.shape)", out=out)
             self.append("    self.input_op_fake_data['{out}'] = True", out=out)
         else:
-            self.append("""{}=self.get_dataloader_data({}, '{}', {}, {})""",
+            self.append("""{}[...] = self.get_dataloader_data({}, '{}', {}, {})""",
                         out, op.aeon_cfg, op.group_type, op.data_type_index,
                         op.data_type_count)
 
