@@ -385,6 +385,10 @@ class CPUCodeGenerator(PyGen):
         return self.transformer.device_computation.conv_slices
 
     @property
+    def input_nodes(self):
+        return self.transformer.device_computation.input_nodes
+
+    @property
     def send_nodes(self):
         return self.transformer.device_computation.send_nodes
 
@@ -487,9 +491,9 @@ class CPUCodeGenerator(PyGen):
             self.append("    {out}[()] = np.zeros({out}.shape)", out=out)
             self.append("    self.input_op_fake_data['{out}'] = True", out=out)
         else:
-            self.append("""{}[...] = self.get_dataloader_data({}, '{}', {}, {})""",
-                        out, op.aeon_cfg, op.group_type, op.data_type_index,
-                        op.data_type_count)
+            input_id = len(self.input_nodes)
+            self.input_nodes.append(op)
+            self.append("{}[...] = self.get_dataloader_data({})", out, input_id)
 
     @generate_op.on_type(ReadOp)
     def generate_op(self, op, out):
@@ -1023,7 +1027,8 @@ self.__profiler_stop__  = list()
         params = {'conv_params': device_computation.conv_params,
                   'pool_params': device_computation.pool_params,
                   'conv_slices': device_computation.conv_slices,
-                  'pool_slices': device_computation.pool_slices}
+                  'pool_slices': device_computation.pool_slices,
+                  'input_nodes': device_computation.input_nodes}
         if use_mlsl:
             params.update({'send_nodes': device_computation.send_nodes,
                            'recv_nodes': device_computation.recv_nodes,

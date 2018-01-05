@@ -159,7 +159,7 @@ device_backend = args.backend
 device_hetr = args.hetr_device
 device_id = [str(d) for d in range(args.num_devices)]
 
-aeon_adress = None
+aeon_address = None
 aeon_port = None
 if device_backend == 'hetr':
     if 'HETR_AEON_IP' not in os.environ or 'HETR_AEON_PORT' not in os.environ:
@@ -167,20 +167,20 @@ if device_backend == 'hetr':
             for the HETR_AEON_IP environment variable and a port number for the HETR_AEON_PORT \
             environment variable')
 
-    aeon_adress = os.environ['HETR_AEON_IP']
+    aeon_address = os.environ['HETR_AEON_IP']
     aeon_port = int(os.environ['HETR_AEON_PORT'])
 
 # Create training and validation dataset objects
 train_set, valid_set = make_aeon_loaders(args.data_dir, args.batch_size,
                                          args.num_iterations, dataset=args.dataset,
                                          num_devices=args.num_devices, device=device_backend,
-                                         split_batch=True, address=aeon_adress, port=aeon_port)
+                                         split_batch=True, address=aeon_address, port=aeon_port)
 print("Completed loading " + args.dataset + " dataset")
 
 # Make input_ops or placeholders depending on single device or multi device compute
-input_ops_train = train_set.make_input_ops("train", aeon_adress, aeon_port, ax.N,
+input_ops_train = train_set.make_input_ops(aeon_address, aeon_port, ax.N,
                                            device_hetr, device_id)
-input_ops_valid = valid_set.make_input_ops("valid", aeon_adress, aeon_port, ax.N,
+input_ops_valid = valid_set.make_input_ops(aeon_address, aeon_port, ax.N,
                                            device_hetr, device_id)
 
 with ng.metadata(device=device_hetr, device_id=device_id, parallel=ax.N):

@@ -2809,7 +2809,7 @@ class InputOp(TensorOp):
     Currently implemented to provide fake data instead of using Aeon
     """
 
-    def __init__(self, axes, aeon_cfg, data_type, data_types, group_type, *args, **kwargs):
+    def __init__(self, axes, aeon_cfg, label, session_id, *args, **kwargs):
         """
         Arguments:
             axes  : of fake data to generate
@@ -2822,10 +2822,8 @@ class InputOp(TensorOp):
         )
         self._is_input = True
         self.aeon_cfg = aeon_cfg
-        self.data_type = data_type
-        self.data_type_index = data_types.index(data_type)
-        self.data_type_count = len(data_types)
-        self.group_type = group_type
+        self.label = label
+        self.session_id = session_id
 
     @property
     def is_persistent(self):

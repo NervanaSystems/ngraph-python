@@ -436,9 +436,10 @@ def update_lut(error, idx, pad_idx, axis, dW):
 
 class ConvLocals(object):
 
-    def __init__(self, conv_params, conv_slices, pool_params, pool_slices, **kwargs):
+    def __init__(self, conv_params, conv_slices, pool_params, pool_slices, input_nodes, **kwargs):
         super(ConvLocals, self).__init__(**kwargs)
         self.conv_params = conv_params
         self.conv_slices = conv_slices
         self.pool_params = pool_params
         self.pool_slices = pool_slices
+        self.input_nodes = input_nodes

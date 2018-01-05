@@ -77,9 +77,9 @@ class AeonDataLoader(object):
             placeholders['iteration'] = ng.placeholder(axes=())
         return placeholders
 
-    def make_input_ops(self, group_type, address, port, batch_axis, device, device_id):
-        logger.debug("make_input_ops: session_id = " + str(self.session_id) +
-                     ", group_type = " + group_type)
+    def make_input_ops(self, address, port, batch_axis, device, device_id):
+        use_placeholder = (address is None and port is None)
+        logger.debug("make_input_ops: session_id = " + str(self.session_id))
 
         # Setup aeon datloader config for worker
         config_worker = {'remote': {'address': address, 'port': port,
@@ -89,24 +89,21 @@ class AeonDataLoader(object):
         C = ng.make_axis(length=self.config['etl'][0]['channels'], name='C')
         H = ng.make_axis(length=self.config['etl'][0]['height'], name='H')
         W = ng.make_axis(length=self.config['etl'][0]['width'], name='W')
-        u = ng.make_axis(length=1, name='unit_axis')
 
         # Build dataloader input ops for data set
         input_ops = dict()
         with ng.metadata(device=device, device_id=device_id, parallel=batch_axis):
-            data_types = [a['type'] for a in self.config['etl']]
             for obj in self.config['etl']:
                 ph_name = obj['type']
+                axes = [batch_axis]
                 if ph_name == 'image':
-                    input_ops[ph_name] = ng.placeholder(axes=[batch_axis, C, H, W]) \
-                        if (address is None and port is None) else \
-                        InputOp(axes=[batch_axis, C, H, W], aeon_cfg=str(config_worker),
-                                data_type=ph_name, data_types=data_types, group_type=group_type)
-                elif ph_name == 'label':
-                    input_ops[ph_name] = ng.placeholder(axes=[batch_axis]) \
-                        if (address is None and port is None) else \
-                        InputOp(axes=[batch_axis, u], aeon_cfg=str(config_worker),
-                                data_type=ph_name, data_types=data_types, group_type=group_type)
+                    axes += [C, H, W]
+
+                if use_placeholder:
+                    input_ops[ph_name] = ng.placeholder(axes=axes)
+                else:
+                    input_ops[ph_name] = InputOp(axes=axes, aeon_cfg=config_worker,
+                                                 label=ph_name, session_id=self.session_id)
 
         # use placeholder for iteration parameter
         input_ops['iteration'] = ng.placeholder(axes=())

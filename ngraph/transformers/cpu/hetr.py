@@ -58,27 +58,21 @@ class HetrLocals(object):
         # MPI-specific
         self.comm = MPI.COMM_WORLD
 
-    def get_dataloader_data(self, cfg, group_type, data_type_index, data_type_count):
-        from aeon import DataLoader
+    def get_dataloader_data(self, input_id):
+        from ngraph.frontends.neon.aeon_shim import AeonDataLoader
+        input_op = self.input_nodes[input_id]
+        session_id = input_op.session_id
+        if session_id not in self.dataloaders:
+            self.dataloaders[session_id] = AeonDataLoader(config=input_op.aeon_cfg)
+            self.dataloader_data[session_id] = dict()
 
-        if group_type != 'train' and group_type != 'valid':
-            raise ValueError('group type can only be train or valid')
+        if len(self.dataloader_data[session_id]) == 0:
+            self.dataloader_data[session_id] = next(self.dataloaders[session_id])
 
-        if group_type not in self.dataloader_configs.keys():
-            self.dataloader_configs[group_type] = cfg
-            self.dataloaders[group_type] = DataLoader(config=cfg)
-            self.dataloader_trackers[group_type] = set()
-
-        if len(self.dataloader_trackers[group_type]) % data_type_count == 0:
-            self.dataloader_trackers[group_type].clear()
-            self.dataloader_data[group_type] = next(self.dataloaders[group_type])
-
-        self.dataloader_trackers[group_type].add(data_type_index)
-        return_value = None
-        if self.dataloader_data[group_type] is not None:
-            return_value = self.dataloader_data[group_type][data_type_index][1]
-        else:
-            raise ValueError("fetched empty data from dataloader for group_type: " + group_type)
+        # Data should be in place already, and each
+        # element should be consumed exactly once before next()
+        return_value = self.dataloader_data[session_id][input_op.label]
+        self.dataloader_data[session_id].pop(input_op.label)
         return return_value
 
     def create_distribution(self):
