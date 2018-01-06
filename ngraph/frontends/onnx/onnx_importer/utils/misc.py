@@ -13,6 +13,8 @@
 # limitations under the License.
 # ----------------------------------------------------------------------------
 
+from __future__ import division
+
 
 def split_into_pairs(items):  # type: (Sequence) -> List[Tuple]
     """

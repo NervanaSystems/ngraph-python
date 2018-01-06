@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ----------------------------------------------------------------------------
+from __future__ import division
 from builtins import str, zip
 from configargparse import ArgParser
 from itertools import repeat
