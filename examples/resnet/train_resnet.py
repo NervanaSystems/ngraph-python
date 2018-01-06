@@ -73,8 +73,15 @@ def loop_eval(dataset, input_ops, metric_name, computation, en_top5=False):
     # Reset validation set
     dataset.reset()
     all_results = None
+
+    eval_bsz = dataset.config['batch_size']
+    eval_iter = int(dataset.ndata // eval_bsz)
+    if dataset.ndata % eval_bsz != 0:
+        logger.warning("Eval dataset isn't divisible by eval batch size (%d/%d),"
+                       " some data will be ignored", dataset.ndata, eval_bsz)
+
     # Iterating over the dataset
-    for step in range(dataset.ndata):
+    for step in range(eval_iter):
         feed_dict = fill_feed_dict(input_or_ph_ops=input_ops, dataset=dataset)
         # Tuple of results from computation
         predictions, miss_class, labels = computation(feed_dict=feed_dict)
