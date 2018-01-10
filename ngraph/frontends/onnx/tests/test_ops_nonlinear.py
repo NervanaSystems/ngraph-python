@@ -16,6 +16,7 @@
 from __future__ import print_function, division
 import numpy as np
 import onnx
+import pytest
 
 from ngraph.frontends.onnx.tests.utils import convert_and_calculate
 
@@ -60,7 +61,7 @@ def test_relu():
 
 def test_leaky_relu():
     def leaky_relu(x, alpha=0.01):
-        return np.maximum(alpha * x, 0)
+        return np.maximum(alpha * x, x)
 
     assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [-2, -1., 0., 1., 2.], alpha=0.5)
     assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [0.])
@@ -70,16 +71,22 @@ def test_leaky_relu():
     assert_onnx_import_equals_callable('LeakyRelu', leaky_relu, [[-3, -2, -1], [1, 2, 3]])
 
 
-def test_parametric_relu():
-    def parametic_relu(x, slope=0.01):
+@pytest.mark.parametrize('x,slope', [
+    ([-2, -1., 0., 1., 2.], 0.5),
+    ([0.], 1),
+    ([-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1], 1),
+    ([[1, 2, 3], [4, 5, 6]], 0.5),
+    ([[-3, -2, -1], [1, 2, 3]], 1),
+])
+def test_parametric_relu(x, slope):
+    def parametic_relu(x, slope):
         return np.where(x < 0, slope * x, x)
 
-    assert_onnx_import_equals_callable('PRelu', parametic_relu, [-2, -1., 0., 1., 2.], slope=0.5)
-    assert_onnx_import_equals_callable('PRelu', parametic_relu, [0.])
-    assert_onnx_import_equals_callable('PRelu', parametic_relu,
-                                       [-0.9, -0.8, -0.7, -0.4, -0.3, -0.2, -0.1], slope=1)
-    assert_onnx_import_equals_callable('PRelu', parametic_relu, [[1, 2, 3], [4, 5, 6]], slope=0.2)
-    assert_onnx_import_equals_callable('PRelu', parametic_relu, [[-3, -2, -1], [1, 2, 3]])
+    x, slope = np.array(x), np.array(slope)
+    expected_output = parametic_relu(x, slope)
+    node = onnx.helper.make_node('PRelu', inputs=['x', 'slope'], outputs=['y'])
+    output = convert_and_calculate(node, [x, slope], [expected_output]).pop()
+    assert np.allclose(output, expected_output)
 
 
 def test_selu():

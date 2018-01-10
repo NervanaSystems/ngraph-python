@@ -66,8 +66,8 @@ class GraphWrapper(WrapperBaseClass):
         self.output = [ValueInfoWrapper(output, self) for output in self._proto.output]
         self.initializer = [TensorWrapper(initializer, self)
                             for initializer in self._proto.initializer]
-        self.initialize_ng_tensors()
-        self.initialize_ng_nodes()
+        self._initialize_ng_tensors()
+        self._initialize_ng_nodes()
 
     @lru_cache(maxsize=512)
     def get_initializer(self, value_name):  # type: (str) -> Optional[TensorWrapper]
@@ -108,15 +108,33 @@ class GraphWrapper(WrapperBaseClass):
         """
         self._ng_node_cache[name] = node
 
-    def initialize_ng_tensors(self):  # type: () -> None
+    def _initialize_ng_tensors(self):  # type: () -> None
         """Create and cache ngraph Op nodes for all input values in the ONNX graph."""
         for value_info in self.input:
             value_info.get_ng_node()
 
-    def initialize_ng_nodes(self):  # type: () -> None
+    def _initialize_ng_nodes(self):  # type: () -> None
         """Create and cache ngraph Op nodes for all operation nodes in the ONNX graph."""
         for node in self.node:
             node.get_ng_nodes_dict()
+
+    def get_input_names(self):  # type: () -> List[str]
+        """Return a list of names of graph inputs.
+
+        Inputs with an initializer will not be returned.
+        """
+        return [input_node.name for input_node in self._proto.input
+                if not self.get_initializer(input_node.name)]
+
+    def get_output_names(self):  # type: () -> List[str]
+        """Return a list of names of graph outputs.
+
+        If graph does not define outputs, return outputs of all graph nodes.
+        """
+        output_names = [output_node.name for output_node in self._proto.output]
+        if not output_names:
+            output_names = [node_name for node in self._proto.node for node_name in node.output]
+        return output_names
 
     def get_ng_model(self):  # type: () -> List[Dict]
         """
@@ -130,11 +148,11 @@ class GraphWrapper(WrapperBaseClass):
             }]
         """
         output_nodes = []
-        for output_proto in self._proto.output:
+        for output_name in self.get_output_names():
             output_nodes.append({
-                'name': output_proto.name,
-                'output': self.ng_node_cache_get(output_proto.name),
-                'inputs': [self.ng_node_cache_get(inpt.name) for inpt in self._proto.input],
+                'name': output_name,
+                'output': self.ng_node_cache_get(output_name),
+                'inputs': [self.ng_node_cache_get(input_) for input_ in self.get_input_names()],
             })
         return output_nodes
 
@@ -180,6 +198,16 @@ class ValueInfoWrapper(WrapperBaseClass):
                                initial_value=initializer.to_array()).named(self.name)
         return ng.variable(axes=axes, dtype=dtype).named(self.name)
 
+    @lru_cache(maxsize=1)
+    def get_ng_constant(self):  # type: () -> TensorOp
+        """Create an ngraph variable node for this value."""
+        axes = self.get_ng_axes()
+        dtype = self.get_dtype()
+        if not self.has_initializer:
+            raise ValueError('Cannot create a constant without an initial value.')
+
+        return ng.constant(self.get_initializer().to_array(), axes=axes, dtype=dtype)
+
     def get_ng_node(self):  # type: () -> TensorOp
         """Create an ngraph placeholder or variable node for this value."""
         cached_node = self._graph.ng_node_cache_get(self.name)
@@ -187,7 +215,7 @@ class ValueInfoWrapper(WrapperBaseClass):
             return cached_node
 
         if self.has_initializer:
-            node = self.get_ng_variable()
+            node = self.get_ng_constant()
         else:
             node = self.get_ng_placeholder()
 

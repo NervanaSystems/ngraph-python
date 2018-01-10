@@ -14,6 +14,8 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import print_function, division
+
+import pytest
 from cachetools.func import lru_cache
 
 import onnx
@@ -30,7 +32,7 @@ def get_transformer():
 
 
 def make_onnx_model_for_matmul_op(input_left, input_right):
-    output_shape = np.dot(input_left, input_right).shape
+    output_shape = np.matmul(input_left, input_right).shape
     node = make_node('MatMul', ['X', 'Y'], ['Z'], name='test_node')
     graph = make_graph([node], 'test_graph',
                        [make_tensor_value_info('X', onnx.TensorProto.FLOAT, input_left.shape),
@@ -90,41 +92,44 @@ def import_and_compute_gemm(input_a, input_b, input_c, **kwargs):
     return computation(input_a, input_b, input_c)
 
 
-def test_matmul():
+def test_op_matmul():
     # vector @ vector
     data = ([1, 2], [1, 3])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     data = ([1, 2, 3], [[4], [5], [6]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     data = ([[1, 2, 3]], [1, 2, 3])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     # vector @ matrix
     data = ([1, 2, 3], [[4, 5], [6, 7], [8, 9]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     # matrix @ vector
     data = ([[1, 2, 3], [4, 5, 6]], [[7], [8], [9]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     # matrix @ matrix
     data = ([[1, 2], [3, 4]], [[5, 6], [7, 8]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     data = ([[1, 2, 3], [4, 5, 6]], [[7, 8], [9, 10], [11, 12]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     data = ([[1, 2], [3, 4], [5, 6]], [[7, 8, 9], [10, 11, 12]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
+
+@pytest.mark.xfail(reason='ngraph ng.dot does not support matmul-style broadcasting')
+def test_op_matmul_3d():
     # 3d tensor @ 3d tensor
     data = ([[[1, 2], [3, 4]], [[1, 2], [3, 4]]], [[[5, 6], [7, 8]], [[5, 6], [7, 8]]])
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
     data = (np.ones((5, 2, 3)), (np.ones((5, 3, 2)) + 2))
-    assert np.array_equal(import_and_compute_matmul(*data), np.dot(*data))
+    assert np.array_equal(import_and_compute_matmul(*data), np.matmul(*data))
 
 
 def test_gemm():

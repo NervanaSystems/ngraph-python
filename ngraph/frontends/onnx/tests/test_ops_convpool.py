@@ -209,7 +209,7 @@ def test_2d_conv_transpose():
 
 
 def test_padding():
-    node = onnx.helper.make_node('Pad', inputs=['x'], outputs=['y'], paddings=[1, 1, 1, 1])
+    node = onnx.helper.make_node('Pad', inputs=['x'], outputs=['y'], pads=[1, 1, 1, 1])
     x = np.ones((2, 2), dtype=np.float32)
     y = np.pad(x, pad_width=1, mode='constant')
 
@@ -217,7 +217,7 @@ def test_padding():
     assert np.array_equal(ng_results, [y])
 
     node = onnx.helper.make_node('Pad', inputs=['x'], outputs=['y'],
-                                 mode='constant', paddings=[0, 0, 0, 0, 1, 2, 3, 4])
+                                 mode='constant', pads=[0, 0, 1, 3, 0, 0, 2, 4])
     x = np.random.randn(1, 3, 4, 5).astype(np.float32)
     y = np.pad(x, pad_width=((0, 0), (0, 0), (1, 2), (3, 4)), mode='constant')
 

@@ -16,16 +16,20 @@
 from __future__ import division
 
 
-def split_into_pairs(items):  # type: (Sequence) -> List[Tuple]
+def split_pads_into_pairs(pads):  # type: (Sequence[int]) -> List[Tuple[int]]
     """
-    Split a list or tuple of items into a list of pairs (tuples).
+    Convert ONNX padding format to ngraph padding format.
 
-    e.g. [1, 2, 3, 4, 5, 6] -> [(1, 2), (3, 4), (5, 6)]
-
-    :param items: an iterable with items
-    :return: list of tuples with pairs of items
+    :param pads: ONNX `pads` format: [x1_begin, x2_begin..., x1_end, x2_end,...]
+    :return: ngraph format: [(x1_begin, x1_end), (x2_begin, x2_end), ...]
     """
-    return list(zip(*[iter(items)] * 2))
+    if not pads:
+        return []
+
+    first_end_pad_index = int(len(pads) / 2)
+    begin_pads = pads[:first_end_pad_index]
+    end_pads = pads[first_end_pad_index:]
+    return list(zip(begin_pads, end_pads))
 
 
 def verify_symmetric_padding(onnx_node, pads):
@@ -37,12 +41,7 @@ def verify_symmetric_padding(onnx_node, pads):
     :param pads: the value for `pads` already extracted or calculated base on `auto_pad`
     :return: True if padding is symmetric, otherwise raises a NotImplementedError
     """
-    # `pads` format should be as follow [x1_begin, x2_begin..., x1_end, x2_end,...]
-    first_end_pad_index = int(len(pads) / 2)
-    begin_pads = pads[:first_end_pad_index]
-    end_pads = pads[first_end_pad_index:]
-
-    for pad_left, pad_right in zip(begin_pads, end_pads):
+    for pad_left, pad_right in split_pads_into_pairs(pads):
         if pad_left != pad_right:
             raise NotImplementedError('%s node (%s): asymmetric padding is not supported '
                                       'by ngraph.', onnx_node.op_type, onnx_node.name)

@@ -28,10 +28,11 @@ from ngraph.frontends.onnx.onnx_importer.model_wrappers import ModelWrapper, Gra
 
 @pytest.fixture
 def onnx_model():
-    node = make_node('Abs', ['X'], ['Y'], name='test_node')
+    node = make_node('Add', ['X', 'Y'], ['Z'], name='test_node')
     graph = make_graph([node], 'test_graph',
-                       [make_tensor_value_info('X', onnx.TensorProto.FLOAT, [1, 2])],
-                       [make_tensor_value_info('Y', onnx.TensorProto.FLOAT, [1, 2])],
+                       [make_tensor_value_info('X', onnx.TensorProto.FLOAT, [1, 2]),
+                        make_tensor_value_info('Y', onnx.TensorProto.FLOAT, [1, 2])],
+                       [make_tensor_value_info('Z', onnx.TensorProto.FLOAT, [1, 2])],
                        initializer=[make_tensor('X', onnx.TensorProto.FLOAT, [1, 2], [1, 1])])
     model = make_model(graph, producer_name='ngraph ONNXImporter')
     return model
@@ -50,7 +51,7 @@ def test_graph_wrapper(onnx_model):
     assert len(wrapped_graph.node) == 1
     assert wrapped_graph.node[0].__class__ == NodeWrapper
 
-    assert len(wrapped_graph.input) == 1
+    assert len(wrapped_graph.input) == 2
     assert wrapped_graph.input[0].__class__ == ValueInfoWrapper
 
     assert len(wrapped_graph.output) == 1
@@ -64,7 +65,7 @@ def test_graph_wrapper(onnx_model):
     assert not wrapped_graph.get_initializer('Y')
 
     ng_model = wrapped_graph.get_ng_model()[0]
-    assert ng_model['output'].__class__ == ng.op_graph.op_graph.AbsoluteOp
+    assert ng_model['output'].__class__ == ng.op_graph.op_graph.Add
     assert ng_model['inputs'][0].__class__ == ng.op_graph.op_graph.AssignableTensorOp
 
 
@@ -92,8 +93,13 @@ def test_value_info_wrapper(onnx_model):
     assert variable.is_trainable
     assert variable.axes == axes
 
+    constant = wrapped_value_info.get_ng_constant()
+    assert constant.__class__ == ng.op_graph.op_graph.AssignableTensorOp
+    assert constant.is_constant
+    assert constant.axes == axes
+
     ng_node = wrapped_value_info.get_ng_node()
-    assert ng_node == variable
+    assert ng_node == constant
 
 
 def test_node_wrapper(onnx_model):
@@ -101,12 +107,12 @@ def test_node_wrapper(onnx_model):
     wrapped_node = wrapped_model.graph.node[0]
 
     ng_inputs = wrapped_node.get_ng_inputs()
-    assert len(ng_inputs) == 1
+    assert len(ng_inputs) == 2
     assert ng_inputs[0].__class__ == ng.op_graph.op_graph.AssignableTensorOp
 
     ng_outputs = wrapped_node.get_ng_nodes_dict()
     assert len(ng_outputs) == 1
-    assert ng_outputs['Y'].__class__ == ng.op_graph.op_graph.AbsoluteOp
+    assert ng_outputs['Z'].__class__ == ng.op_graph.op_graph.Add
 
 
 def test_attribute_wrapper():

@@ -23,7 +23,7 @@ from functools import reduce
 import ngraph as ng
 from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes, reshape_workaround, \
     rename_axes
-from ngraph.frontends.onnx.onnx_importer.utils.misc import split_into_pairs
+from ngraph.frontends.onnx.onnx_importer.utils.misc import split_pads_into_pairs
 from ngraph.frontends.onnx.onnx_importer.utils.pool import make_pooling_op, make_global_pooling_op
 from ngraph.frontends.onnx.onnx_importer.utils.reduction import make_reduction_op
 from ngraph.frontends.onnx.onnx_importer.utils.binary import cast_axes_for_binary_broadcast, \
@@ -102,17 +102,14 @@ def LeakyRelu(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> O
     if not 0 <= alpha <= 1:
         logger.warning('LeakyRelu node (%s): alpha value should be in range (0,1), but is: %s',
                        onnx_node.name, alpha)
-
-    return ng.maximum(alpha * ng_inputs[0], 0.)
+    return ng.maximum(alpha * ng_inputs[0], ng_inputs[0])
 
 
 def PRelu(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    slope = onnx_node.get_attribute_value('slope', 0.01)
-    if not 0 <= slope <= 1:
-        logger.warning('PRelu node (%s): slope value should be in range (0,1), but is: %s',
-                       onnx_node.name, slope)
-
-    return ng.maximum(slope * ng_inputs[0], ng_inputs[0])
+    x, slope = ng_inputs
+    x = ng.broadcast(x, x.axes + slope.axes)
+    slope = ng.broadcast(slope, axes=x.axes)
+    return ng.maximum(slope * x, x)
 
 
 def Selu(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
@@ -134,6 +131,11 @@ def Elu(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
                        onnx_node.name, alpha)
 
     return ng.maximum(x, 0) + alpha * (ng.exp(-ng.maximum(-x, 0)) - 1)
+
+
+def Softplus(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    """Apply Softplus function, y = ln(exp(x) + 1) to the input tensor elementwise."""
+    return ng.log((ng.exp(ng_inputs[0]) + 1))
 
 
 # Reduction Ops
@@ -301,7 +303,7 @@ def ConvTranspose(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) 
 
 
 def Pad(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
-    paddings = onnx_node.get_attribute_value('paddings')
+    pads = onnx_node.get_attribute_value('pads')
     constant = 'constant'
     mode = onnx_node.get_attribute_value('mode', constant)  # 'constant', 'reflect' or 'edge'
     value = onnx_node.get_attribute_value('value', 0)
@@ -311,8 +313,8 @@ def Pad(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
                                   'is supported.', onnx_node.name)
 
     # Split paddings into pairs for each axis
-    paddings = [pad for pad in split_into_pairs(paddings)]
-    return cast_to_pos_axes(ng.pad(ng_inputs[0], paddings))
+    pads = [pad for pad in split_pads_into_pairs(pads)]
+    return cast_to_pos_axes(ng.pad(ng_inputs[0], pads))
 
 
 # Pooling
@@ -444,6 +446,8 @@ def Split(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Tuple
     data = ng_inputs[0]
     count_outputs = len(onnx_node.get_output_names())
     axis_to_split = onnx_node.get_attribute_value('axis')
+    if axis_to_split < 0:
+        axis_to_split = len(data.axes) + axis_to_split
     len_axis_to_split = data.axes[axis_to_split].length
     len_parts = onnx_node.get_attribute_value('split')
 
@@ -473,6 +477,12 @@ def Constant(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     return cast_to_pos_axes(ng.constant(value_tensor.to_array()))
 
 
+def Softmax(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
+    input_ = ng_inputs[0]
+    axis = onnx_node.get_attribute_value('axis', 1)
+    return ng.softmax(input_, normalization_axes=input_.axes[axis])
+
+
 def BatchNormalization(onnx_node, ng_inputs):  # type: (NodeWrapper, List[TensorOp]) -> Op
     x, scale, bias, mean, var = ng_inputs
 
@@ -489,7 +499,11 @@ def BatchNormalization(onnx_node, ng_inputs):  # type: (NodeWrapper, List[Tensor
         raise NotImplementedError('BatchNormalization node (%s): only `spatial` mode is currently '
                                   'supported.', onnx_node.name)
 
-    x = rename_axes(x, 'NCHW')
+    if len(x.axes) == 5:
+        x = rename_axes(x, 'NCHWD')
+    else:
+        x = rename_axes(x, 'NCHW')
+
     mean = rename_axes(mean, 'C')
     scale = rename_axes(scale, 'C')
     bias = rename_axes(bias, 'C')

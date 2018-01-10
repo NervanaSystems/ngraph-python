@@ -21,6 +21,7 @@ from math import floor, ceil
 import ngraph as ng
 from ngraph.frontends.onnx.onnx_importer.utils.axes import reorder_axes
 from ngraph.frontends.onnx.onnx_importer.utils.misc import verify_symmetric_padding
+from ngraph.frontends.tensorflow.tf_importer.utils_pos_axes import cast_to_pos_axes
 
 
 def get_pads(onnx_node):  # type: (NodeWrapper) -> Tuple[int, int, int]
@@ -60,6 +61,10 @@ def get_pads(onnx_node):  # type: (NodeWrapper) -> Tuple[int, int, int]
     verify_symmetric_padding(onnx_node, pads)
 
     pad_h, pad_w, pad_d = 0, 0, 0
+    if pads and len(pads) == 2:  # ONNX input axes NCHW
+        pad_h, pad_w = pads
+    if pads and len(pads) == 3:  # ONNX input axes NCHWD
+        pad_h, pad_w, pad_d = pads
     if pads and len(pads) == 4:  # ONNX input axes NCHW
         pad_h, pad_w, _, _ = pads
     elif pads and len(pads) == 6:  # ONNX input axes NCHWD
@@ -196,10 +201,12 @@ def make_convolution_op(onnx_node, ng_inputs, transpose=False):
     output_axes = make_conv_output_axes(x, weights, conv_params)
 
     if transpose:
-        conv = ng.deconvolution(conv_params, x, weights, axes=output_axes) + bias
+        conv = ng.deconvolution(conv_params, x, weights, axes=output_axes)
 
     else:
-        conv = ng.convolution(conv_params, x, weights, axes=output_axes) + bias
+        conv = ng.convolution(conv_params, x, weights, axes=output_axes)
+
+    conv = cast_to_pos_axes(conv) + bias
 
     # ONNX output should have axes in the order N, C, H, W, D
     conv = reorder_axes(conv, 'CDHWN', 'NCHWD')

@@ -21,12 +21,6 @@ from onnx.helper import make_node, make_graph, make_tensor_value_info
 
 from ngraph.frontends.onnx.onnx_importer.model_wrappers import NodeWrapper, GraphWrapper
 from ngraph.frontends.onnx.onnx_importer.utils.conv import get_pads
-from ngraph.frontends.onnx.onnx_importer.utils.misc import split_into_pairs
-
-
-def test_split_into_pairs():
-    assert split_into_pairs([1, 1, 2, 2, 3, 3]) == [(1, 1), (2, 2), (3, 3)]
-    assert split_into_pairs([1, 1, 2, 2, 3]) == [(1, 1), (2, 2)]
 
 
 def test_get_pads():
