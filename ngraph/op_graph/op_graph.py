@@ -4281,9 +4281,10 @@ class DerivOp(ValueOp):
             adjoint = adjoints[independent.forwarded.tensor]
             self.value_tensor = broadcast(adjoint.forwarded, axes=independent.axes)
 
-        # add hetr metadata to the deriv op
-        # should be allreduced across data-parallel workers
-        self.value_tensor.metadata['reduce_func'] = 'mean'
+        # Add metadata to trigger insertion of AllReduce Op by HeTr pass.
+        # Gradients are sum-reduced between replicas, since the resulting gradients
+        # are divided by aggregate batch size in the optimizer to compute mean gradients.
+        self.value_tensor.metadata['reduce_func'] = 'sum'
 
 
 def deriv(dependent, independent, error=None):
