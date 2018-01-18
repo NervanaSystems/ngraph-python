@@ -17,6 +17,23 @@ from setuptools.command.build_ext import build_ext as _build_ext
 import sys
 import sysconfig
 import os
+import re
+
+
+def get_version(public_build_version):
+
+    local_build_version = os.environ.get('LOCAL_VERSION', '')
+
+    if not local_build_version:
+        return public_build_version
+
+    # Local version matching PEP440
+    local_ver_regexp = re.compile(r'(?P<local>[a-z0-9]+(?:[-_\.][a-z0-9]+)*)', re.IGNORECASE)
+
+    if not local_ver_regexp.match(local_build_version):
+        raise RuntimeError("Invalid local version format:{}".format(local_build_version))
+
+    return "{}+{}".format(public_build_version, local_build_version)
 
 
 class build_ext(_build_ext):
@@ -107,7 +124,7 @@ requirements = [
 
 setup(
     name="ngraph",
-    version="0.4.0",
+    version=get_version(public_build_version="0.4.0"),
     packages=find_packages(exclude=["tests"]),
     install_requires=requirements,
     author='Nervana Systems',
