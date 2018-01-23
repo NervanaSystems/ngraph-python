@@ -487,7 +487,6 @@ class CPUMlslAllReduceWaitOp(MutateInsteadOfCopyWithNewArgsMixin, AllReduceOp):
                                                      out_axes=input_node.axes,
                                                      dtype=input_node.dtype,
                                                      func=func)
-        self._args = tuple([])
         self.add_control_dep(start_node)
         self._req = start_node._req
         self.metadata['priority'] = 'low'

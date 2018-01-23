@@ -43,6 +43,7 @@ def train_mnist_mlp(transformer_name, data_dir=None,
 
     # Data
     train_data, valid_data = MNIST(path=data_dir).load_data()
+
     train_set = ArrayIterator(train_data, batch_size, total_iterations=train_iter)
     valid_set = ArrayIterator(valid_data, batch_size)
     inputs = train_set.make_placeholders()

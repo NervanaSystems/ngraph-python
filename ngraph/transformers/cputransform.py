@@ -818,7 +818,7 @@ class CPUCodeGenerator(PyGen):
         self.append("self.mlsl_allreduce_start({}, {}, {})", allreduce_id, out, arg)
 
     @generate_op.on_type(CPUMlslAllReduceWaitOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, arg):
         if self.skip_comm_ops:
             return
         allreduce_id = len(self.allreduce_nodes)
