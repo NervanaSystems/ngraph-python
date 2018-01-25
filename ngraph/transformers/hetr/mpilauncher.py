@@ -6,6 +6,7 @@ import signal
 import tempfile
 import fcntl
 import re
+from ngraph.transformers.hetr.hetr_utils import get_rng_seeds
 
 
 LINE_TOKEN = 'token'
@@ -103,6 +104,8 @@ class MPILauncher(object):
         if self._rpc_ports is not None:
             cmd.extend(['-p'] + self._rpc_ports)
             self._rpc_ports = None
+        rng_seeds = [str(seed) for seed in get_rng_seeds(size=num_servers)]
+        cmd.extend(['-r'] + rng_seeds)
         logger.debug("mpirun cmd: %s", cmd)
 
         try:

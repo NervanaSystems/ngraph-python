@@ -20,6 +20,7 @@ from ngraph.op_graph.comm_nodes import RecvOp
 from orderedset import OrderedSet
 from ngraph.op_graph.axes import Axes
 import collections
+import numpy as np
 
 
 def get_iterable(x):
@@ -137,3 +138,10 @@ def update_parallel_axis(root, parallel_axis):
 
         if isinstance(op, TensorValueOp) and parallel_axis in op.tensor.axes:
             op.tensor._axes = set_parallel_axes(op.tensor.axes, parallel_axis)
+
+
+def get_rng_seeds(low=0, high=np.iinfo(np.int32).max, size=1):
+    seeds = set()
+    while len(seeds) < size:
+        seeds |= set(np.random.randint(low=low, high=high, size=size))
+    return list(seeds)

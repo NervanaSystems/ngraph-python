@@ -6,6 +6,7 @@ import grpc
 import hetr_pb2
 import hetr_pb2_grpc
 import traceback
+import numpy as np
 from mpi4py import MPI
 from ngraph.op_graph.op_graph import Op
 from ngraph.op_graph.serde.serde import protobuf_to_op, pb_to_tensor, tensor_to_protobuf,\
@@ -15,7 +16,6 @@ import logging
 import os
 import fcntl
 from ngraph.op_graph.comm_nodes import GatherRecvOp, ScatterRecvOp
-import numpy as np
 
 try:
     # The first "import mlsl" will create internal mlsl object and will init MLSL library.
@@ -205,6 +205,7 @@ def serve():
     parser = argparse.ArgumentParser()
     parser.add_argument("-tf", "--tmpfile", nargs=1)
     parser.add_argument("-p", "--ports", nargs='+')
+    parser.add_argument("-r", "--rng_seed", nargs='+')
     args = parser.parse_args()
     comm = MPI.COMM_WORLD
 
@@ -213,12 +214,7 @@ def serve():
     hetr_pb2_grpc.add_HetrServicer_to_server(HetrServer(comm, server), server)
     logger.debug("server: rank %d, tmpfile %s, ports %s",
                  comm.Get_rank(), args.tmpfile[0], args.ports if args.ports is not None else "")
-
-    # TODO (HeTr) #944: Pass the random value throug gRPC from hetr master
-    # Setting random seed to ensure that each hetr workers
-    # gets the same initializations for random values
-    np.random.seed(64)
-
+    np.random.seed(int(args.rng_seed[comm.Get_rank()]))
     if args.ports is not None and len(args.ports) > comm.Get_rank():
         p = args.ports[comm.Get_rank()]
         if is_port_open(p):
