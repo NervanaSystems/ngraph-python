@@ -801,7 +801,7 @@ class CPUCodeGenerator(PyGen):
         self.append("self.mlsl_scatter_send({}, {})", scatter_send_id, arg)
 
     @generate_op.on_type(CPUMlslScatterRecvOp)
-    def generate_op(self, op, out):
+    def generate_op(self, op, out, arg=None):
         if self.skip_comm_ops:
             return
         scatter_recv_id = len(self.scatter_recv_nodes)

@@ -83,9 +83,17 @@ class HetrServer(hetr_pb2_grpc.HetrServicer):
             # on the root device.
             # This ensures that by the send buffer does not get reused before
             # the recv_buf gets access to items
+            root_idx = 0
             for op in Op.all_op_references(subgraph):
-                if isinstance(op, (GatherRecvOp, ScatterRecvOp)) and \
+                if isinstance(op, (GatherRecvOp)) and \
                    MPI.COMM_WORLD.Get_rank() == op.metadata['device_id']:
+                    args = list(op._args)
+                    args.extend(op.send_node().args)
+                    op._args = tuple(args)
+                    op.invalidate_property_cache('all_deps')
+                elif (isinstance(op, (ScatterRecvOp)) and
+                      MPI.COMM_WORLD.Get_rank() == root_idx and
+                      MPI.COMM_WORLD.Get_rank() in op.metadata['device_id']):
                     args = list(op._args)
                     args.extend(op.send_node().args)
                     op._args = tuple(args)
