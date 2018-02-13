@@ -1,4 +1,5 @@
 # Intel® nGraph™ project
+### An Intermediate Representation, Compiler, and Executor for Deep Learning
 
 *Updated: February 13, 2018* 
 
@@ -37,17 +38,14 @@ ways in which performance can be further optimized.
 
 ## How does it work in practice?
 
-### An Intermediate Representation, Compiler, and Executor for Deep Learning
-
-
-You install the nGraph library and write or compile a framework with the library, 
+Install the nGraph library and write or compile a framework with the library, 
 in order to run training and inference models. Using the command line on any Linux* 
 system (or on any UNIX-based platform that has "virtual machine" capabilities), 
-you specify the backend. Our Intermediate Representation (IR) layer handles all 
-the hardware abstraction details and frees developers to focus on their data 
-science, algorithms and models, rather than on machine code.  
+specify the backend you want to use. Our Intermediate Representation (IR) layer 
+handles all the hardware abstraction details and frees developers to focus on 
+their data science, algorithms and models, rather than on machine code.  
 
-At a more granular level of high-level detail: 
+At a more granular level of detail: 
 
 * The **nGraph core** uses a strongly-typed and platform-neutral stateless graph 
   representation for computations. Each node, or *op*, in the graph corresponds
@@ -69,6 +67,6 @@ You can read more about design decisions and what is tentatively in the
 pipeline for backends and development in our [ARXIV abstract and conference paper]:
 
 
-[preparing our new C++ code base for open-sourcing]:http://ngraph.nervanasys.com/docs/cpp/ 
+[preparing to open-source our C++ code base]:http://ngraph.nervanasys.com/docs/cpp/ 
 [legacy]:legacy-README.rd
 [ARXIV abstract and conference paper]:https://arxiv.org/pdf/1801.08058.pdf
