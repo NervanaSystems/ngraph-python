@@ -1,15 +1,15 @@
-# Intel® nGraph™ project
+# Intel® nGraph™ 
+
 ### An Intermediate Representation, Compiler, and Executor for Deep Learning
 
 *Updated: February 13, 2018* 
 
-Welcome to the Intel nGraph project repo. While we're transitioning our main
-project from Python and [preparing to open-source our C++ code base] to the 
-community, you can browse this repo to learn a bit about the [legacy] roots of 
-the project.  
+Welcome to the Intel nGraph repo. While we're transitioning our main project 
+from Python and [preparing to open-source our C++ code base] to the community, 
+you can browse here to learn a bit about the roots of the [legacy] project.  
 
 
-## Why did we build the nGraph project?
+## Why did we build nGraph?
 
 When Deep Learning (DL) frameworks first emerged as the vehicle for training and
 inference models, they were designed around kernels optimized for a particular 
