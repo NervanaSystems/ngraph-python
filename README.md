@@ -68,5 +68,5 @@ pipeline for backends and development in our [ARXIV abstract and conference pape
 
 
 [preparing to open-source our C++ code base]:http://ngraph.nervanasys.com/docs/cpp/ 
-[legacy]:legacy-README.rd
+[legacy]:legacy_README.md
 [ARXIV abstract and conference paper]:https://arxiv.org/pdf/1801.08058.pdf
