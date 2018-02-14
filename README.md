@@ -39,8 +39,7 @@ ways in which performance can be further optimized.
 ## How does it work in practice?
 
 Install the nGraph library and write or compile a framework with the library, 
-in order to run training and inference models. Using the command line on any Linux* 
-system (or on any UNIX-based platform that has "virtual machine" capabilities), 
+in order to run training and inference models. Using the command line, 
 specify the backend you want to use. Our Intermediate Representation (IR) layer 
 handles all the hardware abstraction details and frees developers to focus on 
 their data science, algorithms and models, rather than on machine code.  
