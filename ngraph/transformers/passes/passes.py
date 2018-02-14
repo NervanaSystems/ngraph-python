@@ -23,7 +23,7 @@ from ngraph.op_graph.op_graph import BroadcastOp, broadcast, DotOp, make_axes, \
     axes_with_order, flatten_at, Transpose, unflatten, ReorderAxes, \
     ContiguousOp, DotLowDimension, \
     ExpOp, LogOp, NegativeOp, constant, \
-    Multiply, Add, Divide, Op, Sum, Prod, negative, power, \
+    Multiply, Add, Divide, Op, Sum, Prod, negative, \
     PatternLabelOp, PatternSkipOp
 from ngraph.transformers.passes.opdelegate import DelegateOpAccessor
 from ngraph.op_graph.comm_nodes import CPUMlslGatherSendOp, CPUMlslScatterSendOp, \
@@ -520,7 +520,7 @@ class SimplePrune(PeepholeGraphPass):
           TODO
         """
         if x.is_scalar and x.is_constant:
-            self.replace_op(op, constant(-x.const))
+            self.replace_op(op, constant(-x.const, op.axes))
 
     @visit.on_type(Multiply)
     def visit(self, op, x, y):
@@ -589,13 +589,13 @@ class SimplePrune(PeepholeGraphPass):
         """
         if x.is_scalar and x.is_constant:
             val = x.const * op.reduction_axes.size
-            self.replace_op(op, constant(val))
+            self.replace_op(op, constant(val, op.axes))
 
     @visit.on_type(Prod)
     def visit(self, op, x):
         """
         If x is filled with the same value, then replace the prod op
-        with `power`.
+        with x.const ** reduction_axes.size.
 
         Arguments:
           op: TODO
@@ -604,8 +604,8 @@ class SimplePrune(PeepholeGraphPass):
           TODO
         """
         if x.is_scalar and x.is_constant:
-            val = power(x.const, op.reduction_axes.size)
-            self.replace_op(op, constant(val))
+            val = x.const ** op.reduction_axes.size
+            self.replace_op(op, constant(val, op.axes))
 
     @visit.on_type(LogOp)
     def visit(self, op, x):

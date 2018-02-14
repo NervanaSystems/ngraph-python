@@ -1699,6 +1699,14 @@ class IndexOp(with_metaclass(abc.ABCMeta, TensorOp)):
         return self.args[0].scalar_op
 
     @property
+    def is_constant(self):
+        return self.args[0].is_constant
+
+    @property
+    def const(self):
+        return self.args[0].const
+
+    @property
     def is_device_op(self):
         """
         Returns:
