@@ -1,177 +1,67 @@
-# NOTICE
+# Intel® nGraph™ 
 
-We are currently transitioning the Intel® nGraph™ codebase from Python to C++.
+### An Intermediate Representation, Compiler, and Executor for Deep Learning
 
-As of January 03, 2018, this version of the project has a low level of activity. 
-Bug patches will continue to be reviewed and accepted by the maintainer; however, 
-new features will not be accepted. The code remains available for the community's 
-use.
- 
-As a result, most work in this repository is now focused on the higher levels of 
-the neon™ framework. Additional work in internal repositories is ongoing for the 
-core C++ Intel nGraph library project and for framework bridges from Intel nGraph 
-library to TensorFlow*/XLA and MXNet*. We will continue to support neon and it 
-will retain its Python interface and be fully integratable with the C++ version 
-of Intel nGraph library.  The new version will be released publicly when it is 
-more mature.  
+*Updated: February 13, 2018* 
 
-# nGraph library
-
-nGraph library is Nervana's library for developing frameworks that can run deep
-learning computations efficiently on a variety of compute platforms. It consists 
-of three primary API components:
-
-- An API for creating computational graphs.
-- Two higher level frontend APIs (TensorFlow and Neon) utilizing the `ngraph` 
-  library API for common deep learning workflows
-- A transformer API for compiling these graphs and executing them.
+Welcome to the Intel nGraph repo. While we're transitioning our main project 
+from Python and [preparing to open-source our C++ code base] to the community, 
+you can browse here to learn a bit about the roots of the [legacy] project.  
 
 
-## Installation
+## Why did we build nGraph?
 
-Installation documentation can be found
-[here](https://ngraph.nervanasys.com/docs/latest/installation.html).
+When Deep Learning (DL) frameworks first emerged as the vehicle for training and 
+inference models, they were designed around kernels optimized for a particular 
+platform. As a result, many backend details were being exposed in the model 
+definitions, making the adaptability and portability of DL models to other or 
+more advanced backends inherently complex and expensive.
 
-### MKL-DNN Support
-To install with Intel MKL-DNN support, first download MKL-DNN from [here](https://github.com/01org/mkl-dnn) 
-and follow the installation instructions there to install MKL-DNN. Set 
-environment variable MKLDNN_ROOT to point to the installed location and 
-follow the rest of the steps to install nGraph library.
-```
-export MKLDNN_ROOT=/path/to/mkldnn/root
-```
+The traditional approach means that an algorithm developer cannot easily adapt 
+his or her model to different backends. Making a model run on a different 
+framework is also problematic because the developer must separate the essence of 
+the model from the performance adjustments made for the backend, translate to 
+similar ops in the new framework, and finally make the necessary changes for 
+the preferred backend configuration on the new framework.
 
-### Multi-node Support
-MPI is required for multi-node (multi-CPU and multi-GPU) support.  
-Download Intel MPI from [here](https://software.intel.com/en-us/intel-mpi-library)
-(select Linux OS, Intel MPI library product and go to 'Free Download' link).
-Intel MPI package contains SDK part (headers and compiler scripts) required for mpi4py installation.
+We designed the Intel nGraph project to substantially reduce these kinds of 
+engineering complexities. While optimized kernels for deep-learning primitives 
+are provided through the project and via libraries like Intel® Math Kernel Library 
+for Deep Neural Networks (Intel® MKL-DNN), there are several compiler-inspired 
+ways in which performance can be further optimized. 
 
-Install Intel MPI (use install.sh script from package).
 
-Setup Intel MPI environment:
-```
-source <impi_install_path>/bin64/mpivars.sh
-```
-Intel MLSL is required for multi-CPU support in addtion to MPI.  
-Download Intel MLSL from [here](https://github.com/intel/MLSL/releases).
+## How does it work in practice?
 
-Install Intel MLSL (follow the instructions [here](https://github.com/intel/MLSL/blob/master/README.md)).
+Install the nGraph library and write or compile a framework with the library, 
+in order to run training and inference models. Using the command line on any 
+supported system (currently Linux) specify the backend you want to use. Our 
+Intermediate Representation (IR) layer handles all the hardware abstraction 
+details and frees developers to focus on their data science, algorithms and 
+models, rather than on machine code.
 
-Setup Intel MLSL environment:
-```
-source <mlsl_install_path>/intel64/bin/mlslvars.sh
-```
-Then, run
-```
-make multinode_prepare
-```
+At a more granular level of detail: 
 
-### nGraph library installation
-We recommend installing nGraph library inside a virtual environment.
+* The **nGraph core** creates a strongly-typed and platform-neutral stateless 
+  graph representation of computations. Each node, or *op*, in the graph 
+  corresponds to one step in a computation, where each step produces zero or 
+  more tensor outputs from zero or more tensor inputs.
 
-To create and activate a Python 3 virtualenv:
-```
-python3 -m venv .venv
-. .venv/bin/activate
-```
+* We've developed a **framework bridge** for each supported framework; it acts 
+  as an intermediary between the *ngraph core* and the framework. A **transformer** 
+  then plays a similar role between the ngraph core and the various execution 
+  platforms.
 
-To, instead, create and activate a Python 2.7 virtualenv:
-```
-virtualenv -p python2.7 .venv
-. .venv/bin/activate
-```
+* **Transformers** handle the hardware abstraction; they compile the graph with 
+  a combination of generic and platform-specific graph transformations. The 
+  result is a function that can be executed from the framework bridge. 
+  Transformers also allocate and deallocate, as well as read and write tensors 
+  under direction of the bridge.
+  
+You can read more about design decisions and what is tentatively in the pipeline 
+for backends and development in our [ARXIV abstract and conference paper]:
 
-To install nGraph library:
-```
-make install
-```
 
-To add GPU support:
-```
-make gpu_prepare
-```
-
-To uninstall nGraph library:
-```
-make uninstall
-```
-
-To run the tests:
-```
-make [test_cpu|test_mkldnn|test_gpu|test_integration]
-```
-
-Before checking in code, ensure no "make style" errors:
-```
-make style
-```
-
-To fix style errors:
-```
-make fixstyle
-```
-
-To generate the documentation as html files:
-```
-sudo apt-get install pandoc
-make doc
-```
-
-## Examples
-
-* ``examples/walk_through/`` contains several code walk throughs.
-* ``examples/mnist/mnist_mlp.py`` uses the neon front-end to define and train a MLP model on MNIST data.
-* ``examples/cifar10/cifar10_conv.py`` uses the neon front-end to define and train a CNN model on CIFAR10 data.
-* ``examples/cifar10/cifar10_mlp.py`` uses the neon front-end to define and train a MLP model on CIFAR10 data.
-* ``examples/ptb/char_rnn.py`` uses the neon front-end to define and train a character-level RNN model on Penn Treebank data.
-
-## Overview
-
-### Frontends
-- The neon frontend offers an improved interface for increased composability/flexibility
-  while leaving common use cases easy. We demonstrate this with MLP, convolutional, and
-  RNN network examples on MNIST, CIFAR10, and Penn Treebank datasets.
-- The TensorFlow importer allows users to import existing tensorflow graphs and execute
-  them using nGraph library transformers/runtimes. This importer currently only supports a
-  subset of the TensorFlow API, but this will be expanded over time.
-
-### nGraph library API
-- The nGraph library API consists of a collection of graph building functions all exposed
-  in the `ngraph` module/namespace. (eg: `ngraph.sum(...)`)
-- We include walkthrough examples to use this API for logistic regression and multilayer
-  perceptron classification of MNIST digit images.
-- With the introduction of named `Axes` we lay the foundation for frontend writers to
-  reason about tensor axis without concern of memory layout or order (for future
-  optimization against hardware targets which often have differing and specific
-  requirements for batch axis orderings for example).
-
-### Transformer API
-- This release ships with two example transformers targetting CPU and GPU hardware targets. 
-- Both transformers support memory usage optimization passes.
-- The GPU transformer also includes preliminary support for automatic kernel
-  fusion/compounding for increased performance.
-- Transformers allow users to register an included set of optional compiler passes for
-  debug and visualization.
-- The compiler pass infrastructure is slated to offer frontends/users similar flexibility
-  to what LLVM library offers for general purpose compilation.
-
-### Known Issues
-These are known issues which are being addressed:
-
-- The transformer fusion and memory sharing optimizations are currently hampered by some
-  of the tensor dimension reshaping introduced by the existing lowering passes. Thus both
-  are turned off by default.
-- RNNs don't work well with longer sequences (longer than 30).
-
-## Highlighted Future Work
-
-- nGraph library serialization/deserialization.
-- Further improvements/abstractions to graph composability for usability/optimization.
-- Distributed, heterogeneous backend target support.
-- C APIs for interoperability to enable other languages to create/execute graphs.
-- Better debugging
-- Support for model deployment
-
-## Join Us
-Please feel free to [contribute](CONTRIBUTING.rst) in shaping the future of nGraph library.
+[preparing to open-source our C++ code base]:http://ngraph.nervanasys.com/docs/cpp/ 
+[legacy]:legacy_README.md
+[ARXIV abstract and conference paper]:https://arxiv.org/pdf/1801.08058.pdf

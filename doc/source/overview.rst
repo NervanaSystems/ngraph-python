@@ -18,13 +18,12 @@
 Overview
 ========
 
-:Release: |version|
-:Date: |today|
-
 .. Note::
-   Intel® Nervana™ Graph is currently a preview release, and the APIs and 
-   implementation are subject to change. We encourage you to contribute to 
-   the discussion and help shape its future.
+   We are currently transitioning the Intel® nGraph™ codebase from Python to 
+   C++. As of January 03, 2018, this version of the project has a low level of 
+   activity. Bug patches will continue to be reviewed and accepted by the 
+   maintainer; however, new features will not be accepted. The code remains available 
+   for the community's use.
 
 Intel® Nervana™ Graph (nGraph™) is a Python library for implementing programs 
 that convert descriptions of neural networks into programs that run efficiently 
@@ -49,7 +48,7 @@ To achieve these goals, the nGraph™ library has three layers:
 
 #. A transformer API for compiling these graphs and executing them on GPUs and CPUs.
 
-.. image :: assets/ngraph_workflow.png
+   .. image:: assets/ngraph_workflow.png
 
 Let's consider each of these layers in turn and the way they enable users.
 
@@ -94,7 +93,7 @@ images, and the Penn Treebank text corpus.
 We also realize that users already know and use existing frameworks today 
 and might want to continue using/combine models written in other frameworks. 
 To that end, we demonstrate the capability to **convert existing TensorFlow 
-models into Intel Nervana Graphs and execute them using nGraph transformers. 
+models into Intel Nervana Graphs** and execute them using nGraph transformers. 
 This importer supports a variety of common operation types today and will be 
 expanding in future releases. We also plan on implementing compatibility with 
 other frameworks in the near future, so stay tuned.
