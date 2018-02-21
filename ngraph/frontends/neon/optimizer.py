@@ -293,7 +293,20 @@ class GradientDescentMomentum(LearningRateOptimizer):
             delta = (self.momentum_coef * velocity + lr)
         else:
             delta = velocity
-        updates.append(ng.assign(variable, variable + delta))
+        # Old way without Kahan summation
+        # updates.append(ng.assign(variable, variable + delta))
+
+        # New way with Kahan summation
+        kahan_c = ng.persistent_tensor(axes=variable.axes,
+                                       initial_value=0.).named(variable.name + '_c')
+        kahan_y = ng.persistent_tensor(axes=variable.axes,
+                                       initial_value=0.).named(variable.name + '_y')
+        kahan_t = ng.persistent_tensor(axes=variable.axes,
+                                       initial_value=0.).named(variable.name + '_t')
+        updates.append(ng.assign(kahan_y, delta - kahan_c))
+        updates.append(ng.assign(kahan_t, variable + kahan_y))
+        updates.append(ng.assign(kahan_c, (kahan_t - variable) - kahan_y))
+        updates.append(ng.assign(variable, kahan_t))
         return ng.sequential(updates)
 
 
