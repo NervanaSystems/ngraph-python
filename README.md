@@ -5,7 +5,7 @@
 *Updated: March 17, 2018* 
 
 Welcome to the nGraph Python repo. Now that we've released our [C++ rewrite]
-to the commununity, we are transitioning away from this original Python
+to the community, we are transitioning away from this original Python
 implementation. You can browse here to learn a bit about the roots of the
 [legacy] project.  
 
