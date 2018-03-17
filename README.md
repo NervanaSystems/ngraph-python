@@ -1,12 +1,13 @@
-# Intel® nGraph™ 
+# nGraph Python 
 
 ### An Intermediate Representation, Compiler, and Executor for Deep Learning
 
-*Updated: February 13, 2018* 
+*Updated: March 17, 2018* 
 
-Welcome to the Intel nGraph repo. While we're transitioning our main project 
-from Python and [preparing to open-source our C++ code base] to the community, 
-you can browse here to learn a bit about the roots of the [legacy] project.  
+Welcome to the nGraph Python repo. Now that we've released our [C++ rewrite]
+to the commununity, we are transitioning away from this original Python
+implementation. You can browse here to learn a bit about the roots of the
+[legacy] project.  
 
 
 ## Why did we build nGraph?
@@ -59,9 +60,9 @@ At a more granular level of detail:
   under direction of the bridge.
   
 You can read more about design decisions and what is tentatively in the pipeline 
-for backends and development in our [ARXIV abstract and conference paper]:
+for backends and development in our [ARXIV abstract and conference paper].
 
 
-[preparing to open-source our C++ code base]:http://ngraph.nervanasys.com/docs/cpp/ 
+[C++ rewrite]:http://github.com/NervanaSystems/ngraph 
 [legacy]:legacy_README.md
 [ARXIV abstract and conference paper]:https://arxiv.org/pdf/1801.08058.pdf
