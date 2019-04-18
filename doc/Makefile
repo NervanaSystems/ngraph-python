@@ -223,3 +223,4 @@ coverage:
 	@echo "Testing of coverage in the sources finished, look at the " \
 	      "results in $(BUILDDIR)/coverage/python.txt."
 	(
+
